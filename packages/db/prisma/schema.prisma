@@ -1,0 +1,388 @@
+// packages/db/prisma/schema.prisma
+// BuildMart — Prisma schema (Neon PostgreSQL)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────
+// M01 Authentication & User Management
+// ─────────────────────────────────────────────
+
+enum Role {
+  BUILDER
+  SUPPLIER
+  ADMIN
+}
+
+enum KycStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id            String      @id @default(cuid())
+  email         String?     @unique
+  phone         String?     @unique
+  name          String?
+  role          Role
+  kycStatus     KycStatus   @default(PENDING)
+  mfaEnabled    Boolean     @default(false)
+  mfaSecret     String?
+  whatsappNumber String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Relations
+  kycDocuments  KycDocument[]
+  orders        Order[]
+  cart          CartItem[]
+  watchlist     Watchlist[]
+  disputes      Dispute[]
+  notifications Notification[]
+  creditProfile CreditProfile?
+  supplierProfile SupplierProfile?
+
+  @@index([email])
+  @@index([phone])
+}
+
+model KycDocument {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  type       String    // GST_CERT | AADHAAR | TRADE_LICENCE | BIS_CERT
+  fileUrl    String
+  verified   Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────
+// M02 Product Catalogue + M07 Supplier Portal
+// ─────────────────────────────────────────────
+
+model SupplierProfile {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id])
+  companyName     String
+  bisLicenceNo    String?
+  bisVerified     Boolean   @default(false)
+  verifiedBadge   Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  products        Product[]
+  orderItems      OrderItem[]
+  quotes          Quote[]
+  mtcCertificates MtcCertificate[]
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  slug     String    @unique
+  products Product[]
+}
+
+model Product {
+  id              String          @id @default(cuid())
+  supplierId      String
+  supplier        SupplierProfile @relation(fields: [supplierId], references: [id])
+  categoryId      String
+  category        Category        @relation(fields: [categoryId], references: [id])
+  name            String
+  slug            String          @unique
+  brand           String?
+  grade           String?
+  isCode          String?
+  bisStatus       String?         // CERTIFIED | PENDING | NA
+  description     String?
+  unit            String          // MT | BAG | SQM | PCS
+  basePrice       Decimal         @db.Decimal(12, 2)
+  stock           Int             @default(0)
+  images          String[]
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  prices          PricePoint[]
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
+  watchlist       Watchlist[]
+  mtcCertificates MtcCertificate[]
+
+  @@index([supplierId])
+  @@index([categoryId])
+  @@index([slug])
+}
+
+model MtcCertificate {
+  id          String          @id @default(cuid())
+  productId   String
+  product     Product         @relation(fields: [productId], references: [id])
+  supplierId  String
+  supplier    SupplierProfile @relation(fields: [supplierId], references: [id])
+  fileUrl     String
+  batchNo     String?
+  verified    Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+
+  @@index([productId])
+}
+
+// ─────────────────────────────────────────────
+// M03 Pricing & Market Intelligence
+// ─────────────────────────────────────────────
+
+model PricePoint {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  sourceCity  String   // EX-Raipur, EX-Vizag, etc.
+  price       Decimal  @db.Decimal(12, 2)
+  freight     Decimal  @db.Decimal(10, 2) @default(0)
+  recordedAt  DateTime @default(now())
+
+  @@index([productId])
+  @@index([recordedAt])
+}
+
+model Watchlist {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id])
+  targetPrice    Decimal? @db.Decimal(12, 2)
+  alertSent      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId])
+}
+
+model Quote {
+  id          String          @id @default(cuid())
+  supplierId  String
+  supplier    SupplierProfile @relation(fields: [supplierId], references: [id])
+  rfqId       String?
+  rfq         QuickRequest?   @relation(fields: [rfqId], references: [id])
+  price       Decimal         @db.Decimal(12, 2)
+  validUntil  DateTime?
+  notes       String?
+  createdAt   DateTime        @default(now())
+
+  @@index([supplierId])
+}
+
+model QuickRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  materialName String
+  quantity    String
+  pincode     String
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  quotes      Quote[]
+}
+
+// ─────────────────────────────────────────────
+// M04 Cart & Order Management
+// ─────────────────────────────────────────────
+
+model CartItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+  @@index([userId])
+}
+
+enum OrderStatus {
+  PLACED
+  PROCESSING
+  DISPATCHED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  NET_BANKING
+  COD
+  CREDIT
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  status          OrderStatus   @default(PLACED)
+  paymentMethod   PaymentMethod
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentRef      String?
+  utrProofUrl     String?
+  gstInvoiceUrl   String?
+  irn             String?
+  totalAmount     Decimal       @db.Decimal(12, 2)
+  deliveryDate    DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  items           OrderItem[]
+  tracking        OrderTracking[]
+  dispute         Dispute?
+
+  @@index([userId])
+  @@index([status])
+}
+
+model OrderItem {
+  id          String          @id @default(cuid())
+  orderId     String
+  order       Order           @relation(fields: [orderId], references: [id])
+  productId   String
+  product     Product         @relation(fields: [productId], references: [id])
+  supplierId  String
+  supplier    SupplierProfile @relation(fields: [supplierId], references: [id])
+  quantity    Int
+  unitPrice   Decimal         @db.Decimal(12, 2)
+  deliveryDate DateTime?
+
+  @@index([orderId])
+  @@index([supplierId])
+}
+
+// ─────────────────────────────────────────────
+// M06 Order Tracking
+// ─────────────────────────────────────────────
+
+model OrderTracking {
+  id          String      @id @default(cuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id])
+  status      OrderStatus
+  gpsVehicleId String?
+  latitude    Float?
+  longitude   Float?
+  note        String?
+  recordedAt  DateTime    @default(now())
+
+  @@index([orderId])
+}
+
+// ─────────────────────────────────────────────
+// M08 Credit & Lending
+// ─────────────────────────────────────────────
+
+enum CreditStatus {
+  NOT_APPLIED
+  SCORING
+  APPROVED
+  REJECTED
+  ACTIVE
+}
+
+model CreditProfile {
+  id              String       @id @default(cuid())
+  userId          String       @unique
+  user            User         @relation(fields: [userId], references: [id])
+  creditLimit     Decimal?     @db.Decimal(12, 2)
+  usedLimit       Decimal      @db.Decimal(12, 2) @default(0)
+  status          CreditStatus @default(NOT_APPLIED)
+  kfsAcceptedAt   DateTime?
+  nbfcRef         String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// M09 Notifications, Reviews & Admin
+// ─────────────────────────────────────────────
+
+enum NotificationChannel {
+  PUSH
+  SMS
+  EMAIL
+  WHATSAPP
+  IN_APP
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id])
+  channel   NotificationChannel
+  title     String
+  body      String
+  read      Boolean             @default(false)
+  sentAt    DateTime            @default(now())
+
+  @@index([userId])
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  ESCALATED
+}
+
+model Dispute {
+  id          String        @id @default(cuid())
+  orderId     String        @unique
+  order       Order         @relation(fields: [orderId], references: [id])
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  issueType   String
+  description String
+  evidenceUrls String[]
+  status      DisputeStatus @default(OPEN)
+  resolution  String?
+  rating      Int?          // 1-5
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  escalateAt  DateTime?
+
+  @@index([userId])
+  @@index([status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+}

@@ -1,0 +1,35 @@
+{
+  "name": "@matsrc/web",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@matsrc/ui": "workspace:*",
+    "@matsrc/db": "workspace:*",
+    "next": "^14.2.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@tanstack/react-query": "^5.40.0",
+    "socket.io-client": "^4.7.5",
+    "recharts": "^2.12.7",
+    "next-pwa": "^5.6.0",
+    "next-auth": "^5.0.0-beta.19",
+    "axios": "^1.7.2"
+  },
+  "devDependencies": {
+    "@matsrc/config": "workspace:*",
+    "@types/node": "^20.14.2",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.4.5",
+    "tailwindcss": "^3.4.4",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38"
+  }
+}

@@ -1,0 +1,29 @@
+/** @type {import('next').NextConfig} */
+const withPWA = require("next-pwa")({
+  dest: "public",
+  disable: process.env.NODE_ENV === "development",
+  register: true,
+  skipWaiting: true,
+});
+
+const nextConfig = {
+  reactStrictMode: true,
+  transpilePackages: ["@matsrc/ui", "@matsrc/db"],
+  images: {
+    domains: ["matsrc-docs.s3.ap-south-1.amazonaws.com"],
+  },
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
+  },
+};
+
+module.exports = withPWA(nextConfig);

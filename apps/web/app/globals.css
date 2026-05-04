@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --brand-500: #1a4f8a;
+    --accent-500: #e87722;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+}
+
+@layer utilities {
+  .price-up {
+    @apply text-green-600;
+  }
+  .price-down {
+    @apply text-red-500;
+  }
+}

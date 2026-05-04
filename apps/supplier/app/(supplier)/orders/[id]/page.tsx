@@ -1,34 +1,37 @@
+import { OrderStatusActions } from "@/components/supplier/OrderStatusActions";
+import { getSupplierOrderDetail } from "@/lib/supplier-data";
+
 type Props = {
   params: { id: string };
 };
 
-const timeline = ["Order Accepted", "Material Allocated", "Truck Assigned", "Out for Delivery", "Delivered"];
+export default async function SupplierOrderDetailPage({ params }: Props) {
+  const order = await getSupplierOrderDetail(params.id);
 
-export default function SupplierOrderDetailPage({ params }: Props) {
+  if (!order) {
+    return <div className="panel p-5 text-sm text-slate-600">Order not found for this supplier.</div>;
+  }
+
   return (
     <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
       <section className="panel p-5">
-        <h3 className="text-xl font-extrabold text-slate-900">Order #{params.id}</h3>
-        <p className="mt-1 text-sm text-slate-600">Buyer: SK Infra Projects | Delivery: 600102</p>
+        <h3 className="text-xl font-extrabold text-slate-900">Order #{order.id}</h3>
+        <p className="mt-1 text-sm text-slate-600">
+          Buyer: {order.buyer} | Material: {order.material} | Delivery: {order.deliveryDate}
+        </p>
 
         <div className="mt-4 space-y-3">
-          {timeline.map((step, i) => (
-            <div key={step} className="flex items-center gap-3">
-              <div className={`h-3 w-3 rounded-full ${i <= 2 ? "bg-blue-600" : "bg-slate-300"}`} />
-              <p className="text-sm font-semibold text-slate-700">{step}</p>
+          {order.tracking.map((step, i) => (
+            <div key={step.id} className="flex items-center gap-3">
+              <div className={`h-3 w-3 rounded-full ${i === order.tracking.length - 1 ? "bg-blue-600" : "bg-slate-300"}`} />
+              <p className="text-sm font-semibold text-slate-700">{step.label}</p>
             </div>
           ))}
+          {order.tracking.length === 0 ? <p className="text-sm text-slate-500">No tracking events recorded yet.</p> : null}
         </div>
       </section>
 
-      <aside className="panel p-5">
-        <h4 className="text-lg font-bold text-slate-900">Update Status</h4>
-        <div className="mt-3 space-y-2">
-          <button className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">Mark as Packed</button>
-          <button className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">Assign Vehicle</button>
-          <button className="w-full rounded-lg bg-blue-700 px-3 py-2 text-sm font-bold text-white">Mark Dispatched</button>
-        </div>
-      </aside>
+      <OrderStatusActions orderId={order.id} status={order.status} />
     </div>
   );
 }

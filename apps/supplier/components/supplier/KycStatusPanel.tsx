@@ -1,11 +1,9 @@
-const items = [
-  { doc: "GST Certificate", status: "Verified" },
-  { doc: "Trade Licence", status: "Verified" },
-  { doc: "PAN", status: "Pending" },
-  { doc: "Cancelled Cheque", status: "Pending" },
-];
+type KycItem = {
+  doc: string;
+  status: string;
+};
 
-export function KycStatusPanel() {
+export function KycStatusPanel({ items }: { items: KycItem[] }) {
   return (
     <section className="panel p-5">
       <h3 className="text-xl font-extrabold text-slate-900">KYC Progress</h3>
@@ -22,7 +20,8 @@ export function KycStatusPanel() {
               {item.status}
             </span>
           </div>
-        ))}
+          ))}
+          {items.length === 0 ? <p className="text-sm text-slate-500">No KYC documents uploaded yet.</p> : null}
       </div>
     </section>
   );

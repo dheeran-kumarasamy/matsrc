@@ -1,21 +1,11 @@
 import Link from "next/link";
 import { KpiCard } from "@/components/supplier/KpiCard";
 import { OrderQueueTable } from "@/components/supplier/OrderQueueTable";
+import { getSupplierDashboardData } from "@/lib/supplier-data";
 
-const kpis = [
-  { label: "Active Listings", value: "24", hint: "+3 this week" },
-  { label: "Incoming Orders", value: "8", hint: "2 require dispatch today" },
-  { label: "Open RFQs", value: "14", hint: "7 high-priority" },
-  { label: "On-time Dispatch", value: "97%", hint: "Last 30 days" },
-];
+export default async function SupplierDashboardPage() {
+  const { kpis, orders } = await getSupplierDashboardData();
 
-const orders = [
-  { id: "98214", material: "TMT Bars Fe500", quantity: "28 MT", eta: "06 May", status: "NEW" as const },
-  { id: "98211", material: "OPC Cement 53", quantity: "600 Bags", eta: "05 May", status: "PACKING" as const },
-  { id: "98198", material: "M Sand", quantity: "2 Loads", eta: "04 May", status: "IN_TRANSIT" as const },
-];
-
-export default function SupplierDashboardPage() {
   return (
     <div className="space-y-4">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

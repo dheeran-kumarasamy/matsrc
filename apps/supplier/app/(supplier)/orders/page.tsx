@@ -1,12 +1,9 @@
 import Link from "next/link";
+import { getSupplierOrders } from "@/lib/supplier-data";
 
-const orders = [
-  { id: "98214", buyer: "SK Infra Projects", material: "TMT Bars 12mm", qty: "28 MT", status: "NEW" },
-  { id: "98211", buyer: "Vinayaka Constructions", material: "OPC Cement 53", qty: "600 Bags", status: "PACKING" },
-  { id: "98198", buyer: "Rudra Developers", material: "M Sand", qty: "2 Loads", status: "IN_TRANSIT" },
-];
+export default async function SupplierOrdersPage() {
+  const orders = await getSupplierOrders();
 
-export default function SupplierOrdersPage() {
   return (
     <section className="panel overflow-hidden">
       <div className="border-b border-slate-200 px-4 py-3">
@@ -40,6 +37,13 @@ export default function SupplierOrdersPage() {
                 </td>
               </tr>
             ))}
+            {orders.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
+                  No supplier orders yet.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>

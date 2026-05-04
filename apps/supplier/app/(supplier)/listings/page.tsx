@@ -1,12 +1,9 @@
 import Link from "next/link";
+import { getSupplierListings } from "@/lib/supplier-data";
 
-const listings = [
-  { id: "lst-101", name: "TMT Bars 12mm", city: "Chennai", price: "₹61,250 / MT", stock: "120 MT" },
-  { id: "lst-102", name: "OPC Cement 53", city: "Coimbatore", price: "₹372 / bag", stock: "24,000 bags" },
-  { id: "lst-103", name: "M Sand", city: "Salem", price: "₹1,850 / ton", stock: "75 tons" },
-];
+export default async function SupplierListingsPage() {
+  const listings = await getSupplierListings();
 
-export default function SupplierListingsPage() {
   return (
     <section className="panel overflow-hidden">
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
@@ -24,7 +21,8 @@ export default function SupplierListingsPage() {
           <thead className="bg-slate-50 text-left text-slate-500">
             <tr>
               <th className="px-4 py-3 font-semibold">Material</th>
-              <th className="px-4 py-3 font-semibold">Dispatch City</th>
+              <th className="px-4 py-3 font-semibold">Category</th>
+              <th className="px-4 py-3 font-semibold">Grade</th>
               <th className="px-4 py-3 font-semibold">Price</th>
               <th className="px-4 py-3 font-semibold">Stock</th>
               <th className="px-4 py-3 font-semibold">Action</th>
@@ -34,7 +32,8 @@ export default function SupplierListingsPage() {
             {listings.map((row) => (
               <tr key={row.id} className="border-t border-slate-100">
                 <td className="px-4 py-3 font-semibold text-slate-800">{row.name}</td>
-                <td className="px-4 py-3 text-slate-700">{row.city}</td>
+                <td className="px-4 py-3 text-slate-700">{row.category}</td>
+                <td className="px-4 py-3 text-slate-700">{row.grade}</td>
                 <td className="px-4 py-3 text-slate-700">{row.price}</td>
                 <td className="px-4 py-3 text-slate-700">{row.stock}</td>
                 <td className="px-4 py-3">
@@ -44,6 +43,13 @@ export default function SupplierListingsPage() {
                 </td>
               </tr>
             ))}
+            {listings.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
+                  No listings yet. Create your first product listing to appear in builder discovery.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>

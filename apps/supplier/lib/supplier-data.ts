@@ -64,7 +64,14 @@ async function withPoolTimeoutRetry<T>(operation: () => Promise<T>): Promise<T> 
 }
 
 export async function ensureSupplierContext() {
-  const user = await withPoolTimeoutRetry(() =>
+  const user = await withPoolTimeoutRetry<{
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    whatsappNumber: string | null;
+    supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null } | null;
+  }>(() =>
     prisma.user.upsert({
       where: { email: DEV_SUPPLIER_EMAIL },
       update: { role: "SUPPLIER", name: "Demo Supplier" },

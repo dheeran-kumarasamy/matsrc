@@ -1,4 +1,6 @@
-import { OrderStatus, Role, prisma } from "@matsrc/db";
+import { Role, prisma } from "@matsrc/db";
+
+type OrderStatus = "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
 
 const DEV_SUPPLIER_EMAIL = "supplier.demo@buildmart.local";
 
@@ -29,8 +31,8 @@ function humanizeToken(value: string) {
 }
 
 function mapOrderStatus(status: OrderStatus): "NEW" | "PACKING" | "IN_TRANSIT" {
-  if (status === OrderStatus.DISPATCHED || status === OrderStatus.OUT_FOR_DELIVERY) return "IN_TRANSIT";
-  if (status === OrderStatus.PROCESSING) return "PACKING";
+  if (status === "DISPATCHED" || status === "OUT_FOR_DELIVERY") return "IN_TRANSIT";
+  if (status === "PROCESSING") return "PACKING";
   return "NEW";
 }
 
@@ -112,7 +114,7 @@ export async function getSupplierDashboardData() {
       take: 5,
     }),
     prisma.quickRequest.count(),
-    prisma.orderItem.count({ where: { supplierId: supplierProfile.id, order: { status: OrderStatus.DELIVERED } } }),
+    prisma.orderItem.count({ where: { supplierId: supplierProfile.id, order: { status: "DELIVERED" } } }),
     prisma.orderItem.count({ where: { supplierId: supplierProfile.id } }),
   ]);
 

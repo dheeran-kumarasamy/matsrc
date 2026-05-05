@@ -135,7 +135,7 @@ export async function getSupplierDashboardData() {
   };
 }
 
-export async function getSupplierListings() {
+export async function getSupplierListings(): Promise<SupplierListingRow[]> {
   const { supplierProfile } = await ensureSupplierContext();
 
   const listings = await prisma.product.findMany({
@@ -155,6 +155,41 @@ export async function getSupplierListings() {
     active: product.isActive,
   }));
 }
+
+export type SupplierListingRow = {
+  id: string;
+  name: string;
+  category: string;
+  grade: string;
+  unit: string;
+  price: string;
+  stock: string;
+  active: boolean;
+};
+
+export type SupplierOrderRow = {
+  id: string;
+  buyer: string;
+  material: string;
+  qty: string;
+  status: OrderStatus;
+};
+
+export type SupplierTrackingStep = {
+  id: string;
+  label: string;
+  status: OrderStatus;
+};
+
+export type SupplierOrderDetail = {
+  id: string;
+  buyer: string;
+  deliveryDate: string;
+  quantity: string;
+  material: string;
+  status: OrderStatus;
+  tracking: SupplierTrackingStep[];
+};
 
 export async function getSupplierListingById(id: string) {
   const { supplierProfile } = await ensureSupplierContext();
@@ -246,7 +281,7 @@ export async function updateSupplierListing(id: string, input: ListingInput) {
   });
 }
 
-export async function getSupplierOrders() {
+export async function getSupplierOrders(): Promise<SupplierOrderRow[]> {
   const { supplierProfile } = await ensureSupplierContext();
 
   const items = await prisma.orderItem.findMany({
@@ -264,7 +299,7 @@ export async function getSupplierOrders() {
   }));
 }
 
-export async function getSupplierOrderDetail(orderId: string) {
+export async function getSupplierOrderDetail(orderId: string): Promise<SupplierOrderDetail | null> {
   const { supplierProfile } = await ensureSupplierContext();
 
   const item = await prisma.orderItem.findFirst({

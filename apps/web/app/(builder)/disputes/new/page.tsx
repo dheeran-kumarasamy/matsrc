@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 // UF-10 Step 3: Raise dispute ticket — FR-16
-export default function NewDisputePage() {
+function NewDisputeForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orderId = searchParams.get("orderId") ?? "";
@@ -93,5 +93,13 @@ export default function NewDisputePage() {
         </button>
       </form>
     </div>
+  );
+}
+
+export default function NewDisputePage() {
+  return (
+    <Suspense fallback={<div className="panel p-8 text-center text-slate-500 text-sm">Loading...</div>}>
+      <NewDisputeForm />
+    </Suspense>
   );
 }

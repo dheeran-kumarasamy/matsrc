@@ -1,8 +1,40 @@
 import Link from "next/link";
 import { Package, ShoppingCart, TrendingDown, FileText, CreditCard } from "lucide-react";
+import { builderApiGet } from "@/lib/api";
 
 // UF-02 entry, summary of key builder actions
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  let cartCount = 0;
+  let orderCount = 0;
+  let watchlistCount = 0;
+  let availableCredit = 0;
+
+  try {
+    const [cart, orders, watchlist, credit] = await Promise.all([
+      builderApiGet<{ items: Array<{ id: string }> }>("/builder/cart"),
+      builderApiGet<Array<{ id: string }>>("/builder/orders"),
+      builderApiGet<Array<{ id: string }>>("/builder/watchlist"),
+      builderApiGet<{ availableLimit: number }>("/builder/credit"),
+    ]);
+
+    cartCount = cart.items.length;
+    orderCount = orders.length;
+    watchlistCount = watchlist.length;
+    availableCredit = credit.availableLimit;
+  } catch {
+    cartCount = 0;
+    orderCount = 0;
+    watchlistCount = 0;
+    availableCredit = 0;
+  }
+
+  const stats = [
+    { label: "Active Orders", value: String(orderCount), icon: FileText, href: "/orders", color: "blue" },
+    { label: "Cart Items", value: String(cartCount), icon: ShoppingCart, href: "/cart", color: "orange" },
+    { label: "Price Alerts", value: String(watchlistCount), icon: TrendingDown, href: "/watchlist", color: "green" },
+    { label: "Credit Available", value: `INR ${availableCredit.toLocaleString("en-IN")}`, icon: CreditCard, href: "/credit", color: "purple" },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
@@ -12,12 +44,7 @@ export default function DashboardPage() {
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Active Orders", value: "—", icon: FileText, href: "/orders", color: "blue" },
-          { label: "Cart Items", value: "—", icon: ShoppingCart, href: "/cart", color: "orange" },
-          { label: "Price Alerts", value: "—", icon: TrendingDown, href: "/watchlist", color: "green" },
-          { label: "Credit Available", value: "—", icon: CreditCard, href: "/credit", color: "purple" },
-        ].map(({ label, value, icon: Icon, href, color }) => (
+        {stats.map(({ label, value, icon: Icon, href, color }) => (
           <Link
             key={label}
             href={href}

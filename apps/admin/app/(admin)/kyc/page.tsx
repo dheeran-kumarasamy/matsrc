@@ -1,11 +1,16 @@
 import { KycReviewList } from "@/components/admin/KycReviewList";
+import { adminApiGet } from "@/lib/api";
 
-const items = [
-  { id: "kyc-11", vendor: "Metro Cement Hub", document: "PAN Document", submittedAt: "Today, 08:32", status: "FLAGGED" as const },
-  { id: "kyc-12", vendor: "Arka Steel Traders", document: "Cancelled Cheque", submittedAt: "Today, 09:10", status: "PENDING" as const },
-  { id: "kyc-13", vendor: "Prime Pipe Works", document: "GST Certificate", submittedAt: "Today, 09:41", status: "PENDING" as const },
-];
+export default async function KycPage() {
+  const docs = await adminApiGet<Array<{ id: string; vendorName: string | null; type: string; createdAt: string }>>("/admin/kyc").catch(() => []);
 
-export default function KycPage() {
+  const items = docs.map((doc) => ({
+    id: doc.id,
+    vendor: doc.vendorName || "Unknown Vendor",
+    document: doc.type,
+    submittedAt: new Date(doc.createdAt).toLocaleString("en-IN"),
+    status: "PENDING" as const,
+  }));
+
   return <KycReviewList items={items} />;
 }

@@ -1,12 +1,16 @@
 import { VendorApprovalTable } from "@/components/admin/VendorApprovalTable";
+import { adminApiGet } from "@/lib/api";
 
-const vendors = [
-  { id: "ven-101", company: "Arka Steel Traders", category: "Steel", city: "Chennai", risk: "LOW" as const },
-  { id: "ven-102", company: "Metro Cement Hub", category: "Cement", city: "Bengaluru", risk: "MEDIUM" as const },
-  { id: "ven-103", company: "Rudra Aggregates", category: "Aggregates", city: "Hyderabad", risk: "HIGH" as const },
-  { id: "ven-104", company: "Prime Pipe Works", category: "Pipes", city: "Pune", risk: "MEDIUM" as const },
-];
+export default async function VendorsPage() {
+  const vendorsRaw = await adminApiGet<Array<{ id: string; companyName: string | null; kycStatus: string }>>("/admin/vendors").catch(() => []);
 
-export default function VendorsPage() {
+  const vendors = vendorsRaw.map((vendor) => ({
+    id: vendor.id,
+    company: vendor.companyName || "Unnamed Supplier",
+    category: "General",
+    city: "—",
+    risk: (vendor.kycStatus === "REJECTED" ? "HIGH" : vendor.kycStatus === "PENDING" ? "MEDIUM" : "LOW") as "LOW" | "MEDIUM" | "HIGH",
+  }));
+
   return <VendorApprovalTable vendors={vendors} />;
 }

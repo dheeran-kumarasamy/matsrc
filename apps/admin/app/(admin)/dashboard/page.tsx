@@ -2,32 +2,48 @@ import { AuditTimeline } from "@/components/admin/AuditTimeline";
 import { DisputeBoard } from "@/components/admin/DisputeBoard";
 import { MetricCard } from "@/components/admin/MetricCard";
 import { VendorApprovalTable } from "@/components/admin/VendorApprovalTable";
+import { adminApiGet } from "@/lib/api";
 
-const metrics = [
-  { label: "Pending Vendors", value: "12", hint: "4 high-risk submissions" },
-  { label: "KYC Docs Pending", value: "31", hint: "11 flagged for mismatch" },
-  { label: "Open Disputes", value: "9", hint: "3 nearing SLA breach" },
-  { label: "Audit Events", value: "284", hint: "Last 24 hours" },
-];
+export default async function AdminDashboardPage() {
+  const [summary, vendorsRaw, disputesRaw, auditRaw] = await Promise.all([
+    adminApiGet<{ pendingVendors: number; pendingKyc: number; openDisputes: number; totalOrders: number }>("/admin/dashboard").catch(() => ({ pendingVendors: 0, pendingKyc: 0, openDisputes: 0, totalOrders: 0 })),
+    adminApiGet<Array<{ id: string; companyName: string | null; kycStatus: string }>>("/admin/vendors").catch(() => []),
+    adminApiGet<Array<{ id: string; orderId: string; issueType: string; status: string }>>("/admin/disputes").catch(() => []),
+    adminApiGet<Array<{ id: string; actorId: string; action: string; entityType: string; entityId: string; createdAt: string }>>("/admin/audit?limit=5").catch(() => []),
+  ]);
 
-const vendors = [
-  { id: "ven-101", company: "Arka Steel Traders", category: "Steel", city: "Chennai", risk: "LOW" as const },
-  { id: "ven-102", company: "Metro Cement Hub", category: "Cement", city: "Bengaluru", risk: "MEDIUM" as const },
-  { id: "ven-103", company: "Rudra Aggregates", category: "Aggregates", city: "Hyderabad", risk: "HIGH" as const },
-];
+  const metrics = [
+    { label: "Pending Vendors", value: String(summary.pendingVendors), hint: "Awaiting review" },
+    { label: "KYC Docs Pending", value: String(summary.pendingKyc), hint: "Require document checks" },
+    { label: "Open Disputes", value: String(summary.openDisputes), hint: "Need resolution" },
+    { label: "Total Orders", value: String(summary.totalOrders), hint: "Across platform" },
+  ];
 
-const disputes = [
-  { id: "d-201", orderId: "98211", issue: "Short delivery claim", owner: "Ops Team A", sla: "18 hrs", severity: "HIGH" as const },
-  { id: "d-204", orderId: "98198", issue: "Damaged goods", owner: "Ops Team B", sla: "31 hrs", severity: "MEDIUM" as const },
-];
+  const vendors = vendorsRaw.slice(0, 3).map((vendor) => ({
+    id: vendor.id,
+    company: vendor.companyName || "Unnamed Supplier",
+    category: "General",
+    city: "—",
+    risk: (vendor.kycStatus === "REJECTED" ? "HIGH" : vendor.kycStatus === "PENDING" ? "MEDIUM" : "LOW") as "LOW" | "MEDIUM" | "HIGH",
+  }));
 
-const events = [
-  { id: "a1", actor: "Meera", action: "approved vendor", target: "Arka Steel Traders", time: "04 May · 10:10 IST" },
-  { id: "a2", actor: "Ravi", action: "flagged KYC", target: "PAN mismatch for Metro Cement Hub", time: "04 May · 09:42 IST" },
-  { id: "a3", actor: "Nila", action: "escalated dispute", target: "Short delivery claim on order #98211", time: "04 May · 09:15 IST" },
-];
+  const disputes = disputesRaw.slice(0, 3).map((dispute) => ({
+    id: dispute.id,
+    orderId: dispute.orderId,
+    issue: dispute.issueType,
+    owner: "Ops Team",
+    sla: dispute.status === "ESCALATED" ? "4 hrs" : "24 hrs",
+    severity: (dispute.status === "ESCALATED" ? "HIGH" : "MEDIUM") as "MEDIUM" | "HIGH",
+  }));
 
-export default function AdminDashboardPage() {
+  const events = auditRaw.map((event) => ({
+    id: event.id,
+    actor: event.actorId,
+    action: event.action.toLowerCase().replace(/_/g, " "),
+    target: `${event.entityType} ${event.entityId}`,
+    time: new Date(event.createdAt).toLocaleString("en-IN"),
+  }));
+
   return (
     <div className="space-y-4">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

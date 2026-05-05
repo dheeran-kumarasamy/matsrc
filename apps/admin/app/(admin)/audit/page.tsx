@@ -1,12 +1,16 @@
 import { AuditTimeline } from "@/components/admin/AuditTimeline";
+import { adminApiGet } from "@/lib/api";
 
-const events = [
-  { id: "a1", actor: "Meera", action: "approved vendor", target: "Arka Steel Traders", time: "04 May · 10:10 IST" },
-  { id: "a2", actor: "Ravi", action: "flagged KYC", target: "PAN mismatch for Metro Cement Hub", time: "04 May · 09:42 IST" },
-  { id: "a3", actor: "Nila", action: "escalated dispute", target: "Short delivery claim on order #98211", time: "04 May · 09:15 IST" },
-  { id: "a4", actor: "Suresh", action: "rejected vendor", target: "Warehouse proof missing for Prime Pipe Works", time: "04 May · 08:57 IST" },
-];
+export default async function AuditPage() {
+  const logs = await adminApiGet<Array<{ id: string; actorId: string; action: string; entityType: string; entityId: string; createdAt: string }>>("/admin/audit?limit=50").catch(() => []);
 
-export default function AuditPage() {
+  const events = logs.map((log) => ({
+    id: log.id,
+    actor: log.actorId,
+    action: log.action.toLowerCase().replace(/_/g, " "),
+    target: `${log.entityType} ${log.entityId}`,
+    time: new Date(log.createdAt).toLocaleString("en-IN"),
+  }));
+
   return <AuditTimeline events={events} />;
 }

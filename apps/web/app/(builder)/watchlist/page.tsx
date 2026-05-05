@@ -1,8 +1,54 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, TrendingDown } from "lucide-react";
+import { Bell, TrendingDown, Trash2 } from "lucide-react";
+import { builderApiDelete, builderApiGet } from "@/lib/api";
+
+type WatchlistItem = {
+  id: string;
+  productId: string;
+  name: string;
+  unit: string;
+  basePrice: number;
+  targetPrice: number | null;
+};
 
 // UF-09: Watchlist & Price Alerts — FR-07, FR-31
-export default async function WatchlistPage() {
+export default function WatchlistPage() {
+  const [items, setItems] = useState<WatchlistItem[]>([]);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadWatchlist() {
+      try {
+        const payload = await builderApiGet<WatchlistItem[]>("/builder/watchlist");
+        if (!active) return;
+        setItems(payload);
+      } catch {
+        if (!active) return;
+        setItems([]);
+      }
+    }
+
+    void loadWatchlist();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handleRemove(productId: string, id: string) {
+    setLoadingId(id);
+    try {
+      await builderApiDelete(`/builder/watchlist/${productId}`);
+      setItems((prev) => prev.filter((item) => item.id !== id));
+    } finally {
+      setLoadingId(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -23,12 +69,40 @@ export default async function WatchlistPage() {
       </div>
 
       {/* Watchlist items */}
-      <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
-        <p className="text-gray-400 text-sm">No items in watchlist.</p>
-        <Link href="/products" className="mt-3 inline-block text-sm text-brand-500 hover:underline">
-          Browse and watchlist materials →
-        </Link>
-      </div>
+      {items.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
+          <p className="text-gray-400 text-sm">No items in watchlist.</p>
+          <Link href="/products" className="mt-3 inline-block text-sm text-brand-500 hover:underline">
+            Browse and watchlist materials →
+          </Link>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-100">
+          {items.map((item) => (
+            <div key={item.id} className="p-4 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">{item.name}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Current: INR {item.basePrice.toLocaleString("en-IN")} / {item.unit}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <p className="text-xs text-gray-600">
+                  Target: {item.targetPrice ? `INR ${item.targetPrice.toLocaleString("en-IN")}` : "Not set"}
+                </p>
+                <button
+                  disabled={loadingId === item.id}
+                  onClick={() => void handleRemove(item.productId, item.id)}
+                  className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-40"
+                  aria-label={`Remove ${item.name} from watchlist`}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,14 +1,50 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 // UF-05: Credit / BNPL Activation — FR-20, FR-27, FR-28, FR-29
 export default function CreditPage() {
   const [step, setStep] = useState<"options" | "consent" | "scoring" | "kfs" | "approved">("options");
+  const [availableLimit, setAvailableLimit] = useState<number>(0);
+  const [creditStatus, setCreditStatus] = useState<string>("NOT_APPLIED");
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCreditSummary() {
+      try {
+        const response = await fetch("http://localhost:4000/api/builder/credit", {
+          headers: {
+            "X-User-Id": "builder.demo@buildmart.local",
+            "X-User-Email": "builder.demo@buildmart.local",
+            "X-User-Name": "Demo Builder",
+            "X-User-Role": "BUILDER",
+          },
+        });
+
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!active) return;
+
+        setAvailableLimit(Number(data.availableLimit || 0));
+        setCreditStatus(String(data.status || "NOT_APPLIED"));
+      } catch {
+        if (!active) return;
+        setAvailableLimit(0);
+        setCreditStatus("NOT_APPLIED");
+      }
+    }
+
+    void loadCreditSummary();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
       <h1 className="text-xl font-bold text-gray-900">Credit & BNPL</h1>
+      <p className="text-sm text-gray-500">Status: <span className="font-semibold text-gray-700">{creditStatus}</span> · Available: <span className="font-semibold text-gray-700">INR {availableLimit.toLocaleString("en-IN")}</span></p>
 
       {/* Step: select credit type */}
       {step === "options" && (

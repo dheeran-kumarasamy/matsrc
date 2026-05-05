@@ -29,7 +29,7 @@ export default async function SupplierListingsPage() {
             </tr>
           </thead>
           <tbody>
-            {listings.map((row) => (
+            {listings.map((row: { id: string; name: string; category: string; grade: string; price: string; stock: string; active: boolean }) => (
               <tr key={row.id} className="border-t border-slate-100">
                 <td className="px-4 py-3 font-semibold text-slate-800">{row.name}</td>
                 <td className="px-4 py-3 text-slate-700">{row.category}</td>

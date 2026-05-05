@@ -26,7 +26,7 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
         </p>
 
         <div className="mt-4 space-y-3">
-          {order.tracking.map((step: TrackingStep, i) => (
+          {order.tracking.map((step: TrackingStep, i: number) => (
             <div key={step.id} className="flex items-center gap-3">
               <div className={`h-3 w-3 rounded-full ${i === order.tracking.length - 1 ? "bg-blue-600" : "bg-slate-300"}`} />
               <p className="text-sm font-semibold text-slate-700">{step.label}</p>

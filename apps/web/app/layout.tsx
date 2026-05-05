@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   themeColor: "#1a4f8a",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "BuildMart" },
+  other: { "mobile-web-app-capable": "yes" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

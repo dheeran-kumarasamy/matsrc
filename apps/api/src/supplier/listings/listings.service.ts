@@ -12,8 +12,8 @@ export class ListingsService {
     private readonly supplierContext: SupplierContextService
   ) {}
 
-  async findAll() {
-    const { supplierProfile } = await this.supplierContext.getCurrentSupplier();
+  async findAll(user: any) {
+    const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
 
     const listings = await this.prisma.product.findMany({
       where: { supplierId: supplierProfile.id },
@@ -33,8 +33,8 @@ export class ListingsService {
     }));
   }
 
-  async findOne(id: string) {
-    const { supplierProfile } = await this.supplierContext.getCurrentSupplier();
+  async findOne(id: string, user: any) {
+    const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
 
     const listing = await this.prisma.product.findFirst({
       where: { id, supplierId: supplierProfile.id },
@@ -58,8 +58,8 @@ export class ListingsService {
     };
   }
 
-  async create(dto: CreateListingDto): Promise<{ id: string; name: string; category: string; unit: string }> {
-    const { supplierProfile } = await this.supplierContext.getCurrentSupplier();
+  async create(dto: CreateListingDto, user: any): Promise<{ id: string; name: string; category: string; unit: string }> {
+    const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
     const categoryName = dto.category.trim();
     const category = await this.prisma.category.upsert({
       where: { slug: slugify(categoryName) },
@@ -94,8 +94,8 @@ export class ListingsService {
     };
   }
 
-  async update(id: string, dto: UpdateListingDto): Promise<{ id: string; name: string; unit: string }> {
-    await this.findOne(id);
+  async update(id: string, dto: UpdateListingDto, user: any): Promise<{ id: string; name: string; unit: string }> {
+    await this.findOne(id, user);
     const categoryName = dto.category?.trim();
 
     let categoryId: string | undefined;

@@ -11,8 +11,8 @@ export class OrdersService {
     private readonly supplierContext: SupplierContextService
   ) {}
 
-  async findAll() {
-    const { supplierProfile } = await this.supplierContext.getCurrentSupplier();
+  async findAll(user: any) {
+    const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
 
     const items = await this.prisma.orderItem.findMany({
       where: { supplierId: supplierProfile.id },
@@ -29,8 +29,8 @@ export class OrdersService {
     }));
   }
 
-  async findOne(id: string) {
-    const { supplierProfile } = await this.supplierContext.getCurrentSupplier();
+  async findOne(id: string, user: any) {
+    const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
 
     const item = await this.prisma.orderItem.findFirst({
       where: { orderId: id, supplierId: supplierProfile.id },
@@ -64,8 +64,8 @@ export class OrdersService {
     };
   }
 
-  async updateStatus(id: string, status: OrderStatus): Promise<{ id: string; status: OrderStatus }> {
-    await this.findOne(id);
+  async updateStatus(id: string, status: OrderStatus, user: any): Promise<{ id: string; status: OrderStatus }> {
+    await this.findOne(id, user);
 
     const order = await this.prisma.order.update({
       where: { id },

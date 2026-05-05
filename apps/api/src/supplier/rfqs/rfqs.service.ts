@@ -11,8 +11,8 @@ export class RfqsService {
     private readonly supplierContext: SupplierContextService
   ) {}
 
-  async findAll() {
-    const { supplierProfile } = await this.supplierContext.getCurrentSupplier();
+  async findAll(user: any) {
+    const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
 
     const rfqs = await this.prisma.quickRequest.findMany({
       include: {
@@ -41,8 +41,8 @@ export class RfqsService {
     }));
   }
 
-  async createQuote(rfqId: string, dto: CreateQuoteDto): Promise<{ id: string; rfqId: string; price: string }> {
-    const { supplierProfile } = await this.supplierContext.getCurrentSupplier();
+  async createQuote(rfqId: string, dto: CreateQuoteDto, user: any): Promise<{ id: string; rfqId: string; price: string }> {
+    const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
     const rfq = await this.prisma.quickRequest.findUnique({ where: { id: rfqId } });
 
     if (!rfq) {

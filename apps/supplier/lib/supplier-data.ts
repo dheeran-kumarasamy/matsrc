@@ -191,6 +191,18 @@ export type SupplierOrderDetail = {
   tracking: SupplierTrackingStep[];
 };
 
+export type SupplierRfqCard = {
+  id: string;
+  material: string;
+  quantity: string;
+  pincode: string;
+  dueBy: string;
+  latestQuote: {
+    price: string;
+    validUntil: string | null;
+  } | null;
+};
+
 export async function getSupplierListingById(id: string) {
   const { supplierProfile } = await ensureSupplierContext();
 
@@ -349,7 +361,7 @@ export async function updateSupplierOrderStatus(orderId: string, status: OrderSt
   return order;
 }
 
-export async function getSupplierRfqs() {
+export async function getSupplierRfqs(): Promise<SupplierRfqCard[]> {
   const { supplierProfile } = await ensureSupplierContext();
 
   const rfqs = await prisma.quickRequest.findMany({

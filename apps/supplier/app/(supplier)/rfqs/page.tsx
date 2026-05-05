@@ -1,6 +1,6 @@
 import { RfqCard } from "@/components/supplier/RfqCard";
 import { QuoteResponseForm } from "@/components/supplier/QuoteResponseForm";
-import { getSupplierRfqs } from "@/lib/supplier-data";
+import { getSupplierRfqs, type SupplierRfqCard } from "@/lib/supplier-data";
 
 export default async function SupplierRfqsPage({ searchParams }: { searchParams?: { respond?: string } }) {
   const rfqs = await getSupplierRfqs();
@@ -13,7 +13,7 @@ export default async function SupplierRfqsPage({ searchParams }: { searchParams?
       </div>
       <QuoteResponseForm rfqId={searchParams?.respond ?? null} />
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {rfqs.map((rfq) => (
+        {rfqs.map((rfq: SupplierRfqCard) => (
           <RfqCard key={rfq.id} rfq={rfq} />
         ))}
       </div>

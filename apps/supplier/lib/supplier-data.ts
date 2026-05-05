@@ -1,4 +1,4 @@
-import { Role, prisma } from "@matsrc/db";
+import { prisma } from "@matsrc/db";
 
 type OrderStatus = "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
 
@@ -67,12 +67,12 @@ export async function ensureSupplierContext() {
   const user = await withPoolTimeoutRetry(() =>
     prisma.user.upsert({
       where: { email: DEV_SUPPLIER_EMAIL },
-      update: { role: Role.SUPPLIER, name: "Demo Supplier" },
+      update: { role: "SUPPLIER", name: "Demo Supplier" },
       create: {
         email: DEV_SUPPLIER_EMAIL,
         name: "Demo Supplier",
         phone: "+919000011111",
-        role: Role.SUPPLIER,
+        role: "SUPPLIER",
         whatsappNumber: "+919000011111",
         supplierProfile: {
           create: {

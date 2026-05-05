@@ -14,5 +14,14 @@
   "devDependencies": {
     "turbo": "^2.9.8",
     "typescript": "^5.4.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "msgpackr-extract",
+      "prisma"
+    ]
   }
 }

@@ -146,7 +146,7 @@ export async function getSupplierDashboardData() {
       { label: "Open RFQs", value: String(openRfqs), hint: "Quick requests awaiting supplier quotes" },
       { label: "Fulfilment Rate", value: `${fulfilment}%`, hint: "Delivered supplier order items" },
     ],
-    orders: incomingOrders.map((item) => ({
+    orders: incomingOrders.map((item: any) => ({
       id: item.orderId,
       material: item.product.name,
       quantity: `${item.quantity} ${item.product.unit}`,
@@ -165,7 +165,7 @@ export async function getSupplierListings(): Promise<SupplierListingRow[]> {
     orderBy: { updatedAt: "desc" },
   });
 
-  return listings.map((product) => ({
+  return listings.map((product: any) => ({
     id: product.id,
     name: product.name,
     category: product.category.name,
@@ -323,7 +323,7 @@ export async function getSupplierOrders(): Promise<SupplierOrderRow[]> {
     orderBy: { order: { createdAt: "desc" } },
   });
 
-  return items.map((item) => ({
+  return items.map((item: any) => ({
     id: item.orderId,
     buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
     material: item.product.name,
@@ -357,7 +357,7 @@ export async function getSupplierOrderDetail(orderId: string): Promise<SupplierO
     quantity: `${item.quantity} ${item.product.unit}`,
     material: item.product.name,
     status: item.order.status,
-    tracking: item.order.tracking.map((entry) => ({
+    tracking: item.order.tracking.map((entry: any) => ({
       id: entry.id,
       label: entry.note ?? humanizeToken(entry.status),
       status: entry.status,
@@ -397,7 +397,7 @@ export async function getSupplierRfqs(): Promise<SupplierRfqCard[]> {
     take: 12,
   });
 
-  return rfqs.map((rfq) => ({
+  return rfqs.map((rfq: any) => ({
     id: rfq.id,
     material: rfq.materialName,
     quantity: rfq.quantity,
@@ -449,7 +449,7 @@ export async function getSupplierProfileData() {
       whatsappNumber: user.whatsappNumber ?? "",
       bisLicenceNo: supplierProfile.bisLicenceNo ?? "",
     },
-    kycItems: docs.map((doc) => ({
+    kycItems: docs.map((doc: any) => ({
       doc: humanizeToken(doc.type),
       status: doc.verified ? "Verified" : "Pending",
     })),

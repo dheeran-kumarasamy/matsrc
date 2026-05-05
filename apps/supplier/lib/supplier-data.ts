@@ -2,6 +2,18 @@ import { prisma } from "@matsrc/db";
 
 type OrderStatus = "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
 
+type SupplierContext = {
+  user: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    whatsappNumber: string | null;
+    supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null } | null;
+  };
+  supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null };
+};
+
 const DEV_SUPPLIER_EMAIL = "supplier.demo@buildmart.local";
 
 function slugify(value: string) {
@@ -63,7 +75,7 @@ async function withPoolTimeoutRetry<T>(operation: () => Promise<T>): Promise<T> 
   throw new Error("Unexpected retry state while acquiring database connection");
 }
 
-export async function ensureSupplierContext() {
+export async function ensureSupplierContext(): Promise<SupplierContext> {
   const user = await withPoolTimeoutRetry<{
     id: string;
     name: string | null;
@@ -103,7 +115,7 @@ export async function ensureSupplierContext() {
       }),
     );
 
-    return { user, supplierProfile: profile };
+    return { user, supplierProfile: profile as SupplierContext["supplierProfile"] };
   }
 
   return { user, supplierProfile: user.supplierProfile };

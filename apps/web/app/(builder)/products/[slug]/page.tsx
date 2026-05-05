@@ -43,7 +43,7 @@ export default async function ProductDetailPage({ params }: Props) {
             {/* Specs */}
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               {[["IS Code", "IS 1786"], ["Grade", "Fe-500D"], ["Unit", "MT"], ["BIS Status", "Certified"]].map(([k, v]) => (
-                <div key={k} className="flex justify-between border-b border-gray-50 pb-2">
+                <div key={k} className="flex justify-between border-b border-slate-50 pb-2">
                   <span className="text-slate-400">{k}</span>
                   <span className="font-medium text-slate-700">{v}</span>
                 </div>
@@ -78,7 +78,7 @@ export default async function ProductDetailPage({ params }: Props) {
                   type="number"
                   min={1}
                   defaultValue={1}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
                 />
               </div>
 
@@ -94,7 +94,7 @@ export default async function ProductDetailPage({ params }: Props) {
             </button>
 
             {/* Supplier info */}
-            <div className="mt-4 pt-4 border-t border-gray-100">
+            <div className="mt-4 pt-4 border-t border-slate-100">
               <p className="text-xs text-slate-400 mb-2">Top supplier</p>
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-xs font-bold text-slate-500">S</div>

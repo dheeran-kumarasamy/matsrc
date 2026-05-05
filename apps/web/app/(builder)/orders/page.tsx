@@ -27,7 +27,7 @@ export default async function OrdersPage() {
       {/* Filters */}
       <div className="flex gap-2 flex-wrap">
         {["All", "Placed", "Processing", "Dispatched", "Delivered"].map((s) => (
-          <button key={s} className="text-xs border border-gray-200 rounded-full px-3 py-1 hover:bg-gray-50 transition-colors">
+          <button key={s} className="text-xs border border-slate-200 rounded-full px-3 py-1 hover:bg-slate-50 transition-colors">
             {s}
           </button>
         ))}

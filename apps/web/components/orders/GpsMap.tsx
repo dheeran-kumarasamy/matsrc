@@ -6,14 +6,14 @@ export default function GpsMap({ orderId }: { orderId: string }) {
 
   if (!apiKey) {
     return (
-      <div className="h-56 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-sm">
+      <div className="h-56 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 text-sm">
         GPS map will appear here once order is dispatched.
       </div>
     );
   }
 
   return (
-    <div className="h-56 rounded-lg overflow-hidden border border-gray-100">
+    <div className="h-56 rounded-lg overflow-hidden border border-slate-100">
       <iframe
         title="Live Delivery Map"
         width="100%"

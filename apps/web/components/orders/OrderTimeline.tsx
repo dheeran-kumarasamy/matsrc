@@ -22,15 +22,15 @@ export default function OrderTimeline({ status }: { status: Status }) {
           <div key={step.status} className="flex gap-4 pb-6 last:pb-0 relative">
             {/* Vertical line */}
             {i < steps.length - 1 && (
-              <div className={`absolute left-3.5 top-7 bottom-0 w-0.5 ${done ? "bg-brand-500" : "bg-gray-100"}`} />
+              <div className={`absolute left-3.5 top-7 bottom-0 w-0.5 ${done ? "bg-blue-700" : "bg-slate-100"}`} />
             )}
             {/* Dot */}
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold z-10 ${active ? "bg-brand-500 text-white ring-4 ring-blue-100" : done ? "bg-brand-500 text-white" : "bg-gray-100 text-gray-400"}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold z-10 ${active ? "bg-blue-700 text-white ring-4 ring-blue-100" : done ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-400"}`}>
               {done ? "✓" : i + 1}
             </div>
             <div className="pt-0.5">
-              <p className={`text-sm font-medium ${done ? "text-gray-800" : "text-gray-400"}`}>{step.label}</p>
-              <p className="text-xs text-gray-400">{step.desc}</p>
+              <p className={`text-sm font-medium ${done ? "text-slate-800" : "text-slate-400"}`}>{step.label}</p>
+              <p className="text-xs text-slate-400">{step.desc}</p>
             </div>
           </div>
         );

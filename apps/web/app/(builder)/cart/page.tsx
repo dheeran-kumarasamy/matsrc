@@ -73,7 +73,7 @@ export default function CartPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-gray-900">My Cart</h1>
+      <h1 className="text-xl font-bold text-slate-900">My Cart</h1>
 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Cart items */}
@@ -88,7 +88,7 @@ export default function CartPage() {
           ) : (
             data.items.map((item) => (
               <div key={item.id} className="panel p-4 flex gap-4">
-                <div className="w-16 h-16 bg-gray-100 rounded-lg shrink-0" />
+                <div className="w-16 h-16 bg-slate-100 rounded-lg shrink-0" />
                 <div className="flex-1">
                   <p className="font-medium text-slate-800 text-sm">{item.name}</p>
                   <p className="text-xs text-slate-400 mt-0.5">Qty: {item.quantity} {item.unit}</p>
@@ -99,7 +99,7 @@ export default function CartPage() {
                 <button
                   disabled={loadingId === item.id}
                   onClick={() => void handleRemove(item.productId, item.id)}
-                  className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-40"
+                  className="text-slate-300 hover:text-red-500 transition-colors disabled:opacity-40"
                 >
                   <Trash2 size={16} />
                 </button>
@@ -128,7 +128,7 @@ export default function CartPage() {
             </div>
             <Link
               href="/checkout"
-              className="block w-full text-center bg-brand-500 hover:bg-brand-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors"
+              className="block w-full text-center bg-blue-700 hover:bg-blue-800 text-white rounded-lg py-2.5 text-sm font-medium transition-colors"
             >
               Proceed to Checkout
             </Link>

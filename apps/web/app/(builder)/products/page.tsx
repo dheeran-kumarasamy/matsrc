@@ -33,7 +33,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
               name="q"
               defaultValue={searchParams.q}
               placeholder="Search TMT bars, cement, bricks..."
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
             />
           </form>
 
@@ -42,7 +42,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
             <p className="text-xs text-slate-400">Showing live market prices</p>
             <select
               name="sort"
-              className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none"
+              className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none"
             >
               <option value="price_asc">Price: Low to High</option>
               <option value="price_desc">Price: High to Low</option>

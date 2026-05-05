@@ -46,7 +46,7 @@ export default async function OrderDetailPage({ params }: Props) {
               <div className="flex justify-between text-slate-500"><span>Payment</span><span>UPI</span></div>
               <div className="flex justify-between text-slate-500"><span>Total</span><span className="font-bold text-slate-800">₹—</span></div>
             </div>
-            <button className="w-full text-xs text-blue-700 border border-blue-700 rounded-lg py-2 hover:bg-brand-50 transition-colors">
+            <button className="w-full text-xs text-blue-700 border border-blue-700 rounded-lg py-2 hover:bg-blue-50 transition-colors">
               Download GST Invoice (PDF)
             </button>
           </div>

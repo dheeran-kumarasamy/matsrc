@@ -29,11 +29,11 @@ export default function MfaVerification({ onVerified }: { onVerified: () => void
 
   return (
     <div className="max-w-sm mx-auto">
-      <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center space-y-5">
+      <div className="panel p-8 text-center space-y-5">
         <div className="text-3xl">🔐</div>
         <div>
-          <h2 className="font-bold text-gray-800">Verify Your Identity</h2>
-          <p className="text-sm text-gray-400 mt-1">Enter the OTP sent to your registered phone to authorise this payment.</p>
+          <h2 className="font-bold text-slate-800">Verify Your Identity</h2>
+          <p className="text-sm text-slate-400 mt-1">Enter the OTP sent to your registered phone to authorise this payment.</p>
         </div>
         <form onSubmit={handleVerify} className="space-y-4">
           <input
@@ -44,10 +44,10 @@ export default function MfaVerification({ onVerified }: { onVerified: () => void
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
             required
-            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-center text-xl tracking-widest focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full border border-slate-200 rounded-lg px-4 py-3 text-center text-xl tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-700"
           />
           {error && <p className="text-red-500 text-xs">{error}</p>}
-          <button type="submit" disabled={loading || otp.length < 6} className="w-full bg-brand-500 text-white rounded-lg py-3 text-sm font-medium disabled:opacity-50">
+          <button type="submit" disabled={loading || otp.length < 6} className="w-full bg-blue-700 text-white rounded-lg py-3 text-sm font-medium disabled:opacity-50">
             {loading ? "Verifying..." : "Confirm & Place Order"}
           </button>
         </form>

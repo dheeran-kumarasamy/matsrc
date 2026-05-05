@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { Package, ShoppingCart, TrendingDown, FileText, CreditCard } from "lucide-react";
+import { BuilderKpiCard } from "@/components/builder/BuilderKpiCard";
 import { builderApiGet } from "@/lib/api";
 
-// UF-02 entry, summary of key builder actions
+// UF-02 entry: builder dashboard summary
 export default async function DashboardPage() {
   let cartCount = 0;
   let orderCount = 0;
@@ -22,73 +22,86 @@ export default async function DashboardPage() {
     watchlistCount = watchlist.length;
     availableCredit = credit.availableLimit;
   } catch {
-    cartCount = 0;
-    orderCount = 0;
-    watchlistCount = 0;
-    availableCredit = 0;
+    // show zeros on error
   }
-
-  const stats = [
-    { label: "Active Orders", value: String(orderCount), icon: FileText, href: "/orders", color: "blue" },
-    { label: "Cart Items", value: String(cartCount), icon: ShoppingCart, href: "/cart", color: "orange" },
-    { label: "Price Alerts", value: String(watchlistCount), icon: TrendingDown, href: "/watchlist", color: "green" },
-    { label: "Credit Available", value: `INR ${availableCredit.toLocaleString("en-IN")}`, icon: CreditCard, href: "/credit", color: "purple" },
-  ];
 
   return (
     <div className="space-y-4">
-      {/* Quick stats */}
-      <section className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        {stats.map(({ label, value, icon: Icon, href, color }) => (
-          <Link
-            key={label}
-            href={href}
-            className="panel p-4 hover:shadow-md transition-shadow"
-          >
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 bg-${color}-50`}>
-              <Icon size={18} className={`text-${color}-600`} />
-            </div>
-            <div className="text-2xl font-bold text-slate-800">{value}</div>
-            <div className="text-xs text-slate-500 mt-0.5">{label}</div>
-          </Link>
-        ))}
+      {/* KPI cards */}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <BuilderKpiCard label="Active Orders" value={String(orderCount)} hint="Orders in progress" href="/orders" />
+        <BuilderKpiCard label="Cart Items" value={String(cartCount)} hint="Items ready to checkout" href="/cart" />
+        <BuilderKpiCard label="Price Alerts" value={String(watchlistCount)} hint="Watchlist materials" href="/watchlist" />
+        <BuilderKpiCard
+          label="Credit Available"
+          value={`₹${availableCredit.toLocaleString("en-IN")}`}
+          hint="BNPL / credit line"
+          href="/credit"
+        />
       </section>
 
-      {/* Recent orders */}
-      <div className="panel p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-slate-800">Recent Orders</h2>
-          <Link href="/orders" className="text-xs text-blue-700 hover:underline">View all</Link>
-        </div>
-        <div className="text-center py-8 text-slate-400 text-sm">No orders yet. <Link href="/products" className="text-blue-700 hover:underline">Browse materials →</Link></div>
-      </div>
-
-      {/* Watchlist price alerts */}
-      <div className="panel p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-slate-800">Watchlist Alerts</h2>
-          <Link href="/watchlist" className="text-xs text-blue-700 hover:underline">Manage</Link>
-        </div>
-        <div className="text-center py-8 text-slate-400 text-sm">No alerts. <Link href="/products" className="text-blue-700 hover:underline">Watchlist a material →</Link></div>
-      </div>
-
-      {/* Quick links */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Link href="/products" className="rounded-2xl bg-[linear-gradient(120deg,#1a4f8a,#2778cc)] text-white p-5 hover:opacity-90 transition-opacity flex items-center gap-4">
-          <Package size={28} />
-          <div>
-            <div className="font-semibold">Browse Materials</div>
-            <div className="text-xs text-blue-200 mt-0.5">Compare prices across suppliers</div>
+      <section className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+        {/* Recent orders panel */}
+        <div className="panel overflow-hidden">
+          <div className="border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+            <h3 className="text-lg font-bold text-slate-900">Recent Orders</h3>
+            <Link href="/orders" className="text-xs text-blue-700 hover:underline">View all →</Link>
           </div>
-        </Link>
-        <Link href="/credit" className="panel p-5 hover:shadow-md transition-shadow flex items-center gap-4">
-          <CreditCard size={28} className="text-blue-700" />
-          <div>
-            <div className="font-semibold text-slate-800">Apply for Credit</div>
-            <div className="text-xs text-slate-400 mt-0.5">EMI, BNPL, working capital</div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-left text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">Order</th>
+                  <th className="px-4 py-3 font-semibold">Material</th>
+                  <th className="px-4 py-3 font-semibold">Total</th>
+                  <th className="px-4 py-3 font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={4} className="px-4 py-10 text-center text-slate-400 text-sm">
+                    No orders yet.{" "}
+                    <Link href="/products" className="text-blue-700 hover:underline">
+                      Browse materials →
+                    </Link>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-        </Link>
-      </div>
+        </div>
+
+        {/* Quick actions panel */}
+        <div className="panel p-4">
+          <h3 className="text-lg font-bold text-slate-900">Quick Actions</h3>
+          <div className="mt-3 space-y-2">
+            <Link
+              href="/products"
+              className="block rounded-lg bg-blue-700 px-3 py-2 text-center text-sm font-bold text-white hover:bg-blue-800 transition-colors"
+            >
+              Browse Materials
+            </Link>
+            <Link
+              href="/cart"
+              className="block rounded-lg border border-slate-300 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              View Cart
+            </Link>
+            <Link
+              href="/credit"
+              className="block rounded-lg border border-slate-300 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              Apply for Credit
+            </Link>
+            <Link
+              href="/disputes"
+              className="block rounded-lg border border-slate-300 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              Raise Dispute
+            </Link>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

@@ -53,7 +53,7 @@ export default function WatchlistPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-900">Watchlist</h1>
-        <span className="text-xs text-gray-400 flex items-center gap-1">
+        <span className="text-xs text-slate-400 flex items-center gap-1">
           <Bell size={12} /> WhatsApp alerts enabled
         </span>
       </div>
@@ -77,23 +77,23 @@ export default function WatchlistPage() {
           </Link>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-100">
+        <div className="panel divide-y divide-slate-100">
           {items.map((item) => (
             <div key={item.id} className="p-4 flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold text-gray-800">{item.name}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                <p className="text-xs text-slate-500 mt-0.5">
                   Current: INR {item.basePrice.toLocaleString("en-IN")} / {item.unit}
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-slate-600">
                   Target: {item.targetPrice ? `INR ${item.targetPrice.toLocaleString("en-IN")}` : "Not set"}
                 </p>
                 <button
                   disabled={loadingId === item.id}
                   onClick={() => void handleRemove(item.productId, item.id)}
-                  className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-40"
+                  className="text-slate-300 hover:text-red-500 transition-colors disabled:opacity-40"
                   aria-label={`Remove ${item.name} from watchlist`}
                 >
                   <Trash2 size={16} />

@@ -43,16 +43,16 @@ export default function QuickRequestForm({ floating }: Props) {
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-800">Quick Material Request</h3>
-                <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+                <h3 className="font-semibold text-slate-800">Quick Material Request</h3>
+                <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
               </div>
 
               {submitted ? (
                 <div className="text-center py-6">
                   <div className="text-4xl mb-2">✅</div>
-                  <p className="font-medium text-gray-800">Request Submitted!</p>
-                  <p className="text-sm text-gray-400 mt-1">Suppliers will respond with quotes shortly.</p>
-                  <button onClick={() => { setOpen(false); setSubmitted(false); setMaterial(""); setQuantity(""); setPincode(""); }} className="mt-4 text-xs text-brand-500 hover:underline">Submit another</button>
+                  <p className="font-medium text-slate-800">Request Submitted!</p>
+                  <p className="text-sm text-slate-400 mt-1">Suppliers will respond with quotes shortly.</p>
+                  <button onClick={() => { setOpen(false); setSubmitted(false); setMaterial(""); setQuantity(""); setPincode(""); }} className="mt-4 text-xs text-blue-700 hover:underline">Submit another</button>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-3">
@@ -61,14 +61,14 @@ export default function QuickRequestForm({ floating }: Props) {
                     placeholder="Material name (e.g. TMT Bar Fe-500D)"
                     value={material}
                     onChange={(e) => setMaterial(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
                   />
                   <input
                     required
                     placeholder="Quantity (e.g. 10 MT)"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
                   />
                   <input
                     required
@@ -76,12 +76,12 @@ export default function QuickRequestForm({ floating }: Props) {
                     maxLength={6}
                     value={pincode}
                     onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
                   />
                   <button type="submit" disabled={loading} className="w-full bg-accent-500 hover:bg-accent-600 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
                     {loading ? "Submitting..." : "Get Quotes from Suppliers"}
                   </button>
-                  <p className="text-xs text-gray-400 text-center">Takes less than 30 seconds</p>
+                  <p className="text-xs text-slate-400 text-center">Takes less than 30 seconds</p>
                 </form>
               )}
             </div>

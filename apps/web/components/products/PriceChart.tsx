@@ -22,7 +22,7 @@ export default function PriceChart({ productSlug }: { productSlug: string }) {
           <button
             key={p}
             onClick={() => setPeriod(p)}
-            className={`text-xs px-3 py-1 rounded-full border transition-colors ${period === p ? "bg-brand-500 text-white border-brand-500" : "border-gray-200 text-gray-500 hover:border-brand-500"}`}
+            className={`text-xs px-3 py-1 rounded-full border transition-colors ${period === p ? "bg-blue-700 text-white border-blue-700" : "border-slate-200 text-slate-500 hover:border-blue-700"}`}
           >
             {p}D
           </button>

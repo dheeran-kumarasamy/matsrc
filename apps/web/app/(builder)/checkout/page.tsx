@@ -41,7 +41,7 @@ export default function CheckoutPage() {
       <div className="panel p-5">
         <h2 className="font-semibold text-slate-800 mb-3">1. Review Cart</h2>
         <p className="text-sm text-slate-400">Stock re-validated against live supplier inventory.</p>
-        <div className="mt-3 text-center py-4 text-slate-300 text-sm border border-dashed border-gray-200 rounded-lg">
+        <div className="mt-3 text-center py-4 text-slate-300 text-sm border border-dashed border-slate-200 rounded-lg">
           Cart items appear here
         </div>
       </div>
@@ -50,9 +50,9 @@ export default function CheckoutPage() {
       <div className="panel p-5">
         <h2 className="font-semibold text-slate-800 mb-3">2. Preferred Delivery Dates</h2>
         <p className="text-xs text-slate-400 mb-3">Set a preferred delivery date per supplier.</p>
-        <div className="border border-gray-100 rounded-lg p-3 flex items-center justify-between">
+        <div className="border border-slate-100 rounded-lg p-3 flex items-center justify-between">
           <span className="text-sm text-slate-700">Raipur Steel Co.</span>
-          <input type="date" className="text-xs border border-gray-200 rounded px-2 py-1" />
+          <input type="date" className="text-xs border border-slate-200 rounded px-2 py-1" />
         </div>
       </div>
 
@@ -61,14 +61,14 @@ export default function CheckoutPage() {
         <h2 className="font-semibold text-slate-800 mb-3">3. Payment Method</h2>
         <div className="space-y-2">
           {paymentOptions.map(({ value, label, desc }) => (
-            <label key={value} className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === value ? "border-blue-700 bg-brand-50" : "border-gray-100 hover:border-gray-200"}`}>
+            <label key={value} className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === value ? "border-blue-700 bg-blue-50" : "border-slate-100 hover:border-slate-200"}`}>
               <input
                 type="radio"
                 name="payment"
                 value={value}
                 checked={paymentMethod === value}
                 onChange={() => setPaymentMethod(value)}
-                className="accent-brand-500"
+                className="accent-blue-700"
               />
               <div>
                 <div className="text-sm font-medium text-slate-800">{label}</div>
@@ -80,7 +80,7 @@ export default function CheckoutPage() {
 
         {/* UTR upload for bank transfer — FR-12 */}
         {paymentMethod === "BANK_TRANSFER" && (
-          <div className="mt-4 border-2 border-dashed border-gray-200 rounded-lg p-4 text-center">
+          <div className="mt-4 border-2 border-dashed border-slate-200 rounded-lg p-4 text-center">
             <input type="file" accept=".pdf,.jpg,.jpeg,.png" id="utr-upload" className="hidden" />
             <label htmlFor="utr-upload" className="text-sm text-blue-700 cursor-pointer hover:underline">
               Upload UTR / Bank Receipt
@@ -93,11 +93,11 @@ export default function CheckoutPage() {
       <div className="panel p-5 space-y-3">
         <div className="flex justify-between text-sm text-slate-500"><span>Subtotal</span><span>₹0</span></div>
         <div className="flex justify-between text-sm text-slate-500"><span>GST</span><span>₹0</span></div>
-        <div className="flex justify-between font-bold text-slate-800 border-t border-gray-100 pt-3"><span>Total</span><span>₹0</span></div>
+        <div className="flex justify-between font-bold text-slate-800 border-t border-slate-100 pt-3"><span>Total</span><span>₹0</span></div>
         <button
           onClick={handlePlaceOrder}
           disabled={loading}
-          className="w-full bg-brand-500 hover:bg-brand-600 text-white rounded-lg py-3 text-sm font-medium transition-colors disabled:opacity-50"
+          className="w-full bg-blue-700 hover:bg-blue-800 text-white rounded-lg py-3 text-sm font-medium transition-colors disabled:opacity-50"
         >
           {loading ? "Processing..." : "Place Order — Verify with OTP"}
         </button>

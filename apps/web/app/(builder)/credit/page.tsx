@@ -80,15 +80,15 @@ export default function CreditPage() {
             <li>Income Tax Returns (last 2 years)</li>
           </ul>
           <div className="flex gap-3">
-            <button onClick={() => setStep("options")} className="flex-1 border border-gray-200 text-slate-600 rounded-lg py-2.5 text-sm">Cancel</button>
-            <button onClick={() => setStep("scoring")} className="flex-1 bg-brand-500 text-white rounded-lg py-2.5 text-sm font-medium">I Authorise Data Access</button>
+            <button onClick={() => setStep("options")} className="flex-1 border border-slate-200 text-slate-600 rounded-lg py-2.5 text-sm">Cancel</button>
+            <button onClick={() => setStep("scoring")} className="flex-1 bg-blue-700 text-white rounded-lg py-2.5 text-sm font-medium">I Authorise Data Access</button>
           </div>
         </div>
       )}
 
       {/* Step: scoring in progress */}
       {step === "scoring" && (
-        <div className="bg-white rounded-xl border border-gray-100 p-10 text-center space-y-4">
+        <div className="panel p-10 text-center space-y-4">
           <div className="w-12 h-12 border-4 border-blue-700 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="font-medium text-slate-800">Running credit assessment...</p>
           <p className="text-sm text-slate-400">Evaluating GST + ITR data via NBFC model. This takes ~30 seconds.</p>
@@ -101,7 +101,7 @@ export default function CreditPage() {
 
       {/* Step: RBI Key Fact Statement — FR-29 mandatory */}
       {step === "kfs" && (
-        <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-4">
+        <div className="panel p-6 space-y-4">
           <div className="flex items-center gap-2">
             <span className="bg-blue-50 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded">RBI Mandated</span>
             <h2 className="font-semibold text-slate-800">Key Fact Statement (KFS)</h2>
@@ -117,10 +117,10 @@ export default function CreditPage() {
             <p><strong>Grievance Officer:</strong> grievance@matsrc.in</p>
           </div>
           <label className="flex items-start gap-3 cursor-pointer">
-            <input type="checkbox" className="mt-0.5 accent-brand-500" />
+            <input type="checkbox" className="mt-0.5 accent-blue-700" />
             <span className="text-xs text-slate-500">I have read and accept the Key Fact Statement. I consent to the terms of this credit product.</span>
           </label>
-          <button onClick={() => setStep("approved")} className="w-full bg-brand-500 text-white rounded-lg py-2.5 text-sm font-medium">
+          <button onClick={() => setStep("approved")} className="w-full bg-blue-700 text-white rounded-lg py-2.5 text-sm font-medium">
             Confirm with OTP & Activate Credit
           </button>
         </div>
@@ -128,12 +128,12 @@ export default function CreditPage() {
 
       {/* Approved */}
       {step === "approved" && (
-        <div className="bg-white rounded-xl border border-gray-100 p-10 text-center space-y-3">
+        <div className="panel p-10 text-center space-y-3">
           <div className="text-5xl">🎉</div>
           <h2 className="font-bold text-xl text-slate-800">Credit Activated!</h2>
           <p className="text-sm text-slate-500">Your credit limit of <strong>₹5,00,000</strong> is ready to use at checkout.</p>
           <p className="text-xs text-slate-400">Payment reminders will be sent 7 and 1 day before due date via WhatsApp & SMS.</p>
-          <a href="/dashboard" className="inline-block mt-2 bg-brand-500 text-white rounded-lg px-6 py-2 text-sm font-medium">Go to Dashboard</a>
+          <a href="/dashboard" className="inline-block mt-2 bg-blue-700 text-white rounded-lg px-6 py-2 text-sm font-medium">Go to Dashboard</a>
         </div>
       )}
     </div>

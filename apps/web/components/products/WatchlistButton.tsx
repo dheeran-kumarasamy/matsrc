@@ -31,7 +31,7 @@ export default function WatchlistButton({ productId }: { productId: string }) {
     <div>
       <button
         onClick={handleWatchlist}
-        className={`w-full flex items-center justify-center gap-2 border-2 rounded-lg py-2.5 text-sm font-medium transition-all ${watching ? "border-green-500 text-green-600 bg-green-50" : "border-gray-200 text-gray-600 hover:border-brand-500 hover:text-brand-500"}`}
+        className={`w-full flex items-center justify-center gap-2 border-2 rounded-lg py-2.5 text-sm font-medium transition-all ${watching ? "border-green-500 text-green-600 bg-green-50" : "border-slate-200 text-slate-600 hover:border-blue-700 hover:text-blue-700"}`}
       >
         {watching ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
         {watching ? "Watching — Price Alert Set" : "Add to Watchlist"}
@@ -44,9 +44,9 @@ export default function WatchlistButton({ productId }: { productId: string }) {
             placeholder="Alert me below ₹..."
             value={targetPrice}
             onChange={(e) => setTargetPrice(e.target.value)}
-            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
           />
-          <button onClick={saveWatchlist} className="bg-brand-500 text-white rounded-lg px-3 text-xs font-medium">Save</button>
+          <button onClick={saveWatchlist} className="bg-blue-700 text-white rounded-lg px-3 text-xs font-medium">Save</button>
         </div>
       )}
     </div>

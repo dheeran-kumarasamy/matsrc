@@ -46,12 +46,12 @@ export default function NewDisputePage() {
       <form onSubmit={handleSubmit} className="panel p-5 space-y-4">
         <div>
           <label className="text-xs font-medium text-slate-600 mb-1.5 block">Order ID</label>
-          <input value={orderId} readOnly className="w-full border border-gray-100 bg-slate-50 rounded-lg px-3 py-2 text-sm text-slate-500" />
+          <input value={orderId} readOnly className="w-full border border-slate-100 bg-slate-50 rounded-lg px-3 py-2 text-sm text-slate-500" />
         </div>
 
         <div>
           <label className="text-xs font-medium text-slate-600 mb-1.5 block">Issue Type</label>
-          <select value={issueType} onChange={(e) => setIssueType(e.target.value)} required className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <select value={issueType} onChange={(e) => setIssueType(e.target.value)} required className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700">
             <option value="">Select issue type</option>
             {issueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -65,13 +65,13 @@ export default function NewDisputePage() {
             required
             rows={4}
             placeholder="Describe the issue in detail..."
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 resize-none"
           />
         </div>
 
         <div>
           <label className="text-xs font-medium text-slate-600 mb-1.5 block">Photo Evidence</label>
-          <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center">
+          <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center">
             <input
               type="file"
               accept="image/*"

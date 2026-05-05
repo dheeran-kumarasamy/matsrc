@@ -15,8 +15,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Browse Materials</h1>
-        <span className="text-sm text-gray-400">Live prices from all suppliers</span>
+        <h1 className="text-xl font-bold text-slate-900">Browse Materials</h1>
+        <span className="text-sm text-slate-400">Live prices from all suppliers</span>
       </div>
 
       <div className="flex flex-col md:flex-row gap-6">
@@ -39,7 +39,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
 
           {/* Sort */}
           <div className="flex items-center justify-between mb-4">
-            <p className="text-xs text-gray-400">Showing live market prices</p>
+            <p className="text-xs text-slate-400">Showing live market prices</p>
             <select
               name="sort"
               className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none"

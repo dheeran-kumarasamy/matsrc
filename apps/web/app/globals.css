@@ -6,10 +6,20 @@
   :root {
     --brand-500: #1a4f8a;
     --accent-500: #e87722;
+    --ink-900: #0f172a;
+    --sky-50: #eef6ff;
   }
 
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply min-h-screen bg-slate-50 text-slate-900 antialiased;
+    background-image: radial-gradient(circle at 1px 1px, rgba(26, 79, 138, 0.08) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
   }
 }
 

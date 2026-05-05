@@ -22,7 +22,7 @@ export default async function OrdersPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-gray-900">My Orders</h1>
+      <h1 className="text-xl font-bold text-slate-900">My Orders</h1>
 
       {/* Filters */}
       <div className="flex gap-2 flex-wrap">
@@ -34,25 +34,25 @@ export default async function OrdersPage() {
       </div>
 
       {orders.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
-          <p className="text-gray-400 text-sm">No orders found.</p>
-          <Link href="/products" className="mt-3 inline-block text-sm text-brand-500 hover:underline">
+        <div className="panel p-10 text-center">
+          <p className="text-slate-400 text-sm">No orders found.</p>
+          <Link href="/products" className="mt-3 inline-block text-sm text-blue-700 hover:underline">
             Place your first order →
           </Link>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-100">
+        <div className="panel divide-y divide-slate-100">
           {orders.map((order) => (
             <div key={order.id} className="p-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-gray-800">Order #{order.id.slice(0, 8)}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="text-sm font-semibold text-slate-800">Order #{order.id.slice(0, 8)}</p>
+                <p className="text-xs text-slate-500 mt-0.5">
                   {order.itemCount} items · INR {order.total.toLocaleString("en-IN")}
                 </p>
               </div>
               <div className="flex items-center gap-3">
                 <OrderStatusBadge status={order.status} />
-                <Link href={`/orders/${order.id}`} className="text-xs text-brand-500 hover:underline">
+                <Link href={`/orders/${order.id}`} className="text-xs text-blue-700 hover:underline">
                   View
                 </Link>
               </div>

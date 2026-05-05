@@ -34,34 +34,65 @@ function mapOrderStatus(status: OrderStatus): "NEW" | "PACKING" | "IN_TRANSIT" {
   return "NEW";
 }
 
+function isPoolTimeoutError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("Timed out fetching a new connection from the connection pool");
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withPoolTimeoutRetry<T>(operation: () => Promise<T>): Promise<T> {
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isPoolTimeoutError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+
+      await sleep(150 * attempt);
+    }
+  }
+
+  throw new Error("Unexpected retry state while acquiring database connection");
+}
+
 export async function ensureSupplierContext() {
-  const user = await prisma.user.upsert({
-    where: { email: DEV_SUPPLIER_EMAIL },
-    update: { role: Role.SUPPLIER, name: "Demo Supplier" },
-    create: {
-      email: DEV_SUPPLIER_EMAIL,
-      name: "Demo Supplier",
-      phone: "+919000011111",
-      role: Role.SUPPLIER,
-      whatsappNumber: "+919000011111",
-      supplierProfile: {
-        create: {
-          companyName: "BuildMart Demo Supplies",
+  const user = await withPoolTimeoutRetry(() =>
+    prisma.user.upsert({
+      where: { email: DEV_SUPPLIER_EMAIL },
+      update: { role: Role.SUPPLIER, name: "Demo Supplier" },
+      create: {
+        email: DEV_SUPPLIER_EMAIL,
+        name: "Demo Supplier",
+        phone: "+919000011111",
+        role: Role.SUPPLIER,
+        whatsappNumber: "+919000011111",
+        supplierProfile: {
+          create: {
+            companyName: "BuildMart Demo Supplies",
+          },
         },
       },
-    },
-    include: {
-      supplierProfile: true,
-    },
-  });
+      include: {
+        supplierProfile: true,
+      },
+    }),
+  );
 
   if (!user.supplierProfile) {
-    const profile = await prisma.supplierProfile.create({
-      data: {
-        userId: user.id,
-        companyName: user.name ?? "BuildMart Demo Supplies",
-      },
-    });
+    const profile = await withPoolTimeoutRetry(() =>
+      prisma.supplierProfile.create({
+        data: {
+          userId: user.id,
+          companyName: user.name ?? "BuildMart Demo Supplies",
+        },
+      }),
+    );
 
     return { user, supplierProfile: profile };
   }

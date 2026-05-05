@@ -52,7 +52,7 @@ export default function WatchlistPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Watchlist</h1>
+        <h1 className="text-xl font-bold text-slate-900">Watchlist</h1>
         <span className="text-xs text-gray-400 flex items-center gap-1">
           <Bell size={12} /> WhatsApp alerts enabled
         </span>
@@ -70,9 +70,9 @@ export default function WatchlistPage() {
 
       {/* Watchlist items */}
       {items.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-100 p-10 text-center">
-          <p className="text-gray-400 text-sm">No items in watchlist.</p>
-          <Link href="/products" className="mt-3 inline-block text-sm text-brand-500 hover:underline">
+        <div className="panel p-10 text-center">
+          <p className="text-slate-400 text-sm">No items in watchlist.</p>
+          <Link href="/products" className="mt-3 inline-block text-sm text-blue-700 hover:underline">
             Browse and watchlist materials →
           </Link>
         </div>

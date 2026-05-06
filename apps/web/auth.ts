@@ -4,8 +4,8 @@ import Google from "next-auth/providers/google";
 
 export const authConfig: NextAuthConfig = {
   pages: {
-    signIn: "/sign-in",
-    error: "/sign-in",
+    signIn: "/auth/login",
+    error: "/auth/login",
   },
   callbacks: {
     async jwt({ token, user }) {

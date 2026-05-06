@@ -1,35 +1,46 @@
 import Link from "next/link";
 import { BuilderKpiCard } from "@/components/builder/BuilderKpiCard";
 import { builderApiGet } from "@/lib/api";
+import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
+
+type Order = {
+  id: string;
+  status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
+  totalLabel: string;
+  total: number;
+  items: Array<{ name: string }>;
+};
 
 // UF-02 entry: builder dashboard summary
 export default async function DashboardPage() {
   let cartCount = 0;
-  let orderCount = 0;
+  let orders: Order[] = [];
   let watchlistCount = 0;
   let availableCredit = 0;
 
   try {
-    const [cart, orders, watchlist, credit] = await Promise.all([
+    const [cart, ordersData, watchlist, credit] = await Promise.all([
       builderApiGet<{ items: Array<{ id: string }> }>("/builder/cart"),
-      builderApiGet<Array<{ id: string }>>("/builder/orders"),
+      builderApiGet<Order[]>("/builder/orders"),
       builderApiGet<Array<{ id: string }>>("/builder/watchlist"),
       builderApiGet<{ availableLimit: number }>("/builder/credit"),
     ]);
 
     cartCount = cart.items.length;
-    orderCount = orders.length;
+    orders = ordersData;
     watchlistCount = watchlist.length;
     availableCredit = credit.availableLimit;
   } catch {
     // show zeros on error
   }
 
+  const recentOrders = orders.slice(0, 5);
+
   return (
     <div className="space-y-4">
       {/* KPI cards */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <BuilderKpiCard label="Active Orders" value={String(orderCount)} hint="Orders in progress" href="/orders" />
+        <BuilderKpiCard label="Active Orders" value={String(orders.length)} hint="Orders in progress" href="/orders" />
         <BuilderKpiCard label="Cart Items" value={String(cartCount)} hint="Items ready to checkout" href="/cart" />
         <BuilderKpiCard label="Price Alerts" value={String(watchlistCount)} hint="Watchlist materials" href="/watchlist" />
         <BuilderKpiCard
@@ -58,14 +69,36 @@ export default async function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-slate-400 text-sm">
-                    No orders yet.{" "}
-                    <Link href="/products" className="text-blue-700 hover:underline">
-                      Browse materials →
-                    </Link>
-                  </td>
-                </tr>
+                {recentOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-10 text-center text-slate-400 text-sm">
+                      No orders yet.{" "}
+                      <Link href="/products" className="text-blue-700 hover:underline">
+                        Browse materials →
+                      </Link>
+                    </td>
+                  </tr>
+                ) : (
+                  recentOrders.map((order) => (
+                    <tr key={order.id} className="border-t border-slate-100 hover:bg-slate-50">
+                      <td className="px-4 py-3">
+                        <Link href={`/orders/${order.id}`} className="font-mono text-xs text-blue-700 hover:underline">
+                          #{order.id.slice(0, 8)}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {order.items?.[0]?.name ?? "—"}
+                        {(order.items?.length ?? 0) > 1 ? ` +${order.items.length - 1}` : ""}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-800">
+                        {order.totalLabel ?? `₹${order.total?.toLocaleString("en-IN")}`}
+                      </td>
+                      <td className="px-4 py-3">
+                        <OrderStatusBadge status={order.status} />
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

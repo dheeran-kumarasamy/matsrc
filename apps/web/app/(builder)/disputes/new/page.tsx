@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { builderApiPost } from "@/lib/api";
 
 // UF-10 Step 3: Raise dispute ticket — FR-16
 function NewDisputeForm() {
@@ -21,13 +22,11 @@ function NewDisputeForm() {
     setError("");
     setLoading(true);
     try {
-      const form = new FormData();
-      form.append("orderId", orderId);
-      form.append("issueType", issueType);
-      form.append("description", description);
-      files.forEach((f) => form.append("evidence", f));
-      const res = await fetch("/api/disputes", { method: "POST", body: form });
-      if (!res.ok) throw new Error((await res.json()).message);
+      const res = await builderApiPost<{ id: string }>("/builder/disputes", {
+        orderId,
+        issueType,
+        description,
+      });
       router.push("/disputes");
     } catch (err: any) {
       setError(err.message ?? "Failed to raise dispute");

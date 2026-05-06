@@ -13,6 +13,7 @@ import { BuilderOrdersModule } from "./builder/orders/orders.module";
 import { WatchlistModule } from "./builder/watchlist/watchlist.module";
 import { BuilderRfqsModule } from "./builder/rfqs/rfqs.module";
 import { CreditModule } from "./builder/credit/credit.module";
+import { BuilderDisputesModule } from "./builder/disputes/disputes.module";
 import { AdminModule } from "./admin/admin.module";
 import { AdminDashboardModule } from "./admin/dashboard/dashboard.module";
 import { VendorsModule } from "./admin/vendors/vendors.module";
@@ -35,6 +36,7 @@ import { AuditModule } from "./admin/audit/audit.module";
     WatchlistModule,
     BuilderRfqsModule,
     CreditModule,
+    BuilderDisputesModule,
     AdminModule,
     AdminDashboardModule,
     VendorsModule,

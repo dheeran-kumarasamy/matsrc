@@ -10,9 +10,15 @@ type OrderItem = {
   createdAt: string;
 };
 
+const STATUS_FILTERS = ["All", "PLACED", "PROCESSING", "DISPATCHED", "DELIVERED"] as const;
+const FILTER_LABELS: Record<string, string> = {
+  All: "All", PLACED: "Placed", PROCESSING: "Processing", DISPATCHED: "Dispatched", DELIVERED: "Delivered",
+};
+
 // UF-04: Order Tracking list — FR-13
-export default async function OrdersPage() {
+export default async function OrdersPage({ searchParams }: { searchParams: { status?: string } }) {
   let orders: OrderItem[] = [];
+  const activeFilter = searchParams.status ?? "All";
 
   try {
     orders = await builderApiGet<OrderItem[]>("/builder/orders");
@@ -20,20 +26,30 @@ export default async function OrdersPage() {
     orders = [];
   }
 
+  const filtered = activeFilter === "All" ? orders : orders.filter((o) => o.status === activeFilter);
+
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold text-slate-900">My Orders</h1>
 
       {/* Filters */}
       <div className="flex gap-2 flex-wrap">
-        {["All", "Placed", "Processing", "Dispatched", "Delivered"].map((s) => (
-          <button key={s} className="text-xs border border-slate-200 rounded-full px-3 py-1 hover:bg-slate-50 transition-colors">
-            {s}
-          </button>
+        {STATUS_FILTERS.map((s) => (
+          <Link
+            key={s}
+            href={s === "All" ? "/orders" : `/orders?status=${s}`}
+            className={`text-xs border rounded-full px-3 py-1 transition-colors ${
+              activeFilter === s
+                ? "bg-blue-700 text-white border-blue-700"
+                : "border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            {FILTER_LABELS[s]}
+          </Link>
         ))}
       </div>
 
-      {orders.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="panel p-10 text-center">
           <p className="text-slate-400 text-sm">No orders found.</p>
           <Link href="/products" className="mt-3 inline-block text-sm text-blue-700 hover:underline">
@@ -42,7 +58,7 @@ export default async function OrdersPage() {
         </div>
       ) : (
         <div className="panel divide-y divide-slate-100">
-          {orders.map((order) => (
+          {filtered.map((order) => (
             <div key={order.id} className="p-4 flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-slate-800">Order #{order.id.slice(0, 8)}</p>

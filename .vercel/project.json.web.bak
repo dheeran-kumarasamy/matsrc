@@ -1,0 +1,16 @@
+{
+  "projectId": "prj_Cmvj5EhwGqkIZ63l8D6gKx1sV3Yb",
+  "orgId": "team_KZcFJjzq8p16ZhoyHD86cFBu",
+  "projectName": "web",
+  "settings": {
+    "createdAt": 1777999037726,
+    "framework": "nextjs",
+    "devCommand": null,
+    "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+    "buildCommand": "cd ../.. && pnpm --filter @matsrc/web build",
+    "outputDirectory": ".next",
+    "rootDirectory": "apps/web",
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}

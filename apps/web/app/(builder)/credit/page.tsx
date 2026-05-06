@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { builderApiGet } from "@/lib/api";
 
 // UF-05: Credit / BNPL Activation — FR-20, FR-27, FR-28, FR-29
 export default function CreditPage() {
@@ -13,19 +14,8 @@ export default function CreditPage() {
 
     async function loadCreditSummary() {
       try {
-        const response = await fetch("http://localhost:4000/api/builder/credit", {
-          headers: {
-            "X-User-Id": "builder.demo@buildmart.local",
-            "X-User-Email": "builder.demo@buildmart.local",
-            "X-User-Name": "Demo Builder",
-            "X-User-Role": "BUILDER",
-          },
-        });
-
-        if (!response.ok) return;
-        const data = await response.json();
+        const data = await builderApiGet<{ availableLimit: number; status: string }>("/builder/credit");
         if (!active) return;
-
         setAvailableLimit(Number(data.availableLimit || 0));
         setCreditStatus(String(data.status || "NOT_APPLIED"));
       } catch {

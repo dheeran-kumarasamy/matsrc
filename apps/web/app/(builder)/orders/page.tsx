@@ -1,6 +1,7 @@
 import Link from "next/link";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
 import { builderApiGet } from "@/lib/api";
+import { prisma } from "@matsrc/db";
 
 type OrderItem = {
   id: string;
@@ -9,6 +10,8 @@ type OrderItem = {
   total: number;
   createdAt: string;
 };
+
+const DEMO_USER_EMAIL = "builder.demo@buildmart.local";
 
 const STATUS_FILTERS = ["All", "PLACED", "PROCESSING", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
@@ -37,8 +40,31 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
   try {
     orders = await builderApiGet<OrderItem[]>("/builder/orders");
   } catch {
-    orders = [];
-    apiError = true;
+    const demoUser = await prisma.user.findFirst({
+      where: {
+        OR: [{ email: DEMO_USER_EMAIL }, { id: DEMO_USER_EMAIL }],
+      },
+      select: { id: true },
+    });
+
+    if (!demoUser) {
+      orders = [];
+      apiError = true;
+    } else {
+      const dbOrders = await prisma.order.findMany({
+        where: { userId: demoUser.id },
+        include: { _count: { select: { items: true } } },
+        orderBy: { createdAt: "desc" },
+      });
+
+      orders = dbOrders.map((order) => ({
+        id: order.id,
+        status: order.status,
+        itemCount: order._count.items,
+        total: Number(order.totalAmount),
+        createdAt: order.createdAt.toISOString(),
+      }));
+    }
   }
 
   const filtered = activeFilter === "All" ? orders : orders.filter((o) => o.status === activeFilter);

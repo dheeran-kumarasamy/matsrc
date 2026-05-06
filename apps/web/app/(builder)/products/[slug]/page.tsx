@@ -11,25 +11,30 @@ interface Props {
 
 type Listing = {
   id: string;
-  title: string;
+  name: string;
   description?: string;
-  pricePerUnit: number;
+  price: string;       // formatted string, e.g. "₹62,400 / MT"
   unit: string;
   category?: string;
+  grade?: string;
   supplierName?: string;
-  tags?: string[];
 };
 
 async function getListing(slug: string): Promise<Listing | null> {
-  const base = process.env.SUPPLIER_APP_URL ?? "https://matsrc-supplier.vercel.app";
+  const base = process.env.NEXT_PUBLIC_SUPPLIER_APP_URL ?? process.env.SUPPLIER_APP_URL ?? "https://matsrc-supplier.vercel.app";
   try {
-    const res = await fetch(`${base}/api/supplier/listings?q=${encodeURIComponent(slug)}`, {
-      next: { revalidate: 60 },
+    const res = await fetch(`${base}/api/supplier/listings`, {
+      cache: "no-store",
     });
     if (!res.ok) return null;
     const data: Listing[] = await res.json();
-    // match by id or slug
-    return data.find((l) => l.id === slug || l.title.toLowerCase().replace(/\s+/g, "-") === slug) ?? data[0] ?? null;
+    // match by id, or by name-slug
+    return (
+      data.find((l) => l.id === slug) ??
+      data.find((l) => l.name.toLowerCase().replace(/\s+/g, "-") === slug) ??
+      data[0] ??
+      null
+    );
   } catch {
     return null;
   }
@@ -46,7 +51,7 @@ export default async function ProductDetailPage({ params }: Props) {
       <nav className="text-xs text-slate-400 flex gap-2">
         <a href="/products" className="hover:text-blue-700">Materials</a>
         <span>/</span>
-        <span className="text-slate-600 capitalize">{listing.title}</span>
+        <span className="text-slate-600 capitalize">{listing.name}</span>
       </nav>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -55,9 +60,9 @@ export default async function ProductDetailPage({ params }: Props) {
           <div className="panel p-5">
             <div className="flex items-start justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">{listing.title}</h1>
-                {listing.description && (
-                  <p className="text-sm text-slate-400 mt-1">{listing.description}</p>
+                <h1 className="text-2xl font-bold text-slate-900">{listing.name}</h1>
+                {(listing.description ?? listing.grade) && (
+                  <p className="text-sm text-slate-400 mt-1">{listing.description ?? listing.grade}</p>
                 )}
               </div>
               {/* FR-36: Verified Quality Badge */}
@@ -73,7 +78,7 @@ export default async function ProductDetailPage({ params }: Props) {
 
             {/* Specs */}
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              {[["Category", listing.category ?? "—"], ["Unit", listing.unit], ["Supplier", listing.supplierName ?? "—"]].map(([k, v]) => (
+              {([["Category", listing.category ?? "—"], ["Grade", listing.grade ?? "—"], ["Unit", listing.unit]] as [string, string][]).map(([k, v]) => (
                 <div key={k} className="flex justify-between border-b border-slate-50 pb-2">
                   <span className="text-slate-400">{k}</span>
                   <span className="font-medium text-slate-700">{v}</span>
@@ -98,9 +103,9 @@ export default async function ProductDetailPage({ params }: Props) {
         {/* Right: Buy panel */}
         <div className="space-y-4">
           <div className="panel p-5 sticky top-20">
-            {/* Live price — FR-06 */}
+            {/* Live price — FR-06: price is pre-formatted "₹62,400 / MT" from supplier API */}
             <div className="text-3xl font-bold text-slate-900">
-              ₹{listing.pricePerUnit.toLocaleString("en-IN")} <span className="text-base font-normal text-slate-400">/ {listing.unit}</span>
+              {listing.price}
             </div>
 
             <div className="mt-4 space-y-3">

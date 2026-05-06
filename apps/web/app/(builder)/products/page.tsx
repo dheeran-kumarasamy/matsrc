@@ -14,6 +14,10 @@ interface SearchParams {
   q?: string;
 }
 
+function normalizeParam(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 function parseNumber(value?: string) {
   if (!value) return undefined;
   const parsed = Number(value);
@@ -49,23 +53,38 @@ async function getSupplierListings(): Promise<SupplierListing[]> {
 
 // UF-02: Material Discovery — FR-04 Faceted Search & Browse
 export default async function ProductsPage({ searchParams }: { searchParams: SearchParams }) {
-  const minPrice = parseNumber(searchParams.minPrice);
-  const maxPrice = parseNumber(searchParams.maxPrice);
+  const q = normalizeParam(searchParams.q);
+  const category = normalizeParam(searchParams.category);
+  const brand = normalizeParam(searchParams.brand);
+  const minPriceRaw = normalizeParam(searchParams.minPrice);
+  const maxPriceRaw = normalizeParam(searchParams.maxPrice);
+  const sort = normalizeParam(searchParams.sort) ?? "price_asc";
+
+  const minPrice = parseNumber(minPriceRaw);
+  const maxPrice = parseNumber(maxPriceRaw);
   const listings = await getSupplierListings();
 
   let filtered = listings.filter((listing) => listing.active);
 
-  if (searchParams.q) {
-    const q = searchParams.q.toLowerCase();
+  if (q) {
+    const query = q.toLowerCase();
     filtered = filtered.filter((listing) => {
       const haystack = `${listing.name} ${listing.category} ${listing.grade}`.toLowerCase();
-      return haystack.includes(q);
+      return haystack.includes(query);
     });
   }
 
-  if (searchParams.category) {
-    const category = searchParams.category.toLowerCase();
-    filtered = filtered.filter((listing) => listing.category.toLowerCase().includes(category));
+  if (category) {
+    const selectedCategory = category.toLowerCase();
+    filtered = filtered.filter((listing) => listing.category.toLowerCase().includes(selectedCategory));
+  }
+
+  if (brand) {
+    const selectedBrand = brand.toLowerCase();
+    filtered = filtered.filter((listing) => {
+      const haystack = `${listing.name} ${listing.grade}`.toLowerCase();
+      return haystack.includes(selectedBrand);
+    });
   }
 
   if (minPrice !== undefined || maxPrice !== undefined) {
@@ -77,9 +96,9 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
     });
   }
 
-  if (searchParams.sort === "price_desc") {
+  if (sort === "price_desc") {
     filtered.sort((a, b) => parseListingPrice(b.price) - parseListingPrice(a.price));
-  } else if (searchParams.sort === "price_asc") {
+  } else if (sort === "price_asc") {
     filtered.sort((a, b) => parseListingPrice(a.price) - parseListingPrice(b.price));
   }
 
@@ -102,34 +121,51 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
       <div className="flex flex-col md:flex-row gap-6">
         {/* Sidebar filters — FR-04 */}
         <aside className="w-full md:w-64 shrink-0">
-          <ProductFilters />
+          <ProductFilters
+            selectedCategory={category}
+            selectedBrand={brand}
+            minPrice={minPriceRaw}
+            maxPrice={maxPriceRaw}
+            q={q}
+            sort={sort}
+          />
         </aside>
 
         {/* Product grid */}
         <div className="flex-1">
           {/* Search bar */}
-          <form method="GET" className="mb-4">
+          <form method="GET" className="mb-4 space-y-3">
+            {category ? <input type="hidden" name="category" value={category} /> : null}
+            {brand ? <input type="hidden" name="brand" value={brand} /> : null}
+            {minPriceRaw ? <input type="hidden" name="minPrice" value={minPriceRaw} /> : null}
+            {maxPriceRaw ? <input type="hidden" name="maxPrice" value={maxPriceRaw} /> : null}
+
             <input
               name="q"
-              defaultValue={searchParams.q}
+              defaultValue={q}
               placeholder="Search TMT bars, cement, bricks..."
               className="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
             />
-          </form>
 
-          {/* Sort */}
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-xs text-slate-400">Showing active supplier listings</p>
-            <select
-              name="sort"
-              defaultValue={searchParams.sort ?? "price_asc"}
-              className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none"
-            >
-              <option value="price_asc">Price: Low to High</option>
-              <option value="price_desc">Price: High to Low</option>
-              <option value="newest">Newest</option>
-            </select>
-          </div>
+            {/* Sort */}
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-400">Showing active supplier listings</p>
+              <div className="flex items-center gap-2">
+                <select
+                  name="sort"
+                  defaultValue={sort}
+                  className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none"
+                >
+                  <option value="price_asc">Price: Low to High</option>
+                  <option value="price_desc">Price: High to Low</option>
+                  <option value="newest">Newest</option>
+                </select>
+                <button type="submit" className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-700">
+                  Apply
+                </button>
+              </div>
+            </div>
+          </form>
 
           {/* Products grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

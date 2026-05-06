@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 
 // UF-01 Steps 1–5
 export default function RegisterPage() {
@@ -97,7 +98,11 @@ export default function RegisterPage() {
       {step === "channel" && (
         <form onSubmit={handleSendOtp} className="space-y-4">
           {/* Social login */}
-          <button type="button" className="w-full flex items-center justify-center gap-3 border border-gray-200 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors">
+          <button
+            type="button"
+            onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+            className="w-full flex items-center justify-center gap-3 border border-gray-200 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
             Continue with Google
           </button>
           <div className="relative">

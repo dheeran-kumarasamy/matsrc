@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { RfqCard } from "@/components/supplier/RfqCard";
 import { QuoteResponseForm } from "@/components/supplier/QuoteResponseForm";
 import { getSupplierRfqs, type SupplierRfqCard } from "@/lib/supplier-data";

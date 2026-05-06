@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import { KpiCard } from "@/components/supplier/KpiCard";
 import { OrderQueueTable } from "@/components/supplier/OrderQueueTable";

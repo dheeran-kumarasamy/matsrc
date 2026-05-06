@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { ProfileForm } from "@/components/supplier/ProfileForm";
 import { KycStatusPanel } from "@/components/supplier/KycStatusPanel";
 import { getSupplierProfileData } from "@/lib/supplier-data";

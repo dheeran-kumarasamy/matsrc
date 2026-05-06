@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-
-const NEST_API_URL = "http://localhost:4000/api";
+import {
+  createSupplierListing,
+  createSupplierQuote,
+  getSupplierListings,
+  getSupplierOrders,
+  getSupplierRfqs,
+  updateSupplierListing,
+  updateSupplierOrderStatus,
+  updateSupplierProfile,
+} from "@/lib/supplier-data";
 
 // Helper function to extract user from request headers
 // In development, we accept user info from custom headers
@@ -36,24 +43,23 @@ export async function GET(req: NextRequest) {
     }
 
     const path = req.nextUrl.pathname.replace("/api/supplier", "");
-    const queryString = req.nextUrl.search;
-    const fullUrl = `${NEST_API_URL}/supplier${path}${queryString}`;
 
-    const response = await fetch(fullUrl, {
-      method: "GET",
-      headers: {
-        "X-User-Id": user.id,
-        "X-User-Email": user.email,
-        "X-User-Name": user.name || "",
-        "X-User-Role": user.role || "SUPPLIER",
-        "Content-Type": "application/json",
-      },
-    });
-
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
+    // Route to appropriate data handler based on path
+    if (path === "/listings") {
+      const listings = await getSupplierListings();
+      return NextResponse.json(listings);
+    } else if (path === "/orders") {
+      const orders = await getSupplierOrders();
+      return NextResponse.json(orders);
+    } else if (path === "/rfqs") {
+      const rfqs = await getSupplierRfqs();
+      return NextResponse.json(rfqs);
+    } else {
+      return NextResponse.json({ message: "Not found" }, { status: 404 });
+    }
   } catch (error: any) {
-    return NextResponse.json({ message: error.message }, { status: 500 });
+    console.error("API Error:", error);
+    return NextResponse.json({ message: error.message || "Internal server error" }, { status: 500 });
   }
 }
 
@@ -66,24 +72,26 @@ export async function POST(req: NextRequest) {
 
     const path = req.nextUrl.pathname.replace("/api/supplier", "");
     const body = await req.json();
-    const fullUrl = `${NEST_API_URL}/supplier${path}`;
 
-    const response = await fetch(fullUrl, {
-      method: "POST",
-      headers: {
-        "X-User-Id": user.id,
-        "X-User-Email": user.email,
-        "X-User-Name": user.name || "",
-        "X-User-Role": user.role || "SUPPLIER",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    if (path === "/listings") {
+      const created = await createSupplierListing(body);
+      return NextResponse.json(created, { status: 201 });
+    }
 
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
+    const quoteMatch = path.match(/^\/rfqs\/([^/]+)\/quote$/);
+    if (quoteMatch) {
+      const rfqId = quoteMatch[1];
+      const created = await createSupplierQuote(rfqId, body);
+      if (!created) {
+        return NextResponse.json({ message: "RFQ not found" }, { status: 404 });
+      }
+      return NextResponse.json(created, { status: 201 });
+    }
+
+    return NextResponse.json({ message: "Not found" }, { status: 404 });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message }, { status: 500 });
+    console.error("API Error:", error);
+    return NextResponse.json({ message: error.message || "Internal server error" }, { status: 500 });
   }
 }
 
@@ -96,23 +104,32 @@ export async function PATCH(req: NextRequest) {
 
     const path = req.nextUrl.pathname.replace("/api/supplier", "");
     const body = await req.json();
-    const fullUrl = `${NEST_API_URL}/supplier${path}`;
 
-    const response = await fetch(fullUrl, {
-      method: "PATCH",
-      headers: {
-        "X-User-Id": user.id,
-        "X-User-Email": user.email,
-        "X-User-Name": user.name || "",
-        "X-User-Role": user.role || "SUPPLIER",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    const listingMatch = path.match(/^\/listings\/([^/]+)$/);
+    if (listingMatch) {
+      const listingId = listingMatch[1];
+      const updated = await updateSupplierListing(listingId, body);
+      if (!updated) {
+        return NextResponse.json({ message: "Listing not found" }, { status: 404 });
+      }
+      return NextResponse.json(updated);
+    }
 
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
+    const orderMatch = path.match(/^\/orders\/([^/]+)$/);
+    if (orderMatch) {
+      const orderId = orderMatch[1];
+      const updated = await updateSupplierOrderStatus(orderId, body.status);
+      return NextResponse.json(updated);
+    }
+
+    if (path === "/profile") {
+      const updated = await updateSupplierProfile(body);
+      return NextResponse.json(updated);
+    }
+
+    return NextResponse.json({ message: "Not found" }, { status: 404 });
   } catch (error: any) {
-    return NextResponse.json({ message: error.message }, { status: 500 });
+    console.error("API Error:", error);
+    return NextResponse.json({ message: error.message || "Internal server error" }, { status: 500 });
   }
 }

@@ -1,17 +1,68 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import MfaVerification from "@/components/checkout/MfaVerification";
+import { builderApiGet, builderApiPost } from "@/lib/api";
 
 type PaymentMethod = "UPI" | "CARD" | "NET_BANKING" | "COD" | "CREDIT" | "BANK_TRANSFER";
+
+type CartResponse = {
+  items: Array<{
+    id: string;
+    productId: string;
+    name: string;
+    unit: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+  }>;
+  summary: {
+    itemCount: number;
+    subtotal: number;
+    subtotalLabel: string;
+  };
+};
+
+type CheckoutResult = {
+  id: string;
+  status: string;
+  total: number;
+  itemCount: number;
+};
 
 // UF-03: Checkout & Payment — FR-09, FR-10, FR-11, FR-12
 export default function CheckoutPage() {
   const router = useRouter();
-  const [step, setStep] = useState<"review" | "delivery" | "payment" | "mfa">("review");
+  const [step, setStep] = useState<"review" | "mfa">("review");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("UPI");
+  const [deliveryDate, setDeliveryDate] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cart, setCart] = useState<CartResponse>({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: "INR 0" } });
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCart() {
+      try {
+        const payload = await builderApiGet<CartResponse>("/builder/cart");
+        if (!active) return;
+        setCart(payload);
+      } catch {
+        if (!active) return;
+        setCart({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: "INR 0" } });
+      }
+    }
+
+    void loadCart();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const gst = useMemo(() => Math.round(cart.summary.subtotal * 0.18), [cart.summary.subtotal]);
+  const total = useMemo(() => cart.summary.subtotal + gst, [cart.summary.subtotal, gst]);
 
   const paymentOptions: { value: PaymentMethod; label: string; desc: string }[] = [
     { value: "UPI", label: "UPI", desc: "Pay via any UPI app" },
@@ -22,15 +73,35 @@ export default function CheckoutPage() {
     { value: "BANK_TRANSFER", label: "NEFT / RTGS", desc: "Upload UTR as proof" },
   ];
 
-  async function handlePlaceOrder() {
-    setLoading(true);
-    // MFA required before payment — FR-03
+  function handlePlaceOrder() {
+    if (!cart.items.length) {
+      setError("Your cart is empty.");
+      return;
+    }
+
+    setError(null);
     setStep("mfa");
-    setLoading(false);
+  }
+
+  async function handleVerified() {
+    setLoading(true);
+    setError(null);
+    try {
+      const order = await builderApiPost<CheckoutResult>("/builder/orders/checkout", {
+        paymentMethod,
+        deliveryDate: deliveryDate || undefined,
+      });
+      router.push(`/orders/${order.id}`);
+    } catch {
+      setError("Unable to place order right now.");
+      setStep("review");
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (step === "mfa") {
-    return <MfaVerification onVerified={() => router.push("/orders")} />;
+    return <MfaVerification onVerified={handleVerified} />;
   }
 
   return (
@@ -41,8 +112,17 @@ export default function CheckoutPage() {
       <div className="panel p-5">
         <h2 className="font-semibold text-slate-800 mb-3">1. Review Cart</h2>
         <p className="text-sm text-slate-400">Stock re-validated against live supplier inventory.</p>
-        <div className="mt-3 text-center py-4 text-slate-300 text-sm border border-dashed border-slate-200 rounded-lg">
-          Cart items appear here
+        <div className="mt-3 border border-slate-100 rounded-lg divide-y divide-slate-100">
+          {cart.items.length === 0 ? (
+            <div className="py-4 text-center text-slate-300 text-sm">No cart items found.</div>
+          ) : (
+            cart.items.map((item) => (
+              <div key={item.id} className="px-3 py-2 flex items-center justify-between text-sm">
+                <span className="text-slate-700">{item.name} ({item.quantity} {item.unit})</span>
+                <span className="font-semibold text-slate-900">INR {item.lineTotal.toLocaleString("en-IN")}</span>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -52,7 +132,12 @@ export default function CheckoutPage() {
         <p className="text-xs text-slate-400 mb-3">Set a preferred delivery date per supplier.</p>
         <div className="border border-slate-100 rounded-lg p-3 flex items-center justify-between">
           <span className="text-sm text-slate-700">Raipur Steel Co.</span>
-          <input type="date" className="text-xs border border-slate-200 rounded px-2 py-1" />
+          <input
+            type="date"
+            value={deliveryDate}
+            onChange={(e) => setDeliveryDate(e.target.value)}
+            className="text-xs border border-slate-200 rounded px-2 py-1"
+          />
         </div>
       </div>
 
@@ -91,16 +176,17 @@ export default function CheckoutPage() {
 
       {/* Order total */}
       <div className="panel p-5 space-y-3">
-        <div className="flex justify-between text-sm text-slate-500"><span>Subtotal</span><span>₹0</span></div>
-        <div className="flex justify-between text-sm text-slate-500"><span>GST</span><span>₹0</span></div>
-        <div className="flex justify-between font-bold text-slate-800 border-t border-slate-100 pt-3"><span>Total</span><span>₹0</span></div>
+        <div className="flex justify-between text-sm text-slate-500"><span>Subtotal</span><span>INR {cart.summary.subtotal.toLocaleString("en-IN")}</span></div>
+        <div className="flex justify-between text-sm text-slate-500"><span>GST</span><span>INR {gst.toLocaleString("en-IN")}</span></div>
+        <div className="flex justify-between font-bold text-slate-800 border-t border-slate-100 pt-3"><span>Total</span><span>INR {total.toLocaleString("en-IN")}</span></div>
         <button
           onClick={handlePlaceOrder}
-          disabled={loading}
+          disabled={loading || cart.items.length === 0}
           className="w-full bg-blue-700 hover:bg-blue-800 text-white rounded-lg py-3 text-sm font-medium transition-colors disabled:opacity-50"
         >
           {loading ? "Processing..." : "Place Order — Verify with OTP"}
         </button>
+        {error ? <p className="text-xs text-red-600 text-center">{error}</p> : null}
         <p className="text-xs text-slate-400 text-center">
           GST e-invoice (IRN) will be emailed after payment — FR-11
         </p>

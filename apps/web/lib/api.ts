@@ -40,3 +40,23 @@ export async function builderApiDelete(path: string): Promise<void> {
     throw new Error(`Builder API delete failed: ${response.status}`);
   }
 }
+
+export async function builderApiPost<TResponse>(path: string, body: unknown): Promise<TResponse> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-User-Id": DEMO_USER.id,
+      "X-User-Email": DEMO_USER.email,
+      "X-User-Name": DEMO_USER.name,
+      "X-User-Role": DEMO_USER.role,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Builder API post failed: ${response.status}`);
+  }
+
+  return response.json() as Promise<TResponse>;
+}

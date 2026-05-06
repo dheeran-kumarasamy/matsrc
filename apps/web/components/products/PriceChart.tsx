@@ -1,19 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 type Period = 7 | 30 | 90;
 
-// FR-23: Price movement chart with 7/30/90-day trend
-export default function PriceChart({ productSlug }: { productSlug: string }) {
+type PriceEntry = { price: number; recordedAt: string };
+
+// FR-23: Price movement chart with 7/30/90-day trend (real PricePoint data)
+export default function PriceChart({ priceHistory }: { priceHistory: PriceEntry[] }) {
   const [period, setPeriod] = useState<Period>(30);
 
-  // Placeholder data — replaced by API call in production
-  const data = Array.from({ length: period }, (_, i) => ({
-    day: i + 1,
-    price: 60000 + Math.round((Math.random() - 0.5) * 5000),
-  }));
+  const data = useMemo(() => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - period);
+    return priceHistory
+      .filter((p) => new Date(p.recordedAt) >= cutoff)
+      .map((p, i) => ({
+        day: i + 1,
+        date: new Date(p.recordedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+        price: p.price,
+      }))
+      .reverse(); // oldest first for chart
+  }, [priceHistory, period]);
 
   return (
     <div>
@@ -28,15 +37,21 @@ export default function PriceChart({ productSlug }: { productSlug: string }) {
           </button>
         ))}
       </div>
+      {data.length === 0 ? (
+        <div className="h-[200px] flex items-center justify-center text-slate-300 text-sm">
+          No price history for this period
+        </div>
+      ) : (
       <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+        <LineChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey="day" tick={{ fontSize: 10 }} tickLine={false} />
+          <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} />
           <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-          <Tooltip formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Price"]} labelFormatter={(l) => `Day ${l}`} />
+          <Tooltip formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Price"]} />
           <Line type="monotone" dataKey="price" stroke="#1a4f8a" strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
+      )}
     </div>
   );
 }

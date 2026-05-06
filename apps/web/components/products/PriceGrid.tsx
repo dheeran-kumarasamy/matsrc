@@ -1,14 +1,25 @@
-// FR-21 & FR-22: Source city × brand price grid
-const cities = ["EX-Raipur", "EX-Vizag", "EX-Durgapur", "EX-Jamshedpur"];
-const brands = ["SAIL", "TATA Steel", "JSW", "RINL"];
+type PriceRow = { brand: string; sourceCity: string; price: number };
 
-export default function PriceGrid({ productSlug }: { productSlug: string }) {
-  // Placeholder data — fetched from API in production
+// FR-21 & FR-22: Source city × brand price grid (real PricePoint data)
+export default function PriceGrid({ rows }: { rows: PriceRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <div className="py-8 text-center text-slate-300 text-sm">
+        No source city pricing data available yet
+      </div>
+    );
+  }
+
+  // Derive unique brands and cities from the data
+  const brands = [...new Set(rows.map((r) => r.brand))].sort();
+  const cities = [...new Set(rows.map((r) => r.sourceCity))].sort();
+
+  // Build lookup: brand → city → price
   const grid: Record<string, Record<string, number>> = {};
-  brands.forEach((b) => {
-    grid[b] = {};
-    cities.forEach((c) => { grid[b][c] = 58000 + Math.round(Math.random() * 8000); });
-  });
+  for (const row of rows) {
+    if (!grid[row.brand]) grid[row.brand] = {};
+    grid[row.brand][row.sourceCity] = row.price;
+  }
 
   return (
     <div className="overflow-x-auto">

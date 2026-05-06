@@ -2,6 +2,9 @@ import Link from "next/link";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
 import { builderApiGet } from "@/lib/api";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type OrderItem = {
   id: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
@@ -10,15 +13,22 @@ type OrderItem = {
   createdAt: string;
 };
 
-const STATUS_FILTERS = ["All", "PLACED", "PROCESSING", "DISPATCHED", "DELIVERED"] as const;
+const STATUS_FILTERS = ["All", "PLACED", "PROCESSING", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"] as const;
 const FILTER_LABELS: Record<string, string> = {
-  All: "All", PLACED: "Placed", PROCESSING: "Processing", DISPATCHED: "Dispatched", DELIVERED: "Delivered",
+  All: "All",
+  PLACED: "Placed",
+  PROCESSING: "Processing",
+  DISPATCHED: "Dispatched",
+  OUT_FOR_DELIVERY: "Out for delivery",
+  DELIVERED: "Delivered",
+  CANCELLED: "Cancelled",
 };
 
 // UF-04: Order Tracking list — FR-13
 export default async function OrdersPage({ searchParams }: { searchParams: { status?: string } }) {
   let orders: OrderItem[] = [];
-  const activeFilter = searchParams.status ?? "All";
+  const requestedFilter = (searchParams.status ?? "All").toUpperCase();
+  const activeFilter = (STATUS_FILTERS as readonly string[]).includes(requestedFilter) ? requestedFilter : "All";
 
   try {
     orders = await builderApiGet<OrderItem[]>("/builder/orders");

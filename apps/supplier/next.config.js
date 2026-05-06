@@ -2,6 +2,17 @@
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@matsrc/ui", "@matsrc/db"],
+  experimental: {
+    // Ensure Prisma query engine binaries are included in Vercel serverless output.
+    outputFileTracingIncludes: {
+      "/*": [
+        "../../node_modules/.prisma/client/**/*",
+        "../../node_modules/@prisma/client/**/*",
+        "../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/**/*",
+        "../../node_modules/.pnpm/@prisma+client@*/node_modules/@prisma/client/**/*",
+      ],
+    },
+  },
   images: {
     domains: ["matsrc-docs.s3.ap-south-1.amazonaws.com"],
   },

@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { upsertKycDocument, type KycDocType } from "@/lib/supplier-data";
+import { upsertKycDocument, updateSupplierProfile, type KycDocType } from "@/lib/supplier-data";
 
 const ALLOWED_TYPES = ["GST_CERT", "TRADE_LICENCE", "BIS_CERT", "AADHAAR"] as const;
 
@@ -21,8 +21,30 @@ export async function submitKycDocument(formData: FormData) {
     throw new Error("Invalid document type");
   }
 
-  // file is a File object when submitted via multipart form
   const fileName = file instanceof File && file.name ? file.name : "document";
-
   await upsertKycDocument(session.user.email, docType, fileName);
+}
+
+export async function saveBusinessInfo(data: {
+  companyName: string;
+  contactName: string;
+  phone: string;
+  whatsappNumber: string;
+  bisLicenceNo: string;
+}) {
+  const session = await auth();
+  if (!session?.user?.email) redirect("/sign-in");
+
+  const email = session.user.email;
+  await updateSupplierProfile(
+    {
+      companyName: data.companyName.trim(),
+      contactName: data.contactName.trim(),
+      email, // keep existing email unchanged
+      phone: data.phone.trim(),
+      whatsappNumber: data.whatsappNumber.trim(),
+      bisLicenceNo: data.bisLicenceNo.trim(),
+    },
+    email
+  );
 }

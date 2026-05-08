@@ -497,6 +497,10 @@ export type KycDocStatus = {
 export async function getKycOnboardingData(email: string): Promise<{
   kycStatus: "PENDING" | "APPROVED" | "REJECTED";
   companyName: string;
+  contactName: string;
+  phone: string;
+  whatsappNumber: string;
+  bisLicenceNo: string;
   docs: KycDocStatus[];
 }> {
   const user = await prisma.user.findUniqueOrThrow({
@@ -517,6 +521,10 @@ export async function getKycOnboardingData(email: string): Promise<{
   return {
     kycStatus: user.kycStatus as "PENDING" | "APPROVED" | "REJECTED",
     companyName: user.supplierProfile?.companyName ?? "",
+    contactName: user.name ?? "",
+    phone: user.phone ?? "",
+    whatsappNumber: user.whatsappNumber ?? "",
+    bisLicenceNo: user.supplierProfile?.bisLicenceNo ?? "",
     docs: KYC_DOCS.map((d) => {
       const existing = docMap.get(d.type);
       return {

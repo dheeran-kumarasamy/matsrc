@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import type { NextAuthConfig, Session } from "next-auth";
 import type { JWT } from "next-auth/jwt";
 import Google from "next-auth/providers/google";
+import { prisma } from "@matsrc/db";
 
 const authConfig: NextAuthConfig = {
   pages: {
@@ -9,6 +10,23 @@ const authConfig: NextAuthConfig = {
     error: "/sign-in",
   },
   callbacks: {
+    async signIn({ user }) {
+      if (!user.email) return false;
+      // Auto-provision User + SupplierProfile on first Google sign-in
+      await prisma.user.upsert({
+        where: { email: user.email },
+        update: {},
+        create: {
+          email: user.email,
+          name: user.name ?? null,
+          role: "SUPPLIER",
+          supplierProfile: {
+            create: { companyName: user.name ?? "New Supplier" },
+          },
+        },
+      });
+      return true;
+    },
     async jwt({ token, user }): Promise<JWT> {
       if (user) {
         token.id = user.id;

@@ -473,3 +473,80 @@ export async function updateSupplierProfile(
     },
   });
 }
+
+// ─── KYC Onboarding ─────────────────────────────────────────────────────────
+
+export const KYC_DOCS = [
+  { type: "GST_CERT", label: "GST Certificate", required: true },
+  { type: "TRADE_LICENCE", label: "Trade Licence", required: true },
+  { type: "BIS_CERT", label: "BIS Certification", required: false },
+  { type: "AADHAAR", label: "Aadhaar / PAN of Signatory", required: true },
+] as const;
+
+export type KycDocType = (typeof KYC_DOCS)[number]["type"];
+
+export type KycDocStatus = {
+  type: KycDocType;
+  label: string;
+  required: boolean;
+  fileUrl: string | null;
+  verified: boolean;
+  submittedAt: string | null;
+};
+
+export async function getKycOnboardingData(email: string): Promise<{
+  kycStatus: "PENDING" | "APPROVED" | "REJECTED";
+  companyName: string;
+  docs: KycDocStatus[];
+}> {
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { email },
+    include: {
+      kycDocuments: { orderBy: { createdAt: "desc" } },
+      supplierProfile: true,
+    },
+  });
+
+  const docMap = new Map<string, { fileUrl: string; verified: boolean; createdAt: Date }>();
+  for (const doc of user.kycDocuments) {
+    if (!docMap.has(doc.type)) {
+      docMap.set(doc.type, { fileUrl: doc.fileUrl, verified: doc.verified, createdAt: doc.createdAt });
+    }
+  }
+
+  return {
+    kycStatus: user.kycStatus as "PENDING" | "APPROVED" | "REJECTED",
+    companyName: user.supplierProfile?.companyName ?? "",
+    docs: KYC_DOCS.map((d) => {
+      const existing = docMap.get(d.type);
+      return {
+        type: d.type,
+        label: d.label,
+        required: d.required,
+        fileUrl: existing?.fileUrl ?? null,
+        verified: existing?.verified ?? false,
+        submittedAt: existing ? existing.createdAt.toISOString() : null,
+      };
+    }),
+  };
+}
+
+export async function upsertKycDocument(
+  email: string,
+  docType: KycDocType,
+  fileName: string
+): Promise<void> {
+  const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+
+  // Store as a pending reference — real file URL would come from cloud storage
+  const fileUrl = `pending:${docType}:${Date.now()}:${fileName}`;
+
+  // Delete any previous un-verified doc of same type; keep if already verified
+  await prisma.kycDocument.deleteMany({
+    where: { userId: user.id, type: docType, verified: false },
+  });
+
+  await prisma.kycDocument.create({
+    data: { userId: user.id, type: docType, fileUrl, verified: false },
+  });
+}

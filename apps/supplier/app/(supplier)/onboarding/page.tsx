@@ -9,7 +9,7 @@ export default async function SupplierOnboardingPage() {
   const session = await auth();
   if (!session?.user?.email) redirect("/sign-in");
 
-  const { kycStatus, docs } = await getKycOnboardingData(session.user.email);
+  const data = await getKycOnboardingData(session.user.email);
 
-  return <OnboardingForm docs={docs} kycStatus={kycStatus} />;
+  return <OnboardingForm initial={data} />;
 }

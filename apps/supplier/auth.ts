@@ -1,14 +1,15 @@
-import { NextAuthConfig } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
+import NextAuth from "next-auth";
+import type { NextAuthConfig, Session } from "next-auth";
+import type { JWT } from "next-auth/jwt";
 import Google from "next-auth/providers/google";
 
-export const authConfig: NextAuthConfig = {
+const authConfig: NextAuthConfig = {
   pages: {
     signIn: "/sign-in",
     error: "/sign-in",
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }): Promise<JWT> {
       if (user) {
         token.id = user.id;
         token.email = user.email;
@@ -18,7 +19,7 @@ export const authConfig: NextAuthConfig = {
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }): Promise<Session> {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.email = token.email as string;
@@ -29,27 +30,6 @@ export const authConfig: NextAuthConfig = {
     },
   },
   providers: [
-    Credentials({
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-        phone: { label: "Phone", type: "tel" },
-        name: { label: "Name", type: "text" },
-        role: { label: "Role", type: "text" },
-      },
-      async authorize(credentials: any) {
-        // For now, accept any credentials (dev mode)
-        // In production, validate against API or database
-        if (!credentials?.email) return null;
-
-        return {
-          id: credentials.email as string,
-          email: credentials.email as string,
-          name: (credentials.name as string) || "",
-          image: null,
-        } as any;
-      },
-    }),
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
@@ -57,3 +37,5 @@ export const authConfig: NextAuthConfig = {
     }),
   ],
 };
+
+export const { auth, handlers, signIn, signOut } = NextAuth(authConfig);

@@ -1,11 +1,15 @@
 export const dynamic = "force-dynamic";
 
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { RfqCard } from "@/components/supplier/RfqCard";
 import { QuoteResponseForm } from "@/components/supplier/QuoteResponseForm";
 import { getSupplierRfqs, type SupplierRfqCard } from "@/lib/supplier-data";
 
 export default async function SupplierRfqsPage({ searchParams }: { searchParams?: { respond?: string } }) {
-  const rfqs = await getSupplierRfqs();
+  const session = await auth();
+  if (!session?.user?.email) redirect("/sign-in");
+  const rfqs = await getSupplierRfqs(session.user.email);
 
   return (
     <section className="space-y-3">

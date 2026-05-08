@@ -1,10 +1,14 @@
 export const dynamic = "force-dynamic";
 
+import { redirect } from "next/navigation";
 import Link from "next/link";
+import { auth } from "@/auth";
 import { getSupplierListings } from "@/lib/supplier-data";
 
 export default async function SupplierListingsPage() {
-  const listings = await getSupplierListings();
+  const session = await auth();
+  if (!session?.user?.email) redirect("/sign-in");
+  const listings = await getSupplierListings(session.user.email);
 
   return (
     <section className="panel overflow-hidden">

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
 import {
   createSupplierListing,
   createSupplierQuote,
@@ -10,49 +11,28 @@ import {
   updateSupplierProfile,
 } from "@/lib/supplier-data";
 
-// Helper function to extract user from request headers
-// In development, we accept user info from custom headers
-function extractUserFromRequest(req: NextRequest): { id: string; email: string; name?: string; role?: string } | null {
-  // Try to get from custom headers (set by middleware or test)
-  const userId = req.headers.get("x-user-id");
-  const userEmail = req.headers.get("x-user-email");
-  
-  if (userId && userEmail) {
-    return {
-      id: userId,
-      email: userEmail,
-      name: req.headers.get("x-user-name") || undefined,
-      role: req.headers.get("x-user-role") || "SUPPLIER",
-    };
-  }
-  
-  // For now, return a demo user in development
-  return {
-    id: "supplier@demo",
-    email: "supplier@demo@buildmart.local",
-    name: "Demo Supplier",
-    role: "SUPPLIER",
-  };
+async function requireEmail(req: NextRequest): Promise<string | null> {
+  const session = await auth();
+  return session?.user?.email ?? null;
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const user = extractUserFromRequest(req);
-    if (!user) {
+    const email = await requireEmail(req);
+    if (!email) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
     const path = req.nextUrl.pathname.replace("/api/supplier", "");
 
-    // Route to appropriate data handler based on path
     if (path === "/listings") {
-      const listings = await getSupplierListings();
+      const listings = await getSupplierListings(email);
       return NextResponse.json(listings);
     } else if (path === "/orders") {
-      const orders = await getSupplierOrders();
+      const orders = await getSupplierOrders(email);
       return NextResponse.json(orders);
     } else if (path === "/rfqs") {
-      const rfqs = await getSupplierRfqs();
+      const rfqs = await getSupplierRfqs(email);
       return NextResponse.json(rfqs);
     } else {
       return NextResponse.json({ message: "Not found" }, { status: 404 });
@@ -65,8 +45,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = extractUserFromRequest(req);
-    if (!user) {
+    const email = await requireEmail(req);
+    if (!email) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
@@ -74,14 +54,14 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     if (path === "/listings") {
-      const created = await createSupplierListing(body);
+      const created = await createSupplierListing(body, email);
       return NextResponse.json(created, { status: 201 });
     }
 
     const quoteMatch = path.match(/^\/rfqs\/([^/]+)\/quote$/);
     if (quoteMatch) {
       const rfqId = quoteMatch[1];
-      const created = await createSupplierQuote(rfqId, body);
+      const created = await createSupplierQuote(rfqId, body, email);
       if (!created) {
         return NextResponse.json({ message: "RFQ not found" }, { status: 404 });
       }
@@ -97,8 +77,8 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const user = extractUserFromRequest(req);
-    if (!user) {
+    const email = await requireEmail(req);
+    if (!email) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
@@ -108,7 +88,7 @@ export async function PATCH(req: NextRequest) {
     const listingMatch = path.match(/^\/listings\/([^/]+)$/);
     if (listingMatch) {
       const listingId = listingMatch[1];
-      const updated = await updateSupplierListing(listingId, body);
+      const updated = await updateSupplierListing(listingId, body, email);
       if (!updated) {
         return NextResponse.json({ message: "Listing not found" }, { status: 404 });
       }
@@ -123,7 +103,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (path === "/profile") {
-      const updated = await updateSupplierProfile(body);
+      const updated = await updateSupplierProfile(body, email);
       return NextResponse.json(updated);
     }
 
@@ -133,3 +113,4 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ message: error.message || "Internal server error" }, { status: 500 });
   }
 }
+

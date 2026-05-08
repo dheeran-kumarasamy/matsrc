@@ -14,7 +14,7 @@ type SupplierContext = {
   supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null };
 };
 
-const DEV_SUPPLIER_EMAIL = "supplier.demo@buildmart.local";
+
 
 function slugify(value: string) {
   return value
@@ -75,7 +75,7 @@ async function withPoolTimeoutRetry<T>(operation: () => Promise<T>): Promise<T> 
   throw new Error("Unexpected retry state while acquiring database connection");
 }
 
-export async function ensureSupplierContext(): Promise<SupplierContext> {
+export async function ensureSupplierContext(email: string): Promise<SupplierContext> {
   const user = await withPoolTimeoutRetry<{
     id: string;
     name: string | null;
@@ -84,24 +84,9 @@ export async function ensureSupplierContext(): Promise<SupplierContext> {
     whatsappNumber: string | null;
     supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null } | null;
   }>(() =>
-    prisma.user.upsert({
-      where: { email: DEV_SUPPLIER_EMAIL },
-      update: { role: "SUPPLIER", name: "Demo Supplier" },
-      create: {
-        email: DEV_SUPPLIER_EMAIL,
-        name: "Demo Supplier",
-        phone: "+919000011111",
-        role: "SUPPLIER",
-        whatsappNumber: "+919000011111",
-        supplierProfile: {
-          create: {
-            companyName: "BuildMart Demo Supplies",
-          },
-        },
-      },
-      include: {
-        supplierProfile: true,
-      },
+    prisma.user.findUniqueOrThrow({
+      where: { email },
+      include: { supplierProfile: true },
     }),
   );
 
@@ -121,8 +106,8 @@ export async function ensureSupplierContext(): Promise<SupplierContext> {
   return { user, supplierProfile: user.supplierProfile };
 }
 
-export async function getSupplierDashboardData() {
-  const { supplierProfile } = await ensureSupplierContext();
+export async function getSupplierDashboardData(email: string) {
+  const { supplierProfile } = await ensureSupplierContext(email);
 
   const [activeListings, incomingOrders, openRfqs, deliveredOrders, totalOrderItems] = await Promise.all([
     prisma.product.count({ where: { supplierId: supplierProfile.id, isActive: true } }),
@@ -156,8 +141,8 @@ export async function getSupplierDashboardData() {
   };
 }
 
-export async function getSupplierListings(): Promise<SupplierListingRow[]> {
-  const { supplierProfile } = await ensureSupplierContext();
+export async function getSupplierListings(email: string): Promise<SupplierListingRow[]> {
+  const { supplierProfile } = await ensureSupplierContext(email);
 
   const listings = await prisma.product.findMany({
     where: { supplierId: supplierProfile.id },
@@ -224,8 +209,8 @@ export type SupplierRfqCard = {
   } | null;
 };
 
-export async function getSupplierListingById(id: string) {
-  const { supplierProfile } = await ensureSupplierContext();
+export async function getSupplierListingById(id: string, email: string) {
+  const { supplierProfile } = await ensureSupplierContext(email);
 
   const product = await prisma.product.findFirst({
     where: { id, supplierId: supplierProfile.id },
@@ -258,8 +243,8 @@ type ListingInput = {
   description?: string;
 };
 
-export async function createSupplierListing(input: ListingInput) {
-  const { supplierProfile } = await ensureSupplierContext();
+export async function createSupplierListing(input: ListingInput, email: string) {
+  const { supplierProfile } = await ensureSupplierContext(email);
   const categoryName = input.category.trim();
   const category = await prisma.category.upsert({
     where: { slug: slugify(categoryName) },
@@ -288,8 +273,8 @@ export async function createSupplierListing(input: ListingInput) {
   });
 }
 
-export async function updateSupplierListing(id: string, input: ListingInput) {
-  const existing = await getSupplierListingById(id);
+export async function updateSupplierListing(id: string, input: ListingInput, email: string) {
+  const existing = await getSupplierListingById(id, email);
   if (!existing) return null;
 
   const categoryName = input.category.trim();
@@ -314,8 +299,8 @@ export async function updateSupplierListing(id: string, input: ListingInput) {
   });
 }
 
-export async function getSupplierOrders(): Promise<SupplierOrderRow[]> {
-  const { supplierProfile } = await ensureSupplierContext();
+export async function getSupplierOrders(email: string): Promise<SupplierOrderRow[]> {
+  const { supplierProfile } = await ensureSupplierContext(email);
 
   const items = await prisma.orderItem.findMany({
     where: { supplierId: supplierProfile.id },
@@ -332,8 +317,8 @@ export async function getSupplierOrders(): Promise<SupplierOrderRow[]> {
   }));
 }
 
-export async function getSupplierOrderDetail(orderId: string): Promise<SupplierOrderDetail | null> {
-  const { supplierProfile } = await ensureSupplierContext();
+export async function getSupplierOrderDetail(orderId: string, email: string): Promise<SupplierOrderDetail | null> {
+  const { supplierProfile } = await ensureSupplierContext(email);
 
   const item = await prisma.orderItem.findFirst({
     where: { orderId, supplierId: supplierProfile.id },
@@ -382,8 +367,8 @@ export async function updateSupplierOrderStatus(orderId: string, status: OrderSt
   return order;
 }
 
-export async function getSupplierRfqs(): Promise<SupplierRfqCard[]> {
-  const { supplierProfile } = await ensureSupplierContext();
+export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]> {
+  const { supplierProfile } = await ensureSupplierContext(email);
 
   const rfqs = await prisma.quickRequest.findMany({
     include: {
@@ -414,9 +399,10 @@ export async function getSupplierRfqs(): Promise<SupplierRfqCard[]> {
 
 export async function createSupplierQuote(
   rfqId: string,
-  input: { price: string; validUntil?: string; notes?: string }
+  input: { price: string; validUntil?: string; notes?: string },
+  email: string
 ) {
-  const { supplierProfile } = await ensureSupplierContext();
+  const { supplierProfile } = await ensureSupplierContext(email);
 
   const rfq = await prisma.quickRequest.findUnique({ where: { id: rfqId } });
   if (!rfq) return null;
@@ -432,8 +418,8 @@ export async function createSupplierQuote(
   });
 }
 
-export async function getSupplierProfileData() {
-  const { user, supplierProfile } = await ensureSupplierContext();
+export async function getSupplierProfileData(email: string) {
+  const { user, supplierProfile } = await ensureSupplierContext(email);
 
   const docs = await prisma.kycDocument.findMany({
     where: { userId: user.id },
@@ -456,15 +442,18 @@ export async function getSupplierProfileData() {
   };
 }
 
-export async function updateSupplierProfile(input: {
-  companyName: string;
-  contactName: string;
-  email: string;
-  phone: string;
-  whatsappNumber: string;
-  bisLicenceNo: string;
-}) {
-  const { user, supplierProfile } = await ensureSupplierContext();
+export async function updateSupplierProfile(
+  input: {
+    companyName: string;
+    contactName: string;
+    email: string;
+    phone: string;
+    whatsappNumber: string;
+    bisLicenceNo: string;
+  },
+  callerEmail: string
+) {
+  const { user, supplierProfile } = await ensureSupplierContext(callerEmail);
 
   await prisma.user.update({
     where: { id: user.id },

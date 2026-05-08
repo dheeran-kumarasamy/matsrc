@@ -1,12 +1,16 @@
 export const dynamic = "force-dynamic";
 
+import { redirect } from "next/navigation";
 import Link from "next/link";
+import { auth } from "@/auth";
 import { KpiCard } from "@/components/supplier/KpiCard";
 import { OrderQueueTable } from "@/components/supplier/OrderQueueTable";
 import { getSupplierDashboardData } from "@/lib/supplier-data";
 
 export default async function SupplierDashboardPage() {
-  const { kpis, orders } = await getSupplierDashboardData();
+  const session = await auth();
+  if (!session?.user?.email) redirect("/sign-in");
+  const { kpis, orders } = await getSupplierDashboardData(session.user.email);
 
   return (
     <div className="space-y-4">

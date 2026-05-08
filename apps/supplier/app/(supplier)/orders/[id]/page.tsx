@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { OrderStatusActions } from "@/components/supplier/OrderStatusActions";
 import { getSupplierOrderDetail } from "@/lib/supplier-data";
 
@@ -13,7 +15,9 @@ type TrackingStep = {
 };
 
 export default async function SupplierOrderDetailPage({ params }: Props) {
-  const order = await getSupplierOrderDetail(params.id);
+  const session = await auth();
+  if (!session?.user?.email) redirect("/sign-in");
+  const order = await getSupplierOrderDetail(params.id, session.user.email);
 
   if (!order) {
     return <div className="panel p-5 text-sm text-slate-600">Order not found for this supplier.</div>;

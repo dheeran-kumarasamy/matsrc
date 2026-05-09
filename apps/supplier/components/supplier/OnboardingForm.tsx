@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { submitKycDocument, saveBusinessInfo } from "@/app/(supplier)/onboarding/actions";
+import { submitKycDocument, saveBusinessInfo, submitOnboarding } from "@/app/(supplier)/onboarding/actions";
 import type { KycDocStatus } from "@/lib/supplier-data";
 
 type BusinessInfo = {
@@ -58,6 +58,7 @@ export function OnboardingForm({ initial }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
   const [docFeedback, setDocFeedback] = useState<Record<string, "ok" | "error" | null>>({});
+  const [submitError, setSubmitError] = useState("");
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   function handleBizChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -106,6 +107,21 @@ export function OnboardingForm({ initial }: Props) {
         if (input) input.value = "";
       } catch {
         setDocFeedback((prev) => ({ ...prev, [docType]: "error" }));
+      }
+    });
+  }
+
+  function submitForAdminReview() {
+    setSubmitError("");
+
+    startTransition(async () => {
+      try {
+        await submitOnboarding();
+        router.push("/dashboard?onboarding=submitted");
+      } catch (error) {
+        setSubmitError(
+          error instanceof Error ? error.message : "Unable to submit onboarding. Please try again."
+        );
       }
     });
   }
@@ -457,11 +473,13 @@ export function OnboardingForm({ initial }: Props) {
 
           <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
             <p className="text-xs text-amber-700">
-              <strong>What happens next:</strong> BuildMart's compliance team will review your documents within
-              2 business days. BIS licence details are validated against the government database. You'll receive
-              a confirmation email once approved.
+              <strong>What happens next:</strong> Your submission is routed to the admin portal for manual KYC
+              approval. BuildMart's compliance team will review your documents within 2 business days. You'll
+              receive a confirmation email once approved.
             </p>
           </div>
+
+          {submitError && <p className="text-sm font-semibold text-red-600">{submitError}</p>}
 
           <div className="flex items-center justify-between pt-2">
             <button
@@ -473,10 +491,11 @@ export function OnboardingForm({ initial }: Props) {
             </button>
             <button
               type="button"
-              onClick={() => router.push("/dashboard")}
-              className="rounded-lg bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-emerald-700"
+              onClick={submitForAdminReview}
+              disabled={isPending || !requiredDocsUploaded}
+              className="rounded-lg bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Submit & Go to Dashboard
+              {isPending ? "Submitting..." : "Submit for Admin Review"}
             </button>
           </div>
         </div>

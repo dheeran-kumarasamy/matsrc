@@ -558,3 +558,33 @@ export async function upsertKycDocument(
     data: { userId: user.id, type: docType, fileUrl, verified: false },
   });
 }
+
+export async function submitOnboardingForReview(email: string): Promise<void> {
+  const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+
+  const requiredTypes = KYC_DOCS.filter((doc) => doc.required).map((doc) => doc.type);
+  const existingDocs = await prisma.kycDocument.findMany({
+    where: {
+      userId: user.id,
+      type: { in: requiredTypes },
+    },
+    select: { type: true },
+  });
+
+  const uploadedTypes = new Set(existingDocs.map((doc) => doc.type));
+  const missing = requiredTypes.filter((type) => !uploadedTypes.has(type));
+  if (missing.length > 0) {
+    throw new Error("Upload all required documents before submitting for review");
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: { kycStatus: "PENDING" },
+    }),
+    prisma.supplierProfile.updateMany({
+      where: { userId: user.id },
+      data: { verifiedBadge: false, bisVerified: false },
+    }),
+  ]);
+}

@@ -2,7 +2,12 @@
 
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { upsertKycDocument, updateSupplierProfile, type KycDocType } from "@/lib/supplier-data";
+import {
+  submitOnboardingForReview,
+  upsertKycDocument,
+  updateSupplierProfile,
+  type KycDocType,
+} from "@/lib/supplier-data";
 
 const ALLOWED_TYPES = ["GST_CERT", "TRADE_LICENCE", "BIS_CERT", "AADHAAR"] as const;
 
@@ -47,4 +52,11 @@ export async function saveBusinessInfo(data: {
     },
     email
   );
+}
+
+export async function submitOnboarding() {
+  const session = await auth();
+  if (!session?.user?.email) redirect("/sign-in");
+
+  await submitOnboardingForReview(session.user.email);
 }

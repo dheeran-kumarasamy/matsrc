@@ -32,7 +32,7 @@ export default async function SupplierDashboardPage() {
               Browse RFQs
             </Link>
             <Link href="/onboarding" className="block rounded-lg border border-slate-300 px-3 py-2 text-center text-sm font-semibold text-slate-700">
-              Complete Onboarding
+              Continue Setup
             </Link>
           </div>
         </div>

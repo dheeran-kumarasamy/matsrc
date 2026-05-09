@@ -40,6 +40,7 @@ const INPUT_CLS =
 export function OnboardingForm({ initial }: Props) {
   const router = useRouter();
   const [step, setStep] = useState(() => deriveInitialStep(initial));
+  const [showRejectedNotice, setShowRejectedNotice] = useState(initial.kycStatus === "REJECTED");
   const [docs, setDocs] = useState<KycDocStatus[]>(initial.docs);
   const [bizInfo, setBizInfo] = useState<BusinessInfo>({
     companyName: initial.companyName === "New Supplier" ? "" : initial.companyName,
@@ -119,7 +120,7 @@ export function OnboardingForm({ initial }: Props) {
     );
   }
 
-  if (initial.kycStatus === "REJECTED") {
+  if (showRejectedNotice) {
     return (
       <div className="panel p-10 text-center">
         <div className="text-5xl mb-4">⚠️</div>
@@ -128,10 +129,13 @@ export function OnboardingForm({ initial }: Props) {
           One or more documents could not be verified. Please re-upload corrected documents below and resubmit.
         </p>
         <button
-          onClick={() => setStep(1)}
+          onClick={() => {
+            setShowRejectedNotice(false);
+            setStep(1);
+          }}
           className="mt-6 rounded-lg bg-blue-700 px-6 py-2.5 text-sm font-bold text-white"
         >
-          Re-upload Documents
+          Continue Setup
         </button>
       </div>
     );

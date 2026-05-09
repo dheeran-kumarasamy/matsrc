@@ -42,6 +42,12 @@ export function OnboardingForm({ initial }: Props) {
   const [step, setStep] = useState(() => deriveInitialStep(initial));
   const [showRejectedNotice, setShowRejectedNotice] = useState(initial.kycStatus === "REJECTED");
   const [docs, setDocs] = useState<KycDocStatus[]>(initial.docs);
+  const [uploadedDocTypes, setUploadedDocTypes] = useState<Set<string>>(
+    () =>
+      new Set(
+        initial.docs.filter((d) => d.verified || !!d.fileUrl).map((d) => d.type)
+      )
+  );
   const [bizInfo, setBizInfo] = useState<BusinessInfo>({
     companyName: initial.companyName === "New Supplier" ? "" : initial.companyName,
     contactName: initial.contactName,
@@ -91,6 +97,11 @@ export function OnboardingForm({ initial }: Props) {
               : d
           )
         );
+        setUploadedDocTypes((prev) => {
+          const next = new Set(prev);
+          next.add(docType);
+          return next;
+        });
         setDocFeedback((prev) => ({ ...prev, [docType]: "ok" }));
         if (input) input.value = "";
       } catch {
@@ -99,7 +110,9 @@ export function OnboardingForm({ initial }: Props) {
     });
   }
 
-  const requiredDocsUploaded = docs.filter((d) => d.required).every((d) => !!d.fileUrl);
+  const requiredDocsUploaded = docs
+    .filter((d) => d.required)
+    .every((d) => d.verified || !!d.fileUrl || uploadedDocTypes.has(d.type));
 
   // ── Approved / Rejected shortcircuit ────────────────────────────────────
   if (initial.kycStatus === "APPROVED") {
@@ -289,7 +302,7 @@ export function OnboardingForm({ initial }: Props) {
 
           <div className="grid gap-3 sm:grid-cols-2">
             {docs.map((doc) => {
-              const uploaded = !!doc.fileUrl;
+              const uploaded = doc.verified || !!doc.fileUrl || uploadedDocTypes.has(doc.type);
               const feedback = docFeedback[doc.type];
               return (
                 <article key={doc.type} className="panel p-4">

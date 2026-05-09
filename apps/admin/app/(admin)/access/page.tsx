@@ -14,10 +14,11 @@ export default async function AccessControlPage() {
     include: { adminMenuPermissions: true },
     orderBy: { createdAt: "asc" },
   });
+  type AccessUser = (typeof users)[number];
 
   const menus = allMenus();
 
-  const payload = users.map((user) => ({
+  const payload = users.map((user: AccessUser) => ({
     id: user.id,
     name: user.name,
     email: user.email,
@@ -26,7 +27,7 @@ export default async function AccessControlPage() {
       user.role === "SUPER_ADMIN"
         ? menus
         : user.adminMenuPermissions
-            .map((p) => p.menu)
+            .map((p: { menu: string }) => p.menu)
             .filter((m): m is AdminMenu => menus.includes(m as AdminMenu)),
   }));
 

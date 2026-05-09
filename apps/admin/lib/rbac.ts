@@ -1,4 +1,4 @@
-import { Role, prisma } from "@matsrc/db";
+import { prisma } from "@matsrc/db";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 
@@ -43,12 +43,12 @@ export async function getCurrentAdminAccess() {
 
   if (!user) return null;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.SUPER_ADMIN) {
+  if (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN") {
     return null;
   }
 
   const menus =
-    user.role === Role.SUPER_ADMIN
+    user.role === "SUPER_ADMIN"
       ? allMenus()
       : normalizeMenus(user.adminMenuPermissions.map((item) => item.menu));
 

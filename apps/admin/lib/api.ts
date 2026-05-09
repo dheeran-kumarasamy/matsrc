@@ -1,21 +1,44 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
 
-const DEMO_ADMIN = {
-  id: "admin.demo@buildmart.local",
-  email: "admin.demo@buildmart.local",
-  name: "Demo Admin",
-  role: "ADMIN",
+type AdminSessionUser = {
+  id?: string;
+  email?: string | null;
+  name?: string | null;
+  role?: string;
 };
 
+async function getSessionUser(): Promise<AdminSessionUser | null> {
+  if (typeof window === "undefined") {
+    const { auth } = await import("@/auth");
+    const session = await auth();
+    return (session?.user as AdminSessionUser) || null;
+  }
+
+  const { getSession } = await import("next-auth/react");
+  const session = await getSession();
+  return (session?.user as AdminSessionUser) || null;
+}
+
+async function getAdminHeaders(extra?: HeadersInit): Promise<HeadersInit> {
+  const user = await getSessionUser();
+  if (!user?.email) {
+    throw new Error("Not authenticated");
+  }
+
+  return {
+    ...(extra || {}),
+    "X-User-Id": user.id || user.email,
+    "X-User-Email": user.email,
+    "X-User-Name": user.name || "Admin",
+    "X-User-Role": user.role || "ADMIN",
+  };
+}
+
 export async function adminApiGet<T>(path: string): Promise<T> {
+  const headers = await getAdminHeaders();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     cache: "no-store",
-    headers: {
-      "X-User-Id": DEMO_ADMIN.id,
-      "X-User-Email": DEMO_ADMIN.email,
-      "X-User-Name": DEMO_ADMIN.name,
-      "X-User-Role": DEMO_ADMIN.role,
-    },
+    headers,
   });
 
   if (!response.ok) {
@@ -26,15 +49,10 @@ export async function adminApiGet<T>(path: string): Promise<T> {
 }
 
 export async function adminApiPatch<T>(path: string, body: unknown): Promise<T> {
+  const headers = await getAdminHeaders({ "Content-Type": "application/json" });
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      "X-User-Id": DEMO_ADMIN.id,
-      "X-User-Email": DEMO_ADMIN.email,
-      "X-User-Name": DEMO_ADMIN.name,
-      "X-User-Role": DEMO_ADMIN.role,
-    },
+    headers,
     body: JSON.stringify(body),
   });
 

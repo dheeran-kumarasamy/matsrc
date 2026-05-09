@@ -3,8 +3,11 @@ import { DisputeBoard } from "@/components/admin/DisputeBoard";
 import { MetricCard } from "@/components/admin/MetricCard";
 import { VendorApprovalTable } from "@/components/admin/VendorApprovalTable";
 import { adminApiGet } from "@/lib/api";
+import { requireMenu } from "@/lib/rbac";
 
 export default async function AdminDashboardPage() {
+  await requireMenu("dashboard");
+
   const [summary, vendorsRaw, disputesRaw, auditRaw] = await Promise.all([
     adminApiGet<{ pendingVendors: number; pendingKyc: number; openDisputes: number; totalOrders: number }>("/admin/dashboard").catch(() => ({ pendingVendors: 0, pendingKyc: 0, openDisputes: 0, totalOrders: 0 })),
     adminApiGet<Array<{ id: string; companyName: string | null; kycStatus: string }>>("/admin/vendors").catch(() => []),

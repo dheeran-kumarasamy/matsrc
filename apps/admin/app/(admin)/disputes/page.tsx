@@ -1,7 +1,10 @@
 import { DisputeBoard } from "@/components/admin/DisputeBoard";
 import { adminApiGet } from "@/lib/api";
+import { requireMenu } from "@/lib/rbac";
 
 export default async function DisputesPage() {
+  await requireMenu("disputes");
+
   const disputesRaw = await adminApiGet<Array<{ id: string; orderId: string; issueType: string; status: string }>>("/admin/disputes").catch(() => []);
 
   const disputes = disputesRaw.map((dispute) => ({

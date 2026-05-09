@@ -1,9 +1,20 @@
 import { AdminNav } from "@/components/admin/AdminNav";
+import { MENU_CONFIG, requireAdminAccess } from "@/lib/rbac";
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const access = await requireAdminAccess();
+  const links = MENU_CONFIG.filter((menu) => access.menus.includes(menu.key)).map((menu) => ({
+    href: menu.href,
+    label: menu.label,
+  }));
+
   return (
     <div className="mx-auto grid min-h-screen max-w-7xl grid-cols-1 gap-4 p-4 lg:grid-cols-[280px_1fr]">
-      <AdminNav />
+      <AdminNav
+        links={links}
+        userName={access.name || access.email || "Admin"}
+        role={access.role}
+      />
       <main className="space-y-4">
         <header className="panel flex items-center justify-between p-4">
           <div>

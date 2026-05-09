@@ -4,8 +4,11 @@ type Props = {
 
 import { adminApiGet } from "@/lib/api";
 import { VendorDecisionActions } from "@/components/admin/VendorDecisionActions";
+import { requireMenu } from "@/lib/rbac";
 
 export default async function VendorReviewPage({ params }: Props) {
+  await requireMenu("vendors");
+
   const vendor = await adminApiGet<{
     id: string;
     name: string | null;

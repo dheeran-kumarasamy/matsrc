@@ -26,7 +26,7 @@ export default async function AccessControlPage() {
       user.role === "SUPER_ADMIN"
         ? menus
         : user.adminMenuPermissions
-            .map((p) => p.menu)
+            .map((p: (typeof user.adminMenuPermissions)[number]) => p.menu)
             .filter((m): m is AdminMenu => menus.includes(m as AdminMenu)),
   }));
 

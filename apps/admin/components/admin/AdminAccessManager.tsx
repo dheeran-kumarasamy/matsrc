@@ -1,6 +1,5 @@
 "use client";
 
-import { Role } from "@matsrc/db";
 import { useState } from "react";
 import { menuLabel, type AdminMenu } from "@/lib/rbac";
 
@@ -8,7 +7,7 @@ type AdminUser = {
   id: string;
   name: string | null;
   email: string | null;
-  role: Role;
+  role: "ADMIN" | "SUPER_ADMIN";
   menus: AdminMenu[];
 };
 

@@ -1,4 +1,4 @@
-import { Role, prisma } from "@matsrc/db";
+import { prisma } from "@matsrc/db";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { allMenus, DEFAULT_ADMIN_MENUS, type AdminMenu } from "@/lib/rbac";
@@ -13,7 +13,7 @@ export async function PATCH(
   }
 
   const actor = await prisma.user.findUnique({ where: { email: session.user.email } });
-  if (!actor || actor.role !== Role.SUPER_ADMIN) {
+  if (!actor || actor.role !== "SUPER_ADMIN") {
     return NextResponse.json({ message: "Only super admin can assign permissions" }, { status: 403 });
   }
 
@@ -22,11 +22,11 @@ export async function PATCH(
     return NextResponse.json({ message: "Admin user not found" }, { status: 404 });
   }
 
-  if (target.role === Role.SUPER_ADMIN) {
+  if (target.role === "SUPER_ADMIN") {
     return NextResponse.json({ message: "Super admin already has full access" }, { status: 400 });
   }
 
-  if (target.role !== Role.ADMIN) {
+  if (target.role !== "ADMIN") {
     return NextResponse.json({ message: "Target user is not an admin" }, { status: 400 });
   }
 

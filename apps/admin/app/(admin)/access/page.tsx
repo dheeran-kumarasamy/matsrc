@@ -1,16 +1,16 @@
-import { Role, prisma } from "@matsrc/db";
+import { prisma } from "@matsrc/db";
 import { AdminAccessManager } from "@/components/admin/AdminAccessManager";
 import { allMenus, requireMenu, type AdminMenu } from "@/lib/rbac";
 import { redirect } from "next/navigation";
 
 export default async function AccessControlPage() {
   const access = await requireMenu("access");
-  if (access.role !== Role.SUPER_ADMIN) {
+  if (access.role !== "SUPER_ADMIN") {
     redirect("/forbidden");
   }
 
   const users = await prisma.user.findMany({
-    where: { role: { in: [Role.SUPER_ADMIN, Role.ADMIN] } },
+    where: { role: { in: ["SUPER_ADMIN", "ADMIN"] } },
     include: { adminMenuPermissions: true },
     orderBy: { createdAt: "asc" },
   });
@@ -21,9 +21,9 @@ export default async function AccessControlPage() {
     id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: user.role as "ADMIN" | "SUPER_ADMIN",
     menus:
-      user.role === Role.SUPER_ADMIN
+      user.role === "SUPER_ADMIN"
         ? menus
         : user.adminMenuPermissions
             .map((p) => p.menu)

@@ -17,7 +17,7 @@ export default async function AccessControlPage() {
 
   const menus = allMenus();
 
-  const payload = users.map((user) => ({
+  const payload = users.map((user: (typeof users)[number]) => ({
     id: user.id,
     name: user.name,
     email: user.email,

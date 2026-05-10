@@ -59,7 +59,7 @@ export const authConfig: NextAuthConfig = {
         const menus =
           user.role === "SUPER_ADMIN"
             ? allMenus()
-            : user.adminMenuPermissions.map((item) => item.menu);
+            : user.adminMenuPermissions.map((item: { menu: string }) => item.menu);
 
         return {
           id: user.id,

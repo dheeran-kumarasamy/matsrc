@@ -50,7 +50,7 @@ export async function getCurrentAdminAccess() {
   const menus =
     user.role === "SUPER_ADMIN"
       ? allMenus()
-      : normalizeMenus(user.adminMenuPermissions.map((item) => item.menu));
+      : normalizeMenus(user.adminMenuPermissions.map((item: { menu: string }) => item.menu));
 
   return {
     id: user.id,

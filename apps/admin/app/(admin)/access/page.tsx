@@ -27,7 +27,7 @@ export default async function AccessControlPage() {
         ? menus
         : user.adminMenuPermissions
             .map((p: (typeof user.adminMenuPermissions)[number]) => p.menu)
-            .filter((m): m is AdminMenu => menus.includes(m as AdminMenu)),
+          .filter((m: string): m is AdminMenu => menus.includes(m as AdminMenu)),
   }));
 
   return <AdminAccessManager users={payload} allMenus={menus} />;

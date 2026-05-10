@@ -1,4 +1,4 @@
-import { prisma } from "@matsrc/db";
+import { Role, prisma } from "@matsrc/db";
 import { NextRequest, NextResponse } from "next/server";
 import { hashPassword } from "@/lib/password";
 import { allMenus, DEFAULT_ADMIN_MENUS } from "@/lib/rbac";
@@ -27,9 +27,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Account already exists" }, { status: 409 });
     }
 
-    const superAdminCount = await prisma.user.count({ where: { role: "SUPER_ADMIN" } });
-    const role = superAdminCount === 0 ? "SUPER_ADMIN" : "ADMIN";
-    const menus = role === "SUPER_ADMIN" ? allMenus() : DEFAULT_ADMIN_MENUS;
+    const superAdminCount = await prisma.user.count({ where: { role: Role.SUPER_ADMIN } });
+    const role = superAdminCount === 0 ? Role.SUPER_ADMIN : Role.ADMIN;
+    const menus = role === Role.SUPER_ADMIN ? allMenus() : DEFAULT_ADMIN_MENUS;
 
     const passwordHash = await hashPassword(password);
 

@@ -1,6 +1,6 @@
 import NextAuth, { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { prisma } from "@matsrc/db";
+import { Role, prisma } from "@matsrc/db";
 import { allMenus, DEFAULT_ADMIN_MENUS } from "@/lib/rbac";
 import { verifyPassword } from "@/lib/password";
 
@@ -51,13 +51,13 @@ export const authConfig: NextAuthConfig = {
         });
 
         if (!user?.adminCredential) return null;
-        if (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN") return null;
+        if (user.role !== Role.ADMIN && user.role !== Role.SUPER_ADMIN) return null;
 
         const isValidPassword = await verifyPassword(password, user.adminCredential.passwordHash);
         if (!isValidPassword) return null;
 
         const menus =
-          user.role === "SUPER_ADMIN"
+          user.role === Role.SUPER_ADMIN
             ? allMenus()
             : user.adminMenuPermissions.map((item) => item.menu);
 

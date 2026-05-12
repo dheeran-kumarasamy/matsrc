@@ -5,6 +5,7 @@ import { allMenus, DEFAULT_ADMIN_MENUS } from "@/lib/rbac";
 import { verifyPassword } from "@/lib/password";
 
 export const authConfig: NextAuthConfig = {
+  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
   pages: {
     signIn: "/sign-in",
     error: "/sign-in",

@@ -60,12 +60,34 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
 
   function updateTier(index: number, field: keyof PricingTierRow, value: string) {
     setSaved(false);
-    setTiers((prev) => prev.map((tier, tierIndex) => (tierIndex === index ? { ...tier, [field]: value } : tier)));
-  }
+    setTiers((prev) => {
+      // Update the target tier
+      const updated = prev.map((tier, tierIndex) => (tierIndex === index ? { ...tier, [field]: value } : tier));
 
-  function addTier() {
-    setSaved(false);
-    setTiers((prev) => [...prev, { minQty: "", maxQty: "", price: form.price }]);
+      if (field === "maxQty") {
+        const maxQtyNum = Number(value);
+        const serviceableQty = Number(form.maxServiceableQty);
+
+        // Truncate all tiers after the edited one so ranges stay consistent
+        const truncated = updated.slice(0, index + 1);
+
+        // Auto-append a new tier if the entered maxQty is a valid integer less than maxServiceableQty
+        if (
+          value !== "" &&
+          Number.isInteger(maxQtyNum) &&
+          maxQtyNum >= 1 &&
+          Number.isInteger(serviceableQty) &&
+          serviceableQty >= 1 &&
+          maxQtyNum < serviceableQty
+        ) {
+          return [...truncated, { minQty: String(maxQtyNum + 1), maxQty: "", price: form.price }];
+        }
+
+        return truncated;
+      }
+
+      return updated;
+    });
   }
 
   function removeTier(index: number) {
@@ -266,14 +288,9 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
       </div>
 
       <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h4 className="text-lg font-bold text-slate-900">Tiered Pricing</h4>
-            <p className="text-sm text-slate-600">Define contiguous ranges from MOQ 1 up to your maximum serviceable quantity.</p>
-          </div>
-          <button type="button" onClick={addTier} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
-            Add Tier
-          </button>
+        <div>
+          <h4 className="text-lg font-bold text-slate-900">Tiered Pricing</h4>
+          <p className="text-sm text-slate-600">Define contiguous ranges from MOQ 1 up to your maximum serviceable quantity. The next tier is added automatically as you fill in each Max Qty.</p>
         </div>
 
         <div className="space-y-3">
@@ -284,7 +301,8 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
                 <input
                   value={tier.minQty}
                   onChange={(e) => updateTier(index, "minQty", e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                  readOnly={index > 0}
+                  className={`w-full rounded-lg border border-slate-300 px-3 py-2 ${index > 0 ? "bg-slate-100 text-slate-500" : ""}`}
                   placeholder={index === 0 ? "1" : "6"}
                 />
               </label>

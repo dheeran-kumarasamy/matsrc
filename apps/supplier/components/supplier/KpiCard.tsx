@@ -4,6 +4,7 @@ type KpiCardProps = {
   label: string;
   value: string;
   hint: string;
+  className?: string;
 };
 
 const iconByLabel: Record<string, ReactNode> = {
@@ -34,11 +35,11 @@ const iconByLabel: Record<string, ReactNode> = {
   ),
 };
 
-export function KpiCard({ label, value, hint }: KpiCardProps) {
+export function KpiCard({ label, value, hint, className = "" }: KpiCardProps) {
   const metricType = label === "Fulfilment Rate" ? "Percentage" : "Count";
 
   return (
-    <article className="panel p-5">
+    <article className={`panel p-5 ${className}`.trim()}>
       <div className="flex items-start justify-between gap-3">
         <p className="text-base font-extrabold uppercase leading-5 tracking-tight text-slate-800">{label}</p>
         <span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-100 text-cyan-700">{iconByLabel[label]}</span>

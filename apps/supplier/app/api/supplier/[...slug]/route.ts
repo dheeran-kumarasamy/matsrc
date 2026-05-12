@@ -9,6 +9,7 @@ import {
   updateSupplierListing,
   updateSupplierOrderStatus,
   updateSupplierProfile,
+  getMarketScrollerData,
 } from "@/lib/supplier-data";
 
 async function requireEmail(req: NextRequest): Promise<string | null> {
@@ -34,6 +35,9 @@ export async function GET(req: NextRequest) {
     } else if (path === "/rfqs") {
       const rfqs = await getSupplierRfqs(email);
       return NextResponse.json(rfqs);
+    } else if (path === "/market-scroll") {
+      const items = await getMarketScrollerData(email);
+      return NextResponse.json(items);
     } else {
       return NextResponse.json({ message: "Not found" }, { status: 404 });
     }

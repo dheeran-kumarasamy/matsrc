@@ -2,29 +2,26 @@ export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { KpiCard } from "@/components/supplier/KpiCard";
-import { OrderQueueTable } from "@/components/supplier/OrderQueueTable";
 import { SupplierFabMenu } from "@/components/supplier/SupplierFabMenu";
-import { getSupplierDashboardData } from "@/lib/supplier-data";
+import { MarketScroller } from "@/components/supplier/MarketScroller";
+import { DashboardQueueSwitcher } from "@/components/supplier/DashboardQueueSwitcher";
+import { getSupplierDashboardData, getMarketScrollerData, getSupplierListings, getSupplierRfqs } from "@/lib/supplier-data";
 
 export default async function SupplierDashboardPage() {
   const session = await auth();
   if (!session?.user?.email) redirect("/sign-in");
-  const { kpis, orders } = await getSupplierDashboardData(session.user.email);
+  const [{ kpis, orders }, scrollerItems, listings, rfqs] = await Promise.all([
+    getSupplierDashboardData(session.user.email),
+    getMarketScrollerData(session.user.email),
+    getSupplierListings(session.user.email),
+    getSupplierRfqs(session.user.email),
+  ]);
 
   return (
     <div className="space-y-6">
-      <h1 className="pt-2 text-center text-5xl font-extrabold tracking-tight text-slate-900">Operational Console</h1>
+      <MarketScroller initialItems={scrollerItems} />
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpis.map((kpi) => (
-          <KpiCard key={kpi.label} {...kpi} />
-        ))}
-      </section>
-
-      <section>
-        <OrderQueueTable orders={orders} />
-      </section>
+      <DashboardQueueSwitcher kpis={kpis} orders={orders} listings={listings} rfqs={rfqs} />
 
       <SupplierFabMenu />
     </div>

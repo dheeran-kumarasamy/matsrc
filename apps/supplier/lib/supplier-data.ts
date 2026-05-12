@@ -106,6 +106,102 @@ export async function ensureSupplierContext(email: string): Promise<SupplierCont
   return { user, supplierProfile: user.supplierProfile };
 }
 
+export type MarketScrollItem = {
+  category: string;
+  type: "market" | "mine";
+  label: string;
+  primaryValue: string;
+  subValue: string;
+  sharePercent: number | null;
+};
+
+export async function getMarketScrollerData(email: string): Promise<MarketScrollItem[]> {
+  const { supplierProfile } = await ensureSupplierContext(email);
+
+  const supplierCategories = await withPoolTimeoutRetry(() =>
+    prisma.category.findMany({
+      where: {
+        products: {
+          some: { supplierId: supplierProfile.id, isActive: true },
+        },
+      },
+      select: { id: true, name: true },
+    }),
+  );
+
+  if (supplierCategories.length === 0) return [];
+
+  const categoryIds = supplierCategories.map((category) => category.id);
+  const categoryMap = Object.fromEntries(supplierCategories.map((category) => [category.id, category.name]));
+
+  type AggRow = {
+    categoryId: string;
+    totalQty: bigint | number | null;
+    totalRevenue: bigint | number | null;
+    myQty: bigint | number | null;
+    myRevenue: bigint | number | null;
+  };
+
+  const rows = await withPoolTimeoutRetry<AggRow[]>(() =>
+    prisma.$queryRaw`
+      SELECT
+        p."categoryId" AS "categoryId",
+        COALESCE(SUM(oi.quantity), 0)::bigint AS "totalQty",
+        COALESCE(SUM(oi.quantity * oi."unitPrice"), 0)::bigint AS "totalRevenue",
+        COALESCE(SUM(CASE WHEN oi."supplierId" = ${supplierProfile.id} THEN oi.quantity ELSE 0 END), 0)::bigint AS "myQty",
+        COALESCE(SUM(CASE WHEN oi."supplierId" = ${supplierProfile.id} THEN oi.quantity * oi."unitPrice" ELSE 0 END), 0)::bigint AS "myRevenue"
+      FROM "OrderItem" oi
+      JOIN "Product" p ON oi."productId" = p.id
+      WHERE p."categoryId" = ANY(${categoryIds}::text[])
+      GROUP BY p."categoryId"
+    `,
+  );
+
+  const items: MarketScrollItem[] = [];
+
+  for (const row of rows) {
+    const category = categoryMap[row.categoryId] ?? "Products";
+    const totalQty = Number(row.totalQty ?? 0);
+    const totalRevenue = Number(row.totalRevenue ?? 0);
+    const myQty = Number(row.myQty ?? 0);
+    const myRevenue = Number(row.myRevenue ?? 0);
+    const sharePercent = totalQty > 0 ? Math.round((myQty / totalQty) * 100) : 0;
+
+    items.push({
+      category,
+      type: "market",
+      label: `${category} · Platform Volume`,
+      primaryValue: `${totalQty.toLocaleString("en-IN")} units`,
+      subValue: `${formatCurrency(totalRevenue)} total platform revenue`,
+      sharePercent: null,
+    });
+
+    items.push({
+      category,
+      type: "mine",
+      label: `${category} · Your Delivery`,
+      primaryValue: `${myQty.toLocaleString("en-IN")} units`,
+      subValue: `${formatCurrency(myRevenue)} earned · ${sharePercent}% market share`,
+      sharePercent,
+    });
+  }
+
+  if (items.length === 0) {
+    for (const category of supplierCategories) {
+      items.push({
+        category: category.name,
+        type: "market",
+        label: `${category.name} · Platform Volume`,
+        primaryValue: "No orders yet",
+        subValue: "Market volume appears once buyers place orders",
+        sharePercent: null,
+      });
+    }
+  }
+
+  return items;
+}
+
 export async function getSupplierDashboardData(email: string) {
   const { supplierProfile } = await ensureSupplierContext(email);
 

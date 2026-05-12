@@ -80,6 +80,44 @@ function isPoolTimeoutError(error: unknown) {
   return message.includes("Timed out fetching a new connection from the connection pool");
 }
 
+function isMissingPricingSchemaError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+
+  const maybeError = error as {
+    code?: string;
+    meta?: { column?: string; table?: string };
+    message?: string;
+  };
+
+  if (maybeError.code === "P2022" && maybeError.meta?.column?.includes("maxServiceableQty")) {
+    return true;
+  }
+
+  if (maybeError.code === "P2021" && maybeError.meta?.table?.includes("PricingTier")) {
+    return true;
+  }
+
+  const message = maybeError.message ?? "";
+  return message.includes("maxServiceableQty") || message.includes("PricingTier");
+}
+
+async function ensurePricingSchema() {
+  await prisma.$executeRawUnsafe('ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "maxServiceableQty" INTEGER;');
+  await prisma.$executeRawUnsafe(
+    'UPDATE "Product" SET "maxServiceableQty" = COALESCE("maxServiceableQty", "stock") WHERE "maxServiceableQty" IS NULL;'
+  );
+  await prisma.$executeRawUnsafe(
+    'CREATE TABLE IF NOT EXISTS "PricingTier" ("id" TEXT PRIMARY KEY, "productId" TEXT NOT NULL, "minQty" INTEGER NOT NULL, "maxQty" INTEGER NOT NULL, "tierPrice" DECIMAL(12,2) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
+  );
+  await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "PricingTier_productId_idx" ON "PricingTier"("productId");');
+  await prisma.$executeRawUnsafe(
+    'CREATE UNIQUE INDEX IF NOT EXISTS "PricingTier_productId_minQty_maxQty_key" ON "PricingTier"("productId", "minQty", "maxQty");'
+  );
+  await prisma.$executeRawUnsafe(
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PricingTier_productId_fkey') THEN ALTER TABLE "PricingTier" ADD CONSTRAINT "PricingTier_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE; END IF; END $$;`
+  );
+}
+
 async function sleep(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -279,11 +317,30 @@ export async function getSupplierDashboardData(email: string) {
 export async function getSupplierListings(email: string): Promise<SupplierListingRow[]> {
   const { supplierProfile } = await ensureSupplierContext(email);
 
-  const listings = await prisma.product.findMany({
-    where: { supplierId: supplierProfile.id },
-    include: { category: true },
-    orderBy: { updatedAt: "desc" },
-  });
+  let listings: any[] = [];
+  try {
+    listings = await prisma.product.findMany({
+      where: { supplierId: supplierProfile.id },
+      include: { category: true },
+      orderBy: { updatedAt: "desc" },
+    });
+  } catch (error) {
+    if (!isMissingPricingSchemaError(error)) throw error;
+    listings = await prisma.product.findMany({
+      where: { supplierId: supplierProfile.id },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        category: { select: { name: true } },
+        grade: true,
+        unit: true,
+        basePrice: true,
+        stock: true,
+        isActive: true,
+      },
+    });
+  }
 
   return listings.map((product: any) => ({
     id: product.id,
@@ -313,10 +370,33 @@ export type SupplierListingRow = {
 export async function getSupplierListingById(id: string, email: string) {
   const { supplierProfile } = await ensureSupplierContext(email);
 
-  const product = await prisma.product.findFirst({
-    where: { id, supplierId: supplierProfile.id },
-    include: { category: true, pricingTiers: { orderBy: { minQty: "asc" } } },
-  });
+  let product: any;
+  try {
+    product = await prisma.product.findFirst({
+      where: { id, supplierId: supplierProfile.id },
+      include: { category: true, pricingTiers: { orderBy: { minQty: "asc" } } },
+    });
+  } catch (error) {
+    if (!isMissingPricingSchemaError(error)) throw error;
+    product = await prisma.product.findFirst({
+      where: { id, supplierId: supplierProfile.id },
+      include: { category: true },
+    });
+
+    if (product) {
+      product = {
+        ...product,
+        maxServiceableQty: product.stock,
+        pricingTiers: [
+          {
+            minQty: 1,
+            maxQty: product.stock,
+            tierPrice: product.basePrice,
+          },
+        ],
+      };
+    }
+  }
 
   if (!product) return null;
 
@@ -330,7 +410,7 @@ export async function getSupplierListingById(id: string, email: string) {
     price: product.basePrice.toString(),
     brand: product.brand ?? "",
     description: product.description ?? "",
-    pricingTiers: product.pricingTiers.map((tier) => ({
+    pricingTiers: product.pricingTiers.map((tier: any) => ({
       minQty: String(tier.minQty),
       maxQty: String(tier.maxQty),
       price: tier.tierPrice.toString(),
@@ -413,36 +493,45 @@ export async function createSupplierListing(input: ListingInput, email: string) 
   const maxServiceableQty = parsePositiveInt(input.maxServiceableQty, "Maximum Serviceable Quantity");
   const pricingTiers = normalizePricingTiers(input.pricingTiers, maxServiceableQty, basePrice);
 
-  return prisma.$transaction(async (transaction) => {
-    const product = await transaction.product.create({
-      data: {
-        supplierId: supplierProfile.id,
-        categoryId: category.id,
-        name: input.title.trim(),
-        slug: `${slugBase}-${suffix}`,
-        brand: input.brand?.trim() || null,
-        grade: input.grade.trim() || null,
-        description: input.description?.trim() || null,
-        unit: input.unit.trim().toUpperCase(),
-        basePrice,
-        stock: maxServiceableQty,
-        maxServiceableQty,
-        images: [],
-        isActive: true,
-      },
+  const createWithPricingSchema = () =>
+    prisma.$transaction(async (transaction) => {
+      const product = await transaction.product.create({
+        data: {
+          supplierId: supplierProfile.id,
+          categoryId: category.id,
+          name: input.title.trim(),
+          slug: `${slugBase}-${suffix}`,
+          brand: input.brand?.trim() || null,
+          grade: input.grade.trim() || null,
+          description: input.description?.trim() || null,
+          unit: input.unit.trim().toUpperCase(),
+          basePrice,
+          stock: maxServiceableQty,
+          maxServiceableQty,
+          images: [],
+          isActive: true,
+        },
+      });
+
+      await transaction.pricingTier.createMany({
+        data: pricingTiers.map((tier) => ({
+          productId: product.id,
+          minQty: tier.minQty,
+          maxQty: tier.maxQty,
+          tierPrice: tier.tierPrice,
+        })),
+      });
+
+      return product;
     });
 
-    await transaction.pricingTier.createMany({
-      data: pricingTiers.map((tier) => ({
-        productId: product.id,
-        minQty: tier.minQty,
-        maxQty: tier.maxQty,
-        tierPrice: tier.tierPrice,
-      })),
-    });
-
-    return product;
-  });
+  try {
+    return await createWithPricingSchema();
+  } catch (error) {
+    if (!isMissingPricingSchemaError(error)) throw error;
+    await ensurePricingSchema();
+    return createWithPricingSchema();
+  }
 }
 
 export async function updateSupplierListing(id: string, input: ListingInput, email: string) {
@@ -460,34 +549,43 @@ export async function updateSupplierListing(id: string, input: ListingInput, ema
   const maxServiceableQty = parsePositiveInt(input.maxServiceableQty, "Maximum Serviceable Quantity");
   const pricingTiers = normalizePricingTiers(input.pricingTiers, maxServiceableQty, basePrice);
 
-  return prisma.$transaction(async (transaction) => {
-    const product = await transaction.product.update({
-      where: { id },
-      data: {
-        categoryId: category.id,
-        name: input.title.trim(),
-        brand: input.brand?.trim() || null,
-        grade: input.grade.trim() || null,
-        description: input.description?.trim() || null,
-        unit: input.unit.trim().toUpperCase(),
-        basePrice,
-        stock: maxServiceableQty,
-        maxServiceableQty,
-      },
+  const updateWithPricingSchema = () =>
+    prisma.$transaction(async (transaction) => {
+      const product = await transaction.product.update({
+        where: { id },
+        data: {
+          categoryId: category.id,
+          name: input.title.trim(),
+          brand: input.brand?.trim() || null,
+          grade: input.grade.trim() || null,
+          description: input.description?.trim() || null,
+          unit: input.unit.trim().toUpperCase(),
+          basePrice,
+          stock: maxServiceableQty,
+          maxServiceableQty,
+        },
+      });
+
+      await transaction.pricingTier.deleteMany({ where: { productId: id } });
+      await transaction.pricingTier.createMany({
+        data: pricingTiers.map((tier) => ({
+          productId: id,
+          minQty: tier.minQty,
+          maxQty: tier.maxQty,
+          tierPrice: tier.tierPrice,
+        })),
+      });
+
+      return product;
     });
 
-    await transaction.pricingTier.deleteMany({ where: { productId: id } });
-    await transaction.pricingTier.createMany({
-      data: pricingTiers.map((tier) => ({
-        productId: id,
-        minQty: tier.minQty,
-        maxQty: tier.maxQty,
-        tierPrice: tier.tierPrice,
-      })),
-    });
-
-    return product;
-  });
+  try {
+    return await updateWithPricingSchema();
+  } catch (error) {
+    if (!isMissingPricingSchemaError(error)) throw error;
+    await ensurePricingSchema();
+    return updateWithPricingSchema();
+  }
 }
 
 export async function getSupplierOrders(email: string): Promise<SupplierOrderRow[]> {

@@ -25,7 +25,7 @@ export function SupplierHeader({ kycStatus }: SupplierHeaderProps) {
   return (
     <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex h-20 max-w-[1260px] items-center justify-between px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3">
+        <Link href="/dashboard" className="flex items-center gap-3 rounded-lg p-1 hover:bg-slate-100" aria-label="Go to dashboard">
           <span className="grid h-10 w-10 place-items-center rounded-md border border-blue-200 bg-gradient-to-b from-blue-100 to-blue-50 text-blue-700">
             <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M3 10.5 12 3l9 7.5" />
@@ -36,7 +36,7 @@ export function SupplierHeader({ kycStatus }: SupplierHeaderProps) {
           <p className="text-xl leading-none text-slate-800 sm:text-2xl">
             <span className="font-bold text-slate-900">BuildMart</span> Supplier Portal
           </p>
-        </div>
+        </Link>
 
         <div className="relative">
           <button

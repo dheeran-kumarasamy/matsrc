@@ -9,12 +9,39 @@ type SupplierContext = {
     email: string | null;
     phone: string | null;
     whatsappNumber: string | null;
+    kycStatus: "PENDING" | "APPROVED" | "REJECTED";
     supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null } | null;
   };
   supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null };
 };
 
+export type KycDocType = "GST_CERT" | "TRADE_LICENCE" | "BIS_CERT" | "AADHAAR";
+export type KycDocStatus = {
+  type: KycDocType;
+  label: string;
+  required: boolean;
+  verified: boolean;
+  fileUrl: string | null;
+  submittedAt: string | null;
+};
 
+export type PricingTierInput = {
+  minQty: string;
+  maxQty: string;
+  price: string;
+};
+
+type ListingInput = {
+  title: string;
+  category: string;
+  grade: string;
+  unit: string;
+  maxServiceableQty: string;
+  price: string;
+  brand?: string;
+  description?: string;
+  pricingTiers?: PricingTierInput[];
+};
 
 function slugify(value: string) {
   return value
@@ -60,7 +87,7 @@ async function sleep(ms: number) {
 async function withPoolTimeoutRetry<T>(operation: () => Promise<T>): Promise<T> {
   const maxAttempts = 3;
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       return await operation();
     } catch (error) {
@@ -82,11 +109,20 @@ export async function ensureSupplierContext(email: string): Promise<SupplierCont
     email: string | null;
     phone: string | null;
     whatsappNumber: string | null;
+    kycStatus: "PENDING" | "APPROVED" | "REJECTED";
     supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null } | null;
   }>(() =>
     prisma.user.findUniqueOrThrow({
       where: { email },
-      include: { supplierProfile: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        whatsappNumber: true,
+        kycStatus: true,
+        supplierProfile: true,
+      },
     }),
   );
 
@@ -205,7 +241,7 @@ export async function getMarketScrollerData(email: string): Promise<MarketScroll
 export async function getSupplierDashboardData(email: string) {
   const { supplierProfile } = await ensureSupplierContext(email);
 
-  const [activeListings, incomingOrders, openRfqs, deliveredOrders, totalOrderItems] = await Promise.all([
+  const [activeListings, incomingOrders, openRfqs, servedOrders, servedOrderItems] = await Promise.all([
     prisma.product.count({ where: { supplierId: supplierProfile.id, isActive: true } }),
     prisma.orderItem.findMany({
       where: { supplierId: supplierProfile.id },
@@ -214,18 +250,21 @@ export async function getSupplierDashboardData(email: string) {
       take: 5,
     }),
     prisma.quickRequest.count(),
-    prisma.orderItem.count({ where: { supplierId: supplierProfile.id, order: { status: "DELIVERED" } } }),
-    prisma.orderItem.count({ where: { supplierId: supplierProfile.id } }),
+    prisma.order.count({ where: { status: "DELIVERED", items: { some: { supplierId: supplierProfile.id } } } }),
+    prisma.orderItem.findMany({
+      where: { supplierId: supplierProfile.id, order: { status: "DELIVERED" } },
+      select: { quantity: true, unitPrice: true },
+    }),
   ]);
 
-  const fulfilment = totalOrderItems === 0 ? 0 : Math.round((deliveredOrders / totalOrderItems) * 100);
+  const servedOrderValue = servedOrderItems.reduce((total, item) => total + Number(item.unitPrice) * item.quantity, 0);
 
   return {
     kpis: [
       { label: "Active Listings", value: String(activeListings), hint: "Live SKUs visible to builders" },
       { label: "Incoming Orders", value: String(incomingOrders.length), hint: "Recent order items assigned to you" },
-      { label: "Open RFQs", value: String(openRfqs), hint: "Quick requests awaiting supplier quotes" },
-      { label: "Fulfilment Rate", value: `${fulfilment}%`, hint: "Delivered supplier order items" },
+      { label: "Pending Enquiries", value: String(openRfqs), hint: "Quick requests awaiting supplier quotes" },
+      { label: "Fulfilment Rate", value: String(servedOrders), hint: `${formatCurrency(servedOrderValue)} value served` },
     ],
     orders: incomingOrders.map((item: any) => ({
       id: item.orderId,
@@ -254,6 +293,7 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
     unit: product.unit,
     price: `${formatCurrency(product.basePrice.toString())} / ${product.unit}`,
     stock: `${product.stock} ${product.unit}`,
+    maxServiceableQty: `${product.maxServiceableQty ?? product.stock} ${product.unit}`,
     active: product.isActive,
   }));
 }
@@ -266,8 +306,207 @@ export type SupplierListingRow = {
   unit: string;
   price: string;
   stock: string;
+  maxServiceableQty: string;
   active: boolean;
 };
+
+export async function getSupplierListingById(id: string, email: string) {
+  const { supplierProfile } = await ensureSupplierContext(email);
+
+  const product = await prisma.product.findFirst({
+    where: { id, supplierId: supplierProfile.id },
+    include: { category: true, pricingTiers: { orderBy: { minQty: "asc" } } },
+  });
+
+  if (!product) return null;
+
+  return {
+    id: product.id,
+    title: product.name,
+    category: product.category.name,
+    grade: product.grade ?? "",
+    unit: product.unit,
+    maxServiceableQty: String(product.maxServiceableQty ?? product.stock),
+    price: product.basePrice.toString(),
+    brand: product.brand ?? "",
+    description: product.description ?? "",
+    pricingTiers: product.pricingTiers.map((tier) => ({
+      minQty: String(tier.minQty),
+      maxQty: String(tier.maxQty),
+      price: tier.tierPrice.toString(),
+    })),
+  };
+}
+
+function parsePositiveInt(value: string, field: string) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`${field} must be a positive whole number`);
+  }
+  return parsed;
+}
+
+function parsePositivePrice(value: string, field: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${field} must be a positive number`);
+  }
+  return parsed;
+}
+
+function normalizePricingTiers(tiers: PricingTierInput[] | undefined, maxServiceableQty: number, basePrice: number) {
+  if (!tiers || tiers.length === 0) {
+    return [
+      {
+        minQty: 1,
+        maxQty: maxServiceableQty,
+        tierPrice: basePrice,
+      },
+    ];
+  }
+
+  const normalized = tiers.map((tier, index) => {
+    const minQty = parsePositiveInt(tier.minQty, `Tier ${index + 1} minimum quantity`);
+    const maxQty = parsePositiveInt(tier.maxQty, `Tier ${index + 1} maximum quantity`);
+    const tierPrice = parsePositivePrice(tier.price, `Tier ${index + 1} price`);
+
+    if (minQty > maxQty) {
+      throw new Error(`Tier ${index + 1} minimum quantity cannot exceed maximum quantity`);
+    }
+
+    return { minQty, maxQty, tierPrice };
+  });
+
+  normalized.sort((left, right) => left.minQty - right.minQty);
+
+  if (normalized[0].minQty !== 1) {
+    throw new Error("The first pricing tier must start at quantity 1");
+  }
+
+  for (let index = 1; index < normalized.length; index += 1) {
+    const previous = normalized[index - 1];
+    const current = normalized[index];
+    if (current.minQty !== previous.maxQty + 1) {
+      throw new Error("Pricing tiers must be contiguous with no gaps or overlaps");
+    }
+  }
+
+  if (normalized[normalized.length - 1].maxQty !== maxServiceableQty) {
+    throw new Error("The final pricing tier must end at Maximum Serviceable Quantity");
+  }
+
+  return normalized;
+}
+
+export async function createSupplierListing(input: ListingInput, email: string) {
+  const { supplierProfile } = await ensureSupplierContext(email);
+  const categoryName = input.category.trim();
+  const category = await prisma.category.upsert({
+    where: { slug: slugify(categoryName) },
+    update: { name: categoryName },
+    create: { name: categoryName, slug: slugify(categoryName) },
+  });
+
+  const slugBase = slugify(input.title);
+  const suffix = Math.random().toString(36).slice(2, 7);
+  const basePrice = parsePositivePrice(input.price, "Base Price");
+  const maxServiceableQty = parsePositiveInt(input.maxServiceableQty, "Maximum Serviceable Quantity");
+  const pricingTiers = normalizePricingTiers(input.pricingTiers, maxServiceableQty, basePrice);
+
+  return prisma.$transaction(async (transaction) => {
+    const product = await transaction.product.create({
+      data: {
+        supplierId: supplierProfile.id,
+        categoryId: category.id,
+        name: input.title.trim(),
+        slug: `${slugBase}-${suffix}`,
+        brand: input.brand?.trim() || null,
+        grade: input.grade.trim() || null,
+        description: input.description?.trim() || null,
+        unit: input.unit.trim().toUpperCase(),
+        basePrice,
+        stock: maxServiceableQty,
+        maxServiceableQty,
+        images: [],
+        isActive: true,
+      },
+    });
+
+    await transaction.pricingTier.createMany({
+      data: pricingTiers.map((tier) => ({
+        productId: product.id,
+        minQty: tier.minQty,
+        maxQty: tier.maxQty,
+        tierPrice: tier.tierPrice,
+      })),
+    });
+
+    return product;
+  });
+}
+
+export async function updateSupplierListing(id: string, input: ListingInput, email: string) {
+  const existing = await getSupplierListingById(id, email);
+  if (!existing) return null;
+
+  const categoryName = input.category.trim();
+  const category = await prisma.category.upsert({
+    where: { slug: slugify(categoryName) },
+    update: { name: categoryName },
+    create: { name: categoryName, slug: slugify(categoryName) },
+  });
+
+  const basePrice = parsePositivePrice(input.price, "Base Price");
+  const maxServiceableQty = parsePositiveInt(input.maxServiceableQty, "Maximum Serviceable Quantity");
+  const pricingTiers = normalizePricingTiers(input.pricingTiers, maxServiceableQty, basePrice);
+
+  return prisma.$transaction(async (transaction) => {
+    const product = await transaction.product.update({
+      where: { id },
+      data: {
+        categoryId: category.id,
+        name: input.title.trim(),
+        brand: input.brand?.trim() || null,
+        grade: input.grade.trim() || null,
+        description: input.description?.trim() || null,
+        unit: input.unit.trim().toUpperCase(),
+        basePrice,
+        stock: maxServiceableQty,
+        maxServiceableQty,
+      },
+    });
+
+    await transaction.pricingTier.deleteMany({ where: { productId: id } });
+    await transaction.pricingTier.createMany({
+      data: pricingTiers.map((tier) => ({
+        productId: id,
+        minQty: tier.minQty,
+        maxQty: tier.maxQty,
+        tierPrice: tier.tierPrice,
+      })),
+    });
+
+    return product;
+  });
+}
+
+export async function getSupplierOrders(email: string): Promise<SupplierOrderRow[]> {
+  const { supplierProfile } = await ensureSupplierContext(email);
+
+  const items = await prisma.orderItem.findMany({
+    where: { supplierId: supplierProfile.id },
+    include: { order: { include: { user: true } }, product: true },
+    orderBy: { order: { createdAt: "desc" } },
+  });
+
+  return items.map((item: any) => ({
+    id: item.orderId,
+    buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
+    material: item.product.name,
+    qty: `${item.quantity} ${item.product.unit}`,
+    status: item.order.status,
+  }));
+}
 
 export type SupplierOrderRow = {
   id: string;
@@ -304,114 +543,6 @@ export type SupplierRfqCard = {
     validUntil: string | null;
   } | null;
 };
-
-export async function getSupplierListingById(id: string, email: string) {
-  const { supplierProfile } = await ensureSupplierContext(email);
-
-  const product = await prisma.product.findFirst({
-    where: { id, supplierId: supplierProfile.id },
-    include: { category: true },
-  });
-
-  if (!product) return null;
-
-  return {
-    id: product.id,
-    title: product.name,
-    category: product.category.name,
-    grade: product.grade ?? "",
-    unit: product.unit,
-    stock: String(product.stock),
-    price: product.basePrice.toString(),
-    brand: product.brand ?? "",
-    description: product.description ?? "",
-  };
-}
-
-type ListingInput = {
-  title: string;
-  category: string;
-  grade: string;
-  unit: string;
-  stock: string;
-  price: string;
-  brand?: string;
-  description?: string;
-};
-
-export async function createSupplierListing(input: ListingInput, email: string) {
-  const { supplierProfile } = await ensureSupplierContext(email);
-  const categoryName = input.category.trim();
-  const category = await prisma.category.upsert({
-    where: { slug: slugify(categoryName) },
-    update: { name: categoryName },
-    create: { name: categoryName, slug: slugify(categoryName) },
-  });
-
-  const slugBase = slugify(input.title);
-  const suffix = Math.random().toString(36).slice(2, 7);
-
-  return prisma.product.create({
-    data: {
-      supplierId: supplierProfile.id,
-      categoryId: category.id,
-      name: input.title.trim(),
-      slug: `${slugBase}-${suffix}`,
-      brand: input.brand?.trim() || null,
-      grade: input.grade.trim() || null,
-      description: input.description?.trim() || null,
-      unit: input.unit.trim().toUpperCase(),
-      basePrice: Number(input.price),
-      stock: Number(input.stock),
-      images: [],
-      isActive: true,
-    },
-  });
-}
-
-export async function updateSupplierListing(id: string, input: ListingInput, email: string) {
-  const existing = await getSupplierListingById(id, email);
-  if (!existing) return null;
-
-  const categoryName = input.category.trim();
-  const category = await prisma.category.upsert({
-    where: { slug: slugify(categoryName) },
-    update: { name: categoryName },
-    create: { name: categoryName, slug: slugify(categoryName) },
-  });
-
-  return prisma.product.update({
-    where: { id },
-    data: {
-      categoryId: category.id,
-      name: input.title.trim(),
-      brand: input.brand?.trim() || null,
-      grade: input.grade.trim() || null,
-      description: input.description?.trim() || null,
-      unit: input.unit.trim().toUpperCase(),
-      basePrice: Number(input.price),
-      stock: Number(input.stock),
-    },
-  });
-}
-
-export async function getSupplierOrders(email: string): Promise<SupplierOrderRow[]> {
-  const { supplierProfile } = await ensureSupplierContext(email);
-
-  const items = await prisma.orderItem.findMany({
-    where: { supplierId: supplierProfile.id },
-    include: { order: { include: { user: true } }, product: true },
-    orderBy: { order: { createdAt: "desc" } },
-  });
-
-  return items.map((item: any) => ({
-    id: item.orderId,
-    buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
-    material: item.product.name,
-    qty: `${item.quantity} ${item.product.unit}`,
-    status: item.order.status,
-  }));
-}
 
 export async function getSupplierOrderDetail(orderId: string, email: string): Promise<SupplierOrderDetail | null> {
   const { supplierProfile } = await ensureSupplierContext(email);
@@ -561,126 +692,86 @@ export async function updateSupplierProfile(
     },
   });
 
-  return prisma.supplierProfile.update({
+  await prisma.supplierProfile.update({
     where: { id: supplierProfile.id },
     data: {
-      companyName: input.companyName.trim(),
+      companyName: input.companyName.trim() || supplierProfile.companyName,
       bisLicenceNo: input.bisLicenceNo.trim() || null,
     },
   });
+
+  return getSupplierProfileData(callerEmail);
 }
 
-// ─── KYC Onboarding ─────────────────────────────────────────────────────────
-
-export const KYC_DOCS = [
+const KYC_DOC_META: Array<{ type: KycDocType; label: string; required: boolean }> = [
   { type: "GST_CERT", label: "GST Certificate", required: true },
   { type: "TRADE_LICENCE", label: "Trade Licence", required: true },
-  { type: "BIS_CERT", label: "BIS Certification", required: false },
-  { type: "AADHAAR", label: "Aadhaar / PAN of Signatory", required: true },
-] as const;
+  { type: "BIS_CERT", label: "BIS Certificate", required: false },
+  { type: "AADHAAR", label: "Aadhaar / ID Proof", required: true },
+];
 
-export type KycDocType = (typeof KYC_DOCS)[number]["type"];
+export async function getKycOnboardingData(email: string) {
+  const { user, supplierProfile } = await ensureSupplierContext(email);
 
-export type KycDocStatus = {
-  type: KycDocType;
-  label: string;
-  required: boolean;
-  fileUrl: string | null;
-  verified: boolean;
-  submittedAt: string | null;
-};
-
-export async function getKycOnboardingData(email: string): Promise<{
-  kycStatus: "PENDING" | "APPROVED" | "REJECTED";
-  companyName: string;
-  contactName: string;
-  phone: string;
-  whatsappNumber: string;
-  bisLicenceNo: string;
-  docs: KycDocStatus[];
-}> {
-  const user = await prisma.user.findUniqueOrThrow({
-    where: { email },
-    include: {
-      kycDocuments: { orderBy: { createdAt: "desc" } },
-      supplierProfile: true,
-    },
+  const docs = await prisma.kycDocument.findMany({
+    where: { userId: user.id },
+    orderBy: { createdAt: "desc" },
   });
 
-  const docMap = new Map<string, { fileUrl: string; verified: boolean; createdAt: Date }>();
-  for (const doc of user.kycDocuments) {
-    if (!docMap.has(doc.type)) {
-      docMap.set(doc.type, { fileUrl: doc.fileUrl, verified: doc.verified, createdAt: doc.createdAt });
-    }
-  }
+  const docMap = new Map(docs.map((doc) => [doc.type as KycDocType, doc]));
 
   return {
-    kycStatus: user.kycStatus as "PENDING" | "APPROVED" | "REJECTED",
-    companyName: user.supplierProfile?.companyName ?? "",
+    companyName: supplierProfile.companyName,
     contactName: user.name ?? "",
     phone: user.phone ?? "",
     whatsappNumber: user.whatsappNumber ?? "",
-    bisLicenceNo: user.supplierProfile?.bisLicenceNo ?? "",
-    docs: KYC_DOCS.map((d) => {
-      const existing = docMap.get(d.type);
+    bisLicenceNo: supplierProfile.bisLicenceNo ?? "",
+    kycStatus: user.kycStatus,
+    docs: KYC_DOC_META.map((meta) => {
+      const doc = docMap.get(meta.type);
       return {
-        type: d.type,
-        label: d.label,
-        required: d.required,
-        fileUrl: existing?.fileUrl ?? null,
-        verified: existing?.verified ?? false,
-        submittedAt: existing ? existing.createdAt.toISOString() : null,
-      };
+        type: meta.type,
+        label: meta.label,
+        required: meta.required,
+        verified: doc?.verified ?? false,
+        fileUrl: doc?.fileUrl ?? null,
+        submittedAt: doc?.createdAt ? doc.createdAt.toISOString() : null,
+      } satisfies KycDocStatus;
     }),
   };
 }
 
-export async function upsertKycDocument(
-  email: string,
-  docType: KycDocType,
-  fileName: string
-): Promise<void> {
-  const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+export async function upsertKycDocument(email: string, type: KycDocType, fileUrl: string) {
+  const { user } = await ensureSupplierContext(email);
 
-  // Store as a pending reference — real file URL would come from cloud storage
-  const fileUrl = `pending:${docType}:${Date.now()}:${fileName}`;
+  const existing = await prisma.kycDocument.findFirst({ where: { userId: user.id, type } });
 
-  // Delete any previous un-verified doc of same type; keep if already verified
-  await prisma.kycDocument.deleteMany({
-    where: { userId: user.id, type: docType, verified: false },
-  });
+  if (existing) {
+    await prisma.kycDocument.update({
+      where: { id: existing.id },
+      data: {
+        fileUrl,
+        verified: false,
+      },
+    });
+    return;
+  }
 
   await prisma.kycDocument.create({
-    data: { userId: user.id, type: docType, fileUrl, verified: false },
+    data: {
+      userId: user.id,
+      type,
+      fileUrl,
+      verified: false,
+    },
   });
 }
 
-export async function submitOnboardingForReview(email: string): Promise<void> {
-  const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+export async function submitOnboardingForReview(email: string) {
+  const { user } = await ensureSupplierContext(email);
 
-  const requiredTypes = KYC_DOCS.filter((doc) => doc.required).map((doc) => doc.type);
-  const existingDocs = await prisma.kycDocument.findMany({
-    where: {
-      userId: user.id,
-      type: { in: requiredTypes },
-    },
-    select: { type: true },
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { kycStatus: "PENDING" },
   });
-
-  const uploadedTypes = new Set(existingDocs.map((doc) => doc.type));
-  const missing = requiredTypes.filter((type) => !uploadedTypes.has(type));
-  if (missing.length > 0) {
-    throw new Error("Upload all required documents before submitting for review");
-  }
-
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: user.id },
-      data: { kycStatus: "PENDING" },
-    }),
-    prisma.supplierProfile.updateMany({
-      where: { userId: user.id },
-      data: { verifiedBadge: false, bisVerified: false },
-    }),
-  ]);
 }

@@ -133,12 +133,14 @@ model Product {
   unit            String          // MT | BAG | SQM | PCS
   basePrice       Decimal         @db.Decimal(12, 2)
   stock           Int             @default(0)
+  maxServiceableQty Int?          
   images          String[]
   isActive        Boolean         @default(true)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
   prices          PricePoint[]
+  pricingTiers    PricingTier[]
   cartItems       CartItem[]
   orderItems      OrderItem[]
   watchlist       Watchlist[]
@@ -178,6 +180,19 @@ model PricePoint {
 
   @@index([productId])
   @@index([recordedAt])
+}
+
+model PricingTier {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQty      Int
+  maxQty      Int
+  tierPrice   Decimal  @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+
+  @@index([productId])
+  @@unique([productId, minQty, maxQty])
 }
 
 model Watchlist {

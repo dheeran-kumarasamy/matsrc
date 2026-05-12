@@ -24,7 +24,7 @@ type QueueKey = "listings" | "orders" | "rfqs";
 const cardQueueMap: Record<string, QueueKey> = {
   "Active Listings": "listings",
   "Incoming Orders": "orders",
-  "Open RFQs": "rfqs",
+  "Pending Enquiries": "rfqs",
 };
 
 function ListingQueueTable({ listings }: { listings: SupplierListingRow[] }) {
@@ -73,7 +73,7 @@ function RfqQueueTable({ rfqs }: { rfqs: SupplierRfqCard[] }) {
   return (
     <div className="panel overflow-hidden">
       <div className="border-b border-slate-200 px-7 py-5">
-        <h3 className="text-4xl font-extrabold text-slate-900">Open RFQ Queue</h3>
+        <h3 className="text-4xl font-extrabold text-slate-900">Pending Enquiries Queue</h3>
       </div>
       {rfqs.length === 0 ? (
         <p className="px-7 py-10 text-xl text-slate-500">No RFQs available right now.</p>

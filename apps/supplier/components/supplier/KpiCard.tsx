@@ -20,7 +20,7 @@ const iconByLabel: Record<string, ReactNode> = {
       <path d="M8 6V4h8v2" />
     </svg>
   ),
-  "Open RFQs": (
+  "Pending Enquiries": (
     <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
       <path d="M5 6h14v10H9l-4 4V6Z" />
       <path d="M9 10h6M9 13h4" />
@@ -36,7 +36,7 @@ const iconByLabel: Record<string, ReactNode> = {
 };
 
 export function KpiCard({ label, value, hint, className = "" }: KpiCardProps) {
-  const metricType = label === "Fulfilment Rate" ? "Percentage" : "Count";
+  const metricType = label === "Fulfilment Rate" ? "Orders Served" : "Count";
 
   return (
     <article className={`panel p-5 ${className}`.trim()}>

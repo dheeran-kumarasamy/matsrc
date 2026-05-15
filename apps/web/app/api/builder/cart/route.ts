@@ -16,9 +16,16 @@ export async function GET(request: Request) {
       where: { userId: user.id },
       include: {
         product: {
-          include: {
-            supplier: true,
-            pricingTiers: { orderBy: { minQty: "asc" } },
+          select: {
+            name: true,
+            unit: true,
+            supplierId: true,
+            basePrice: true,
+            supplier: { select: { companyName: true } },
+            pricingTiers: {
+              select: { minQty: true, maxQty: true, tierPrice: true },
+              orderBy: { minQty: "asc" },
+            },
           },
         },
       },

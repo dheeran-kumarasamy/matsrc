@@ -9,18 +9,20 @@ export async function POST(request: Request) {
   try {
     const ctx = getUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
-    const body = await request.json();
-    const { productId, quantity } = body;
+    const body = await request.json().catch(() => ({}));
+    const productId = typeof body.productId === "string" ? body.productId : "";
+    const quantity = Number(body.quantity);
 
-    if (!productId || !quantity) {
+    if (!productId || !Number.isInteger(quantity) || quantity < 1) {
       return NextResponse.json(
-        { error: "productId and quantity are required" },
+        { error: "Valid productId and quantity are required" },
         { status: 400 }
       );
     }
 
     const product = await prisma.product.findUnique({
       where: { id: productId },
+      select: { id: true, isActive: true },
     });
     if (!product || !product.isActive) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });

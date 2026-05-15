@@ -16,7 +16,17 @@ export async function GET(request: Request) {
 
     const orders = await prisma.order.findMany({
       where: { userId: user.id },
-      include: { items: { include: { product: { include: { supplier: true } } } } },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: {
+                supplier: { select: { companyName: true } },
+              },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -52,9 +62,14 @@ export async function POST(request: Request) {
       where: { userId: user.id },
       include: {
         product: {
-          include: {
-            supplier: true,
-            pricingTiers: { orderBy: { minQty: "asc" } },
+          select: {
+            supplierId: true,
+            basePrice: true,
+            supplier: { select: { companyName: true } },
+            pricingTiers: {
+              select: { minQty: true, maxQty: true, tierPrice: true },
+              orderBy: { minQty: "asc" },
+            },
           },
         },
       },

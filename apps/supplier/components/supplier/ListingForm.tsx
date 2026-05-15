@@ -2,7 +2,7 @@
 
 import axios from "axios";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type PricingTierRow = {
   minQty: string;
@@ -56,20 +56,31 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const previousBasePriceRef = useRef(form.price);
+
+  // Keep tier-1 price aligned with base price for new listings unless user overrides it manually.
+  useEffect(() => {
+    const hasInitialTiers = Boolean(initial?.pricingTiers && initial.pricingTiers.length > 0);
+    if (mode !== "create" || hasInitialTiers) {
+      previousBasePriceRef.current = form.price;
+      return;
+    }
+
+    const previousBasePrice = previousBasePriceRef.current;
+    setTiers((prev) => {
+      if (prev.length === 0) return prev;
+      const firstTier = prev[0];
+      const firstTierPrice = firstTier.price.trim();
+      const shouldSync = firstTierPrice === "" || firstTier.price === previousBasePrice;
+
+      if (!shouldSync || firstTier.price === form.price) return prev;
+      return [{ ...firstTier, price: form.price }, ...prev.slice(1)];
+    });
+
+    previousBasePriceRef.current = form.price;
+  }, [form.price, mode, initial]);
 
   function updateField(field: keyof typeof form, value: string) {
-      // Sync first tier price with base price when base price changes
-      useEffect(() => {
-        setTiers((prev) => {
-          if (prev.length === 0 || !form.price) return prev;
-          const firstTier = prev[0];
-          // Only sync if this is a new listing (no initial data) and first tier price is empty or matches old base price
-          if (mode === "create" && (!initial || !initial.pricingTiers || initial.pricingTiers.length === 0)) {
-            return [{ ...firstTier, price: form.price }, ...prev.slice(1)];
-          }
-          return prev;
-        });
-      }, [form.price, mode, initial]);
     setSaved(false);
     setForm((prev) => ({ ...prev, [field]: value }));
   }

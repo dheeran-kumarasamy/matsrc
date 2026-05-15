@@ -10,6 +10,10 @@ type PricingTierRow = {
   price: string;
 };
 
+function parseNumericValue(value: string) {
+  return Number(value.trim().replace(/,/g, ""));
+}
+
 type ListingFormProps = {
   mode: "create" | "edit";
   listingId?: string;
@@ -65,8 +69,8 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
       const updated = prev.map((tier, tierIndex) => (tierIndex === index ? { ...tier, [field]: value } : tier));
 
       if (field === "maxQty") {
-        const maxQtyNum = Number(value);
-        const serviceableQty = Number(form.maxServiceableQty);
+        const maxQtyNum = parseNumericValue(value);
+        const serviceableQty = parseNumericValue(form.maxServiceableQty);
 
         // Truncate all tiers after the edited one so ranges stay consistent
         const truncated = updated.slice(0, index + 1);
@@ -96,7 +100,7 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
   }
 
   function validateTiers() {
-    const serviceableQty = Number(form.maxServiceableQty);
+    const serviceableQty = parseNumericValue(form.maxServiceableQty);
     if (!Number.isInteger(serviceableQty) || serviceableQty < 1) {
       return "Maximum Serviceable Quantity must be a positive whole number.";
     }
@@ -106,9 +110,9 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
     }
 
     const normalized = tiers.map((tier, index) => {
-      const minQty = Number(tier.minQty);
-      const maxQty = Number(tier.maxQty);
-      const price = Number(tier.price);
+      const minQty = parseNumericValue(tier.minQty);
+      const maxQty = parseNumericValue(tier.maxQty);
+      const price = parseNumericValue(tier.price);
 
       if (!Number.isInteger(minQty) || minQty < 1) return `Tier ${index + 1} minimum quantity must be a positive whole number.`;
       if (!Number.isInteger(maxQty) || maxQty < 1) return `Tier ${index + 1} maximum quantity must be a positive whole number.`;
@@ -122,9 +126,9 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
     if (tierError) return tierError as string;
 
     const sorted = [...tiers].map((tier) => ({
-      minQty: Number(tier.minQty),
-      maxQty: Number(tier.maxQty),
-      price: Number(tier.price),
+      minQty: parseNumericValue(tier.minQty),
+      maxQty: parseNumericValue(tier.maxQty),
+      price: parseNumericValue(tier.price),
     })).sort((a, b) => a.minQty - b.minQty);
 
     if (sorted[0].minQty !== 1) {
@@ -182,7 +186,7 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
     }
   }
 
-  const maxServiceableQty = Number(form.maxServiceableQty);
+  const maxServiceableQty = parseNumericValue(form.maxServiceableQty);
 
   return (
     <form onSubmit={onSubmit} className="panel space-y-4 p-5">

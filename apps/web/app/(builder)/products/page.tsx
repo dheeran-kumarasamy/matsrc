@@ -40,15 +40,25 @@ type SupplierListing = {
 };
 
 async function getSupplierListings(): Promise<SupplierListing[]> {
-  const response = await fetch(`${SUPPLIER_APP_URL}/api/supplier/listings`, {
-    cache: "no-store",
-  });
+  try {
+    const response = await fetch(`${SUPPLIER_APP_URL}/api/public/listings`, {
+      cache: "no-store",
+      redirect: "manual",
+    });
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return [];
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      return [];
+    }
+
+    return response.json() as Promise<SupplierListing[]>;
+  } catch {
     return [];
   }
-
-  return response.json() as Promise<SupplierListing[]>;
 }
 
 // UF-02: Material Discovery — FR-04 Faceted Search & Browse

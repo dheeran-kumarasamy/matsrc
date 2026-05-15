@@ -355,6 +355,46 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
   }));
 }
 
+export async function getPublicSupplierListings(): Promise<SupplierListingRow[]> {
+  let listings: any[] = [];
+
+  try {
+    listings = await prisma.product.findMany({
+      where: { isActive: true },
+      include: { category: true },
+      orderBy: { updatedAt: "desc" },
+    });
+  } catch (error) {
+    if (!isMissingPricingSchemaError(error)) throw error;
+    listings = await prisma.product.findMany({
+      where: { isActive: true },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        category: { select: { name: true } },
+        grade: true,
+        unit: true,
+        basePrice: true,
+        stock: true,
+        isActive: true,
+      },
+    });
+  }
+
+  return listings.map((product: any) => ({
+    id: product.id,
+    name: product.name,
+    category: product.category.name,
+    grade: product.grade ?? "NA",
+    unit: product.unit,
+    price: `${formatCurrency(product.basePrice.toString())} / ${product.unit}`,
+    stock: `${product.stock} ${product.unit}`,
+    maxServiceableQty: `${product.maxServiceableQty ?? product.stock} ${product.unit}`,
+    active: product.isActive,
+  }));
+}
+
 export type SupplierListingRow = {
   id: string;
   name: string;
@@ -419,7 +459,7 @@ export async function getSupplierListingById(id: string, email: string) {
 }
 
 function parsePositiveInt(value: string, field: string) {
-  const parsed = Number(value);
+  const parsed = Number(value.trim().replace(/,/g, ""));
   if (!Number.isInteger(parsed) || parsed < 1) {
     throw new Error(`${field} must be a positive whole number`);
   }
@@ -427,7 +467,7 @@ function parsePositiveInt(value: string, field: string) {
 }
 
 function parsePositivePrice(value: string, field: string) {
-  const parsed = Number(value);
+  const parsed = Number(value.trim().replace(/,/g, ""));
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new Error(`${field} must be a positive number`);
   }

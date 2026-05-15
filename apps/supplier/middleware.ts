@@ -6,7 +6,7 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth?.user?.email;
 
   // Always allow auth API and static assets
-  if (pathname.startsWith("/api/auth")) return NextResponse.next();
+  if (pathname.startsWith("/api/auth") || pathname.startsWith("/api/public")) return NextResponse.next();
 
   // Redirect logged-in users away from sign-in
   if (pathname === "/sign-in") {

@@ -1,4 +1,4 @@
-const API_BASE_URL = "/api/proxy";
+const API_BASE_URL = "/api/builder";
 
 const DEMO_USER = {
   id: "builder.demo@buildmart.local",

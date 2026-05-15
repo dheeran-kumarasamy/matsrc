@@ -2,7 +2,7 @@
 
 import axios from "axios";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type PricingTierRow = {
   minQty: string;
@@ -58,6 +58,18 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
   const [saving, setSaving] = useState(false);
 
   function updateField(field: keyof typeof form, value: string) {
+      // Sync first tier price with base price when base price changes
+      useEffect(() => {
+        setTiers((prev) => {
+          if (prev.length === 0 || !form.price) return prev;
+          const firstTier = prev[0];
+          // Only sync if this is a new listing (no initial data) and first tier price is empty or matches old base price
+          if (mode === "create" && (!initial || !initial.pricingTiers || initial.pricingTiers.length === 0)) {
+            return [{ ...firstTier, price: form.price }, ...prev.slice(1)];
+          }
+          return prev;
+        });
+      }, [form.price, mode, initial]);
     setSaved(false);
     setForm((prev) => ({ ...prev, [field]: value }));
   }

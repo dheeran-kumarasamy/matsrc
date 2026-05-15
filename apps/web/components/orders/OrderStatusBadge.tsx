@@ -10,7 +10,7 @@ const colours: Record<Status, string> = {
 };
 
 const labels: Record<Status, string> = {
-  PLACED: "Placed",
+  PLACED: "Enquiry",
   PROCESSING: "Processing",
   DISPATCHED: "Dispatched",
   OUT_FOR_DELIVERY: "Out for Delivery",

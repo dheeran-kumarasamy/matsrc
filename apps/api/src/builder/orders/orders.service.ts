@@ -1,9 +1,19 @@
 import { Injectable, BadRequestException, NotFoundException } from "@nestjs/common";
-import { OrderStatus } from "@matsrc/db";
+import { OrderStatus, PaymentMethod, PaymentStatus } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { formatCurrency, formatDate, humanizeToken } from "src/supplier/utils";
 import { BuilderContextService } from "src/builder/builder-context.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
+
+function resolveUnitPrice(product: any, quantity: number) {
+  const tiers = Array.isArray(product.pricingTiers) ? product.pricingTiers : [];
+  const matchedTier = tiers.find((tier: any) => quantity >= tier.minQty && quantity <= tier.maxQty);
+  return Number(matchedTier?.tierPrice ?? product.basePrice);
+}
+
+function getPaymentLink(orderId: string) {
+  return `/orders/${orderId}/payment`;
+}
 
 @Injectable()
 export class BuilderOrdersService {
@@ -17,17 +27,21 @@ export class BuilderOrdersService {
 
     const orders = await this.prisma.order.findMany({
       where: { userId: user.id },
-      include: { items: { include: { product: true } } },
+      include: { items: { include: { product: { include: { supplier: true } } } } },
       orderBy: { createdAt: "desc" },
     });
 
     return orders.map((order) => ({
       id: order.id,
       status: order.status,
+      paymentStatus: order.paymentStatus,
       itemCount: order.items.length,
       total: Number(order.totalAmount),
       totalLabel: formatCurrency(order.totalAmount.toString()),
       createdAt: order.createdAt,
+      supplierName: order.items[0]?.product.supplier.companyName ?? "Supplier",
+      paymentLinkAvailable: order.status === OrderStatus.PROCESSING && order.paymentStatus === PaymentStatus.PENDING,
+      paymentLink: getPaymentLink(order.id),
     }));
   }
 
@@ -37,7 +51,7 @@ export class BuilderOrdersService {
     const order = await this.prisma.order.findFirst({
       where: { id, userId: user.id },
       include: {
-        items: { include: { product: true } },
+        items: { include: { product: { include: { supplier: true } } } },
         tracking: { orderBy: { recordedAt: "asc" } },
       },
     });
@@ -51,9 +65,12 @@ export class BuilderOrdersService {
       status: order.status,
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus,
+      paymentLinkAvailable: order.status === OrderStatus.PROCESSING && order.paymentStatus === PaymentStatus.PENDING,
+      paymentLink: getPaymentLink(order.id),
       total: Number(order.totalAmount),
       totalLabel: formatCurrency(order.totalAmount.toString()),
       deliveryDate: formatDate(order.deliveryDate),
+      supplierName: order.items[0]?.product.supplier.companyName ?? "Supplier",
       items: order.items.map((item) => ({
         id: item.id,
         name: item.product.name,
@@ -75,48 +92,89 @@ export class BuilderOrdersService {
 
     const cartItems = await this.prisma.cartItem.findMany({
       where: { userId: user.id },
-      include: { product: { include: { supplier: true } } },
+      include: {
+        product: {
+          include: {
+            supplier: true,
+            pricingTiers: { orderBy: { minQty: "asc" } },
+          },
+        },
+      },
     });
 
     if (!cartItems.length) {
       throw new BadRequestException("Cart is empty");
     }
 
-    const totalAmount = cartItems.reduce((acc, item) => acc + Number(item.product.basePrice) * item.quantity, 0);
+    const groupedItems = new Map<
+      string,
+      {
+        supplierId: string;
+        supplierName: string;
+        items: Array<{ productId: string; quantity: number; unitPrice: number }>;
+      }
+    >();
 
-    const order = await this.prisma.order.create({
-      data: {
-        userId: user.id,
-        paymentMethod: dto.paymentMethod,
-        status: OrderStatus.PLACED,
-        totalAmount,
-        deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : null,
-        items: {
-          create: cartItems.map((item) => ({
-            productId: item.productId,
-            supplierId: item.product.supplierId,
-            quantity: item.quantity,
-            unitPrice: item.product.basePrice,
-            deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : null,
-          })),
-        },
-        tracking: {
-          create: {
-            status: OrderStatus.PLACED,
-            note: "Order placed successfully",
+    for (const item of cartItems) {
+      const unitPrice = resolveUnitPrice(item.product, item.quantity);
+      const currentGroup = groupedItems.get(item.product.supplierId) ?? {
+        supplierId: item.product.supplierId,
+        supplierName: item.product.supplier.companyName,
+        items: [],
+      };
+
+      currentGroup.items.push({
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice,
+      });
+
+      groupedItems.set(item.product.supplierId, currentGroup);
+    }
+
+    const createdOrders: Array<{ id: string; supplierName: string; total: number; itemCount: number; status: OrderStatus }> = [];
+
+    for (const group of groupedItems.values()) {
+      const totalAmount = group.items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
+
+      const order = await this.prisma.order.create({
+        data: {
+          userId: user.id,
+          paymentMethod: dto.paymentMethod ?? PaymentMethod.BANK_TRANSFER,
+          status: OrderStatus.PLACED,
+          paymentStatus: PaymentStatus.PENDING,
+          totalAmount,
+          deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : null,
+          items: {
+            create: group.items.map((item) => ({
+              productId: item.productId,
+              supplierId: group.supplierId,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : null,
+            })),
+          },
+          tracking: {
+            create: {
+              status: OrderStatus.PLACED,
+              note: "Pending supplier confirmation",
+            },
           },
         },
-      },
-      include: { items: true },
-    });
+        include: { items: true },
+      });
+
+      createdOrders.push({
+        id: order.id,
+        supplierName: group.supplierName,
+        total: Number(order.totalAmount),
+        itemCount: order.items.length,
+        status: order.status,
+      });
+    }
 
     await this.prisma.cartItem.deleteMany({ where: { userId: user.id } });
 
-    return {
-      id: order.id,
-      status: order.status,
-      total: Number(order.totalAmount),
-      itemCount: order.items.length,
-    };
+    return { orders: createdOrders };
   }
 }

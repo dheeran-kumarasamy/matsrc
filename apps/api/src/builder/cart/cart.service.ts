@@ -4,6 +4,12 @@ import { formatCurrency } from "src/supplier/utils";
 import { BuilderContextService } from "src/builder/builder-context.service";
 import { UpsertCartItemDto } from "./dto/upsert-cart-item.dto";
 
+function resolveUnitPrice(product: any, quantity: number) {
+  const tiers = Array.isArray(product.pricingTiers) ? product.pricingTiers : [];
+  const matchedTier = tiers.find((tier: any) => quantity >= tier.minQty && quantity <= tier.maxQty);
+  return Number(matchedTier?.tierPrice ?? product.basePrice);
+}
+
 @Injectable()
 export class CartService {
   constructor(
@@ -16,11 +22,18 @@ export class CartService {
 
     const items = await this.prisma.cartItem.findMany({
       where: { userId: user.id },
-      include: { product: true },
+      include: {
+        product: {
+          include: {
+            supplier: true,
+            pricingTiers: { orderBy: { minQty: "asc" } },
+          },
+        },
+      },
       orderBy: { updatedAt: "desc" },
     });
 
-    const subtotal = items.reduce((acc, item) => acc + Number(item.product.basePrice) * item.quantity, 0);
+    const subtotal = items.reduce((acc, item) => acc + resolveUnitPrice(item.product, item.quantity) * item.quantity, 0);
 
     return {
       items: items.map((item) => ({
@@ -28,9 +41,11 @@ export class CartService {
         productId: item.productId,
         name: item.product.name,
         unit: item.product.unit,
+        supplierId: item.product.supplierId,
+        supplierName: item.product.supplier.companyName,
         quantity: item.quantity,
-        unitPrice: Number(item.product.basePrice),
-        lineTotal: Number(item.product.basePrice) * item.quantity,
+        unitPrice: resolveUnitPrice(item.product, item.quantity),
+        lineTotal: resolveUnitPrice(item.product, item.quantity) * item.quantity,
       })),
       summary: {
         itemCount: items.length,

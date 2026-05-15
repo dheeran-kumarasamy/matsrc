@@ -352,6 +352,11 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
     stock: `${product.stock} ${product.unit}`,
     maxServiceableQty: `${product.maxServiceableQty ?? product.stock} ${product.unit}`,
     active: product.isActive,
+    pricingTiers: (product.pricingTiers ?? []).map((tier: any) => ({
+      minQty: String(tier.minQty),
+      maxQty: String(tier.maxQty),
+      price: tier.tierPrice.toString(),
+    })),
   }));
 }
 
@@ -392,6 +397,11 @@ export async function getPublicSupplierListings(): Promise<SupplierListingRow[]>
     stock: `${product.stock} ${product.unit}`,
     maxServiceableQty: `${product.maxServiceableQty ?? product.stock} ${product.unit}`,
     active: product.isActive,
+    pricingTiers: (product.pricingTiers ?? []).map((tier: any) => ({
+      minQty: String(tier.minQty),
+      maxQty: String(tier.maxQty),
+      price: tier.tierPrice.toString(),
+    })),
   }));
 }
 

@@ -1,8 +1,8 @@
 type Status = "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
 
 const steps: { status: Status; label: string; desc: string }[] = [
-  { status: "PLACED", label: "Order Placed", desc: "Your order has been confirmed" },
-  { status: "PROCESSING", label: "Processing", desc: "Supplier accepted your order" },
+  { status: "PLACED", label: "Enquiry sent", desc: "Waiting for supplier confirmation" },
+  { status: "PROCESSING", label: "Confirmed", desc: "Supplier accepted your enquiry" },
   { status: "DISPATCHED", label: "Dispatched", desc: "On the way — GPS tracking active" },
   { status: "OUT_FOR_DELIVERY", label: "Out for Delivery", desc: "Arriving today" },
   { status: "DELIVERED", label: "Delivered", desc: "Order completed" },

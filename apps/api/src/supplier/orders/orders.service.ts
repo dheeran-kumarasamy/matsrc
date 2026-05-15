@@ -76,7 +76,7 @@ export class OrdersService {
       data: {
         orderId: id,
         status,
-        note: `Supplier marked order as ${humanizeToken(status)}`,
+        note: status === OrderStatus.PROCESSING ? "Supplier confirmed enquiry" : `Supplier marked order as ${humanizeToken(status)}`,
       },
     });
 

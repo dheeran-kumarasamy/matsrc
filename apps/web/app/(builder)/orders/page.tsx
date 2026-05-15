@@ -5,9 +5,13 @@ import { builderApiGet } from "@/lib/api";
 type OrderItem = {
   id: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
+  paymentStatus?: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
   itemCount: number;
   total: number;
   createdAt: string;
+  supplierName?: string;
+  paymentLinkAvailable?: boolean;
+  paymentLink?: string;
 };
 
 const STATUS_FILTERS = ["All", "PLACED", "PROCESSING", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"] as const;
@@ -15,7 +19,7 @@ type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 const FILTER_LABELS: Record<string, string> = {
   All: "All",
-  PLACED: "Placed",
+  PLACED: "Enquiry",
   PROCESSING: "Processing",
   DISPATCHED: "Dispatched",
   OUT_FOR_DELIVERY: "Out For Delivery",
@@ -83,11 +87,16 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
               <div>
                 <p className="text-sm font-semibold text-slate-800">Order #{order.id.slice(0, 8)}</p>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {order.itemCount} items · INR {order.total.toLocaleString("en-IN")}
+                  {order.supplierName ? `${order.supplierName} · ` : ""}{order.itemCount} items · INR {order.total.toLocaleString("en-IN")}
                 </p>
               </div>
               <div className="flex items-center gap-3">
                 <OrderStatusBadge status={order.status} />
+                {order.paymentLinkAvailable && order.paymentLink ? (
+                  <Link href={order.paymentLink} className="text-xs rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 hover:bg-emerald-100">
+                    Payment link enabled
+                  </Link>
+                ) : null}
                 <Link href={`/orders/${order.id}`} className="text-xs text-blue-700 hover:underline">
                   View
                 </Link>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 const transitions = [
-  { label: "Mark Processing", status: "PROCESSING" },
+  { label: "Confirm Enquiry", status: "PROCESSING" },
   { label: "Mark Dispatched", status: "DISPATCHED" },
   { label: "Mark Delivered", status: "DELIVERED" },
 ];

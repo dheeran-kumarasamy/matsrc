@@ -1,12 +1,35 @@
-// This handler proxies requests to the NestJS app
-// The built app is in dist/main.js and should be started separately
-// For Vercel, we need to ensure the built app can be started
+import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { ExpressAdapter } from '@nestjs/platform-express';
+import { AppModule } from '../src/app.module';
+import * as express from 'express';
+import type { Request, Response } from 'express';
 
-import { VercelRequest, VercelResponse } from '@vercel/node';
+const server = express();
+let nestReady: Promise<void> | null = null;
 
-export default async (req: VercelRequest, res: VercelResponse) => {
-  // In production, the NestJS app should be running as a serverless function
-  // This is a fallback that would be replaced by proper serverless configuration
-  res.status(503).json({ error: 'API server is starting up' });
+function initNest(): Promise<void> {
+  if (!nestReady) {
+    nestReady = NestFactory.create(AppModule, new ExpressAdapter(server), {
+      logger: ['error', 'warn'],
+    }).then(async (app) => {
+      app.setGlobalPrefix('api');
+      app.enableCors();
+      app.useGlobalPipes(
+        new ValidationPipe({
+          whitelist: true,
+          transform: true,
+          forbidNonWhitelisted: true,
+        }),
+      );
+      await app.init();
+    });
+  }
+  return nestReady;
+}
+
+module.exports = async (req: Request, res: Response) => {
+  await initNest();
+  server(req, res);
 };
 

@@ -1,14 +1,21 @@
 {
   "version": 2,
-  "buildCommand": "cd ../.. && pnpm --filter @matsrc/db db:generate && pnpm --filter @matsrc/api build",
   "installCommand": "cd ../.. && pnpm install",
-  "outputDirectory": "dist",
-  "framework": "nodejs",
-  "functions": {
-    "api/index.ts": {
-      "runtime": "nodejs18.x",
-      "memory": 3008,
-      "maxDuration": 60
+  "buildCommand": "cd ../.. && pnpm --filter @matsrc/db db:generate && pnpm --filter @matsrc/api build",
+  "builds": [
+    {
+      "src": "api/index.ts",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["dist/**", "src/**"],
+        "maxLambdaSize": "50mb"
+      }
     }
-  }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.ts"
+    }
+  ]
 }

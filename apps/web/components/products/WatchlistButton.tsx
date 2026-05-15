@@ -16,7 +16,7 @@ export default function WatchlistButton({ productId, initialWatching = false }: 
     if (watching) {
       setSaving(true);
       try {
-        await builderApiDelete(`/builder/watchlist/${productId}`);
+        await builderApiDelete(`/watchlist/${productId}`);
         setWatching(false);
       } catch {
         setError("Failed to remove");
@@ -32,7 +32,7 @@ export default function WatchlistButton({ productId, initialWatching = false }: 
     setSaving(true);
     setError("");
     try {
-      await builderApiPost("/builder/watchlist", {
+      await builderApiPost("/watchlist", {
         productId,
         targetPrice: targetPrice ? targetPrice : undefined,
       });

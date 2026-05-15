@@ -34,7 +34,7 @@ export default function CartPage() {
 
     async function loadCart() {
       try {
-        const payload = await builderApiGet<CartResponse>("/builder/cart");
+        const payload = await builderApiGet<CartResponse>("/cart");
         if (!active) return;
         setData(payload);
       } catch {
@@ -55,7 +55,7 @@ export default function CartPage() {
   async function handleRemove(productId: string, id: string) {
     setLoadingId(id);
     try {
-      await builderApiDelete(`/builder/cart/items/${productId}`);
+      await builderApiDelete(`/cart/items/${productId}`);
       setData((prev) => {
         const items = prev.items.filter((item) => item.id !== id);
         const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);

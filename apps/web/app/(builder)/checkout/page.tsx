@@ -42,7 +42,7 @@ export default function CheckoutPage() {
 
     async function loadCart() {
       try {
-        const payload = await builderApiGet<CartResponse>("/builder/cart");
+        const payload = await builderApiGet<CartResponse>("/cart");
         if (!active) return;
         setCart(payload);
       } catch {
@@ -88,7 +88,7 @@ export default function CheckoutPage() {
     setLoading(true);
     setError(null);
     try {
-      await builderApiPost("/builder/orders/checkout", {
+      await builderApiPost("/orders/checkout", {
         deliveryDate: deliveryDate || undefined,
       });
       router.push("/orders");

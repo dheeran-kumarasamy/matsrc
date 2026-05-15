@@ -24,7 +24,7 @@ export default function WatchlistPage() {
 
     async function loadWatchlist() {
       try {
-        const payload = await builderApiGet<WatchlistItem[]>("/builder/watchlist");
+        const payload = await builderApiGet<WatchlistItem[]>("/watchlist");
         if (!active) return;
         setItems(payload);
       } catch {
@@ -42,7 +42,7 @@ export default function WatchlistPage() {
   async function handleRemove(productId: string, id: string) {
     setLoadingId(id);
     try {
-      await builderApiDelete(`/builder/watchlist/${productId}`);
+      await builderApiDelete(`/watchlist/${productId}`);
       setItems((prev) => prev.filter((item) => item.id !== id));
     } finally {
       setLoadingId(null);

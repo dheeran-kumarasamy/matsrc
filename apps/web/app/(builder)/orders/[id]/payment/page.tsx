@@ -16,7 +16,7 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
   let order: OrderPayment | null = null;
 
   try {
-    order = await builderApiGet<OrderPayment>(`/builder/orders/${params.id}`);
+    order = await builderApiGet<OrderPayment>(`/orders/${params.id}`);
   } catch {
     order = null;
   }

@@ -22,7 +22,7 @@ export default async function DisputesPage() {
   let disputes: Dispute[] = [];
 
   try {
-    disputes = await builderApiGet<Dispute[]>("/builder/disputes");
+    disputes = await builderApiGet<Dispute[]>("/disputes");
   } catch {
     disputes = [];
   }

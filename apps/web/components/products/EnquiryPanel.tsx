@@ -44,7 +44,7 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
     setLoading(true);
     setError(null);
     try {
-      await builderApiPost("/builder/cart/items", { productId, quantity });
+      await builderApiPost("/cart/items", { productId, quantity });
       setAdded(true);
     } catch {
       setError("Unable to add this material to your enquiry basket.");

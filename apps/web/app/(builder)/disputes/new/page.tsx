@@ -22,7 +22,7 @@ function NewDisputeForm() {
     setError("");
     setLoading(true);
     try {
-      const res = await builderApiPost<{ id: string }>("/builder/disputes", {
+      const res = await builderApiPost<{ id: string }>("/disputes", {
         orderId,
         issueType,
         description,

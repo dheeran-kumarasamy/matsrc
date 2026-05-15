@@ -14,7 +14,7 @@ export default function CreditPage() {
 
     async function loadCreditSummary() {
       try {
-        const data = await builderApiGet<{ availableLimit: number; status: string }>("/builder/credit");
+        const data = await builderApiGet<{ availableLimit: number; status: string }>("/credit");
         if (!active) return;
         setAvailableLimit(Number(data.availableLimit || 0));
         setCreditStatus(String(data.status || "NOT_APPLIED"));

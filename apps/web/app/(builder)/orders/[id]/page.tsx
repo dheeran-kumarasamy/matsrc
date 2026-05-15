@@ -33,7 +33,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
   let order: OrderDetail | null = null;
 
   try {
-    order = await builderApiGet<OrderDetail>(`/builder/orders/${params.id}`);
+    order = await builderApiGet<OrderDetail>(`/orders/${params.id}`);
   } catch {
     order = null;
   }

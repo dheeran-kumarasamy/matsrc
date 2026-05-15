@@ -39,7 +39,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
     : "All";
 
   try {
-    orders = await builderApiGet<OrderItem[]>("/builder/orders");
+    orders = await builderApiGet<OrderItem[]>("/orders");
   } catch {
     orders = [];
     apiError = true;

@@ -13,7 +13,7 @@ export default function AddToCartButton({ productId }: { productId: string }) {
     setError(null);
     setLoading(true);
     try {
-      await builderApiPost("/builder/cart/items", { productId, quantity: 1 });
+      await builderApiPost("/cart/items", { productId, quantity: 1 });
       setAdded(true);
     } catch {
       setError("Unable to add item to cart.");

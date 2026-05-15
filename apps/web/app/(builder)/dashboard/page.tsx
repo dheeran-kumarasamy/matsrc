@@ -20,10 +20,10 @@ export default async function DashboardPage() {
 
   try {
     const [cart, ordersData, watchlist, credit] = await Promise.all([
-      builderApiGet<{ items: Array<{ id: string }> }>("/builder/cart"),
-      builderApiGet<Order[]>("/builder/orders"),
-      builderApiGet<Array<{ id: string }>>("/builder/watchlist"),
-      builderApiGet<{ availableLimit: number }>("/builder/credit"),
+      builderApiGet<{ items: Array<{ id: string }> }>("/cart"),
+      builderApiGet<Order[]>("/orders"),
+      builderApiGet<Array<{ id: string }>>("/watchlist"),
+      builderApiGet<{ availableLimit: number }>("/credit"),
     ]);
 
     cartCount = cart.items.length;

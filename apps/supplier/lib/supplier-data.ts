@@ -355,6 +355,55 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
   }));
 }
 
+export async function getPublicSupplierListings() {
+  let listings: any[] = [];
+
+  try {
+    listings = await prisma.product.findMany({
+      where: { isActive: true },
+      include: { category: true, pricingTiers: { orderBy: { minQty: "asc" } } },
+      orderBy: { updatedAt: "desc" },
+    });
+  } catch (error) {
+    if (!isMissingPricingSchemaError(error)) throw error;
+    listings = await prisma.product.findMany({
+      where: { isActive: true },
+      include: { category: true },
+      orderBy: { updatedAt: "desc" },
+    });
+  }
+
+  return listings.map((product: any) => {
+    const fallbackMaxQty = product.maxServiceableQty ?? product.stock;
+    const pricingTiers = Array.isArray(product.pricingTiers) && product.pricingTiers.length > 0
+      ? product.pricingTiers
+      : [
+          {
+            minQty: 1,
+            maxQty: fallbackMaxQty,
+            tierPrice: product.basePrice,
+          },
+        ];
+
+    return {
+      id: product.id,
+      name: product.name,
+      category: product.category.name,
+      grade: product.grade ?? "NA",
+      unit: product.unit,
+      price: `${formatCurrency(product.basePrice.toString())} / ${product.unit}`,
+      stock: `${product.stock} ${product.unit}`,
+      maxServiceableQty: `${fallbackMaxQty} ${product.unit}`,
+      active: product.isActive,
+      pricingTiers: pricingTiers.map((tier: any) => ({
+        minQty: String(tier.minQty),
+        maxQty: String(tier.maxQty),
+        price: String(tier.tierPrice),
+      })),
+    };
+  });
+}
+
 export type SupplierListingRow = {
   id: string;
   name: string;

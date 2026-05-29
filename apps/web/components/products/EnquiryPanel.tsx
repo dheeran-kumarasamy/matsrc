@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ShoppingCart } from "lucide-react";
 import { builderApiPost } from "@/lib/api";
 
@@ -31,6 +32,7 @@ function findTier(pricingTiers: PricingTier[], quantity: number) {
 }
 
 export default function EnquiryPanel({ productId, unit, maxServiceableQty, pricingTiers }: Props) {
+  const router = useRouter();
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState(false);
@@ -51,6 +53,15 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handlePrimaryAction() {
+    if (added) {
+      router.push("/cart");
+      return;
+    }
+
+    await handleAddToEnquiry();
   }
 
   return (
@@ -98,14 +109,14 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
       </div>
 
       <button
-        onClick={handleAddToEnquiry}
+        onClick={() => void handlePrimaryAction()}
         disabled={loading}
         className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors disabled:opacity-50 ${
-          added ? "bg-emerald-600 text-white" : "bg-blue-700 text-white hover:bg-blue-800"
+          added ? "bg-emerald-700 text-white hover:bg-emerald-800" : "bg-blue-700 text-white hover:bg-blue-800"
         }`}
       >
         <ShoppingCart size={16} />
-        {added ? "Added to Enquiry Basket" : loading ? "Adding..." : "Add to Enquiry Basket"}
+        {added ? "Go to Cart" : loading ? "Adding..." : "Add to Enquiry Basket"}
       </button>
 
       {error ? <p className="text-xs text-red-600">{error}</p> : null}

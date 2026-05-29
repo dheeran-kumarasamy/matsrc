@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Trash2 } from "lucide-react";
-import { builderApiDelete, builderApiGet } from "@/lib/api";
+import { builderApiDelete, builderApiGet, builderApiPost } from "@/lib/api";
 
 type CartResponse = {
   items: Array<{
@@ -26,8 +27,11 @@ type CartResponse = {
 
 // UF-02 Step 8–9, UF-03 Step 1 — FR-09
 export default function CartPage() {
+  const router = useRouter();
   const [data, setData] = useState<CartResponse>({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: "INR 0" } });
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -70,6 +74,25 @@ export default function CartPage() {
       });
     } finally {
       setLoadingId(null);
+    }
+  }
+
+  async function handleSubmitEnquiry() {
+    if (data.items.length === 0) {
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      await builderApiPost("/orders/checkout", {});
+      router.push("/orders");
+      router.refresh();
+    } catch {
+      setSubmitError("Unable to submit enquiry right now.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -130,12 +153,20 @@ export default function CartPage() {
                 <span>Total</span><span>INR {total.toLocaleString("en-IN")}</span>
               </div>
             </div>
+            <button
+              onClick={() => void handleSubmitEnquiry()}
+              disabled={data.items.length === 0 || submitting}
+              className="block w-full rounded-lg bg-blue-700 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-800 disabled:opacity-50"
+            >
+              {submitting ? "Submitting..." : "Submit Enquiry"}
+            </button>
             <Link
               href="/checkout"
-              className="block w-full text-center bg-blue-700 hover:bg-blue-800 text-white rounded-lg py-2.5 text-sm font-medium transition-colors"
+              className="block w-full text-center text-xs text-slate-500 hover:text-slate-700 hover:underline"
             >
-              Proceed to Checkout
+              Review on checkout page
             </Link>
+            {submitError ? <p className="text-xs text-red-600">{submitError}</p> : null}
           </div>
         </div>
       </div>

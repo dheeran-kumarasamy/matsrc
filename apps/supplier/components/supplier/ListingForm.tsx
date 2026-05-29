@@ -2,17 +2,13 @@
 
 import axios from "axios";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
 type PricingTierRow = {
   minQty: string;
   maxQty: string;
   price: string;
 };
-
-function parseNumericValue(value: string) {
-  return Number(value.trim().replace(/,/g, ""));
-}
 
 type ListingFormProps = {
   mode: "create" | "edit";
@@ -56,29 +52,6 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const previousBasePriceRef = useRef(form.price);
-
-  // Keep tier-1 price aligned with base price for new listings unless user overrides it manually.
-  useEffect(() => {
-    const hasInitialTiers = Boolean(initial?.pricingTiers && initial.pricingTiers.length > 0);
-    if (mode !== "create" || hasInitialTiers) {
-      previousBasePriceRef.current = form.price;
-      return;
-    }
-
-    const previousBasePrice = previousBasePriceRef.current;
-    setTiers((prev) => {
-      if (prev.length === 0) return prev;
-      const firstTier = prev[0];
-      const firstTierPrice = firstTier.price.trim();
-      const shouldSync = firstTierPrice === "" || firstTier.price === previousBasePrice;
-
-      if (!shouldSync || firstTier.price === form.price) return prev;
-      return [{ ...firstTier, price: form.price }, ...prev.slice(1)];
-    });
-
-    previousBasePriceRef.current = form.price;
-  }, [form.price, mode, initial]);
 
   function updateField(field: keyof typeof form, value: string) {
     setSaved(false);
@@ -92,8 +65,8 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
       const updated = prev.map((tier, tierIndex) => (tierIndex === index ? { ...tier, [field]: value } : tier));
 
       if (field === "maxQty") {
-        const maxQtyNum = parseNumericValue(value);
-        const serviceableQty = parseNumericValue(form.maxServiceableQty);
+        const maxQtyNum = Number(value);
+        const serviceableQty = Number(form.maxServiceableQty);
 
         // Truncate all tiers after the edited one so ranges stay consistent
         const truncated = updated.slice(0, index + 1);
@@ -123,7 +96,7 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
   }
 
   function validateTiers() {
-    const serviceableQty = parseNumericValue(form.maxServiceableQty);
+    const serviceableQty = Number(form.maxServiceableQty);
     if (!Number.isInteger(serviceableQty) || serviceableQty < 1) {
       return "Maximum Serviceable Quantity must be a positive whole number.";
     }
@@ -133,9 +106,9 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
     }
 
     const normalized = tiers.map((tier, index) => {
-      const minQty = parseNumericValue(tier.minQty);
-      const maxQty = parseNumericValue(tier.maxQty);
-      const price = parseNumericValue(tier.price);
+      const minQty = Number(tier.minQty);
+      const maxQty = Number(tier.maxQty);
+      const price = Number(tier.price);
 
       if (!Number.isInteger(minQty) || minQty < 1) return `Tier ${index + 1} minimum quantity must be a positive whole number.`;
       if (!Number.isInteger(maxQty) || maxQty < 1) return `Tier ${index + 1} maximum quantity must be a positive whole number.`;
@@ -149,9 +122,9 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
     if (tierError) return tierError as string;
 
     const sorted = [...tiers].map((tier) => ({
-      minQty: parseNumericValue(tier.minQty),
-      maxQty: parseNumericValue(tier.maxQty),
-      price: parseNumericValue(tier.price),
+      minQty: Number(tier.minQty),
+      maxQty: Number(tier.maxQty),
+      price: Number(tier.price),
     })).sort((a, b) => a.minQty - b.minQty);
 
     if (sorted[0].minQty !== 1) {
@@ -209,7 +182,7 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
     }
   }
 
-  const maxServiceableQty = parseNumericValue(form.maxServiceableQty);
+  const maxServiceableQty = Number(form.maxServiceableQty);
 
   return (
     <form onSubmit={onSubmit} className="panel space-y-4 p-5">

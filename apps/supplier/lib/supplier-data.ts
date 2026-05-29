@@ -352,56 +352,6 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
     stock: `${product.stock} ${product.unit}`,
     maxServiceableQty: `${product.maxServiceableQty ?? product.stock} ${product.unit}`,
     active: product.isActive,
-    pricingTiers: (product.pricingTiers ?? []).map((tier: any) => ({
-      minQty: String(tier.minQty),
-      maxQty: String(tier.maxQty),
-      price: tier.tierPrice.toString(),
-    })),
-  }));
-}
-
-export async function getPublicSupplierListings(): Promise<SupplierListingRow[]> {
-  let listings: any[] = [];
-
-  try {
-    listings = await prisma.product.findMany({
-      where: { isActive: true },
-      include: { category: true },
-      orderBy: { updatedAt: "desc" },
-    });
-  } catch (error) {
-    if (!isMissingPricingSchemaError(error)) throw error;
-    listings = await prisma.product.findMany({
-      where: { isActive: true },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        category: { select: { name: true } },
-        grade: true,
-        unit: true,
-        basePrice: true,
-        stock: true,
-        isActive: true,
-      },
-    });
-  }
-
-  return listings.map((product: any) => ({
-    id: product.id,
-    name: product.name,
-    category: product.category.name,
-    grade: product.grade ?? "NA",
-    unit: product.unit,
-    price: `${formatCurrency(product.basePrice.toString())} / ${product.unit}`,
-    stock: `${product.stock} ${product.unit}`,
-    maxServiceableQty: `${product.maxServiceableQty ?? product.stock} ${product.unit}`,
-    active: product.isActive,
-    pricingTiers: (product.pricingTiers ?? []).map((tier: any) => ({
-      minQty: String(tier.minQty),
-      maxQty: String(tier.maxQty),
-      price: tier.tierPrice.toString(),
-    })),
   }));
 }
 
@@ -469,7 +419,7 @@ export async function getSupplierListingById(id: string, email: string) {
 }
 
 function parsePositiveInt(value: string, field: string) {
-  const parsed = Number(value.trim().replace(/,/g, ""));
+  const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) {
     throw new Error(`${field} must be a positive whole number`);
   }
@@ -477,7 +427,7 @@ function parsePositiveInt(value: string, field: string) {
 }
 
 function parsePositivePrice(value: string, field: string) {
-  const parsed = Number(value.trim().replace(/,/g, ""));
+  const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new Error(`${field} must be a positive number`);
   }

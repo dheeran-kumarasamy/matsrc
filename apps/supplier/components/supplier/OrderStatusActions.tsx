@@ -6,6 +6,7 @@ import { useState } from "react";
 
 const transitions = [
   { label: "Confirm Enquiry", status: "PROCESSING" },
+  { label: "Decline Enquiry", status: "CANCELLED" },
   { label: "Mark Dispatched", status: "DISPATCHED" },
   { label: "Mark Delivered", status: "DELIVERED" },
 ];
@@ -32,9 +33,15 @@ export function OrderStatusActions({ orderId, status }: { orderId: string; statu
         {transitions.map((transition) => (
           <button
             key={transition.status}
-            disabled={pending !== null}
+            disabled={pending !== null || status === transition.status}
             onClick={() => updateStatus(transition.status)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
+            className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-60 ${
+              transition.status === "CANCELLED"
+                ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                : transition.status === "PROCESSING"
+                ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                : "border-slate-300 text-slate-700 hover:bg-slate-50"
+            }`}
           >
             {pending === transition.status ? "Updating..." : transition.label}
           </button>

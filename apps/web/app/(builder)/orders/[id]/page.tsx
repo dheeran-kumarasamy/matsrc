@@ -62,6 +62,18 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         </div>
       </div>
 
+      {order.status === "PROCESSING" ? (
+        <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Supplier confirmed this enquiry. WhatsApp and in-app updates will continue as the order moves forward.
+        </div>
+      ) : null}
+
+      {order.status === "CANCELLED" ? (
+        <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          Supplier declined this enquiry. You can review the details and place a fresh order if needed.
+        </div>
+      ) : null}
+
       <div className="grid gap-5 lg:grid-cols-[1.5fr_0.9fr]">
         <section className="panel p-5 space-y-4">
           <div>
@@ -98,7 +110,9 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           <div className="panel p-5 space-y-3">
             <h2 className="text-lg font-semibold text-slate-800">Payment</h2>
             <p className="text-sm text-slate-500">
-              {order.paymentLinkAvailable
+              {order.status === "CANCELLED"
+                ? "This enquiry was declined, so payment is not available."
+                : order.paymentLinkAvailable
                 ? "Supplier has confirmed this enquiry. The payment link is now enabled."
                 : "Waiting for supplier confirmation before payment becomes available."}
             </p>

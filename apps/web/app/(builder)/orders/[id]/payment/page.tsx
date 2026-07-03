@@ -34,8 +34,10 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
       </div>
 
       <div className="panel p-6 space-y-4">
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-          {order.paymentLinkAvailable
+        <div className={`rounded-2xl p-4 text-sm ${order.status === "CANCELLED" ? "border border-rose-200 bg-rose-50 text-rose-800" : "border border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+          {order.status === "CANCELLED"
+            ? "This enquiry was declined, so payment cannot be completed for this order."
+            : order.paymentLinkAvailable
             ? "Payment link is enabled because the supplier confirmed this enquiry."
             : "Payment is not yet enabled for this enquiry."}
         </div>

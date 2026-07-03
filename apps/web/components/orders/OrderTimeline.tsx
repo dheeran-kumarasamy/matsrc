@@ -11,6 +11,15 @@ const steps: { status: Status; label: string; desc: string }[] = [
 const order: Record<Status, number> = { PLACED: 0, PROCESSING: 1, DISPATCHED: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4, CANCELLED: -1 };
 
 export default function OrderTimeline({ status }: { status: Status }) {
+  if (status === "CANCELLED") {
+    return (
+      <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800">
+        <p className="font-semibold">Enquiry declined</p>
+        <p className="mt-1 text-rose-700">The supplier declined this enquiry before confirmation. You can place a new request with another supplier.</p>
+      </div>
+    );
+  }
+
   const current = order[status];
 
   return (

@@ -7,6 +7,105 @@ import {
   getUserCtx,
 } from "@/lib/builder-db";
 
+const SUPPLIER_APP_URL = process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://matsrc-supplier.vercel.app";
+
+type SupplierListing = {
+  id: string;
+  name: string;
+  category: string;
+  grade: string;
+  unit: string;
+  price: string;
+  stock: string;
+  active: boolean;
+};
+
+function parseNumberLabel(value: string) {
+  const numeric = Number(value.replace(/[^\d.]/g, ""));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function parseQuantityLabel(value: string) {
+  const numeric = Number(value.replace(/[^\d]/g, ""));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+async function fetchSupplierListing(productId: string): Promise<SupplierListing | null> {
+  try {
+    const response = await fetch(`${SUPPLIER_APP_URL}/api/public/listings`, { cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      return null;
+    }
+
+    const listings = (await response.json()) as SupplierListing[];
+    return listings.find((listing) => listing.id === productId) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureMarketplaceProduct(listing: SupplierListing) {
+  const supplierUser = await prisma.user.upsert({
+    where: { email: "marketplace.supplier@buildmart.local" },
+    update: { role: "SUPPLIER", name: "Verified Supplier" },
+    create: {
+      email: "marketplace.supplier@buildmart.local",
+      name: "Verified Supplier",
+      role: "SUPPLIER",
+    },
+  });
+
+  const supplierProfile = await prisma.supplierProfile.upsert({
+    where: { userId: supplierUser.id },
+    update: { companyName: "Verified Supplier" },
+    create: { userId: supplierUser.id, companyName: "Verified Supplier" },
+  });
+
+  const category = await prisma.category.upsert({
+    where: { slug: listing.category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") },
+    update: { name: listing.category },
+    create: {
+      name: listing.category,
+      slug: listing.category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
+    },
+  });
+
+  return prisma.product.upsert({
+    where: { id: listing.id },
+    update: {
+      name: listing.name,
+      categoryId: category.id,
+      grade: listing.grade,
+      unit: listing.unit,
+      basePrice: parseNumberLabel(listing.price),
+      stock: parseQuantityLabel(listing.stock),
+      maxServiceableQty: parseQuantityLabel(listing.stock) || undefined,
+      isActive: listing.active,
+      supplierId: supplierProfile.id,
+      slug: `marketplace-${listing.id}`,
+    },
+    create: {
+      id: listing.id,
+      supplierId: supplierProfile.id,
+      categoryId: category.id,
+      name: listing.name,
+      slug: `marketplace-${listing.id}`,
+      grade: listing.grade,
+      unit: listing.unit,
+      basePrice: parseNumberLabel(listing.price),
+      stock: parseQuantityLabel(listing.stock),
+      maxServiceableQty: parseQuantityLabel(listing.stock) || null,
+      images: [],
+      isActive: listing.active,
+    },
+  });
+}
+
 export async function GET(request: Request) {
   try {
     const ctx = getUserCtx(request);
@@ -81,7 +180,18 @@ export async function POST(request: Request) {
       where: { id: productId },
       select: { id: true, isActive: true },
     });
-    if (!product || !product.isActive) {
+    let resolvedProduct = product;
+
+    if (!resolvedProduct || !resolvedProduct.isActive) {
+      const listing = await fetchSupplierListing(productId);
+      if (!listing || !listing.active) {
+        return NextResponse.json({ error: "Product not found" }, { status: 404 });
+      }
+
+      resolvedProduct = await ensureMarketplaceProduct(listing);
+    }
+
+    if (!resolvedProduct.isActive) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 

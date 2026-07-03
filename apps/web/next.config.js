@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const withPWA = require("next-pwa")({
   dest: "public",
-  disable: process.env.NODE_ENV === "development",
+  disable: process.env.NODE_ENV === "development" || process.env.VERCEL_ENV === "production",
   register: true,
   skipWaiting: true,
 });

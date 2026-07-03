@@ -1,5 +1,6 @@
 {
   "framework": "nextjs",
+  "rootDirectory": ".",
   "buildCommand": "cd ../.. && pnpm --filter @matsrc/db db:generate && pnpm --filter @matsrc/web build",
   "installCommand": "cd ../.. && pnpm install",
   "outputDirectory": ".next"

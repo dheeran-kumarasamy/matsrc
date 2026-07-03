@@ -48,6 +48,7 @@ model User {
   watchlist     Watchlist[]
   disputes      Dispute[]
   notifications Notification[]
+  notificationPreference NotificationPreference?
   creditProfile CreditProfile?
   supplierProfile SupplierProfile?
   adminCredential AdminCredential?
@@ -372,17 +373,97 @@ enum NotificationChannel {
   IN_APP
 }
 
-model Notification {
-  id        String              @id @default(cuid())
-  userId    String
-  user      User                @relation(fields: [userId], references: [id])
+model NotificationPreference {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id])
+  whatsappEnabled Boolean  @default(true)
+  smsEnabled      Boolean  @default(true)
+  emailEnabled    Boolean  @default(true)
+  pushEnabled     Boolean  @default(true)
+  inAppEnabled    Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+}
+
+enum NotificationTemplateType {
+  ORDER_SUBMITTED
+  ORDER_ACCEPTED
+  ORDER_DECLINED
+  ORDER_DISPATCHED
+  ORDER_OUT_FOR_DELIVERY
+  ORDER_DELIVERED
+  PAYMENT_UNLOCKED
+  PAYMENT_REMINDER
+  RFQ_QUOTE_SHARED
+  DISPUTE_CREATED
+  DISPUTE_RESOLVED
+  KYC_APPROVED
+  KYC_REJECTED
+  WATCHLIST_ALERT
+}
+
+model NotificationTemplate {
+  id        String                   @id @default(cuid())
+  type      NotificationTemplateType @unique
   channel   NotificationChannel
   title     String
   body      String
-  read      Boolean             @default(false)
-  sentAt    DateTime            @default(now())
+  variables String[]                 // JSON array of variable names
+  language  String                   @default("en")
+  version   Int                      @default(1)
+  active    Boolean                  @default(true)
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+
+  @@unique([type, channel, language, version])
+  @@index([type])
+}
+
+model Notification {
+  id              String              @id @default(cuid())
+  userId          String
+  user            User                @relation(fields: [userId], references: [id])
+  channel         NotificationChannel
+  title           String
+  body            String
+  read            Boolean             @default(false)
+  externalId      String?             // Provider-assigned message ID
+  status          String              @default("pending") // pending, sent, delivered, failed
+  failureReason   String?
+  retryCount      Int                 @default(0)
+  maxRetries      Int                 @default(3)
+  templateType    NotificationTemplateType?
+  variables       String?             // JSON object of template variables
+  sentAt          DateTime            @default(now())
+  deliveredAt     DateTime?
+  failedAt        DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  deliveryLogs    NotificationDeliveryLog[]
 
   @@index([userId])
+  @@index([status])
+  @@index([externalId])
+}
+
+model NotificationDeliveryLog {
+  id              String      @id @default(cuid())
+  notificationId  String
+  notification    Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  previousStatus  String?
+  newStatus       String
+  provider        String?     // whatsapp, sms, email, push
+  errorCode       String?
+  errorMessage    String?
+  metadata        String?     // JSON blob for provider-specific details
+  createdAt       DateTime    @default(now())
+
+  @@index([notificationId])
+  @@index([newStatus])
 }
 
 enum DisputeStatus {

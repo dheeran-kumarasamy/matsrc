@@ -7,12 +7,14 @@ import { useRouter } from "next/navigation";
 // UF-01 Steps 1–5
 export default function RegisterPage() {
   const router = useRouter();
-  const [step, setStep] = useState<"channel" | "otp" | "role">("channel");
+  const [step, setStep] = useState<"channel" | "otp" | "role" | "contact">("channel");
   const [channel, setChannel] = useState<"phone" | "email">("phone");
   const [identifier, setIdentifier] = useState("");
   const [name, setName] = useState("");
   const [otp, setOtp] = useState("");
   const [role, setRole] = useState<"BUILDER" | "SUPPLIER" | "">("");
+  const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [whatsappConsent, setWhatsappConsent] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -57,18 +59,27 @@ export default function RegisterPage() {
   async function handleRoleSelect(e: React.FormEvent) {
     e.preventDefault();
     if (!role) return;
+    setStep("contact");
+  }
+
+  async function handleContactSubmit(e: React.FormEvent) {
+    e.preventDefault();
     setLoading(true);
     try {
       const res = await fetch("/api/auth/set-role", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ 
+          role,
+          whatsappNumber: whatsappNumber.trim() || null,
+          whatsappConsent,
+        }),
       });
       if (!res.ok) throw new Error((await res.json()).message);
       // Redirect to KYC upload step
       router.push("/auth/kyc");
     } catch (err: any) {
-      setError(err.message ?? "Failed to set role");
+      setError(err.message ?? "Failed to save contact info");
     } finally {
       setLoading(false);
     }
@@ -79,16 +90,16 @@ export default function RegisterPage() {
       <h2 className="text-xl font-semibold text-gray-800 mb-2">Create your account</h2>
 
       {/* Step indicator */}
-      <div className="flex items-center gap-2 mb-6">
-        {["Details", "Verify OTP", "Select Role"].map((label, i) => {
-          const stepIndex = ["channel", "otp", "role"].indexOf(step);
+      <div className="flex items-center gap-2 mb-6 overflow-x-auto">
+        {["Details", "Verify OTP", "Select Role", "Contact"].map((label, i) => {
+          const stepIndex = ["channel", "otp", "role", "contact"].indexOf(step);
           return (
-            <div key={label} className="flex items-center gap-2">
+            <div key={label} className="flex items-center gap-2 flex-shrink-0">
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i <= stepIndex ? "bg-brand-500 text-white" : "bg-gray-100 text-gray-400"}`}>
                 {i + 1}
               </div>
-              <span className={`text-xs ${i <= stepIndex ? "text-brand-500 font-medium" : "text-gray-400"}`}>{label}</span>
-              {i < 2 && <div className={`h-px w-4 ${i < stepIndex ? "bg-brand-500" : "bg-gray-200"}`} />}
+              <span className={`text-xs whitespace-nowrap ${i <= stepIndex ? "text-brand-500 font-medium" : "text-gray-400"}`}>{label}</span>
+              {i < 3 && <div className={`h-px w-4 flex-shrink-0 ${i < stepIndex ? "bg-brand-500" : "bg-gray-200"}`} />}
             </div>
           );
         })}
@@ -176,6 +187,42 @@ export default function RegisterPage() {
           </div>
           {error && <p className="text-red-500 text-xs">{error}</p>}
           <button type="submit" disabled={loading || !role} className="w-full bg-brand-500 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
+            {loading ? "Saving..." : "Continue →"}
+          </button>
+        </form>
+      )}
+
+      {step === "contact" && (
+        <form onSubmit={handleContactSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">WhatsApp Number (Optional)</label>
+            <p className="text-xs text-gray-500 mb-2">For order updates & support. We'll use your phone number if you skip this.</p>
+            <input
+              type="tel"
+              placeholder="+91 98765 43210"
+              value={whatsappNumber}
+              onChange={(e) => setWhatsappNumber(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-2">
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={whatsappConsent}
+                onChange={(e) => setWhatsappConsent(e.target.checked)}
+                className="w-4 h-4 mt-0.5 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+              />
+              <span className="text-xs text-gray-700">
+                <strong>Enable WhatsApp Notifications</strong><br/>
+                Get real-time order updates, price alerts, and support messages on WhatsApp
+              </span>
+            </label>
+          </div>
+
+          {error && <p className="text-red-500 text-xs">{error}</p>}
+          <button type="submit" disabled={loading} className="w-full bg-brand-500 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
             {loading ? "Saving..." : "Continue to KYC →"}
           </button>
         </form>

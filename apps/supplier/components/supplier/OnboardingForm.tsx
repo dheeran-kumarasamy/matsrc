@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { submitKycDocument, saveBusinessInfo, submitOnboarding } from "@/app/(supplier)/onboarding/actions";
+import { validatePhoneFormat, getPhoneErrorMessage } from "@/lib/phone-validator";
 import type { KycDocStatus } from "@/lib/supplier-data";
 
 type BusinessInfo = {
@@ -70,7 +71,17 @@ export function OnboardingForm({ initial }: Props) {
     const errs: Record<string, string> = {};
     if (!bizInfo.companyName.trim()) errs.companyName = "Required";
     if (!bizInfo.contactName.trim()) errs.contactName = "Required";
-    if (!bizInfo.phone.trim()) errs.phone = "Required";
+    if (!bizInfo.phone.trim()) {
+      errs.phone = "Required";
+    } else if (!validatePhoneFormat(bizInfo.phone)) {
+      errs.phone = "Invalid phone number format";
+    }
+    
+    // Validate WhatsApp number if provided
+    if (bizInfo.whatsappNumber?.trim() && !validatePhoneFormat(bizInfo.whatsappNumber)) {
+      errs.whatsappNumber = "Invalid WhatsApp number format";
+    }
+    
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
 
@@ -279,6 +290,7 @@ export function OnboardingForm({ initial }: Props) {
                 placeholder="Same as phone if identical"
                 className={INPUT_CLS}
               />
+              {errors.whatsappNumber && <p className="text-xs text-red-600">{errors.whatsappNumber}</p>}
             </div>
 
             <div className="space-y-1 sm:col-span-2">

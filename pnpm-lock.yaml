@@ -108,6 +108,9 @@ importers:
       ioredis:
         specifier: ^5.4.1
         version: 5.10.1
+      libphonenumber-js:
+        specifier: ^1.12.42
+        version: 1.12.42
       passport:
         specifier: ^0.7.0
         version: 0.7.0
@@ -157,6 +160,9 @@ importers:
       axios:
         specifier: ^1.7.2
         version: 1.16.0
+      libphonenumber-js:
+        specifier: ^1.12.42
+        version: 1.12.42
       next:
         specifier: ^14.2.3
         version: 14.2.35(@babel/core@7.29.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

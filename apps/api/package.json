@@ -24,6 +24,7 @@
     "socket.io": "^4.7.5",
     "bullmq": "^5.8.1",
     "ioredis": "^5.4.1",
+    "libphonenumber-js": "^1.12.42",
     "class-validator": "^0.14.1",
     "class-transformer": "^0.5.1",
     "reflect-metadata": "^0.2.2",

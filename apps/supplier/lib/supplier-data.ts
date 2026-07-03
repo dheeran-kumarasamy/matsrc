@@ -1,4 +1,5 @@
 import { prisma } from "@matsrc/db";
+import { parsePhoneNumber } from "libphonenumber-js";
 
 type OrderStatus = "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
 
@@ -829,13 +830,24 @@ export async function updateSupplierProfile(
 ) {
   const { user, supplierProfile } = await ensureSupplierContext(callerEmail);
 
+  // Normalize phone numbers to E.164 format
+  const normalizePhone = (phone: string | null | undefined): string | null => {
+    if (!phone?.trim()) return null;
+    try {
+      const parsed = parsePhoneNumber(phone.trim(), "IN");
+      return parsed?.isValid() ? parsed.format("E.164") : phone.trim();
+    } catch {
+      return phone.trim();
+    }
+  };
+
   await prisma.user.update({
     where: { id: user.id },
     data: {
       name: input.contactName.trim() || null,
       email: input.email.trim() || null,
-      phone: input.phone.trim() || null,
-      whatsappNumber: input.whatsappNumber.trim() || null,
+      phone: normalizePhone(input.phone),
+      whatsappNumber: normalizePhone(input.whatsappNumber),
     },
   });
 

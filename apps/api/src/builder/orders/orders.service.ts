@@ -1,9 +1,10 @@
-import { Injectable, BadRequestException, NotFoundException } from "@nestjs/common";
+import { Injectable, BadRequestException, NotFoundException, Logger } from "@nestjs/common";
 import { OrderStatus, PaymentMethod, PaymentStatus } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { formatCurrency, formatDate, humanizeToken } from "src/supplier/utils";
 import { BuilderContextService } from "src/builder/builder-context.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
+import { NotificationService } from "src/notifications/notification.service";
 
 function resolveUnitPrice(product: any, quantity: number) {
   const tiers = Array.isArray(product.pricingTiers) ? product.pricingTiers : [];
@@ -17,9 +18,12 @@ function getPaymentLink(orderId: string) {
 
 @Injectable()
 export class BuilderOrdersService {
+  private readonly logger = new Logger(BuilderOrdersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly builderContext: BuilderContextService
+    private readonly builderContext: BuilderContextService,
+    private readonly notificationService: NotificationService
   ) {}
 
   async findAll(userCtx: any) {
@@ -174,6 +178,12 @@ export class BuilderOrdersService {
     }
 
     await this.prisma.cartItem.deleteMany({ where: { userId: user.id } });
+
+    for (const order of createdOrders) {
+      void this.notificationService.notifySupplierOrderSubmitted(order.id).catch((error) => {
+        this.logger.warn(`Failed to queue supplier notification for order ${order.id}: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
 
     return { orders: createdOrders };
   }

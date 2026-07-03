@@ -20,6 +20,7 @@ import { VendorsModule } from "./admin/vendors/vendors.module";
 import { KycModule } from "./admin/kyc/kyc.module";
 import { DisputesModule } from "./admin/disputes/disputes.module";
 import { AuditModule } from "./admin/audit/audit.module";
+import { NotificationsModule } from "./notifications/notifications.module";
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { AuditModule } from "./admin/audit/audit.module";
     BuilderRfqsModule,
     CreditModule,
     BuilderDisputesModule,
+    NotificationsModule,
     AdminModule,
     AdminDashboardModule,
     VendorsModule,

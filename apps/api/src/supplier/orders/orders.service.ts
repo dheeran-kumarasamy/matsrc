@@ -1,14 +1,18 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, Logger } from "@nestjs/common";
 import { OrderStatus } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
 import { formatDate, humanizeToken } from "src/supplier/utils";
+import { NotificationService } from "src/notifications/notification.service";
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly supplierContext: SupplierContextService
+    private readonly supplierContext: SupplierContextService,
+    private readonly notificationService: NotificationService
   ) {}
 
   async findAll(user: any) {
@@ -78,6 +82,10 @@ export class OrdersService {
         status,
         note: status === OrderStatus.PROCESSING ? "Supplier confirmed enquiry" : `Supplier marked order as ${humanizeToken(status)}`,
       },
+    });
+
+    void this.notificationService.notifyBuilderOrderDecision(id, status).catch((error) => {
+      this.logger.warn(`Failed to queue builder notification for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
     });
 
     return { id: order.id, status: order.status };

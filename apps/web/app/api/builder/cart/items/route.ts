@@ -5,6 +5,8 @@ import {
   getUserCtx,
 } from "@/lib/builder-db";
 
+export { GET } from "../route";
+
 export async function POST(request: Request) {
   try {
     const ctx = getUserCtx(request);

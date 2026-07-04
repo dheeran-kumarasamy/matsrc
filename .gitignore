@@ -32,3 +32,5 @@ pnpm-debug.log*
 
 # Prisma
 prisma/migrations
+.vercel
+.env*.local

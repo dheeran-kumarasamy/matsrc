@@ -7,6 +7,8 @@ import {
   getUserCtx,
 } from "@/lib/builder-db";
 
+export const dynamic = "force-dynamic";
+
 const SUPPLIER_APP_URL = process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://matsrc-supplier.vercel.app";
 
 type SupplierListing = {

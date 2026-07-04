@@ -7,6 +7,8 @@ import {
   getUserCtx,
 } from "@/lib/builder-db";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   try {
     const ctx = getUserCtx(request);

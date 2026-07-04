@@ -14,6 +14,11 @@ export class RfqsController {
     return this.rfqsService.findAll(user);
   }
 
+  @Get(":id/quotes")
+  findEnquiryQuotes(@Param("id") id: string, @CurrentUser() user: any) {
+    return this.rfqsService.findEnquiryQuotes(id, user);
+  }
+
   @Post(":id/quotes")
   createQuote(@Param("id") id: string, @Body() dto: CreateQuoteDto, @CurrentUser() user: any): Promise<{ id: string; rfqId: string; price: string }> {
     return this.rfqsService.createQuote(id, dto, user);

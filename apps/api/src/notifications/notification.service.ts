@@ -35,6 +35,22 @@ export class NotificationService {
     await this.enqueueEnvelope(envelope, "order-submitted");
   }
 
+  async notifyBuilderBestPriceSelected(params: {
+    enquiryId: string;
+    bestPriceTotal: number;
+    tentativeDeliveryDate: Date;
+    selectedSupplierName?: string | null;
+    selectedSupplierId?: string | null;
+    lineItemSummary: string;
+  }): Promise<void> {
+    const envelope = await this.buildBuilderBestPriceEnvelope(params);
+    if (!envelope) {
+      return;
+    }
+
+    await this.enqueueEnvelope(envelope, "enquiry-best-price");
+  }
+
   async notifyBuilderOrderDecision(orderId: string, status: OrderStatus): Promise<void> {
     const envelope = await this.buildOrderDecisionEnvelope(orderId, status);
     if (!envelope) {
@@ -42,6 +58,22 @@ export class NotificationService {
     }
 
     await this.enqueueEnvelope(envelope, "order-decision");
+  }
+
+  async sendWhatsApp(params: {
+    to: string;
+    title: string;
+    body: string;
+    context?: Record<string, unknown>;
+    idempotencyKey?: string;
+  }) {
+    return this.provider.sendWhatsAppMessage({
+      to: params.to,
+      title: params.title,
+      body: params.body,
+      context: params.context,
+      idempotencyKey: params.idempotencyKey,
+    });
   }
 
   async processNotification(notificationId: string, attempt = 1, maxAttempts = 3): Promise<void> {
@@ -98,6 +130,8 @@ export class NotificationService {
         to: recipient,
         title: content.title,
         body: content.body,
+        idempotencyKey: (notification as any).idempotencyKey ?? undefined,
+        context: this.parseVariables(notification.variables),
       });
 
       await this.prisma.notification.update({
@@ -130,13 +164,26 @@ export class NotificationService {
   }
 
   private async enqueueEnvelope(envelope: NotificationEnvelope, jobName: string): Promise<void> {
+    if (envelope.idempotencyKey) {
+      const existing = await this.prisma.notification.findFirst({
+        where: { idempotencyKey: envelope.idempotencyKey } as any,
+        select: { id: true },
+      });
+
+      if (existing) {
+        return;
+      }
+    }
+
     const notification = await this.prisma.notification.create({
       data: {
         userId: envelope.userId,
+        audience: envelope.audience,
         channel: envelope.channel,
         title: envelope.content.title,
         body: envelope.content.body,
         status: "queued",
+        idempotencyKey: envelope.idempotencyKey ?? null,
         templateType: envelope.templateType,
         variables: JSON.stringify(envelope.variables),
         retryCount: 0,
@@ -156,6 +203,7 @@ export class NotificationService {
         user: true,
         items: {
           include: {
+            product: true,
             supplier: {
               include: {
                 user: true,
@@ -175,23 +223,85 @@ export class NotificationService {
       return null;
     }
 
+    const deepLink = this.getSupplierEnquiryDeepLink(order.id);
+    const lineItemSummary = this.buildOrderLineItemSummary(
+      order.items.map((item) => ({
+        name: item.product.name,
+        quantity: item.quantity,
+        unit: item.product.unit,
+      }))
+    );
+
     const content = {
       title: "New order received",
-      body: `Order ${order.id.slice(0, 8)} has been placed by ${order.user.name ?? order.user.phone ?? "a builder"} for ${order.items.length} item(s).`,
+      body: `Enquiry ${order.id.slice(0, 8)} from ${order.user.name ?? order.user.phone ?? "a builder"}. Items: ${lineItemSummary}. Quote here: ${deepLink}`,
     };
 
     return {
       userId: supplierUser.id,
+      audience: "supplier",
       channel: NotificationChannel.WHATSAPP,
-      templateType: NotificationTemplateType.ORDER_SUBMITTED,
+      templateType: "ENQUIRY_SUBMITTED_TO_SUPPLIER" as NotificationTemplateType,
       variables: {
         orderId: order.id,
         orderNumber: order.id.slice(0, 8),
+        enquiryId: order.id,
+        enquiryNumber: order.id.slice(0, 8),
+        deepLink,
         builderName: order.user.name ?? order.user.phone,
         itemCount: order.items.length,
+        lineItemSummary,
         totalAmount: Number(order.totalAmount),
       },
       content,
+      idempotencyKey: `supplier-enquiry:${order.id}:${supplierUser.id}`,
+    };
+  }
+
+  private async buildBuilderBestPriceEnvelope(params: {
+    enquiryId: string;
+    bestPriceTotal: number;
+    tentativeDeliveryDate: Date;
+    selectedSupplierName?: string | null;
+    selectedSupplierId?: string | null;
+    lineItemSummary: string;
+  }): Promise<NotificationEnvelope | null> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: params.enquiryId },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!order) {
+      return null;
+    }
+
+    const deepLink = this.getBuilderEnquiryDeepLink(order.id);
+    const tentativeDeliveryDate = params.tentativeDeliveryDate.toISOString().slice(0, 10);
+    const bestPriceLabel = Number(params.bestPriceTotal).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+    return {
+      userId: order.userId,
+      audience: "builder",
+      channel: NotificationChannel.WHATSAPP,
+      templateType: "ENQUIRY_BEST_PRICE_TO_BUILDER" as NotificationTemplateType,
+      variables: {
+        orderId: order.id,
+        orderNumber: order.id.slice(0, 8),
+        enquiryId: order.id,
+        enquiryNumber: order.id.slice(0, 8),
+        supplierName: params.selectedSupplierName ?? null,
+        bestPriceTotal: params.bestPriceTotal,
+        tentativeDeliveryDate,
+        deepLink,
+        lineItemSummary: params.lineItemSummary,
+      },
+      content: {
+        title: "Best quote ready",
+        body: `Enquiry ${order.id.slice(0, 8)} accepted. Best price: INR ${bestPriceLabel}. Tentative delivery: ${tentativeDeliveryDate}. Details: ${deepLink}`,
+      },
+      idempotencyKey: `builder-best-price:${order.id}`,
     };
   }
 
@@ -224,6 +334,7 @@ export class NotificationService {
 
     return {
       userId: order.userId,
+      audience: "builder",
       channel: NotificationChannel.WHATSAPP,
       templateType: statusConfig.templateType,
       variables: {
@@ -367,6 +478,29 @@ export class NotificationService {
       const replacement = variables[key];
       return replacement === undefined || replacement === null ? "" : String(replacement);
     });
+  }
+
+  private getSupplierEnquiryDeepLink(enquiryId: string): string {
+    const baseUrl = process.env.SUPPLIER_PORTAL_URL || process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://matsrc-supplier.vercel.app";
+    return `${baseUrl.replace(/\/$/, "")}/rfqs?respond=${enquiryId}`;
+  }
+
+  private getBuilderEnquiryDeepLink(enquiryId: string): string {
+    const baseUrl = process.env.BUILDER_PORTAL_URL || process.env.NEXT_PUBLIC_APP_URL || "https://web-sable-nine-97.vercel.app";
+    return `${baseUrl.replace(/\/$/, "")}/orders/${enquiryId}`;
+  }
+
+  private buildOrderLineItemSummary(items: Array<{ name: string; quantity: number; unit?: string | null }>): string {
+    if (!items.length) {
+      return "No items";
+    }
+
+    const summary = items.slice(0, 3).map((item) => `${item.name} (${item.quantity}${item.unit ? ` ${item.unit}` : ""})`);
+    if (items.length > 3) {
+      summary.push(`+${items.length - 3} more`);
+    }
+
+    return summary.join(", ");
   }
 
   private async markNotificationFailed(

@@ -108,6 +108,8 @@ model SupplierProfile {
   products        Product[]
   orderItems      OrderItem[]
   quotes          Quote[]
+  supplierQuotes  SupplierQuote[]
+  selectedOrders  Order[]         @relation("SelectedSupplierOrders")
   mtcCertificates MtcCertificate[]
 }
 
@@ -224,6 +226,25 @@ model Quote {
   @@index([supplierId])
 }
 
+model SupplierQuote {
+  id           String          @id @default(cuid())
+  enquiryId    String
+  enquiry      Order           @relation(fields: [enquiryId], references: [id])
+  supplierId   String
+  supplier     SupplierProfile @relation(fields: [supplierId], references: [id])
+  lineItemId   String
+  lineItem     OrderItem       @relation(fields: [lineItemId], references: [id])
+  unitPrice    Decimal         @db.Decimal(12, 2)
+  currency     String          @default("INR")
+  leadTimeDays Int?
+  createdAt    DateTime        @default(now())
+
+  @@index([enquiryId])
+  @@index([supplierId])
+  @@index([lineItemId])
+  @@index([enquiryId, lineItemId])
+}
+
 model QuickRequest {
   id          String   @id @default(cuid())
   userId      String
@@ -291,15 +312,22 @@ model Order {
   irn             String?
   totalAmount     Decimal       @db.Decimal(12, 2)
   deliveryDate    DateTime?
+  selectedSupplierId String?
+  selectedSupplier   SupplierProfile? @relation("SelectedSupplierOrders", fields: [selectedSupplierId], references: [id])
+  bestPriceTotal     Decimal?      @db.Decimal(12, 2)
+  tentativeDeliveryDate DateTime?
+  quoteSelectionCompletedAt DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   items           OrderItem[]
   tracking        OrderTracking[]
   dispute         Dispute?
+  supplierQuotes  SupplierQuote[]
 
   @@index([userId])
   @@index([status])
+  @@index([selectedSupplierId])
 }
 
 model OrderItem {
@@ -313,6 +341,7 @@ model OrderItem {
   quantity    Int
   unitPrice   Decimal         @db.Decimal(12, 2)
   deliveryDate DateTime?
+  supplierQuotes SupplierQuote[]
 
   @@index([orderId])
   @@index([supplierId])
@@ -390,6 +419,8 @@ model NotificationPreference {
 
 enum NotificationTemplateType {
   ORDER_SUBMITTED
+  ENQUIRY_SUBMITTED_TO_SUPPLIER
+  ENQUIRY_BEST_PRICE_TO_BUILDER
   ORDER_ACCEPTED
   ORDER_DECLINED
   ORDER_DISPATCHED
@@ -427,10 +458,12 @@ model Notification {
   userId          String
   user            User                @relation(fields: [userId], references: [id])
   channel         NotificationChannel
+  audience        String?
   title           String
   body            String
   read            Boolean             @default(false)
   externalId      String?             // Provider-assigned message ID
+  idempotencyKey  String?
   status          String              @default("pending") // pending, sent, delivered, failed
   failureReason   String?
   retryCount      Int                 @default(0)
@@ -448,6 +481,7 @@ model Notification {
   @@index([userId])
   @@index([status])
   @@index([externalId])
+  @@unique([idempotencyKey])
 }
 
 model NotificationDeliveryLog {

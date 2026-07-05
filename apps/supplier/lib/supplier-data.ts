@@ -280,15 +280,32 @@ export async function getMarketScrollerData(email: string): Promise<MarketScroll
 export async function getSupplierDashboardData(email: string) {
   const { supplierProfile } = await ensureSupplierContext(email);
 
-  const [activeListings, incomingOrders, openRfqs, servedOrders, servedOrderItems] = await Promise.all([
+  const [activeListings, confirmedIncomingOrders, pendingEnquiries, servedOrders, servedOrderItems] = await Promise.all([
     prisma.product.count({ where: { supplierId: supplierProfile.id, isActive: true } }),
     prisma.orderItem.findMany({
-      where: { supplierId: supplierProfile.id },
+      where: {
+        supplierId: supplierProfile.id,
+        order: {
+          status: {
+            in: ["PROCESSING", "DISPATCHED", "OUT_FOR_DELIVERY"],
+          },
+        },
+      },
       include: { product: true, order: true },
       orderBy: { order: { createdAt: "desc" } },
       take: 5,
     }),
-    prisma.quickRequest.count(),
+    prisma.orderItem.findMany({
+      where: {
+        supplierId: supplierProfile.id,
+        order: {
+          status: "PLACED",
+        },
+      },
+      include: { product: true, order: true },
+      orderBy: { order: { createdAt: "desc" } },
+      take: 5,
+    }),
     prisma.order.count({ where: { status: "DELIVERED", items: { some: { supplierId: supplierProfile.id } } } }),
     prisma.orderItem.findMany({
       where: { supplierId: supplierProfile.id, order: { status: "DELIVERED" } },
@@ -301,16 +318,30 @@ export async function getSupplierDashboardData(email: string) {
   return {
     kpis: [
       { label: "Active Listings", value: String(activeListings), hint: "Live SKUs visible to builders" },
-      { label: "Incoming Orders", value: String(incomingOrders.length), hint: "Recent order items assigned to you" },
-      { label: "Pending Enquiries", value: String(openRfqs), hint: "Quick requests awaiting supplier quotes" },
+      {
+        label: "Incoming Orders",
+        value: String(confirmedIncomingOrders.length),
+        hint: "Confirmed orders after customer confirmation",
+      },
+      {
+        label: "Pending Enquiries",
+        value: String(pendingEnquiries.length),
+        hint: "Submitted enquiries awaiting your decision",
+      },
       { label: "Fulfilment Rate", value: String(servedOrders), hint: `${formatCurrency(servedOrderValue)} value served` },
     ],
-    orders: incomingOrders.map((item: any) => ({
+    orders: confirmedIncomingOrders.map((item: any) => ({
       id: item.orderId,
       material: item.product.name,
       quantity: `${item.quantity} ${item.product.unit}`,
       eta: formatDate(item.deliveryDate ?? item.order.deliveryDate),
       status: mapOrderStatus(item.order.status),
+    })),
+    pendingEnquiries: pendingEnquiries.map((item: any) => ({
+      id: item.orderId,
+      material: item.product.name,
+      quantity: `${item.quantity} ${item.product.unit}`,
+      eta: formatDate(item.deliveryDate ?? item.order.deliveryDate),
     })),
   };
 }
@@ -642,7 +673,14 @@ export async function getSupplierOrders(email: string): Promise<SupplierOrderRow
   const { supplierProfile } = await ensureSupplierContext(email);
 
   const items = await prisma.orderItem.findMany({
-    where: { supplierId: supplierProfile.id },
+    where: {
+      supplierId: supplierProfile.id,
+      order: {
+        status: {
+          in: ["PROCESSING", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED"],
+        },
+      },
+    },
     include: { order: { include: { user: true } }, product: true },
     orderBy: { order: { createdAt: "desc" } },
   });

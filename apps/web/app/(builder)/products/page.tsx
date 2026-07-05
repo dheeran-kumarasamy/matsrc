@@ -1,5 +1,5 @@
-import ProductFilters from "@/components/products/ProductFilters";
 import ProductCard from "@/components/products/ProductCard";
+
 
 export const dynamic = "force-dynamic";
 
@@ -129,20 +129,11 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
       </div>
 
       <div className="flex flex-col md:flex-row gap-6">
-        {/* Sidebar filters — FR-04 */}
-        <aside className="w-full md:w-64 shrink-0">
-          <ProductFilters
-            selectedCategory={category}
-            selectedBrand={brand}
-            minPrice={minPriceRaw}
-            maxPrice={maxPriceRaw}
-            q={q}
-            sort={sort}
-          />
-        </aside>
+        {/* Filters now render in the left-hand main menu sidebar (BuilderNav) — FR-04 */}
 
         {/* Product grid */}
         <div className="flex-1">
+
           {/* Search bar */}
           <form method="GET" className="mb-4 space-y-3">
             {category ? <input type="hidden" name="category" value={category} /> : null}

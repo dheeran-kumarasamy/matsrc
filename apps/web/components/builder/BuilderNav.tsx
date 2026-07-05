@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import ProductFilters from "@/components/products/ProductFilters";
 
 const links = [
   { href: "/dashboard", label: "Dashboard" },
@@ -15,14 +16,19 @@ const links = [
 
 export function BuilderNav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // FR-04: Show the Browse Materials filters directly below the main menu
+  // when the builder is on the product discovery page.
+  const showProductFilters = pathname === "/products";
 
   return (
-    <aside className="panel sticky top-4 h-fit p-4">
+    <aside className="panel sticky top-4 h-fit space-y-4 p-4">
       <div className="rounded-xl bg-[linear-gradient(120deg,#1a4f8a,#e87722)] p-4 text-white">
         <p className="text-xs uppercase tracking-[0.2em] text-blue-100">BuildMart</p>
         <h1 className="mt-1 text-xl font-extrabold">Builder Hub</h1>
       </div>
-      <nav className="mt-4 space-y-1">
+      <nav className="space-y-1">
         {links.map((link) => {
           const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
           return (
@@ -38,6 +44,20 @@ export function BuilderNav() {
           );
         })}
       </nav>
+
+      {showProductFilters ? (
+        <div className="border-t border-slate-100 pt-4">
+          <ProductFilters
+            selectedCategory={searchParams.get("category") ?? undefined}
+            selectedBrand={searchParams.get("brand") ?? undefined}
+            minPrice={searchParams.get("minPrice") ?? undefined}
+            maxPrice={searchParams.get("maxPrice") ?? undefined}
+            q={searchParams.get("q") ?? undefined}
+            sort={searchParams.get("sort") ?? undefined}
+          />
+        </div>
+      ) : null}
     </aside>
   );
 }
+

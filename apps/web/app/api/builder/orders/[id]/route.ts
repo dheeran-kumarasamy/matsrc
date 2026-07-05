@@ -34,9 +34,10 @@ export async function GET(
             unitPrice: true,
             product: {
               select: {
+                id: true,
                 name: true,
                 unit: true,
-                supplier: { select: { companyName: true } },
+                supplier: { select: { id: true, companyName: true } },
               },
             },
           },
@@ -66,12 +67,15 @@ export async function GET(
         order.status === OrderStatus.PROCESSING &&
         order.paymentStatus === PaymentStatus.PENDING,
       paymentLink: `/orders/${order.id}/payment`,
+      supplierId: order.items[0]?.product.supplier.id ?? null,
+      primaryListingId: order.items[0]?.product.id ?? null,
       total: Number(order.totalAmount),
       totalLabel: formatCurrency(order.totalAmount),
       deliveryDate: formatDate(order.deliveryDate),
       supplierName: order.items[0]?.product.supplier.companyName ?? "Supplier",
       items: order.items.map((item) => ({
         id: item.id,
+        productId: item.product.id,
         name: item.product.name,
         quantity: item.quantity,
         unit: item.product.unit,

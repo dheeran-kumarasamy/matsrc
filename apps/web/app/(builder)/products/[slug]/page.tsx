@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import EnquiryPanel from "@/components/products/EnquiryPanel";
+import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ type PricingTier = {
 
 type SupplierListing = {
   id: string;
+  supplierId: string;
   name: string;
   category: string;
   grade: string;
@@ -116,6 +118,7 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
         </section>
 
         <aside className="space-y-4">
+          <SupplierSocialProof listingId={product.id} supplierId={product.supplierId} showViewTracking />
           <EnquiryPanel
             productId={product.id}
             unit={product.unit}

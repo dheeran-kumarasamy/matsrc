@@ -47,6 +47,7 @@ model User {
   cart          CartItem[]
   watchlist     Watchlist[]
   disputes      Dispute[]
+  supplierRatingsGiven SupplierRating[] @relation("BuilderSupplierRatings")
   notifications Notification[]
   notificationPreference NotificationPreference?
   creditProfile CreditProfile?
@@ -109,6 +110,7 @@ model SupplierProfile {
   orderItems      OrderItem[]
   quotes          Quote[]
   supplierQuotes  SupplierQuote[]
+  ratings         SupplierRating[]
   selectedOrders  Order[]         @relation("SelectedSupplierOrders")
   mtcCertificates MtcCertificate[]
 }
@@ -146,6 +148,7 @@ model Product {
   pricingTiers    PricingTier[]
   cartItems       CartItem[]
   orderItems      OrderItem[]
+  interestEvents  ProductInterestEvent[]
   watchlist       Watchlist[]
   mtcCertificates MtcCertificate[]
 
@@ -324,6 +327,7 @@ model Order {
   tracking        OrderTracking[]
   dispute         Dispute?
   supplierQuotes  SupplierQuote[]
+  supplierRating  SupplierRating?
 
   @@index([userId])
   @@index([status])
@@ -525,6 +529,41 @@ model Dispute {
 
   @@index([userId])
   @@index([status])
+}
+
+model SupplierRating {
+  id             String          @id @default(cuid())
+  orderId         String          @unique
+  order           Order           @relation(fields: [orderId], references: [id])
+  supplierId      String
+  supplier        SupplierProfile @relation(fields: [supplierId], references: [id])
+  builderId       String
+  builder         User            @relation("BuilderSupplierRatings", fields: [builderId], references: [id])
+  deliveryRating  Int
+  qualityRating   Int
+  comment         String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([supplierId])
+  @@index([builderId])
+}
+
+enum ProductInterestEventType {
+  VIEW
+  CART_ADD
+  ORDER_PLACED
+}
+
+model ProductInterestEvent {
+  id         String                   @id @default(cuid())
+  listingId  String
+  listing    Product                  @relation(fields: [listingId], references: [id])
+  sessionId  String
+  eventType  ProductInterestEventType
+  createdAt  DateTime                 @default(now())
+
+  @@index([listingId, eventType, createdAt])
 }
 
 model AuditLog {

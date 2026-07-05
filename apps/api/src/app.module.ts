@@ -21,6 +21,7 @@ import { KycModule } from "./admin/kyc/kyc.module";
 import { DisputesModule } from "./admin/disputes/disputes.module";
 import { AuditModule } from "./admin/audit/audit.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { PublicInsightsModule } from "./public-insights/public-insights.module";
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
     CreditModule,
     BuilderDisputesModule,
     NotificationsModule,
+    PublicInsightsModule,
     AdminModule,
     AdminDashboardModule,
     VendorsModule,

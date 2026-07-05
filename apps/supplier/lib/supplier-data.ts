@@ -419,6 +419,7 @@ export async function getPublicSupplierListings() {
 
     return {
       id: product.id,
+      supplierId: product.supplierId,
       name: product.name,
       category: product.category.name,
       grade: product.grade ?? "NA",

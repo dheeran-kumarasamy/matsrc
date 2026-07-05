@@ -5,6 +5,7 @@ import { formatCurrency, formatDate, humanizeToken } from "src/supplier/utils";
 import { BuilderContextService } from "src/builder/builder-context.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { NotificationService } from "src/notifications/notification.service";
+import { UpsertOrderRatingDto } from "./dto/upsert-order-rating.dto";
 
 function resolveUnitPrice(product: any, quantity: number) {
   const tiers = Array.isArray(product.pricingTiers) ? product.pricingTiers : [];
@@ -19,6 +20,7 @@ function getPaymentLink(orderId: string) {
 @Injectable()
 export class BuilderOrdersService {
   private readonly logger = new Logger(BuilderOrdersService.name);
+  private static readonly RATING_EDIT_WINDOW_MS = 72 * 60 * 60 * 1000;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -246,5 +248,82 @@ export class BuilderOrdersService {
     }
 
     return { orders: createdOrders };
+  }
+
+  async upsertRating(userCtx: any, orderId: string, dto: UpsertOrderRatingDto) {
+    const { user } = await this.builderContext.getOrCreateBuilder(userCtx.userId, userCtx.email, userCtx.name);
+
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, userId: user.id },
+      include: {
+        items: {
+          select: {
+            supplierId: true,
+          },
+          take: 1,
+        },
+        supplierRating: true,
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException("Order not found");
+    }
+
+    if (order.status !== OrderStatus.DELIVERED) {
+      throw new BadRequestException("Ratings can be submitted only after delivery");
+    }
+
+    const supplierId = order.items[0]?.supplierId;
+    if (!supplierId) {
+      throw new BadRequestException("Cannot determine supplier for this order");
+    }
+
+    if (order.supplierRating) {
+      const canEditUntil = order.supplierRating.createdAt.getTime() + BuilderOrdersService.RATING_EDIT_WINDOW_MS;
+      if (Date.now() > canEditUntil) {
+        throw new BadRequestException("Rating edit window has expired");
+      }
+
+      const rating = await this.prisma.supplierRating.update({
+        where: { orderId },
+        data: {
+          deliveryRating: dto.deliveryRating,
+          qualityRating: dto.qualityRating,
+          comment: dto.comment?.trim() || null,
+        },
+      });
+
+      return {
+        id: rating.id,
+        orderId: rating.orderId,
+        supplierId: rating.supplierId,
+        deliveryRating: rating.deliveryRating,
+        qualityRating: rating.qualityRating,
+        comment: rating.comment,
+        updated: true,
+      };
+    }
+
+    const rating = await this.prisma.supplierRating.create({
+      data: {
+        orderId,
+        supplierId,
+        builderId: user.id,
+        deliveryRating: dto.deliveryRating,
+        qualityRating: dto.qualityRating,
+        comment: dto.comment?.trim() || null,
+      },
+    });
+
+    return {
+      id: rating.id,
+      orderId: rating.orderId,
+      supplierId: rating.supplierId,
+      deliveryRating: rating.deliveryRating,
+      qualityRating: rating.qualityRating,
+      comment: rating.comment,
+      updated: false,
+    };
   }
 }

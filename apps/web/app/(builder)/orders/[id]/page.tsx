@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { builderApiGet } from "@/lib/api";
 import OrderTimeline from "@/components/orders/OrderTimeline";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
+import SupplierSocialProof from "@/components/products/SupplierSocialProof";
+import OrderRatingForm from "@/components/orders/OrderRatingForm";
 
 type OrderDetail = {
   id: string;
@@ -10,12 +12,15 @@ type OrderDetail = {
   paymentStatus: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
   paymentLinkAvailable: boolean;
   paymentLink: string;
+  supplierId: string | null;
+  primaryListingId: string | null;
   supplierName: string;
   total: number;
   totalLabel: string;
   deliveryDate: string;
   items: Array<{
     id: string;
+    productId: string;
     name: string;
     quantity: number;
     unit: string;
@@ -66,6 +71,14 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
           Supplier confirmed this enquiry. WhatsApp and in-app updates will continue as the order moves forward.
         </div>
+      ) : null}
+
+      {order.status === "PROCESSING" && order.primaryListingId && order.supplierId ? (
+        <SupplierSocialProof
+          listingId={order.primaryListingId}
+          supplierId={order.supplierId}
+          acceptedContext
+        />
       ) : null}
 
       {order.status === "CANCELLED" ? (
@@ -125,6 +138,8 @@ export default async function OrderDetailPage({ params }: { params: { id: string
               </Link>
             ) : null}
           </div>
+
+          {order.status === "DELIVERED" ? <OrderRatingForm orderId={order.id} /> : null}
         </aside>
       </div>
     </div>

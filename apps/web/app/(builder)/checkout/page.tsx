@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { builderApiGet, builderApiPost } from "@/lib/api";
+import { recordInterestEvent } from "@/lib/interest-events";
 
 type CartResponse = {
   items: Array<{
@@ -88,9 +89,11 @@ export default function CheckoutPage() {
     setLoading(true);
     setError(null);
     try {
+      const listingIds = Array.from(new Set(cart.items.map((item) => item.productId)));
       await builderApiPost("/orders/checkout", {
         deliveryDate: deliveryDate || undefined,
       });
+      await Promise.allSettled(listingIds.map((listingId) => recordInterestEvent(listingId, "ORDER_PLACED")));
       router.push("/orders");
     } catch {
       setError("Unable to submit enquiry right now.");

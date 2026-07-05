@@ -390,9 +390,11 @@ export class NotificationService {
     return {
       templateType: NotificationTemplateType.ORDER_DELIVERED,
       title: "Order delivered",
-      body: (builderLabel, supplierLabel) => `${supplierLabel} marked ${builderLabel}'s order as delivered.`,
+      body: (builderLabel, supplierLabel) =>
+        `${supplierLabel} marked ${builderLabel}'s order as delivered. Rate your delivery and product quality experience in My Orders to help other builders.`,
     };
   }
+
 
   private resolveRecipient(user: { whatsappNumber: string | null; phone: string | null }): string | null {
     return user.whatsappNumber?.trim() || user.phone?.trim() || null;

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ShoppingCart } from "lucide-react";
 import { builderApiPost } from "@/lib/api";
+import { recordInterestEvent } from "@/lib/interest-events";
 
 type PricingTier = {
   minQty: string;
@@ -47,6 +48,7 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
     setError(null);
     try {
       await builderApiPost("/cart/items", { productId, quantity });
+      void recordInterestEvent(productId, "CART_ADD");
       setAdded(true);
     } catch {
       setError("Unable to add this material to your enquiry basket.");

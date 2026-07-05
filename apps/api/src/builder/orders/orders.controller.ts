@@ -5,6 +5,7 @@ import { RoleGuard } from "src/auth/role.guard";
 import { CurrentUser } from "src/auth/current-user.decorator";
 import { BuilderOrdersService } from "./orders.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
+import { UpsertOrderRatingDto } from "./dto/upsert-order-rating.dto";
 
 @Controller("builder/orders")
 @UseGuards(OptionalJwtAuthGuard, RoleGuard)
@@ -25,5 +26,10 @@ export class BuilderOrdersController {
   @Post("checkout")
   create(@CurrentUser() user: any, @Body() dto: CreateOrderDto) {
     return this.ordersService.create(user, dto);
+  }
+
+  @Post(":id/rating")
+  upsertRating(@CurrentUser() user: any, @Param("id") id: string, @Body() dto: UpsertOrderRatingDto) {
+    return this.ordersService.upsertRating(user, id, dto);
   }
 }

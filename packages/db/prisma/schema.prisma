@@ -155,11 +155,13 @@ model Product {
   interestEvents  ProductInterestEvent[]
   watchlist       Watchlist[]
   mtcCertificates MtcCertificate[]
+  purchaseOrderLineItems PurchaseOrderLineItem[]
 
   @@index([supplierId])
   @@index([categoryId])
   @@index([slug])
 }
+
 
 model MtcCertificate {
   id          String          @id @default(cuid())
@@ -332,13 +334,11 @@ model Order {
   dispute         Dispute?
   supplierQuotes  SupplierQuote[]
   supplierRating  SupplierRating?
-  purchaseOrders  PurchaseOrder[]
 
   @@index([userId])
   @@index([status])
   @@index([selectedSupplierId])
 }
-
 
 model OrderItem {
   id          String          @id @default(cuid())

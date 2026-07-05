@@ -332,11 +332,13 @@ model Order {
   dispute         Dispute?
   supplierQuotes  SupplierQuote[]
   supplierRating  SupplierRating?
+  purchaseOrders  PurchaseOrder[]
 
   @@index([userId])
   @@index([status])
   @@index([selectedSupplierId])
 }
+
 
 model OrderItem {
   id          String          @id @default(cuid())

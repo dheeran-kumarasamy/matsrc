@@ -115,9 +115,11 @@ model SupplierProfile {
   ratings         SupplierRating[]
   selectedOrders  Order[]         @relation("SelectedSupplierOrders")
   mtcCertificates MtcCertificate[]
+  purchaseOrders  PurchaseOrder[]
 }
 
 model Category {
+
   id       String    @id @default(cuid())
   name     String    @unique
   slug     String    @unique

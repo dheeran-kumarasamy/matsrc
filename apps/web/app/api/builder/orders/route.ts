@@ -18,9 +18,15 @@ export async function GET(request: Request) {
 
     const orders = await prisma.order.findMany({
       where: { userId: user.id },
-      include: {
+      select: {
+        id: true,
+        status: true,
+        paymentStatus: true,
+        totalAmount: true,
+        createdAt: true,
         items: {
-          include: {
+          select: {
+            id: true,
             product: {
               select: {
                 supplier: { select: { companyName: true } },
@@ -128,6 +134,16 @@ export async function POST(request: Request) {
             create: {
               status: OrderStatus.PLACED,
               note: "Pending supplier confirmation",
+            },
+          },
+        },
+        select: {
+          id: true,
+          status: true,
+          totalAmount: true,
+          items: {
+            select: {
+              id: true,
             },
           },
         },

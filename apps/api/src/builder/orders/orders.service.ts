@@ -31,7 +31,27 @@ export class BuilderOrdersService {
 
     const orders = await this.prisma.order.findMany({
       where: { userId: user.id },
-      include: { items: { include: { product: { include: { supplier: true } } } } },
+      select: {
+        id: true,
+        status: true,
+        paymentStatus: true,
+        totalAmount: true,
+        createdAt: true,
+        items: {
+          select: {
+            id: true,
+            product: {
+              select: {
+                supplier: {
+                  select: {
+                    companyName: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -54,9 +74,40 @@ export class BuilderOrdersService {
 
     const order = await this.prisma.order.findFirst({
       where: { id, userId: user.id },
-      include: {
-        items: { include: { product: { include: { supplier: true } } } },
-        tracking: { orderBy: { recordedAt: "asc" } },
+      select: {
+        id: true,
+        status: true,
+        paymentMethod: true,
+        paymentStatus: true,
+        totalAmount: true,
+        deliveryDate: true,
+        items: {
+          select: {
+            id: true,
+            quantity: true,
+            unitPrice: true,
+            product: {
+              select: {
+                name: true,
+                unit: true,
+                supplier: {
+                  select: {
+                    companyName: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        tracking: {
+          select: {
+            id: true,
+            status: true,
+            note: true,
+            recordedAt: true,
+          },
+          orderBy: { recordedAt: "asc" },
+        },
       },
     });
 
@@ -165,7 +216,16 @@ export class BuilderOrdersService {
             },
           },
         },
-        include: { items: true },
+        select: {
+          id: true,
+          totalAmount: true,
+          status: true,
+          items: {
+            select: {
+              id: true,
+            },
+          },
+        },
       });
 
       createdOrders.push({

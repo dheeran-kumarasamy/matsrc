@@ -11,6 +11,11 @@ import {
   updateSupplierProfile,
   getMarketScrollerData,
 } from "@/lib/supplier-data";
+import {
+  acknowledgeSupplierPurchaseOrder,
+  getSupplierPurchaseOrderDetail,
+  getSupplierPurchaseOrders,
+} from "@/lib/purchase-order-data";
 
 async function requireEmail(req: NextRequest): Promise<string | null> {
   const session = await auth();
@@ -38,7 +43,18 @@ export async function GET(req: NextRequest) {
     } else if (path === "/market-scroll") {
       const items = await getMarketScrollerData(email);
       return NextResponse.json(items);
+    } else if (path === "/purchase-orders") {
+      const purchaseOrders = await getSupplierPurchaseOrders(email);
+      return NextResponse.json(purchaseOrders);
     } else {
+      const poMatch = path.match(/^\/purchase-orders\/([^/]+)$/);
+      if (poMatch) {
+        const detail = await getSupplierPurchaseOrderDetail(poMatch[1], email);
+        if (!detail) {
+          return NextResponse.json({ message: "Purchase order not found" }, { status: 404 });
+        }
+        return NextResponse.json(detail);
+      }
       return NextResponse.json({ message: "Not found" }, { status: 404 });
     }
   } catch (error: any) {
@@ -55,7 +71,7 @@ export async function POST(req: NextRequest) {
     }
 
     const path = req.nextUrl.pathname.replace("/api/supplier", "");
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
 
     if (path === "/listings") {
       const created = await createSupplierListing(body, email);
@@ -70,6 +86,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ message: "RFQ not found" }, { status: 404 });
       }
       return NextResponse.json(created, { status: 201 });
+    }
+
+    // Supplier-side: POST /supplier/purchase-orders/:id/acknowledge — confirm receipt in-app.
+    const acknowledgeMatch = path.match(/^\/purchase-orders\/([^/]+)\/acknowledge$/);
+    if (acknowledgeMatch) {
+      const updated = await acknowledgeSupplierPurchaseOrder(acknowledgeMatch[1], email);
+      return NextResponse.json(updated);
     }
 
     return NextResponse.json({ message: "Not found" }, { status: 404 });
@@ -117,4 +140,3 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ message: error.message || "Internal server error" }, { status: 500 });
   }
 }
-

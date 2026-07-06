@@ -14,6 +14,7 @@ import { WatchlistModule } from "./builder/watchlist/watchlist.module";
 import { BuilderRfqsModule } from "./builder/rfqs/rfqs.module";
 import { CreditModule } from "./builder/credit/credit.module";
 import { BuilderDisputesModule } from "./builder/disputes/disputes.module";
+import { PurchaseOrdersModule } from "./builder/purchase-orders/purchase-orders.module";
 import { AdminModule } from "./admin/admin.module";
 import { AdminDashboardModule } from "./admin/dashboard/dashboard.module";
 import { VendorsModule } from "./admin/vendors/vendors.module";
@@ -39,6 +40,7 @@ import { PublicInsightsModule } from "./public-insights/public-insights.module";
     BuilderRfqsModule,
     CreditModule,
     BuilderDisputesModule,
+    PurchaseOrdersModule,
     NotificationsModule,
     PublicInsightsModule,
     AdminModule,

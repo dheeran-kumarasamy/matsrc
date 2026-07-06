@@ -84,3 +84,23 @@ export async function builderApiPost<TResponse>(path: string, body: unknown): Pr
 
   return response.json() as Promise<TResponse>;
 }
+
+export async function builderApiPatch<TResponse>(path: string, body: unknown): Promise<TResponse> {
+  const response = await fetch(buildApiUrl(path), {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "X-User-Id": DEMO_USER.id,
+      "X-User-Email": DEMO_USER.email,
+      "X-User-Name": DEMO_USER.name,
+      "X-User-Role": DEMO_USER.role,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Builder API patch failed: ${response.status}`);
+  }
+
+  return response.json() as Promise<TResponse>;
+}

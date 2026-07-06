@@ -9,7 +9,7 @@ export default async function AdminDashboardPage() {
   await requireMenu("dashboard");
 
   const [summary, vendorsRaw, disputesRaw, auditRaw] = await Promise.all([
-    adminApiGet<{ pendingVendors: number; pendingKyc: number; openDisputes: number; totalOrders: number }>("/admin/dashboard").catch(() => ({ pendingVendors: 0, pendingKyc: 0, openDisputes: 0, totalOrders: 0 })),
+    adminApiGet<{ pendingVendors: number; pendingKyc: number; openDisputes: number; totalOrders: number; issuedPurchaseOrders: number }>("/admin/dashboard").catch(() => ({ pendingVendors: 0, pendingKyc: 0, openDisputes: 0, totalOrders: 0, issuedPurchaseOrders: 0 })),
     adminApiGet<Array<{ id: string; companyName: string | null; kycStatus: string }>>("/admin/vendors").catch(() => []),
     adminApiGet<Array<{ id: string; orderId: string; issueType: string; status: string }>>("/admin/disputes").catch(() => []),
     adminApiGet<Array<{ id: string; actorId: string; action: string; entityType: string; entityId: string; createdAt: string }>>("/admin/audit?limit=5").catch(() => []),
@@ -20,6 +20,7 @@ export default async function AdminDashboardPage() {
     { label: "KYC Docs Pending", value: String(summary.pendingKyc), hint: "Require document checks" },
     { label: "Open Disputes", value: String(summary.openDisputes), hint: "Need resolution" },
     { label: "Total Orders", value: String(summary.totalOrders), hint: "Across platform" },
+    { label: "Purchase Orders Issued", value: String(summary.issuedPurchaseOrders), hint: "Digitally signed & issued" },
   ];
 
   const vendors = vendorsRaw.slice(0, 3).map((vendor) => ({

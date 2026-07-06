@@ -8,6 +8,7 @@ const links = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/products", label: "Browse Materials" },
   { href: "/orders", label: "My Orders" },
+  { href: "/purchase-orders", label: "Purchase Orders" },
   { href: "/cart", label: "Cart" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/credit", label: "Credit / BNPL" },
@@ -60,4 +61,3 @@ export function BuilderNav() {
     </aside>
   );
 }
-

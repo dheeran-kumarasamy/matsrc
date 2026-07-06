@@ -5,6 +5,7 @@ import OrderTimeline from "@/components/orders/OrderTimeline";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import OrderRatingForm from "@/components/orders/OrderRatingForm";
+import GeneratePoButton from "@/components/orders/GeneratePoButton";
 
 type OrderDetail = {
   id: string;
@@ -18,6 +19,8 @@ type OrderDetail = {
   total: number;
   totalLabel: string;
   deliveryDate: string;
+  quoteAccepted?: boolean;
+  purchaseOrder?: { id: string; poNumber: string; status: string; version: number } | null;
   items: Array<{
     id: string;
     productId: string;
@@ -84,6 +87,30 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       {order.status === "CANCELLED" ? (
         <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           Supplier declined this enquiry. You can review the details and place a fresh order if needed.
+        </div>
+      ) : null}
+
+      {/* Digital Purchase Order — additive layer on top of existing enquiry/order tracking */}
+      {order.quoteAccepted ? (
+        <div className="panel space-y-3 p-5">
+          <h2 className="text-lg font-semibold text-slate-800">Purchase Order</h2>
+          {order.purchaseOrder ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-600">
+                {order.purchaseOrder.poNumber}
+                {order.purchaseOrder.version > 1 ? ` (v${order.purchaseOrder.version})` : ""} ·{" "}
+                <span className="font-semibold">{order.purchaseOrder.status}</span>
+              </p>
+              <Link
+                href={`/purchase-orders/${order.purchaseOrder.id}`}
+                className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+              >
+                View Purchase Order
+              </Link>
+            </div>
+          ) : (
+            <GeneratePoButton orderId={order.id} />
+          )}
         </div>
       ) : null}
 

@@ -27,6 +27,11 @@ export async function GET(
         paymentStatus: true,
         totalAmount: true,
         deliveryDate: true,
+        quoteSelectionCompletedAt: true,
+        purchaseOrders: {
+          select: { id: true, poNumber: true, status: true, version: true },
+          orderBy: { version: "desc" },
+        },
         items: {
           select: {
             id: true,
@@ -73,6 +78,16 @@ export async function GET(
       totalLabel: formatCurrency(order.totalAmount),
       deliveryDate: formatDate(order.deliveryDate),
       supplierName: order.items[0]?.product.supplier.companyName ?? "Supplier",
+      // PO trigger point: available once a supplier quote has been accepted for this enquiry.
+      quoteAccepted: Boolean(order.quoteSelectionCompletedAt),
+      purchaseOrder: order.purchaseOrders[0]
+        ? {
+            id: order.purchaseOrders[0].id,
+            poNumber: order.purchaseOrders[0].poNumber,
+            status: order.purchaseOrders[0].status,
+            version: order.purchaseOrders[0].version,
+          }
+        : null,
       items: order.items.map((item) => ({
         id: item.id,
         productId: item.product.id,

@@ -50,6 +50,7 @@ model User {
   supplierRatingsGiven SupplierRating[] @relation("BuilderSupplierRatings")
   purchaseOrders PurchaseOrder[] @relation("BuilderPurchaseOrders")
   notifications Notification[]
+  aggregationParticipations AggregationParticipant[]
 
   notificationPreference NotificationPreference?
   creditProfile CreditProfile?
@@ -116,6 +117,7 @@ model SupplierProfile {
   selectedOrders  Order[]         @relation("SelectedSupplierOrders")
   mtcCertificates MtcCertificate[]
   purchaseOrders  PurchaseOrder[]
+  aggregationPools AggregationPool[]
 }
 
 model Category {
@@ -148,6 +150,12 @@ model Product {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
+  // Order Aggregation ("Group & Save") — supplier-configured per listing, opt-in only.
+  aggregationEnabled    Boolean  @default(false)
+  aggregationPriceTiers Json?    // [{minQty, unitPrice}] — separate from PricingTier (non-aggregated bulk pricing)
+  aggregationZoneRules  Json?    // reserved for future zone-grouping configuration
+  aggregationWindowDays Int?     @default(7)
+
   prices          PricePoint[]
   pricingTiers    PricingTier[]
   cartItems       CartItem[]
@@ -156,6 +164,7 @@ model Product {
   watchlist       Watchlist[]
   mtcCertificates MtcCertificate[]
   purchaseOrderLineItems PurchaseOrderLineItem[]
+  aggregationPools AggregationPool[]
 
   @@index([supplierId])
   @@index([categoryId])
@@ -329,16 +338,25 @@ model Order {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
+  // Order Aggregation ("Group & Save")
+  aggregationPoolId      String?
+  aggregationPool        AggregationPool? @relation(fields: [aggregationPoolId], references: [id])
+  isAggregated           Boolean  @default(false)
+  priceBeforeAggregation Decimal? @db.Decimal(12, 2)
+  priceAfterAggregation  Decimal? @db.Decimal(12, 2)
+
   items           OrderItem[]
   tracking        OrderTracking[]
   dispute         Dispute?
   supplierQuotes  SupplierQuote[]
   supplierRating  SupplierRating?
   purchaseOrders  PurchaseOrder[]
+  aggregationParticipant AggregationParticipant?
 
   @@index([userId])
   @@index([status])
   @@index([selectedSupplierId])
+  @@index([aggregationPoolId])
 }
 
 
@@ -635,4 +653,68 @@ model AuditLog {
 
   @@index([actorId])
   @@index([entityType, entityId])
+}
+
+// ─────────────────────────────────────────────
+// M10 Order Aggregation ("Group & Save")
+// ─────────────────────────────────────────────
+
+enum AggregationPoolStatus {
+  OPEN
+  LOCKED
+  FULFILLING
+  CLOSED
+  CANCELLED
+}
+
+enum AggregationParticipantStatus {
+  PENDING
+  LOCKED_IN
+  CONVERTED
+  OPTED_OUT
+}
+
+model AggregationPool {
+  id                  String                @id @default(cuid())
+  supplierId          String
+  supplier            SupplierProfile       @relation(fields: [supplierId], references: [id])
+  productId           String
+  product             Product               @relation(fields: [productId], references: [id])
+  zoneKey             String                // pincode-based zone granularity (v1: exact pincode string)
+  deliveryWindowStart DateTime
+  deliveryWindowEnd   DateTime
+  status              AggregationPoolStatus @default(OPEN)
+  currentQuantity     Int                   @default(0)
+  priceTiers          Json                  // [{minQty, unitPrice}] snapshot copied from Product at pool creation
+  lockedUnitPrice     Decimal?              @db.Decimal(12, 2)
+  windowCloseAt       DateTime
+  lockedAt            DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  participants        AggregationParticipant[]
+  orders              Order[]
+
+  @@index([supplierId])
+  @@index([productId, zoneKey, status])
+  @@index([status])
+  @@index([windowCloseAt])
+}
+
+model AggregationParticipant {
+  id         String                        @id @default(cuid())
+  poolId     String
+  pool       AggregationPool               @relation(fields: [poolId], references: [id])
+  builderId  String
+  builder    User                          @relation(fields: [builderId], references: [id])
+  orderId    String?                       @unique
+  order      Order?                        @relation(fields: [orderId], references: [id])
+  quantity   Int
+  status     AggregationParticipantStatus  @default(PENDING)
+  optedInAt  DateTime                      @default(now())
+  optedOutAt DateTime?
+
+  @@index([poolId])
+  @@index([builderId])
+  @@index([poolId, status])
 }

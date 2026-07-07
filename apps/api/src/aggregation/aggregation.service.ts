@@ -14,6 +14,7 @@ import {
 } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { AggregationConfigService } from "./aggregation-config.service";
+
 import {
   AddParticipantParams,
   FindOrCreatePoolParams,
@@ -306,10 +307,27 @@ export class AggregationService {
         });
       }
 
-      // Recalculate remaining participants' order pricing to reflect the new tier, if it changed.
-      void currentUnitPrice; // reserved for future reconciliation of remaining participants' provisional pricing
+      // Reconcile remaining participants' provisional pricing to reflect the recalculated
+      // tier (currentUnitPrice) now that this participant's quantity has been removed.
+      const remainingParticipants = await tx.aggregationParticipant.findMany({
+        where: { poolId: pool.id, status: AggregationParticipantStatus.PENDING },
+      });
+
+      for (const remaining of remainingParticipants) {
+        if (!remaining.orderId) continue;
+        const remainingTotal = currentUnitPrice * remaining.quantity;
+        await tx.order.update({
+          where: { id: remaining.orderId },
+          data: { totalAmount: remainingTotal, priceAfterAggregation: remainingTotal },
+        });
+        await tx.orderItem.updateMany({
+          where: { orderId: remaining.orderId },
+          data: { unitPrice: currentUnitPrice },
+        });
+      }
 
       return {
+
         pool: this.toPoolSummary(updatedPool, product.basePrice),
         participant: this.toParticipantSummary(updatedParticipant),
       };

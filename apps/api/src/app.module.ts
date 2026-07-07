@@ -23,6 +23,7 @@ import { DisputesModule } from "./admin/disputes/disputes.module";
 import { AuditModule } from "./admin/audit/audit.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { PublicInsightsModule } from "./public-insights/public-insights.module";
+import { AggregationModule } from "./aggregation/aggregation.module";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { PublicInsightsModule } from "./public-insights/public-insights.module";
     PurchaseOrdersModule,
     NotificationsModule,
     PublicInsightsModule,
+    AggregationModule,
     AdminModule,
     AdminDashboardModule,
     VendorsModule,

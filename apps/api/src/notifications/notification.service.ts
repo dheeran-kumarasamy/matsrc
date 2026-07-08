@@ -60,6 +60,204 @@ export class NotificationService {
     await this.enqueueEnvelope(envelope, "order-decision");
   }
 
+  // ───────────────────────────────────────────────────────────
+  // Order Aggregation ("Group & Save") notifications
+  // ───────────────────────────────────────────────────────────
+
+  async notifyAggregationOptIn(params: {
+    builderId: string;
+    poolId: string;
+    productName: string;
+    quantity: number;
+    currentUnitPrice: number;
+    savingsEstimate: number;
+    windowCloseAt: Date;
+  }): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: params.builderId } });
+    if (!user) {
+      return;
+    }
+
+    const deepLink = this.getBuilderAggregationDeepLink(params.poolId);
+    const savingsLabel = params.savingsEstimate.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+    const envelope: NotificationEnvelope = {
+      userId: user.id,
+      audience: "builder",
+      channel: NotificationChannel.WHATSAPP,
+      templateType: NotificationTemplateType.AGGREGATION_OPT_IN_CONFIRMED,
+      variables: {
+        orderId: params.poolId,
+        orderNumber: params.poolId.slice(0, 8),
+        poolId: params.poolId,
+        productName: params.productName,
+        quantity: params.quantity,
+        currentUnitPrice: params.currentUnitPrice,
+        savingsEstimate: params.savingsEstimate,
+        deepLink,
+      },
+      content: {
+        title: "You're in — Group & Save",
+        body: `Joined the group order for ${params.productName} (qty ${params.quantity}). Current price: INR ${params.currentUnitPrice}/unit, estimated savings so far: INR ${savingsLabel}. Track it here: ${deepLink}`,
+      },
+      idempotencyKey: `aggregation-opt-in:${params.poolId}:${params.builderId}:${params.quantity}`,
+    };
+
+    await this.enqueueEnvelope(envelope, "aggregation-opt-in");
+  }
+
+  async notifyAggregationTierImproved(params: {
+    builderId: string;
+    poolId: string;
+    productName: string;
+    previousUnitPrice: number;
+    currentUnitPrice: number;
+  }): Promise<void> {
+    if (params.currentUnitPrice >= params.previousUnitPrice) {
+      return;
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: params.builderId } });
+    if (!user) {
+      return;
+    }
+
+    const deepLink = this.getBuilderAggregationDeepLink(params.poolId);
+
+    const envelope: NotificationEnvelope = {
+      userId: user.id,
+      audience: "builder",
+      channel: NotificationChannel.WHATSAPP,
+      templateType: NotificationTemplateType.AGGREGATION_TIER_IMPROVED,
+      variables: {
+        orderId: params.poolId,
+        orderNumber: params.poolId.slice(0, 8),
+        poolId: params.poolId,
+        productName: params.productName,
+        previousUnitPrice: params.previousUnitPrice,
+        currentUnitPrice: params.currentUnitPrice,
+        deepLink,
+      },
+      content: {
+        title: "Your price just dropped!",
+        body: `Great news — more builders joined your group order for ${params.productName}. Price dropped from INR ${params.previousUnitPrice} to INR ${params.currentUnitPrice}/unit. View details: ${deepLink}`,
+      },
+    };
+
+    await this.enqueueEnvelope(envelope, "aggregation-tier-improved");
+  }
+
+  async notifyAggregationWindowClosingSoon(params: {
+    builderId: string;
+    poolId: string;
+    productName: string;
+    hoursRemaining: number;
+    currentUnitPrice: number;
+  }): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: params.builderId } });
+    if (!user) {
+      return;
+    }
+
+    const deepLink = this.getBuilderAggregationDeepLink(params.poolId);
+
+    const envelope: NotificationEnvelope = {
+      userId: user.id,
+      audience: "builder",
+      channel: NotificationChannel.WHATSAPP,
+      templateType: NotificationTemplateType.AGGREGATION_WINDOW_CLOSING_SOON,
+      variables: {
+        orderId: params.poolId,
+        orderNumber: params.poolId.slice(0, 8),
+        poolId: params.poolId,
+        productName: params.productName,
+        hoursRemaining: params.hoursRemaining,
+        currentUnitPrice: params.currentUnitPrice,
+        deepLink,
+      },
+      content: {
+        title: "Group order closing soon",
+        body: `Your group order for ${params.productName} closes in ~${params.hoursRemaining}h at INR ${params.currentUnitPrice}/unit. Invite others to join and unlock a better price: ${deepLink}`,
+      },
+      idempotencyKey: `aggregation-window-closing:${params.poolId}:${params.builderId}`,
+    };
+
+    await this.enqueueEnvelope(envelope, "aggregation-window-closing");
+  }
+
+  async notifyAggregationPoolLocked(params: {
+    builderId: string;
+    poolId: string;
+    orderId?: string | null;
+    productName: string;
+    quantity: number;
+    lockedUnitPrice: number;
+  }): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: params.builderId } });
+    if (!user) {
+      return;
+    }
+
+    const deepLink = params.orderId
+      ? this.getBuilderEnquiryDeepLink(params.orderId)
+      : this.getBuilderAggregationDeepLink(params.poolId);
+
+    const envelope: NotificationEnvelope = {
+      userId: user.id,
+      audience: "builder",
+      channel: NotificationChannel.WHATSAPP,
+      templateType: NotificationTemplateType.AGGREGATION_POOL_LOCKED,
+      variables: {
+        orderId: params.orderId ?? params.poolId,
+        orderNumber: (params.orderId ?? params.poolId).slice(0, 8),
+        poolId: params.poolId,
+        productName: params.productName,
+        quantity: params.quantity,
+        lockedUnitPrice: params.lockedUnitPrice,
+        deepLink,
+      },
+      content: {
+        title: "Price locked — order confirmed!",
+        body: `Your group order for ${params.productName} (qty ${params.quantity}) is locked in at INR ${params.lockedUnitPrice}/unit and confirmed as an order. Track it here: ${deepLink}`,
+      },
+      idempotencyKey: `aggregation-locked:${params.poolId}:${params.builderId}`,
+    };
+
+    await this.enqueueEnvelope(envelope, "aggregation-pool-locked");
+  }
+
+  async notifyAggregationOptOut(params: {
+    builderId: string;
+    poolId: string;
+    productName: string;
+  }): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: params.builderId } });
+    if (!user) {
+      return;
+    }
+
+    const envelope: NotificationEnvelope = {
+      userId: user.id,
+      audience: "builder",
+      channel: NotificationChannel.WHATSAPP,
+      templateType: NotificationTemplateType.AGGREGATION_OPT_OUT_CONFIRMED,
+      variables: {
+        orderId: params.poolId,
+        orderNumber: params.poolId.slice(0, 8),
+        poolId: params.poolId,
+        productName: params.productName,
+      },
+      content: {
+        title: "You've left the group order",
+        body: `You've opted out of the group order for ${params.productName}. You can check out anytime at the standard price.`,
+      },
+      idempotencyKey: `aggregation-opt-out:${params.poolId}:${params.builderId}`,
+    };
+
+    await this.enqueueEnvelope(envelope, "aggregation-opt-out");
+  }
+
+
   async sendWhatsApp(params: {
     to: string;
     title: string;
@@ -491,6 +689,12 @@ export class NotificationService {
     const baseUrl = process.env.BUILDER_PORTAL_URL || process.env.NEXT_PUBLIC_APP_URL || "https://web-sable-nine-97.vercel.app";
     return `${baseUrl.replace(/\/$/, "")}/orders/${enquiryId}`;
   }
+
+  private getBuilderAggregationDeepLink(poolId: string): string {
+    const baseUrl = process.env.BUILDER_PORTAL_URL || process.env.NEXT_PUBLIC_APP_URL || "https://web-sable-nine-97.vercel.app";
+    return `${baseUrl.replace(/\/$/, "")}/my-group-orders?pool=${poolId}`;
+  }
+
 
   private buildOrderLineItemSummary(items: Array<{ name: string; quantity: number; unit?: string | null }>): string {
     if (!items.length) {

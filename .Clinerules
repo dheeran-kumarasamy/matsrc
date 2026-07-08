@@ -1,0 +1,18 @@
+# Project instructions
+
+This is a pnpm monorepo. Always use pnpm commands, never npm or npx.
+
+For Prisma commands:
+- Do not use `npx prisma`.
+- Do not install or invoke Prisma globally.
+- Always use the workspace Prisma version.
+- Run Prisma commands using:
+  - `pnpm --filter @matsrc/db db:generate`
+  - `pnpm --filter @matsrc/db db:migrate`
+  - `cd packages/db && pnpm exec prisma <command>`
+
+The project uses Prisma 5.x. Do not upgrade Prisma or use Prisma 7 commands unless explicitly requested.
+
+Before running package commands:
+- Check package.json and workspace configuration.
+- Respect pnpm-workspace.yaml.

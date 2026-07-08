@@ -28,6 +28,16 @@ export type NotificationTemplateContext = {
   tentativeDeliveryDate?: string;
   lineItemSummary?: string;
   itemCount?: number;
+  // Order Aggregation ("Group & Save") template variables
+  poolId?: string;
+  productName?: string;
+  quantity?: number;
+  currentUnitPrice?: number;
+  previousUnitPrice?: number;
+  lockedUnitPrice?: number;
+  savingsEstimate?: number;
+  windowCloseAt?: string;
+  hoursRemaining?: number;
 };
 
 export type NotificationEnvelope = {

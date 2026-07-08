@@ -464,7 +464,13 @@ enum NotificationTemplateType {
   KYC_APPROVED
   KYC_REJECTED
   WATCHLIST_ALERT
+  AGGREGATION_OPT_IN_CONFIRMED
+  AGGREGATION_TIER_IMPROVED
+  AGGREGATION_WINDOW_CLOSING_SOON
+  AGGREGATION_POOL_LOCKED
+  AGGREGATION_OPT_OUT_CONFIRMED
 }
+
 
 model NotificationTemplate {
   id        String                   @id @default(cuid())

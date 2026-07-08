@@ -28,6 +28,13 @@ export async function GET(
         totalAmount: true,
         deliveryDate: true,
         quoteSelectionCompletedAt: true,
+        isAggregated: true,
+        aggregationPoolId: true,
+        priceBeforeAggregation: true,
+        priceAfterAggregation: true,
+        aggregationPool: {
+          select: { status: true },
+        },
         purchaseOrders: {
           select: { id: true, poNumber: true, status: true, version: true },
           orderBy: { version: "desc" },
@@ -80,6 +87,12 @@ export async function GET(
       supplierName: order.items[0]?.product.supplier.companyName ?? "Supplier",
       // PO trigger point: available once a supplier quote has been accepted for this enquiry.
       quoteAccepted: Boolean(order.quoteSelectionCompletedAt),
+      isAggregated: order.isAggregated,
+      aggregationPoolId: order.aggregationPoolId,
+      poolLocked: order.aggregationPool?.status === "LOCKED" || order.aggregationPool?.status === "FULFILLING" || order.aggregationPool?.status === "CLOSED",
+      priceBeforeAggregation: order.priceBeforeAggregation ? Number(order.priceBeforeAggregation) : null,
+      priceAfterAggregation: order.priceAfterAggregation ? Number(order.priceAfterAggregation) : null,
+
       purchaseOrder: order.purchaseOrders[0]
         ? {
             id: order.purchaseOrders[0].id,

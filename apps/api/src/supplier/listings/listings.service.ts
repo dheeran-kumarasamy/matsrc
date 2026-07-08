@@ -4,6 +4,7 @@ import { SupplierContextService } from "src/supplier/supplier-context.service";
 import { formatCurrency, slugify } from "src/supplier/utils";
 import { CreateListingDto } from "./dto/create-listing.dto";
 import { UpdateListingDto } from "./dto/update-listing.dto";
+import { UpdateAggregationSettingsDto } from "./dto/update-aggregation-settings.dto";
 
 @Injectable()
 export class ListingsService {
@@ -126,6 +127,53 @@ export class ListingsService {
       id: product.id,
       name: product.name,
       unit: product.unit,
+    };
+  }
+
+  /**
+   * Updates a listing's Order Aggregation ("Group & Save") configuration. Enabling/
+   * disabling aggregation here does NOT retroactively affect already-open
+   * AggregationPool rows — the scheduler and pool-matching logic only ever reads live
+   * pool state, not `product.aggregationEnabled`, so in-flight pools complete under
+   * their original terms even if the supplier disables aggregation mid-window.
+   */
+  async updateAggregationSettings(
+    id: string,
+    dto: UpdateAggregationSettingsDto,
+    user: any
+  ): Promise<{
+    id: string;
+    aggregationEnabled: boolean;
+    aggregationPriceTiers: unknown;
+    aggregationWindowDays: number | null;
+    aggregationZoneRules: unknown;
+  }> {
+    const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
+
+    const listing = await this.prisma.product.findFirst({
+      where: { id, supplierId: supplierProfile.id },
+    });
+
+    if (!listing) {
+      throw new NotFoundException("Listing not found");
+    }
+
+    const product = await this.prisma.product.update({
+      where: { id },
+      data: {
+        aggregationEnabled: dto.aggregationEnabled,
+        aggregationPriceTiers: dto.priceTiers ? (dto.priceTiers as any) : undefined,
+        aggregationWindowDays: dto.defaultWindowDays,
+        aggregationZoneRules: dto.zoneRules !== undefined ? (dto.zoneRules as any) : undefined,
+      },
+    });
+
+    return {
+      id: product.id,
+      aggregationEnabled: product.aggregationEnabled,
+      aggregationPriceTiers: product.aggregationPriceTiers,
+      aggregationWindowDays: product.aggregationWindowDays,
+      aggregationZoneRules: product.aggregationZoneRules,
     };
   }
 }

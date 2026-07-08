@@ -12,7 +12,10 @@ type OrderItem = {
   supplierName?: string;
   paymentLinkAvailable?: boolean;
   paymentLink?: string;
+  isAggregated?: boolean;
+  aggregationPoolId?: string | null;
 };
+
 
 const STATUS_FILTERS = ["All", "PLACED", "PROCESSING", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
@@ -49,7 +52,16 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-slate-900">My Orders</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-bold text-slate-900">My Orders</h1>
+        <Link
+          href="/group-orders"
+          className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+        >
+          My Group Orders →
+        </Link>
+      </div>
+
 
       {/* Filters */}
       <div className="flex gap-2 flex-wrap">
@@ -85,13 +97,21 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
           {filtered.map((order) => (
             <div key={order.id} className="p-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-800">Order #{order.id.slice(0, 8)}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold text-slate-800">Order #{order.id.slice(0, 8)}</p>
+                  {order.isAggregated ? (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                      Group Order
+                    </span>
+                  ) : null}
+                </div>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {order.supplierName ? `${order.supplierName} · ` : ""}{order.itemCount} items · INR {order.total.toLocaleString("en-IN")}
                 </p>
               </div>
               <div className="flex items-center gap-3">
                 <OrderStatusBadge status={order.status} />
+
                 {order.paymentLinkAvailable && order.paymentLink ? (
                   <Link href={order.paymentLink} className="text-xs rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 hover:bg-emerald-100">
                     Payment link enabled

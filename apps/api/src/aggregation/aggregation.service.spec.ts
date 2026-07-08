@@ -182,6 +182,16 @@ function makeConfig(enabled = true): AggregationConfigService {
   return { isEnabled: () => enabled } as AggregationConfigService;
 }
 
+function makeFakeNotificationService() {
+  return {
+    notifyAggregationOptIn: vi.fn(async () => undefined),
+    notifyAggregationTierImproved: vi.fn(async () => undefined),
+    notifyAggregationWindowClosingSoon: vi.fn(async () => undefined),
+    notifyAggregationPoolLocked: vi.fn(async () => undefined),
+    notifyAggregationOptOut: vi.fn(async () => undefined),
+  } as any;
+}
+
 function seedProduct(db: ReturnType<typeof createFakeDb>["db"], overrides: Partial<any> = {}) {
   const product = {
     id: "product-1",
@@ -209,11 +219,11 @@ describe("AggregationService.findOrCreatePool", () => {
     const fake = createFakeDb();
     db = fake.db;
     prisma = fake.prisma;
-    service = new AggregationService(prisma as any, makeConfig());
+    service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService());
   });
 
   it("throws ForbiddenException when the feature flag is disabled", async () => {
-    service = new AggregationService(prisma as any, makeConfig(false));
+    service = new AggregationService(prisma as any, makeConfig(false), makeFakeNotificationService());
     seedProduct(db);
 
     await expect(
@@ -322,7 +332,7 @@ describe("AggregationService.addParticipant (tier recalculation)", () => {
     const fake = createFakeDb();
     db = fake.db;
     prisma = fake.prisma;
-    service = new AggregationService(prisma as any, makeConfig());
+    service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService());
     seedProduct(db);
   });
 
@@ -434,7 +444,7 @@ describe("AggregationService.lockPool", () => {
     const fake = createFakeDb();
     db = fake.db;
     prisma = fake.prisma;
-    service = new AggregationService(prisma as any, makeConfig());
+    service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService());
     seedProduct(db);
   });
 
@@ -508,7 +518,7 @@ describe("AggregationService.cancelParticipant (opt-out)", () => {
     const fake = createFakeDb();
     db = fake.db;
     prisma = fake.prisma;
-    service = new AggregationService(prisma as any, makeConfig());
+    service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService());
     seedProduct(db);
   });
 
@@ -569,7 +579,7 @@ describe("AggregationService.cancelParticipant (opt-out)", () => {
 describe("AggregationService concurrency: row-lock usage for atomicity", () => {
   it("acquires a SELECT ... FOR UPDATE row lock on the pool before mutating it in addParticipant", async () => {
     const { db, prisma } = createFakeDb();
-    const service = new AggregationService(prisma as any, makeConfig());
+    const service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService());
     seedProduct(db);
 
     const pool = await service.findOrCreatePool({
@@ -591,7 +601,7 @@ describe("AggregationService concurrency: row-lock usage for atomicity", () => {
     // rather than true DB-level lock contention (which would require an integration
     // test against a real Postgres instance per the repo's transactional pattern).
     const { db, prisma } = createFakeDb();
-    const service = new AggregationService(prisma as any, makeConfig());
+    const service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService());
     seedProduct(db, {
       aggregationPriceTiers: [{ minQty: 20, unitPrice: 80 }],
     });

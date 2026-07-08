@@ -46,3 +46,31 @@ export type ParticipantSummary = {
   optedInAt: Date;
   optedOutAt: Date | null;
 };
+
+export type MyPoolParticipation = {
+  participant: ParticipantSummary;
+  pool: PoolSummary;
+  productName: string;
+  supplierName: string;
+};
+
+export type SupplierPoolSummary = PoolSummary & {
+  productName: string;
+  participantCount: number;
+  projectedRevenueAtCurrentTier: number;
+  projectedRevenueAtMaxTier: number;
+};
+
+export type AdminPoolSummary = PoolSummary & {
+  productName: string;
+  supplierName: string;
+  participantCount: number;
+};
+
+export type PoolFilters = {
+  status?: AggregationPoolStatus;
+  zoneKey?: string;
+  productId?: string;
+  supplierId?: string;
+};
+

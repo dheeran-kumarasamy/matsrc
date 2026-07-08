@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { CreateListingDto } from "./dto/create-listing.dto";
 import { UpdateListingDto } from "./dto/update-listing.dto";
+import { UpdateAggregationSettingsDto } from "./dto/update-aggregation-settings.dto";
 import { ListingsService } from "./listings.service";
 import { OptionalJwtAuthGuard } from "src/auth/optional-jwt-auth.guard";
 import { CurrentUser } from "src/auth/current-user.decorator";
@@ -28,5 +29,14 @@ export class ListingsController {
   @Patch(":id")
   update(@Param("id") id: string, @Body() dto: UpdateListingDto, @CurrentUser() user: any): Promise<{ id: string; name: string; unit: string }> {
     return this.listingsService.update(id, dto, user);
+  }
+
+  @Patch(":id/aggregation-settings")
+  updateAggregationSettings(
+    @Param("id") id: string,
+    @Body() dto: UpdateAggregationSettingsDto,
+    @CurrentUser() user: any
+  ) {
+    return this.listingsService.updateAggregationSettings(id, dto, user);
   }
 }

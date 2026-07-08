@@ -28,8 +28,12 @@ export async function GET(request: Request) {
               select: { minQty: true, maxQty: true, tierPrice: true },
               orderBy: { minQty: "asc" },
             },
+            aggregationEnabled: true,
+            aggregationPriceTiers: true,
+            aggregationWindowDays: true,
           },
         },
+
       },
       orderBy: { updatedAt: "desc" },
     });
@@ -52,7 +56,11 @@ export async function GET(request: Request) {
         unitPrice: resolveUnitPrice(item.product, item.quantity),
         lineTotal:
           resolveUnitPrice(item.product, item.quantity) * item.quantity,
+        aggregationEnabled: item.product.aggregationEnabled,
+        aggregationPriceTiers: item.product.aggregationPriceTiers,
+        aggregationWindowDays: item.product.aggregationWindowDays,
       })),
+
       summary: {
         itemCount: items.length,
         subtotal,

@@ -20,7 +20,13 @@ type OrderDetail = {
   totalLabel: string;
   deliveryDate: string;
   quoteAccepted?: boolean;
+  isAggregated?: boolean;
+  aggregationPoolId?: string | null;
+  poolLocked?: boolean;
+  priceBeforeAggregation?: number | null;
+  priceAfterAggregation?: number | null;
   purchaseOrder?: { id: string; poNumber: string; status: string; version: number } | null;
+
   items: Array<{
     id: string;
     productId: string;
@@ -62,7 +68,13 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         </div>
         <div className="flex items-center gap-3">
           <OrderStatusBadge status={order.status} />
+          {order.isAggregated ? (
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              Group Order
+            </span>
+          ) : null}
           {order.paymentLinkAvailable ? (
+
             <Link href={order.paymentLink} className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
               Open payment link
             </Link>
@@ -90,7 +102,24 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         </div>
       ) : null}
 
+      {order.isAggregated ? (
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <p className="font-semibold">This is a Group &amp; Save order</p>
+          <p className="mt-1 text-emerald-700">
+            {order.poolLocked
+              ? `Pool locked${order.priceAfterAggregation ? ` at INR ${order.priceAfterAggregation.toLocaleString("en-IN")}/unit` : ""}. This order will now proceed through the standard fulfilment stages below.`
+              : "This order is still pooling with other builders to unlock a better price. It will convert once the pool locks."}
+          </p>
+          {order.priceBeforeAggregation && order.priceAfterAggregation && order.priceBeforeAggregation > order.priceAfterAggregation ? (
+            <p className="mt-1 text-xs font-semibold text-emerald-800">
+              You saved INR {(order.priceBeforeAggregation - order.priceAfterAggregation).toLocaleString("en-IN")}/unit
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* Digital Purchase Order — additive layer on top of existing enquiry/order tracking */}
+
       {order.quoteAccepted ? (
         <div className="panel space-y-3 p-5">
           <h2 className="text-lg font-semibold text-slate-800">Purchase Order</h2>
@@ -143,7 +172,8 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           <div className="panel p-5">
             <h2 className="text-lg font-semibold text-slate-800">Status timeline</h2>
             <div className="mt-4">
-              <OrderTimeline status={order.status} />
+              <OrderTimeline status={order.status} isAggregated={order.isAggregated} poolLocked={order.poolLocked} />
+
             </div>
           </div>
 

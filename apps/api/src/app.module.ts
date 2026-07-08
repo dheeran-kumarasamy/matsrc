@@ -24,6 +24,10 @@ import { AuditModule } from "./admin/audit/audit.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { PublicInsightsModule } from "./public-insights/public-insights.module";
 import { AggregationModule } from "./aggregation/aggregation.module";
+import { BuilderAggregationModule } from "./builder/aggregation/aggregation.module";
+import { SupplierAggregationModule } from "./supplier/aggregation/aggregation.module";
+import { AdminAggregationModule } from "./admin/aggregation/aggregation.module";
+
 
 @Module({
   imports: [
@@ -45,7 +49,11 @@ import { AggregationModule } from "./aggregation/aggregation.module";
     NotificationsModule,
     PublicInsightsModule,
     AggregationModule,
+    BuilderAggregationModule,
+    SupplierAggregationModule,
+    AdminAggregationModule,
     AdminModule,
+
     AdminDashboardModule,
     VendorsModule,
     KycModule,

@@ -24,7 +24,10 @@ export async function GET(request: Request) {
         paymentStatus: true,
         totalAmount: true,
         createdAt: true,
+        isAggregated: true,
+        aggregationPoolId: true,
         items: {
+
           select: {
             id: true,
             product: {
@@ -47,7 +50,10 @@ export async function GET(request: Request) {
         total: Number(order.totalAmount),
         totalLabel: formatCurrency(order.totalAmount),
         createdAt: order.createdAt,
+        isAggregated: order.isAggregated,
+        aggregationPoolId: order.aggregationPoolId,
         supplierName: order.items[0]?.product.supplier.companyName ?? "Supplier",
+
         paymentLinkAvailable:
           order.status === OrderStatus.PROCESSING &&
           order.paymentStatus === PaymentStatus.PENDING,

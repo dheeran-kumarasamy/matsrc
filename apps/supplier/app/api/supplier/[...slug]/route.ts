@@ -3,7 +3,9 @@ import { auth } from "@/auth";
 import {
   createSupplierListing,
   createSupplierQuote,
+  getSupplierListingById,
   getSupplierListings,
+  getSupplierOrderDetail,
   getSupplierOrders,
   getSupplierRfqs,
   updateSupplierListing,
@@ -14,6 +16,7 @@ import {
   forceLockAggregationPool,
   updateListingAggregationSettings,
 } from "@/lib/supplier-data";
+
 
 import {
   acknowledgeSupplierPurchaseOrder,
@@ -63,8 +66,30 @@ export async function GET(req: NextRequest) {
         }
         return NextResponse.json(detail);
       }
+
+      // Used by the dashboard "View" overlay to fetch order details on demand.
+      const orderMatch = path.match(/^\/orders\/([^/]+)$/);
+      if (orderMatch) {
+        const detail = await getSupplierOrderDetail(orderMatch[1], email);
+        if (!detail) {
+          return NextResponse.json({ message: "Order not found" }, { status: 404 });
+        }
+        return NextResponse.json(detail);
+      }
+
+      // Used by the dashboard "View" overlay to fetch product/listing details on demand.
+      const listingMatch = path.match(/^\/listings\/([^/]+)$/);
+      if (listingMatch) {
+        const detail = await getSupplierListingById(listingMatch[1], email);
+        if (!detail) {
+          return NextResponse.json({ message: "Listing not found" }, { status: 404 });
+        }
+        return NextResponse.json(detail);
+      }
+
       return NextResponse.json({ message: "Not found" }, { status: 404 });
     }
+
   } catch (error: any) {
     console.error("API Error:", error);
     return NextResponse.json({ message: error.message || "Internal server error" }, { status: 500 });

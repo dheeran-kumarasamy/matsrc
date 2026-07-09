@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { getSupplierOrders } from "@/lib/supplier-data";
+import { OrderDetailButton } from "@/components/supplier/OrderDetailButton";
 
 export default async function SupplierOrdersPage() {
   const session = await auth();
@@ -32,7 +33,11 @@ export default async function SupplierOrdersPage() {
             {orders.map((order) => (
               <tr key={order.id} className="border-t border-slate-100">
                 <td className="px-4 py-3 font-semibold text-slate-800">
-                  #{order.id}
+                  <OrderDetailButton
+                    orderId={order.id}
+                    label={`#${order.id}`}
+                    className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
+                  />
                   {order.isAggregated ? (
                     <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                       Group Order

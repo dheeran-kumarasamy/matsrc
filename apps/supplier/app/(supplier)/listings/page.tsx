@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { getSupplierListings } from "@/lib/supplier-data";
+import { ListingDetailButton } from "@/components/supplier/ListingDetailButton";
 
 export default async function SupplierListingsPage() {
   const session = await auth();
@@ -37,7 +38,13 @@ export default async function SupplierListingsPage() {
           <tbody>
             {listings.map((row: { id: string; name: string; category: string; grade: string; price: string; stock: string; active: boolean }) => (
               <tr key={row.id} className="border-t border-slate-100">
-                <td className="px-4 py-3 font-semibold text-slate-800">{row.name}</td>
+                <td className="px-4 py-3 font-semibold text-slate-800">
+                  <ListingDetailButton
+                    listingId={row.id}
+                    label={row.name}
+                    className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
+                  />
+                </td>
                 <td className="px-4 py-3 text-slate-700">{row.category}</td>
                 <td className="px-4 py-3 text-slate-700">{row.grade}</td>
                 <td className="px-4 py-3 text-slate-700">{row.price}</td>

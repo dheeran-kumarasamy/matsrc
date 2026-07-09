@@ -1,3 +1,5 @@
+import { OrderDetailButton } from "@/components/supplier/OrderDetailButton";
+
 type SupplierOrder = {
   id: string;
   material: string;
@@ -43,7 +45,14 @@ export function OrderQueueTable({ orders }: { orders: SupplierOrder[] }) {
           <tbody>
             {orders.map((order) => (
               <tr key={order.id} className="border-t border-slate-100">
-                <td className="px-7 py-5 text-slate-800">{formatOrderId(order.id)}</td>
+                <td className="px-7 py-5 text-slate-800">
+                  {/* Clicking the order number opens the details overlay (UF-04). */}
+                  <OrderDetailButton
+                    orderId={order.id}
+                    label={formatOrderId(order.id)}
+                    className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
+                  />
+                </td>
                 <td className="px-7 py-5 text-slate-800">{order.material}</td>
                 <td className="px-7 py-5 text-slate-800">{order.quantity}</td>
                 <td className="px-7 py-5 text-slate-800">{order.eta}</td>

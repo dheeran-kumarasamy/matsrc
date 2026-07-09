@@ -732,6 +732,15 @@ export type SupplierTrackingStep = {
   status: OrderStatus;
 };
 
+export type SupplierOrderPurchaseOrderSummary = {
+  id: string;
+  poNumber: string;
+  status: "DRAFT" | "ISSUED" | "ACKNOWLEDGED" | "FULFILLED";
+  version: number;
+  approvedAt: string | null;
+  exportUrl: string;
+};
+
 export type SupplierOrderDetail = {
   id: string;
   buyer: string;
@@ -740,7 +749,9 @@ export type SupplierOrderDetail = {
   material: string;
   status: OrderStatus;
   tracking: SupplierTrackingStep[];
+  purchaseOrder: SupplierOrderPurchaseOrderSummary | null;
 };
+
 
 export type SupplierRfqCard = {
   id: string;
@@ -772,6 +783,13 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
 
   if (!item) return null;
 
+  // Surface the PO number issued by the builder (if any) so it can be shown inside the
+  // order details overlay, alongside a link to download it as PDF.
+  const purchaseOrder = await prisma.purchaseOrder.findFirst({
+    where: { orderId, supplierId: supplierProfile.id },
+    orderBy: { createdAt: "desc" },
+  });
+
   return {
     id: item.orderId,
     buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
@@ -784,8 +802,19 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
       label: entry.note ?? humanizeToken(entry.status),
       status: entry.status,
     })),
+    purchaseOrder: purchaseOrder
+      ? {
+          id: purchaseOrder.id,
+          poNumber: purchaseOrder.poNumber,
+          status: purchaseOrder.status,
+          version: purchaseOrder.version,
+          approvedAt: purchaseOrder.approvedAt ? purchaseOrder.approvedAt.toISOString() : null,
+          exportUrl: `/api/builder/purchase-orders/${purchaseOrder.id}/export`,
+        }
+      : null,
   };
 }
+
 
 export async function updateSupplierOrderStatus(orderId: string, status: OrderStatus) {
   const existing = await prisma.order.findUnique({

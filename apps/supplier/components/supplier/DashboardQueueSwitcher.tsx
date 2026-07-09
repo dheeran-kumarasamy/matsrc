@@ -5,7 +5,10 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { KpiCard } from "@/components/supplier/KpiCard";
 import { OrderQueueTable } from "@/components/supplier/OrderQueueTable";
+import { ListingDetailButton } from "@/components/supplier/ListingDetailButton";
+import { OrderDetailButton } from "@/components/supplier/OrderDetailButton";
 import type { SupplierListingRow } from "@/lib/supplier-data";
+
 
 type DashboardKpi = {
   label: string;
@@ -59,7 +62,13 @@ function ListingQueueTable({ listings }: { listings: SupplierListingRow[] }) {
             <tbody>
               {listings.map((item) => (
                 <tr key={item.id} className="border-t border-slate-100">
-                  <td className="px-7 py-5 text-slate-800">{item.name}</td>
+                  <td className="px-7 py-5 text-slate-800">
+                    <ListingDetailButton
+                      listingId={item.id}
+                      label={item.name}
+                      className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
+                    />
+                  </td>
                   <td className="px-7 py-5 text-slate-800">{item.category}</td>
                   <td className="px-7 py-5 text-slate-800">{item.price}</td>
                   <td className="px-7 py-5 text-slate-800">{item.stock}</td>
@@ -114,7 +123,13 @@ function PendingEnquiryQueueTable({ enquiries }: { enquiries: PendingEnquiry[] }
             <tbody>
               {enquiries.map((enquiry) => (
                 <tr key={enquiry.id} className="border-t border-slate-100">
-                  <td className="px-7 py-5 text-slate-800">ENQ-{enquiry.id.slice(-5).toUpperCase()}</td>
+                  <td className="px-7 py-5 text-slate-800">
+                    <OrderDetailButton
+                      orderId={enquiry.id}
+                      label={`ENQ-${enquiry.id.slice(-5).toUpperCase()}`}
+                      className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
+                    />
+                  </td>
                   <td className="px-7 py-5 text-slate-800">{enquiry.material}</td>
                   <td className="px-7 py-5 text-slate-800">{enquiry.quantity}</td>
                   <td className="px-7 py-5 text-slate-800">{enquiry.eta}</td>

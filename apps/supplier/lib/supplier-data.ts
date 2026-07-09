@@ -1064,25 +1064,69 @@ async function callAggregationBackend<T>(path: string, email: string, options: {
 
 export type AggregationPriceTierInput = { minQty: string; unitPrice: string };
 
+/**
+ * Updates a listing's Order Aggregation ("Group & Save") configuration directly via Prisma.
+ *
+ * Note: unlike the other aggregation endpoints below (pools listing / force-lock), this does
+ * NOT proxy to the standalone NestJS API via `callAggregationBackend` — the supplier Next.js
+ * app already has direct database access (see `updateSupplierListing` above), and the NestJS
+ * backend is not always deployed/reachable in every environment (its URL defaults to
+ * `http://localhost:4000/api` via `BACKEND_API_URL`), which caused this endpoint to fail with
+ * a 500 in production when that backend wasn't configured/available.
+ */
 export async function updateListingAggregationSettings(
   listingId: string,
   input: { aggregationEnabled: boolean; priceTiers?: AggregationPriceTierInput[]; defaultWindowDays?: string },
   email: string
 ) {
+  const { supplierProfile } = await ensureSupplierContext(email);
+
+  const listing = await prisma.product.findFirst({
+    where: { id: listingId, supplierId: supplierProfile.id },
+  });
+
+  if (!listing) {
+    throw new Error("Listing not found");
+  }
+
   const priceTiers = (input.priceTiers ?? [])
     .filter((tier) => tier.minQty !== "" && tier.unitPrice !== "")
-    .map((tier) => ({ minQty: Number(tier.minQty), unitPrice: Number(tier.unitPrice) }))
+    .map((tier) => {
+      const minQty = parsePositiveInt(tier.minQty, "Group pricing tier minimum quantity");
+      const unitPrice = Number(tier.unitPrice);
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        throw new Error("Group pricing tier unit price must be a non-negative number");
+      }
+      return { minQty, unitPrice };
+    })
     .sort((a, b) => a.minQty - b.minQty);
 
-  return callAggregationBackend(`/supplier/listings/${listingId}/aggregation-settings`, email, {
-    method: "PATCH",
-    body: {
+  if (input.aggregationEnabled && priceTiers.length === 0) {
+    throw new Error("Add at least one group-pricing tier or disable Group Pricing.");
+  }
+
+  const defaultWindowDays = input.defaultWindowDays
+    ? parsePositiveInt(input.defaultWindowDays, "Aggregation window (days)")
+    : undefined;
+
+  const product = await prisma.product.update({
+    where: { id: listingId },
+    data: {
       aggregationEnabled: input.aggregationEnabled,
-      priceTiers: input.aggregationEnabled ? priceTiers : undefined,
-      defaultWindowDays: input.defaultWindowDays ? Number(input.defaultWindowDays) : undefined,
+      aggregationPriceTiers: input.aggregationEnabled ? (priceTiers as any) : undefined,
+      aggregationWindowDays: defaultWindowDays,
     },
   });
+
+  return {
+    id: product.id,
+    aggregationEnabled: product.aggregationEnabled,
+    aggregationPriceTiers: product.aggregationPriceTiers,
+    aggregationWindowDays: product.aggregationWindowDays,
+    aggregationZoneRules: product.aggregationZoneRules,
+  };
 }
+
 
 export type SupplierAggregationPool = {
   id: string;

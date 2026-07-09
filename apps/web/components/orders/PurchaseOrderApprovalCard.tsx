@@ -226,12 +226,12 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
 
       <div className="panel flex flex-wrap items-center justify-between gap-4 p-4">
         <a
-          href={po.exportUrl}
+          href={`${po.exportUrl}?format=pdf`}
           target="_blank"
           rel="noreferrer"
           className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
         >
-          Download PO (PDF/JSON)
+          Download PO (PDF)
         </a>
 
         {isDraft ? (

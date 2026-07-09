@@ -130,14 +130,6 @@ export function OrderDetailButton({
                   >
                     Download PDF
                   </a>
-                  <a
-                    href={detail.purchaseOrder.exportUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                  >
-                    Download JSON
-                  </a>
                 </div>
               </div>
             ) : (

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { builderApiGet } from "@/lib/api";
+import GeneratePoButton from "@/components/orders/GeneratePoButton";
 
 type OrderPayment = {
   id: string;
@@ -10,7 +11,10 @@ type OrderPayment = {
   supplierName: string;
   total: number;
   totalLabel: string;
+  quoteAccepted: boolean;
+  purchaseOrder: { id: string; poNumber: string; status: string; version: number } | null;
 };
+
 
 export default async function OrderPaymentPage({ params }: { params: { id: string } }) {
   let order: OrderPayment | null = null;
@@ -60,6 +64,30 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
           </Link>
         </div>
       </div>
+
+      {order.quoteAccepted ? (
+        <div className="panel space-y-3 p-6">
+          <h2 className="text-lg font-semibold text-slate-800">Purchase Order</h2>
+          {order.purchaseOrder ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-600">
+                {order.purchaseOrder.poNumber}
+                {order.purchaseOrder.version > 1 ? ` (v${order.purchaseOrder.version})` : ""} ·{" "}
+                <span className="font-semibold">{order.purchaseOrder.status}</span>
+              </p>
+              <Link
+                href={`/purchase-orders/${order.purchaseOrder.id}`}
+                className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+              >
+                View Purchase Order
+              </Link>
+            </div>
+          ) : (
+            <GeneratePoButton orderId={order.id} />
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
+

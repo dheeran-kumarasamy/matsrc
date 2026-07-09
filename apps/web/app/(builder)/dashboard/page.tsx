@@ -16,20 +16,17 @@ export default async function DashboardPage() {
   let cartCount = 0;
   let orders: Order[] = [];
   let watchlistCount = 0;
-  let availableCredit = 0;
 
   try {
-    const [cart, ordersData, watchlist, credit] = await Promise.all([
+    const [cart, ordersData, watchlist] = await Promise.all([
       builderApiGet<{ items: Array<{ id: string }> }>("/cart"),
       builderApiGet<Order[]>("/orders"),
       builderApiGet<Array<{ id: string }>>("/watchlist"),
-      builderApiGet<{ availableLimit: number }>("/credit"),
     ]);
 
     cartCount = cart.items.length;
     orders = ordersData;
     watchlistCount = watchlist.length;
-    availableCredit = credit.availableLimit;
   } catch {
     // show zeros on error
   }
@@ -39,16 +36,10 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-4">
       {/* KPI cards */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <BuilderKpiCard label="Active Orders" value={String(orders.length)} hint="Orders in progress" href="/orders" />
         <BuilderKpiCard label="Cart Items" value={String(cartCount)} hint="Items ready to checkout" href="/cart" />
         <BuilderKpiCard label="Price Alerts" value={String(watchlistCount)} hint="Watchlist materials" href="/watchlist" />
-        <BuilderKpiCard
-          label="Credit Available"
-          value={`₹${availableCredit.toLocaleString("en-IN")}`}
-          hint="BNPL / credit line"
-          href="/credit"
-        />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[2fr_1fr]">
@@ -119,12 +110,6 @@ export default async function DashboardPage() {
               className="block rounded-lg border border-slate-300 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
             >
               View Cart
-            </Link>
-            <Link
-              href="/credit"
-              className="block rounded-lg border border-slate-300 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-            >
-              Apply for Credit
             </Link>
             <Link
               href="/disputes"

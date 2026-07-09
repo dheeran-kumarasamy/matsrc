@@ -11,7 +11,6 @@ const links = [
   { href: "/purchase-orders", label: "Purchase Orders" },
   { href: "/cart", label: "Cart" },
   { href: "/watchlist", label: "Watchlist" },
-  { href: "/credit", label: "Credit / BNPL" },
   { href: "/disputes", label: "Disputes" },
 ];
 

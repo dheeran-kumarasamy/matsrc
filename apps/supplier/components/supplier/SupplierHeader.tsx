@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { signOut } from "next-auth/react";
 
 type SupplierHeaderProps = {
   kycStatus: "PENDING" | "APPROVED" | "REJECTED";
@@ -65,6 +66,13 @@ export function SupplierHeader({ kycStatus }: SupplierHeaderProps) {
               <Link href="/onboarding" className="block px-4 py-3 text-lg text-slate-800 hover:bg-slate-50">
                 Onboarding
               </Link>
+              <button
+                type="button"
+                onClick={() => signOut({ callbackUrl: "/sign-in" })}
+                className="block w-full border-t border-slate-200 px-4 py-3 text-left text-lg text-red-600 hover:bg-slate-50"
+              >
+                Logout
+              </button>
             </div>
           ) : null}
         </div>

@@ -8,6 +8,8 @@ import {
   getOrCreateBuilder,
   getUserCtx,
 } from "@/lib/builder-db";
+import { notifySupplierOrderSubmitted } from "@/lib/notify";
+
 
 export const dynamic = "force-dynamic";
 
@@ -167,7 +169,15 @@ export async function POST(request: Request) {
     // Clear cart
     await prisma.cartItem.deleteMany({ where: { userId: user.id } });
 
+    // Notify suppliers (best-effort, non-blocking) — WhatsApp notification for each new enquiry.
+    for (const order of createdOrders) {
+      void notifySupplierOrderSubmitted(order.id).catch((error) => {
+        console.error(`Failed to send supplier notification for order ${order.id}:`, error);
+      });
+    }
+
     return NextResponse.json({ orders: createdOrders }, { status: 201 });
+
   } catch (error) {
     console.error("Orders POST error:", error);
     return NextResponse.json({ error: "Failed to create order" }, { status: 500 });

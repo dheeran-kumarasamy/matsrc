@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import EnquiryPanel from "@/components/products/EnquiryPanel";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
+import { getDefaultCategoryImage } from "@/lib/category-images";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ type SupplierListing = {
   maxServiceableQty: string;
   active: boolean;
   pricingTiers: PricingTier[];
+  images?: string[];
 };
 
 async function getSupplierProduct(slug: string): Promise<SupplierListing | null> {
@@ -53,6 +55,7 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
 
   const maxServiceableQty = parseNumericLabel(product.maxServiceableQty);
   const basePrice = parseNumericLabel(product.price);
+  const imageUrl = product.images && product.images.length > 0 ? product.images[0] : getDefaultCategoryImage(product.category);
 
   return (
     <div className="space-y-6">
@@ -67,6 +70,10 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
       <div className="grid gap-6 lg:grid-cols-[1.5fr_0.9fr]">
         <section className="space-y-5">
           <div className="panel overflow-hidden p-0">
+            <div className="h-56 w-full overflow-hidden bg-slate-100">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
+            </div>
             <div className="bg-gradient-to-br from-slate-50 to-white p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">

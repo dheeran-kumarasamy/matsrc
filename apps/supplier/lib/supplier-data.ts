@@ -1,5 +1,6 @@
 import { prisma } from "@matsrc/db";
 import { parsePhoneNumber } from "libphonenumber-js";
+import { getDefaultCategoryImage } from "./category-images";
 
 type OrderStatus = "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
 
@@ -42,6 +43,7 @@ type ListingInput = {
   brand?: string;
   description?: string;
   pricingTiers?: PricingTierInput[];
+  images?: string[];
 };
 
 function slugify(value: string) {
@@ -384,6 +386,10 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
     stock: `${product.stock} ${product.unit}`,
     maxServiceableQty: `${product.maxServiceableQty ?? product.stock} ${product.unit}`,
     active: product.isActive,
+    images:
+      Array.isArray(product.images) && product.images.length > 0
+        ? product.images
+        : [getDefaultCategoryImage(product.category?.name)],
   }));
 }
 
@@ -428,6 +434,10 @@ export async function getPublicSupplierListings() {
       stock: `${product.stock} ${product.unit}`,
       maxServiceableQty: `${fallbackMaxQty} ${product.unit}`,
       active: product.isActive,
+      images:
+        Array.isArray(product.images) && product.images.length > 0
+          ? product.images
+          : [getDefaultCategoryImage(product.category?.name)],
       pricingTiers: pricingTiers.map((tier: any) => ({
         minQty: String(tier.minQty),
         maxQty: String(tier.maxQty),
@@ -500,6 +510,7 @@ export async function getSupplierListingById(id: string, email: string) {
     aggregationEnabled: Boolean(product.aggregationEnabled),
     aggregationPriceTiers: Array.isArray(product.aggregationPriceTiers) ? product.aggregationPriceTiers : [],
     aggregationWindowDays: product.aggregationWindowDays ?? 7,
+    images: Array.isArray(product.images) ? product.images : [],
   };
 }
 
@@ -594,7 +605,7 @@ export async function createSupplierListing(input: ListingInput, email: string) 
           basePrice,
           stock: maxServiceableQty,
           maxServiceableQty,
-          images: [],
+          images: Array.isArray(input.images) ? input.images.filter((url) => url.trim().length > 0) : [],
           isActive: true,
         },
       });
@@ -649,6 +660,9 @@ export async function updateSupplierListing(id: string, input: ListingInput, ema
           basePrice,
           stock: maxServiceableQty,
           maxServiceableQty,
+          ...(Array.isArray(input.images)
+            ? { images: input.images.filter((url) => url.trim().length > 0) }
+            : {}),
         },
       });
 

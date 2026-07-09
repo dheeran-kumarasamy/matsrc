@@ -31,6 +31,7 @@ type ListingFormProps = {
     aggregationEnabled?: boolean;
     aggregationPriceTiers?: { minQty: number; unitPrice: number }[];
     aggregationWindowDays?: number;
+    images?: string[];
   };
 };
 
@@ -53,6 +54,10 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
   );
 
   const [form, setForm] = useState(seed);
+  const [images, setImages] = useState<string[]>(
+    initial?.images && initial.images.length > 0 ? initial.images : [""]
+  );
+
   const [tiers, setTiers] = useState<PricingTierRow[]>(
     initial?.pricingTiers && initial.pricingTiers.length > 0
       ? initial.pricingTiers
@@ -118,6 +123,22 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
     setSaved(false);
     setForm((prev) => ({ ...prev, [field]: value }));
   }
+
+  function updateImage(index: number, value: string) {
+    setSaved(false);
+    setImages((prev) => prev.map((url, urlIndex) => (urlIndex === index ? value : url)));
+  }
+
+  function addImage() {
+    setSaved(false);
+    setImages((prev) => [...prev, ""]);
+  }
+
+  function removeImage(index: number) {
+    setSaved(false);
+    setImages((prev) => prev.filter((_, urlIndex) => urlIndex !== index));
+  }
+
 
   function updateTier(index: number, field: keyof PricingTierRow, value: string) {
     setSaved(false);
@@ -232,6 +253,7 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
           maxQty: tier.maxQty,
           price: tier.price,
         })),
+        images: images.map((url) => url.trim()).filter((url) => url.length > 0),
       };
 
       let savedListingId = listingId;
@@ -365,6 +387,58 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
             placeholder="Quality notes, dispatch readiness, and certification details"
           />
         </label>
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div>
+          <h4 className="text-lg font-bold text-slate-900">Product Photos</h4>
+          <p className="text-sm text-slate-600">
+            Add image URLs to showcase your product. If no photo is added, a default image for the selected category
+            will be shown to builders across the marketplace.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {images.map((url, index) => (
+            <div key={index} className="flex items-start gap-3">
+              <div className="flex-1 space-y-1">
+                <input
+                  value={url}
+                  onChange={(e) => updateImage(index, e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  placeholder="https://example.com/product-photo.jpg"
+                />
+              </div>
+              {url.trim() ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={url}
+                  alt="Preview"
+                  className="h-10 w-10 rounded-lg border border-slate-200 object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                  }}
+                />
+              ) : null}
+              <button
+                type="button"
+                onClick={() => removeImage(index)}
+                disabled={images.length === 1}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={addImage}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+        >
+          + Add Another Photo
+        </button>
       </div>
 
       <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">

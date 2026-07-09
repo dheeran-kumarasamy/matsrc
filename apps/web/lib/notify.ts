@@ -1,0 +1,95 @@
+import { prisma } from "@/lib/builder-db";
+
+// Lightweight, best-effort WhatsApp notification writer used by the Next.js (apps/web)
+// builder API routes. Mirrors the shape produced by apps/api's NotificationService so
+// rows show up consistently in the Notification table regardless of which app created
+// the order. Uses the same MockWhatsAppProvider-style "instant success" simulation
+// (no real WhatsApp API call yet) — failures are swallowed so they never block the
+// calling request.
+export async function notifySupplierOrderSubmitted(orderId: string): Promise<void> {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        user: true,
+        items: {
+          include: {
+            product: true,
+            supplier: { include: { user: true } },
+          },
+        },
+      },
+    });
+
+    if (!order) return;
+
+    const supplierUser = order.items[0]?.supplier.user;
+    if (!supplierUser) return;
+
+    const idempotencyKey = `supplier-enquiry:${order.id}:${supplierUser.id}`;
+    const existing = await prisma.notification.findFirst({
+      where: { idempotencyKey },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    const baseUrl =
+      process.env.SUPPLIER_PORTAL_URL ||
+      process.env.NEXT_PUBLIC_SUPPLIER_APP_URL ||
+      "https://matsrc-supplier.vercel.app";
+    const deepLink = `${baseUrl.replace(/\/$/, "")}/rfqs?respond=${order.id}`;
+
+    const itemNames = order.items
+      .slice(0, 3)
+      .map((item) => `${item.product.name} (${item.quantity}${item.product.unit ? ` ${item.product.unit}` : ""})`);
+    if (order.items.length > 3) {
+      itemNames.push(`+${order.items.length - 3} more`);
+    }
+    const lineItemSummary = itemNames.length ? itemNames.join(", ") : "No items";
+
+    const title = "New order received";
+    const body = `Enquiry ${order.id.slice(0, 8)} from ${order.user.name ?? order.user.phone ?? "a builder"}. Items: ${lineItemSummary}. Quote here: ${deepLink}`;
+
+    const notification = await prisma.notification.create({
+      data: {
+        userId: supplierUser.id,
+        audience: "supplier",
+        channel: "WHATSAPP",
+        title,
+        body,
+        status: "queued",
+        idempotencyKey,
+        templateType: "ENQUIRY_SUBMITTED_TO_SUPPLIER",
+        variables: JSON.stringify({
+          orderId: order.id,
+          orderNumber: order.id.slice(0, 8),
+          deepLink,
+          builderName: order.user.name ?? order.user.phone,
+          itemCount: order.items.length,
+          lineItemSummary,
+          totalAmount: Number(order.totalAmount),
+        }),
+        retryCount: 0,
+      },
+    });
+
+    // Simulate provider send (mock — no real WhatsApp API integration yet).
+    const externalId = `mock-wa-${notification.id}`;
+    await prisma.notification.update({
+      where: { id: notification.id },
+      data: { status: "sent", externalId, deliveredAt: new Date() },
+    });
+
+    await prisma.notificationDeliveryLog.create({
+      data: {
+        notificationId: notification.id,
+        previousStatus: "queued",
+        newStatus: "sent",
+        provider: "mock-whatsapp",
+        metadata: JSON.stringify({ recipient: supplierUser.whatsappNumber || supplierUser.phone }),
+      },
+    });
+  } catch (error) {
+    console.error("notifySupplierOrderSubmitted error:", error);
+  }
+}

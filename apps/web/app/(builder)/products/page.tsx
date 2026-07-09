@@ -37,6 +37,7 @@ type SupplierListing = {
   price: string;
   stock: string;
   active: boolean;
+  images?: string[];
 };
 
 async function getSupplierListings(): Promise<SupplierListing[]> {
@@ -119,6 +120,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
     supplier: "Verified Supplier",
     rating: 4.6,
     change: 0,
+    image: listing.images && listing.images.length > 0 ? listing.images[0] : undefined,
+    category: listing.category,
   }));
 
   return (

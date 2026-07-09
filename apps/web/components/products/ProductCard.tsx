@@ -1,4 +1,18 @@
-interface Props { skeleton?: boolean; product?: { name: string; price: number; supplier: string; rating: number; change: number; slug: string } }
+import { getDefaultCategoryImage } from "@/lib/category-images";
+
+interface Props {
+  skeleton?: boolean;
+  product?: {
+    name: string;
+    price: number;
+    supplier: string;
+    rating: number;
+    change: number;
+    slug: string;
+    image?: string;
+    category?: string;
+  };
+}
 
 export default function ProductCard({ skeleton, product }: Props) {
   if (skeleton) {
@@ -14,9 +28,14 @@ export default function ProductCard({ skeleton, product }: Props) {
 
   if (!product) return null;
 
+  const imageUrl = product.image || getDefaultCategoryImage(product.category);
+
   return (
     <a href={`/products/${product.slug}`} className="panel p-4 hover:shadow-md hover:border-blue-700 transition-all block">
-      <div className="h-32 bg-slate-50 rounded-lg mb-3 flex items-center justify-center text-slate-300 text-sm">Image</div>
+      <div className="h-32 bg-slate-50 rounded-lg mb-3 overflow-hidden">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
+      </div>
       <h3 className="font-semibold text-sm text-slate-800 line-clamp-2">{product.name}</h3>
       <p className="text-xs text-slate-400 mt-0.5">{product.supplier}</p>
       <div className="flex items-end justify-between mt-2">

@@ -6,9 +6,11 @@ export const MENU_CONFIG = [
   { key: "vendors", href: "/vendors", label: "Vendor Approval" },
   { key: "kyc", href: "/kyc", label: "KYC Queue" },
   { key: "disputes", href: "/disputes", label: "Disputes" },
+  { key: "aggregation", href: "/aggregation", label: "Aggregation Pools" },
   { key: "audit", href: "/audit", label: "Audit Logs" },
   { key: "access", href: "/access", label: "Access Control" },
 ] as const;
+
 
 export type AdminMenu = (typeof MENU_CONFIG)[number]["key"];
 

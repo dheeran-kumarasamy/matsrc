@@ -10,6 +10,11 @@ type PricingTierRow = {
   price: string;
 };
 
+type AggregationTierRow = {
+  minQty: string;
+  unitPrice: string;
+};
+
 type ListingFormProps = {
   mode: "create" | "edit";
   listingId?: string;
@@ -23,8 +28,12 @@ type ListingFormProps = {
     brand: string;
     description: string;
     pricingTiers?: PricingTierRow[];
+    aggregationEnabled?: boolean;
+    aggregationPriceTiers?: { minQty: number; unitPrice: number }[];
+    aggregationWindowDays?: number;
   };
 };
+
 
 export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
   const router = useRouter();
@@ -49,9 +58,61 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
       ? initial.pricingTiers
       : [{ minQty: "1", maxQty: "", price: seed.price }]
   );
+  const [aggregationEnabled, setAggregationEnabled] = useState<boolean>(Boolean(initial?.aggregationEnabled));
+  const [aggregationTiers, setAggregationTiers] = useState<AggregationTierRow[]>(
+    initial?.aggregationPriceTiers && initial.aggregationPriceTiers.length > 0
+      ? initial.aggregationPriceTiers.map((tier) => ({ minQty: String(tier.minQty), unitPrice: String(tier.unitPrice) }))
+      : [{ minQty: "", unitPrice: "" }]
+  );
+  const [aggregationWindowDays, setAggregationWindowDays] = useState<string>(
+    initial?.aggregationWindowDays ? String(initial.aggregationWindowDays) : "7"
+  );
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  function updateAggregationTier(index: number, field: keyof AggregationTierRow, value: string) {
+    setSaved(false);
+    setAggregationTiers((prev) => prev.map((tier, tierIndex) => (tierIndex === index ? { ...tier, [field]: value } : tier)));
+  }
+
+  function addAggregationTier() {
+    setSaved(false);
+    setAggregationTiers((prev) => [...prev, { minQty: "", unitPrice: "" }]);
+  }
+
+  function removeAggregationTier(index: number) {
+    setSaved(false);
+    setAggregationTiers((prev) => prev.filter((_, tierIndex) => tierIndex !== index));
+  }
+
+  function validateAggregationTiers(): string | null {
+    if (!aggregationEnabled) return null;
+
+    const filled = aggregationTiers.filter((tier) => tier.minQty !== "" || tier.unitPrice !== "");
+    if (filled.length === 0) {
+      return "Add at least one group-pricing tier or disable Group Pricing.";
+    }
+
+    for (let index = 0; index < filled.length; index += 1) {
+      const minQty = Number(filled[index].minQty);
+      const unitPrice = Number(filled[index].unitPrice);
+      if (!Number.isInteger(minQty) || minQty < 1) {
+        return `Group pricing tier ${index + 1}: minimum quantity must be a positive whole number.`;
+      }
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+        return `Group pricing tier ${index + 1}: unit price must be a positive number.`;
+      }
+    }
+
+    const days = Number(aggregationWindowDays);
+    if (!Number.isInteger(days) || days < 1) {
+      return "Aggregation window (days) must be a positive whole number.";
+    }
+
+    return null;
+  }
+
 
   function updateField(field: keyof typeof form, value: string) {
     setSaved(false);
@@ -156,6 +217,13 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
       return;
     }
 
+    const aggregationError = validateAggregationTiers();
+    if (aggregationError) {
+      setError(aggregationError);
+      setSaving(false);
+      return;
+    }
+
     try {
       const payload = {
         ...form,
@@ -166,10 +234,21 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
         })),
       };
 
+      let savedListingId = listingId;
+
       if (mode === "create") {
-        await axios.post("/api/supplier/listings", payload);
+        const created = await axios.post("/api/supplier/listings", payload);
+        savedListingId = created.data?.id;
       } else {
         await axios.patch(`/api/supplier/listings/${listingId}`, payload);
+      }
+
+      if (savedListingId) {
+        await axios.patch(`/api/supplier/listings/${savedListingId}/aggregation-settings`, {
+          aggregationEnabled,
+          priceTiers: aggregationTiers.filter((tier) => tier.minQty !== "" && tier.unitPrice !== ""),
+          defaultWindowDays: aggregationWindowDays,
+        });
       }
 
       setSaved(true);
@@ -181,6 +260,7 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
       setSaving(false);
     }
   }
+
 
   const maxServiceableQty = Number(form.maxServiceableQty);
 
@@ -343,7 +423,96 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
         </p>
       </div>
 
+      <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-lg font-bold text-slate-900">Enable Group Pricing (Aggregation)</h4>
+            <p className="text-sm text-slate-600">
+              Let builders in the same zone pool orders together and unlock lower prices as demand grows.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={aggregationEnabled}
+              onChange={(e) => {
+                setSaved(false);
+                setAggregationEnabled(e.target.checked);
+              }}
+              className="h-5 w-5 rounded border-slate-300"
+            />
+            {aggregationEnabled ? "Enabled" : "Disabled"}
+          </label>
+        </div>
+
+        {aggregationEnabled ? (
+          <>
+            <label className="block max-w-xs space-y-1 text-sm text-slate-700">
+              <span>Aggregation Window (days)</span>
+              <input
+                value={aggregationWindowDays}
+                onChange={(e) => {
+                  setSaved(false);
+                  setAggregationWindowDays(e.target.value);
+                }}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                placeholder="7"
+              />
+              <p className="text-xs text-slate-500">Pools lock automatically after this many days if the top tier isn't reached.</p>
+            </label>
+
+            <div className="space-y-3">
+              {aggregationTiers.map((tier, index) => (
+                <div key={index} className="grid gap-3 rounded-lg border border-emerald-200 bg-white p-3 md:grid-cols-[1fr_1fr_auto]">
+                  <label className="space-y-1 text-sm text-slate-700">
+                    <span>Minimum Pool Quantity</span>
+                    <input
+                      value={tier.minQty}
+                      onChange={(e) => updateAggregationTier(index, "minQty", e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      placeholder="50"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm text-slate-700">
+                    <span>Unit Price at this Tier (INR)</span>
+                    <input
+                      value={tier.unitPrice}
+                      onChange={(e) => updateAggregationTier(index, "unitPrice", e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      placeholder={form.price || "0"}
+                    />
+                  </label>
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={() => removeAggregationTier(index)}
+                      disabled={aggregationTiers.length === 1}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={addAggregationTier}
+              className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+            >
+              + Add Tier
+            </button>
+
+            <p className="text-xs text-slate-500">
+              Example: 50 units at ₹590, 100 units at ₹560, 200 units at ₹520 — price drops as the pool grows.
+            </p>
+          </>
+        ) : null}
+      </div>
+
       <div className="flex items-center gap-3">
+
         <button type="submit" disabled={saving} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-60">
           {mode === "create" ? "Publish Listing" : "Save Changes"}
         </button>

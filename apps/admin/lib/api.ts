@@ -62,3 +62,19 @@ export async function adminApiPatch<T>(path: string, body: unknown): Promise<T> 
 
   return response.json() as Promise<T>;
 }
+
+export async function adminApiPost<T>(path: string, body?: unknown): Promise<T> {
+  const headers = await getAdminHeaders({ "Content-Type": "application/json" });
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Admin API post failed: ${response.status}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+

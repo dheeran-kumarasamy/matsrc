@@ -497,8 +497,12 @@ export async function getSupplierListingById(id: string, email: string) {
       maxQty: String(tier.maxQty),
       price: tier.tierPrice.toString(),
     })),
+    aggregationEnabled: Boolean(product.aggregationEnabled),
+    aggregationPriceTiers: Array.isArray(product.aggregationPriceTiers) ? product.aggregationPriceTiers : [],
+    aggregationWindowDays: product.aggregationWindowDays ?? 7,
   };
 }
+
 
 function parsePositiveInt(value: string, field: string) {
   const parsed = Number(value);
@@ -692,6 +696,8 @@ export async function getSupplierOrders(email: string): Promise<SupplierOrderRow
     material: item.product.name,
     qty: `${item.quantity} ${item.product.unit}`,
     status: item.order.status,
+    isAggregated: Boolean(item.order.isAggregated),
+    aggregationPoolId: item.order.aggregationPoolId ?? null,
   }));
 }
 
@@ -701,7 +707,10 @@ export type SupplierOrderRow = {
   material: string;
   qty: string;
   status: OrderStatus;
+  isAggregated?: boolean;
+  aggregationPoolId?: string | null;
 };
+
 
 export type SupplierTrackingStep = {
   id: string;
@@ -973,3 +982,89 @@ export async function submitOnboardingForReview(email: string) {
     data: { kycStatus: "PENDING" },
   });
 }
+
+// ─────────────────────────────────────────────
+// Order Aggregation ("Group & Save") — Supplier
+// ─────────────────────────────────────────────
+
+const AGGREGATION_BACKEND_URL = process.env.BACKEND_API_URL || "http://localhost:4000/api";
+
+async function callAggregationBackend<T>(path: string, email: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
+  const { user, supplierProfile } = await ensureSupplierContext(email);
+
+  const response = await fetch(`${AGGREGATION_BACKEND_URL}${path}`, {
+    method: options.method ?? "GET",
+    headers: {
+      "Content-Type": "application/json",
+      "X-User-Id": user.id,
+      "X-User-Email": user.email ?? email,
+      "X-User-Name": user.name ?? supplierProfile.companyName,
+      "X-User-Role": "SUPPLIER",
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.message || `Aggregation API error: ${response.status}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export type AggregationPriceTierInput = { minQty: string; unitPrice: string };
+
+export async function updateListingAggregationSettings(
+  listingId: string,
+  input: { aggregationEnabled: boolean; priceTiers?: AggregationPriceTierInput[]; defaultWindowDays?: string },
+  email: string
+) {
+  const priceTiers = (input.priceTiers ?? [])
+    .filter((tier) => tier.minQty !== "" && tier.unitPrice !== "")
+    .map((tier) => ({ minQty: Number(tier.minQty), unitPrice: Number(tier.unitPrice) }))
+    .sort((a, b) => a.minQty - b.minQty);
+
+  return callAggregationBackend(`/supplier/listings/${listingId}/aggregation-settings`, email, {
+    method: "PATCH",
+    body: {
+      aggregationEnabled: input.aggregationEnabled,
+      priceTiers: input.aggregationEnabled ? priceTiers : undefined,
+      defaultWindowDays: input.defaultWindowDays ? Number(input.defaultWindowDays) : undefined,
+    },
+  });
+}
+
+export type SupplierAggregationPool = {
+  id: string;
+  supplierId: string;
+  productId: string;
+  productName: string;
+  zoneKey: string;
+  status: "OPEN" | "LOCKED" | "FULFILLING" | "CLOSED" | "CANCELLED";
+  currentQuantity: number;
+  priceTiers: { minQty: number; unitPrice: number }[];
+  lockedUnitPrice: number | null;
+  currentUnitPrice: number;
+  nextTier: { minQty: number; unitPrice: number } | null;
+  participantCount: number;
+  projectedRevenueAtCurrentTier: number;
+  projectedRevenueAtMaxTier: number;
+  deliveryWindowStart: string;
+  deliveryWindowEnd: string;
+  windowCloseAt: string;
+  lockedAt: string | null;
+};
+
+export async function getSupplierAggregationPools(email: string): Promise<SupplierAggregationPool[]> {
+  try {
+    return await callAggregationBackend<SupplierAggregationPool[]>("/supplier/aggregation/pools", email);
+  } catch {
+    return [];
+  }
+}
+
+export async function forceLockAggregationPool(poolId: string, email: string) {
+  return callAggregationBackend(`/supplier/aggregation/pools/${poolId}/force-lock`, email, { method: "POST" });
+}
+

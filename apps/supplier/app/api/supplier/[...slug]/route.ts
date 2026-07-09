@@ -10,7 +10,11 @@ import {
   updateSupplierOrderStatus,
   updateSupplierProfile,
   getMarketScrollerData,
+  getSupplierAggregationPools,
+  forceLockAggregationPool,
+  updateListingAggregationSettings,
 } from "@/lib/supplier-data";
+
 import {
   acknowledgeSupplierPurchaseOrder,
   getSupplierPurchaseOrderDetail,
@@ -46,8 +50,12 @@ export async function GET(req: NextRequest) {
     } else if (path === "/purchase-orders") {
       const purchaseOrders = await getSupplierPurchaseOrders(email);
       return NextResponse.json(purchaseOrders);
+    } else if (path === "/aggregation/pools") {
+      const pools = await getSupplierAggregationPools(email);
+      return NextResponse.json(pools);
     } else {
       const poMatch = path.match(/^\/purchase-orders\/([^/]+)$/);
+
       if (poMatch) {
         const detail = await getSupplierPurchaseOrderDetail(poMatch[1], email);
         if (!detail) {
@@ -95,6 +103,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(updated);
     }
 
+    const forceLockMatch = path.match(/^\/aggregation\/pools\/([^/]+)\/force-lock$/);
+    if (forceLockMatch) {
+      const result = await forceLockAggregationPool(forceLockMatch[1], email);
+      return NextResponse.json(result);
+    }
+
     return NextResponse.json({ message: "Not found" }, { status: 404 });
   } catch (error: any) {
     console.error("API Error:", error);
@@ -112,6 +126,13 @@ export async function PATCH(req: NextRequest) {
     const path = req.nextUrl.pathname.replace("/api/supplier", "");
     const body = await req.json();
 
+    const aggregationSettingsMatch = path.match(/^\/listings\/([^/]+)\/aggregation-settings$/);
+    if (aggregationSettingsMatch) {
+      const listingId = aggregationSettingsMatch[1];
+      const updated = await updateListingAggregationSettings(listingId, body, email);
+      return NextResponse.json(updated);
+    }
+
     const listingMatch = path.match(/^\/listings\/([^/]+)$/);
     if (listingMatch) {
       const listingId = listingMatch[1];
@@ -121,6 +142,7 @@ export async function PATCH(req: NextRequest) {
       }
       return NextResponse.json(updated);
     }
+
 
     const orderMatch = path.match(/^\/orders\/([^/]+)$/);
     if (orderMatch) {

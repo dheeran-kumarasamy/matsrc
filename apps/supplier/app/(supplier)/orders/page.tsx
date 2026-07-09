@@ -31,7 +31,15 @@ export default async function SupplierOrdersPage() {
           <tbody>
             {orders.map((order) => (
               <tr key={order.id} className="border-t border-slate-100">
-                <td className="px-4 py-3 font-semibold text-slate-800">#{order.id}</td>
+                <td className="px-4 py-3 font-semibold text-slate-800">
+                  #{order.id}
+                  {order.isAggregated ? (
+                    <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                      Group Order
+                    </span>
+                  ) : null}
+                </td>
+
                 <td className="px-4 py-3 text-slate-700">{order.buyer}</td>
                 <td className="px-4 py-3 text-slate-700">{order.material}</td>
                 <td className="px-4 py-3 text-slate-700">{order.qty}</td>

@@ -6,6 +6,8 @@ import {
   purchaseOrderInclude,
   generatePoNumber,
 } from "@/lib/purchase-order-utils";
+import { notifySupplierPurchaseOrderGenerated } from "@/lib/notify";
+
 
 export const dynamic = "force-dynamic";
 
@@ -111,7 +113,11 @@ export async function POST(request: Request) {
       include: purchaseOrderInclude,
     });
 
+    // Best-effort WhatsApp notification to the supplier — must never block PO creation.
+    void notifySupplierPurchaseOrderGenerated(created.id).catch(() => undefined);
+
     return NextResponse.json(serializePurchaseOrder(created), { status: 201 });
+
   } catch (error) {
     console.error("Purchase orders POST error:", error);
     return NextResponse.json({ error: "Failed to create purchase order" }, { status: 500 });

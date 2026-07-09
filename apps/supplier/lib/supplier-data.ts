@@ -788,9 +788,43 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
 }
 
 export async function updateSupplierOrderStatus(orderId: string, status: OrderStatus) {
+  const existing = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true },
+  });
+
+  const additionalData: Record<string, unknown> = {};
+
+  // When the supplier confirms an enquiry directly (single-supplier flow, no competing
+  // RFQ quotes), also finalize quote selection fields — mirrors what apps/api's
+  // BestPriceSelectionService does for the multi-quote RFQ flow. Without this, the
+  // builder-side Purchase Order generation (gated on quoteSelectionCompletedAt) never
+  // unlocks for orders confirmed through this simpler supplier "Confirm Enquiry" action.
+  if (
+    status === "PROCESSING" &&
+    existing &&
+    !existing.quoteSelectionCompletedAt &&
+    existing.items.length > 0
+  ) {
+    const supplierId = existing.items[0].supplierId;
+    const allSameSupplier = existing.items.every((item) => item.supplierId === supplierId);
+    const bestPriceTotal = existing.items.reduce(
+      (sum, item) => sum + Number(item.unitPrice) * item.quantity,
+      0
+    );
+
+    additionalData.selectedSupplierId = allSameSupplier ? supplierId : null;
+    additionalData.bestPriceTotal = bestPriceTotal;
+    additionalData.tentativeDeliveryDate =
+      existing.tentativeDeliveryDate ??
+      existing.deliveryDate ??
+      new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    additionalData.quoteSelectionCompletedAt = new Date();
+  }
+
   const order = await prisma.order.update({
     where: { id: orderId },
-    data: { status },
+    data: { status, ...additionalData },
   });
 
   await prisma.orderTracking.create({
@@ -803,6 +837,7 @@ export async function updateSupplierOrderStatus(orderId: string, status: OrderSt
 
   return order;
 }
+
 
 export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]> {
   const { supplierProfile } = await ensureSupplierContext(email);

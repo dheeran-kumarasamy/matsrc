@@ -36,8 +36,10 @@
     "@matsrc/config": "workspace:*",
     "@nestjs/cli": "^10.3.2",
     "@nestjs/schematics": "^10.1.1",
+    "@types/express": "^5.0.6",
     "@types/node": "^20.14.2",
     "@types/passport-jwt": "^4.0.1",
+
     "typescript": "^5.4.5",
     "vitest": "^2.1.8"
   }

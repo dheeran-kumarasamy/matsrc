@@ -9,5 +9,7 @@ import { RfqsService } from "./rfqs.service";
   imports: [SupplierModule, NotificationsModule],
   controllers: [RfqsController],
   providers: [RfqsService, BestPriceSelectionService],
+  exports: [RfqsService],
 })
 export class RfqsModule {}
+

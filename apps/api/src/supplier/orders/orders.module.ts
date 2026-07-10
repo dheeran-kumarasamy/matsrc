@@ -8,5 +8,7 @@ import { OrdersService } from "./orders.service";
   imports: [SupplierModule, NotificationsModule],
   controllers: [OrdersController],
   providers: [OrdersService],
+  exports: [OrdersService],
 })
 export class OrdersModule {}
+

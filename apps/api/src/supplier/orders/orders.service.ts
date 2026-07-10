@@ -68,7 +68,7 @@ export class OrdersService {
     };
   }
 
-  async updateStatus(id: string, status: OrderStatus, user: any): Promise<{ id: string; status: OrderStatus }> {
+  async updateStatus(id: string, status: OrderStatus, user: any, note?: string): Promise<{ id: string; status: OrderStatus }> {
     await this.findOne(id, user);
 
     const order = await this.prisma.order.update({
@@ -80,9 +80,10 @@ export class OrdersService {
       data: {
         orderId: id,
         status,
-        note: status === OrderStatus.PROCESSING ? "Supplier confirmed enquiry" : `Supplier marked order as ${humanizeToken(status)}`,
+        note: note ?? (status === OrderStatus.PROCESSING ? "Supplier confirmed enquiry" : `Supplier marked order as ${humanizeToken(status)}`),
       },
     });
+
 
     void this.notificationService.notifyBuilderOrderDecision(id, status).catch((error) => {
       this.logger.warn(`Failed to queue builder notification for order ${id}: ${error instanceof Error ? error.message : String(error)}`);

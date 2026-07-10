@@ -21,15 +21,20 @@ import { VendorsModule } from "./admin/vendors/vendors.module";
 import { KycModule } from "./admin/kyc/kyc.module";
 import { DisputesModule } from "./admin/disputes/disputes.module";
 import { AuditModule } from "./admin/audit/audit.module";
+import { WhatsAppEscalationsModule } from "./admin/whatsapp-escalations/whatsapp-escalations.module";
+
 import { NotificationsModule } from "./notifications/notifications.module";
 import { PublicInsightsModule } from "./public-insights/public-insights.module";
 import { AggregationModule } from "./aggregation/aggregation.module";
 import { BuilderAggregationModule } from "./builder/aggregation/aggregation.module";
 import { SupplierAggregationModule } from "./supplier/aggregation/aggregation.module";
 import { AdminAggregationModule } from "./admin/aggregation/aggregation.module";
+import { SupplierReportsModule } from "./supplier/reports/reports.module";
+import { WhatsAppModule } from "./whatsapp/whatsapp.module";
 
 
 @Module({
+
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
@@ -59,7 +64,12 @@ import { AdminAggregationModule } from "./admin/aggregation/aggregation.module";
     KycModule,
     DisputesModule,
     AuditModule,
+    WhatsAppEscalationsModule,
+    SupplierReportsModule,
+
+    WhatsAppModule,
   ],
+
   providers: [RoleGuard],
 })
 export class AppModule {}

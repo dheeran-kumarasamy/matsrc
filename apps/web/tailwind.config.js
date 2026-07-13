@@ -20,4 +20,6 @@ module.exports = {
       },
     },
   },
+  plugins: [...(baseConfig.plugins || []), require("tailwindcss-animate")],
 };
+

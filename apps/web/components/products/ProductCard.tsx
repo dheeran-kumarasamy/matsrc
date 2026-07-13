@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { getDefaultCategoryImage } from "@/lib/category-images";
+
 
 interface Props {
   skeleton?: boolean;
@@ -31,7 +33,12 @@ export default function ProductCard({ skeleton, product }: Props) {
   const imageUrl = product.image || getDefaultCategoryImage(product.category);
 
   return (
-    <a href={`/products/${product.slug}`} className="panel p-4 hover:shadow-md hover:border-blue-700 transition-all block">
+    // next/link (not a bare <a>) so that Next.js's intercepting-route
+    // convention (@modal/(.)products/[slug]) can hijack this soft navigation
+    // and render the product as a quick-view overlay instead of a full page
+    // load — spec section 5A. Direct nav / refresh / shared links still hit
+    // the full standalone page.
+    <Link href={`/products/${product.slug}`} className="panel p-4 hover:shadow-md hover:border-blue-700 transition-all block">
       <div className="h-32 bg-slate-50 rounded-lg mb-3 overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
@@ -47,6 +54,7 @@ export default function ProductCard({ skeleton, product }: Props) {
         </div>
         <span className="text-yellow-400 text-xs">★ {product.rating}</span>
       </div>
-    </a>
+    </Link>
   );
 }
+

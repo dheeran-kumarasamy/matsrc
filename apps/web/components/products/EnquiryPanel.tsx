@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ShoppingCart } from "lucide-react";
-import { builderApiPost } from "@/lib/api";
+import { useCartStore } from "@/lib/store/cart-store";
+import { useOverlayStore } from "@/lib/store/overlay-store";
 import { recordInterestEvent } from "@/lib/interest-events";
+
 
 type PricingTier = {
   minQty: string;
@@ -33,7 +34,8 @@ function findTier(pricingTiers: PricingTier[], quantity: number) {
 }
 
 export default function EnquiryPanel({ productId, unit, maxServiceableQty, pricingTiers }: Props) {
-  const router = useRouter();
+  const addItem = useCartStore((state) => state.addItem);
+  const openCart = useOverlayStore((state) => state.openCart);
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState(false);
@@ -47,7 +49,7 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
     setLoading(true);
     setError(null);
     try {
-      await builderApiPost("/cart/items", { productId, quantity });
+      await addItem(productId, quantity);
       void recordInterestEvent(productId, "CART_ADD");
       setAdded(true);
     } catch {
@@ -59,12 +61,15 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
 
   async function handlePrimaryAction() {
     if (added) {
-      router.push("/cart");
+      // Open the persistent cart drawer instead of navigating away — keeps
+      // the PLP/quick-view underneath mounted (spec section 5A).
+      openCart("review");
       return;
     }
 
     await handleAddToEnquiry();
   }
+
 
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

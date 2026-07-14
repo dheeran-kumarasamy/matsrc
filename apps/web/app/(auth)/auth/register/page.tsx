@@ -125,7 +125,7 @@ export default function RegisterPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
 
           <div className="flex rounded-lg border border-gray-200 overflow-hidden">
@@ -139,10 +139,10 @@ export default function RegisterPage() {
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             required
-            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           {error && <p className="text-red-500 text-xs">{error}</p>}
-          <button type="submit" disabled={loading} className="w-full bg-brand-500 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
+          <button type="submit" disabled={loading} className="w-full min-h-[44px] bg-brand-500 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
             {loading ? "Sending..." : "Send OTP"}
           </button>
         </form>
@@ -159,7 +159,7 @@ export default function RegisterPage() {
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
             required
-            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           {error && <p className="text-red-500 text-xs">{error}</p>}
           <button type="submit" disabled={loading || otp.length < 6} className="w-full bg-brand-500 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
@@ -202,7 +202,7 @@ export default function RegisterPage() {
               placeholder="+91 98765 43210"
               value={whatsappNumber}
               onChange={(e) => setWhatsappNumber(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
 

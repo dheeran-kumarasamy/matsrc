@@ -107,13 +107,13 @@ export default function LoginPage() {
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             required
-            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           {error && <p className="text-red-500 text-xs">{error}</p>}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-brand-500 hover:bg-brand-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+            className="w-full min-h-[44px] bg-brand-500 hover:bg-brand-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
           >
             {loading ? "Sending..." : "Send OTP"}
           </button>
@@ -131,7 +131,7 @@ export default function LoginPage() {
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
             required
-            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           {error && <p className="text-red-500 text-xs">{error}</p>}
           <button

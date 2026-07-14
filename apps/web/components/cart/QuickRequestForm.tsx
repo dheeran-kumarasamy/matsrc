@@ -32,10 +32,10 @@ export default function QuickRequestForm({ floating }: Props) {
         {/* Floating trigger button */}
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 z-50 bg-accent-500 hover:bg-accent-600 text-white rounded-full px-5 py-3 shadow-lg flex items-center gap-2 text-sm font-medium transition-colors"
+          className="fixed bottom-6 right-6 z-40 flex min-h-[44px] items-center gap-2 rounded-full bg-accent-500 px-5 py-3 text-sm font-medium text-white shadow-lg transition-colors hover:bg-accent-600"
         >
           <MessageSquarePlus size={18} />
-          Quick Request
+          <span className="hidden sm:inline">Quick Request</span>
         </button>
 
         {/* Modal */}
@@ -61,14 +61,14 @@ export default function QuickRequestForm({ floating }: Props) {
                     placeholder="Material name (e.g. TMT Bar Fe-500D)"
                     value={material}
                     onChange={(e) => setMaterial(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-700"
                   />
                   <input
                     required
                     placeholder="Quantity (e.g. 10 MT)"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-700"
                   />
                   <input
                     required
@@ -76,7 +76,7 @@ export default function QuickRequestForm({ floating }: Props) {
                     maxLength={6}
                     value={pincode}
                     onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-700"
                   />
                   <button type="submit" disabled={loading} className="w-full bg-accent-500 hover:bg-accent-600 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
                     {loading ? "Submitting..." : "Get Quotes from Suppliers"}

@@ -41,6 +41,8 @@ export async function adminApiGet<T>(path: string): Promise<T> {
     throw new Error(`Admin API request failed: ${response.status}`);
   }
 
+
+
   return response.json() as Promise<T>;
 }
 

@@ -61,16 +61,34 @@ export class TwilioWhatsAppProvider implements WhatsAppProvider {
   ): Promise<WhatsAppSendTemplateResult> {
     try {
       const contentSid = this.config.getTwilioContentSid(templateKey);
-      if (!contentSid) {
-        const error = `No Twilio Content Template SID configured for templateKey "${templateKey}"`;
-        this.logger.error(`[twilio-whatsapp] ${error}`);
-        return { success: false, error };
-      }
+      const mode = this.config.getMode();
 
       const from = this.resolveFrom();
       if (!from.messagingServiceSid && !from.whatsappNumber) {
         const error = "Neither TWILIO_MESSAGING_SERVICE_SID nor TWILIO_WHATSAPP_NUMBER is configured";
         this.logger.error(`[twilio-whatsapp] ${error}`);
+        return { success: false, error };
+      }
+
+      if (!contentSid) {
+        if (mode === "sandbox") {
+          // Twilio's WhatsApp Sandbox does not support custom-approved Content
+          // Templates — only free-form replies within the 24-hour session window are
+          // available. Rather than hard-failing (as production does), fall back to a
+          // plain-text send so sandbox testing can proceed. This branch is intentionally
+          // sandbox-only: production never silently substitutes free text for a missing
+          // template (see the `else` branch below).
+          this.logger.warn(
+            `[twilio-whatsapp][sandbox-fallback] No Content Template SID configured for templateKey "${templateKey}" ` +
+              `while WHATSAPP_MODE=sandbox — sending a free-form text message instead of a template.`
+          );
+          return await this.sendFreeformWithRetry(to, this.buildFreeformBody(templateKey, params), from);
+        }
+
+        // Production: never silently fall back to free-form text. Fail loudly (critical
+        // log) and return a structured failure.
+        const error = `No Twilio Content Template SID configured for templateKey "${templateKey}"`;
+        this.logger.error(`[twilio-whatsapp][CRITICAL] WHATSAPP_MODE=production: ${error}. Refusing to send free-form fallback.`);
         return { success: false, error };
       }
 
@@ -82,6 +100,15 @@ export class TwilioWhatsAppProvider implements WhatsAppProvider {
       return { success: false, error: message };
     }
   }
+
+  /** Builds a readable free-form fallback message body for sandbox mode from the raw template params. */
+  private buildFreeformBody(templateKey: WhatsAppAlertTemplateKey, params: WhatsAppSendTemplateParams): string {
+    const fields = Object.entries(params)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join("\n");
+    return `[${templateKey}]\n${fields}`;
+  }
+
 
   private resolveFrom(): { whatsappNumber?: string; messagingServiceSid?: string } {
     const messagingServiceSid = this.config.getTwilioMessagingServiceSid();
@@ -137,7 +164,53 @@ export class TwilioWhatsAppProvider implements WhatsAppProvider {
     }
   }
 
+  /**
+   * Sandbox-only free-form-text send path (no `contentSid`/`contentVariables`), used
+   * when `sendTemplateMessage` falls back because no Content Template SID is mapped for
+   * the given `templateKey` while `WHATSAPP_MODE=sandbox`. Mirrors `sendWithRetry`'s
+   * retry/backoff/permanent-vs-transient handling exactly, just with a different Twilio
+   * `messages.create` payload shape.
+   */
+  private async sendFreeformWithRetry(
+    to: string,
+    body: string,
+    from: { whatsappNumber?: string; messagingServiceSid?: string },
+    attempt = 0
+  ): Promise<WhatsAppSendTemplateResult> {
+    try {
+      const client = this.getClient();
+      const message = await client.messages.create({
+        to: this.toWhatsAppAddress(to),
+        ...(from.messagingServiceSid ? { messagingServiceSid: from.messagingServiceSid } : { from: from.whatsappNumber! }),
+        body,
+      });
+
+      return { success: true, providerMessageId: message.sid };
+    } catch (error: any) {
+      const errorCode: number | undefined = typeof error?.code === "number" ? error.code : undefined;
+      const status: number | undefined = typeof error?.status === "number" ? error.status : undefined;
+      const isPermanent = errorCode !== undefined && PERMANENT_ERROR_CODES.has(errorCode);
+      const isTransient = !isPermanent && (status === undefined || status >= 500 || status === 429);
+
+      if (isTransient && attempt < MAX_RETRIES) {
+        const delayMs = BASE_BACKOFF_MS * Math.pow(2, attempt);
+        this.logger.warn(
+          `[twilio-whatsapp][sandbox-fallback] Freeform send to ${to} failed (status=${status ?? "n/a"}, code=${errorCode ?? "n/a"}), retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`
+        );
+        await this.sleep(delayMs);
+        return this.sendFreeformWithRetry(to, body, from, attempt + 1);
+      }
+
+      const message = error instanceof Error ? error.message : "WhatsApp freeform send failed";
+      this.logger.error(
+        `[twilio-whatsapp][sandbox-fallback] Freeform send to ${to} failed permanently: status=${status ?? "n/a"} code=${errorCode ?? "n/a"} message=${message}`
+      );
+      return { success: false, error: `${message}${errorCode ? ` (code=${errorCode})` : ""}` };
+    }
+  }
+
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
+

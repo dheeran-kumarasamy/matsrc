@@ -180,9 +180,77 @@ WhatsApp Cloud API later, without touching any call site:
 ## Env vars
 
 See `.env.example` for the full list with placeholders:
-`WHATSAPP_ENABLED`, `WHATSAPP_PROVIDER`, `TWILIO_ACCOUNT_SID`,
+`WHATSAPP_ENABLED`, `WHATSAPP_PROVIDER`, `WHATSAPP_MODE`, `TWILIO_ACCOUNT_SID`,
 `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_NUMBER`, `TWILIO_MESSAGING_SERVICE_SID`,
+`TWILIO_SANDBOX_NUMBER_OVERRIDE`,
 `TWILIO_CONTENT_SID_WATCHLIST_PRICE_HIT`,
 `TWILIO_CONTENT_SID_ORDER_STATUS_UPDATE`,
 `TWILIO_CONTENT_SID_RFQ_QUOTE_RECEIVED`,
 `TWILIO_STATUS_CALLBACK_AUTH_TOKEN`.
+
+## Sandbox vs. production mode
+
+Twilio's WhatsApp Sandbox and a registered production sender are meaningfully
+different environments. `WHATSAPP_MODE` (`sandbox` | `production`) makes that
+boundary **explicit in config**, and `WhatsAppAlertConfigService.validateAtStartup()`
+(run via `OnModuleInit`, once at Nest app bootstrap — **not** lazily at send
+time) fails loudly if the config doesn't match the declared mode.
+
+| | Sandbox (`WHATSAPP_MODE=sandbox`) | Production (`WHATSAPP_MODE=production`) |
+|---|---|---|
+| **Number** | Twilio's shared, public Sandbox number `+14155238886` for every Twilio account. Startup validation requires `TWILIO_WHATSAPP_NUMBER` to match this exactly, unless `TWILIO_SANDBOX_NUMBER_OVERRIDE=true` is explicitly set. | Any registered WhatsApp sender number. Startup validation fails if the configured number is the known sandbox number — this is the guardrail against deploying a sandbox config to production. |
+| **Templates** | Custom/approved Content Templates are **not available** in the Sandbox. If no `TWILIO_CONTENT_SID_*` is mapped for a `templateKey`, `TwilioWhatsAppProvider` falls back to a clearly-logged (`[twilio-whatsapp][sandbox-fallback]`) free-form text message instead of failing. | All three `TWILIO_CONTENT_SID_*` mappings (`watchlist_price_hit`, `order_status_update`, `rfq_quote_received`) are **required** — startup validation fails if any are missing. `sendTemplateMessage` never silently substitutes free-form text for a missing template; it logs a critical error and returns a failure result. |
+| **Webhook config location** | Twilio Console → **Messaging → Try it out → Send a WhatsApp message** ("Sandbox settings") — set the *"When a message comes in"* URL there. | Twilio Console → **your registered Sender's configuration** (Messaging Service or WhatsApp Sender settings) — same field, different page. |
+| **Opt-in handling** | The app-level opt-in check (`NotificationPreference.whatsappOptIn === true`, enforced in `WhatsAppAlertService.sendGated()`) is **not bypassed**. Sandbox testers must have `whatsappOptIn=true` seeded on their test user records — Twilio's own join-code mechanism (each tester texting the sandbox join code) is a separate, platform-level gate on top of this, not a replacement for it. | Same exact check, same code path — no divergence. |
+| **Webhook handler code** | Identical in both modes — `WhatsAppStatusController` and the send call sites (`orders.service.ts`, `rfqs.service.ts`, `listings.service.ts`) never branch on mode. Only `TwilioWhatsAppProvider.sendTemplateMessage`'s internal fallback-vs-fail behavior differs, and only when a template mapping is missing. | Same. |
+
+### What changes vs. what stays identical when moving sandbox → production
+
+**Changes (config only):**
+- `WHATSAPP_MODE=sandbox` → `WHATSAPP_MODE=production`
+- `TWILIO_WHATSAPP_NUMBER` (or `TWILIO_MESSAGING_SERVICE_SID`) → your registered sender
+- All three `TWILIO_CONTENT_SID_*` vars must be populated with approved template SIDs
+- The webhook URL is re-entered against the registered sender's config page in Twilio
+  Console instead of the Sandbox settings page (same handler URL, different console
+  location)
+
+**Stays identical (code):**
+- `WhatsAppProvider` interface and its single method signature
+- `WhatsAppAlertService` and all three hook call sites (order-status, watchlist,
+  RFQ-quote) — no mode-awareness at this layer
+- `WhatsAppStatusController` webhook handler
+- The opt-in gate (`whatsappOptIn`) — identical check, both modes
+
+### Local development: exposing the webhook with a tunnel
+
+Twilio's Sandbox needs a **publicly reachable** URL for its *"When a message
+comes in"* webhook — `localhost:4000` is not reachable from Twilio's servers.
+For local development:
+
+1. Run the API locally as usual (`pnpm --filter @matsrc/api dev` or similar).
+2. Start a tunnel, e.g. `ngrok http 4000`.
+3. Copy the `https://<random>.ngrok-free.app` URL ngrok prints.
+4. In Twilio Console → Sandbox settings → *"When a message comes in"*, enter
+   `https://<random>.ngrok-free.app/api/whatsapp-alerts/status` (adjust the
+   path to match whatever route Twilio should hit — the delivery-status
+   callback route, or an inbound-message route if one exists).
+5. Every time the tunnel restarts, the URL changes — update the Sandbox
+   settings field accordingly. This is purely a Twilio Console configuration
+   step; no code changes are needed to move from a tunnel URL to a real
+   production URL later, since the handler code is identical in both cases.
+
+### Startup validation summary
+
+`WhatsAppAlertConfigService.validateAtStartup()` (called via `onModuleInit()`)
+only runs when `WHATSAPP_ENABLED=true`, and throws (hard-failing app bootstrap)
+if any of the following are true:
+
+- `WHATSAPP_MODE=production` and any of the 3 `TWILIO_CONTENT_SID_*` mappings
+  is missing.
+- `WHATSAPP_MODE=production` and `TWILIO_WHATSAPP_NUMBER` equals the known
+  sandbox number `+14155238886`.
+- `WHATSAPP_MODE=sandbox`, `TWILIO_WHATSAPP_NUMBER` is set but does not match
+  the known sandbox number, and `TWILIO_SANDBOX_NUMBER_OVERRIDE` is not `"true"`.
+- `WHATSAPP_MODE=sandbox` and `NODE_ENV=production` — this is the guardrail
+  against "forgot to flip `WHATSAPP_MODE` before deploying."
+

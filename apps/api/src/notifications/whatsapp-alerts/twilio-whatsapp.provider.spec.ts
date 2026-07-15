@@ -25,8 +25,10 @@ function buildConfig(overrides: Partial<Record<string, string | undefined>> = {}
   vi.spyOn(config, "getTwilioWhatsAppNumber").mockReturnValue(has("whatsappNumber") ? overrides.whatsappNumber : "+15550001111");
   vi.spyOn(config, "getTwilioMessagingServiceSid").mockReturnValue(has("messagingServiceSid") ? overrides.messagingServiceSid : undefined);
   vi.spyOn(config, "getTwilioContentSid").mockReturnValue(has("contentSid") ? overrides.contentSid : "HX-content-sid");
+  vi.spyOn(config, "getMode").mockReturnValue((has("mode") ? overrides.mode : "production") as "sandbox" | "production");
   return config;
 }
+
 
 
 describe("TwilioWhatsAppProvider", () => {
@@ -129,4 +131,43 @@ describe("TwilioWhatsAppProvider", () => {
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Neither TWILIO_MESSAGING_SERVICE_SID nor TWILIO_WHATSAPP_NUMBER/);
   });
+
+  describe("sandbox vs production mode-aware behavior", () => {
+    it("production mode: never sends a free-form message and returns a failure when no template mapping exists", async () => {
+      provider = new TwilioWhatsAppProvider(buildConfig({ contentSid: undefined, mode: "production" }));
+
+      const result = await provider.sendTemplateMessage("919876543210", "watchlist_price_hit", { productName: "Cement" });
+
+      expect(createMock).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/No Twilio Content Template SID configured/);
+    });
+
+    it("sandbox mode: falls back to a free-form text message when no template mapping exists, and logs the fallback", async () => {
+      provider = new TwilioWhatsAppProvider(buildConfig({ contentSid: undefined, mode: "sandbox" }));
+      createMock.mockResolvedValueOnce({ sid: "SM-freeform-1" });
+
+      const result = await provider.sendTemplateMessage("919876543210", "watchlist_price_hit", { productName: "Cement" });
+
+      expect(createMock).toHaveBeenCalledTimes(1);
+      const callArgs = createMock.mock.calls[0][0];
+      expect(callArgs.contentSid).toBeUndefined();
+      expect(callArgs.contentVariables).toBeUndefined();
+      expect(callArgs.body).toContain("watchlist_price_hit");
+      expect(callArgs.body).toContain("productName: Cement");
+      expect(result).toEqual({ success: true, providerMessageId: "SM-freeform-1" });
+    });
+
+    it("sandbox mode: still sends a normal template message (no fallback) when a template mapping DOES exist", async () => {
+      provider = new TwilioWhatsAppProvider(buildConfig({ contentSid: "HX-content-sid", mode: "sandbox" }));
+      createMock.mockResolvedValueOnce({ sid: "SM-template-1" });
+
+      const result = await provider.sendTemplateMessage("919876543210", "order_status_update", { orderId: "o-1" });
+
+      const callArgs = createMock.mock.calls[0][0];
+      expect(callArgs.contentSid).toBe("HX-content-sid");
+      expect(result).toEqual({ success: true, providerMessageId: "SM-template-1" });
+    });
+  });
 });
+

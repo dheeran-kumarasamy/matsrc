@@ -6,6 +6,10 @@ import {
   getOrCreateBuilder,
   getUserCtx,
 } from "@/lib/builder-db";
+import {
+  resolveLowestPriceForQuantity,
+  type ResolutionCandidate,
+} from "@/lib/resolution";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +23,19 @@ type SupplierListing = {
   unit: string;
   price: string;
   stock: string;
+  maxServiceableQty?: string;
   active: boolean;
+  canonicalProductId?: string | null;
+  groupedListingIds?: string[];
+  headlinePrice?: string;
+  headlineSupplierId?: string;
+  // Additive raw-numeric fields exposed by getPublicSupplierListings() —
+  // preferred source for building ResolutionCandidate objects since they
+  // avoid re-parsing formatted currency/quantity strings.
+  basePriceRaw?: number;
+  stockRaw?: number;
+  maxServiceableQtyRaw?: number;
+  pricingTiersRaw?: { minQty: number; maxQty: number; tierPrice: number }[];
 };
 
 function parseNumberLabel(value: string) {
@@ -32,23 +48,75 @@ function parseQuantityLabel(value: string) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-async function fetchSupplierListing(productId: string): Promise<SupplierListing | null> {
+async function fetchAllSupplierListings(): Promise<SupplierListing[]> {
   try {
     const response = await fetch(`${SUPPLIER_APP_URL}/api/public/listings`, { cache: "no-store" });
     if (!response.ok) {
-      return null;
+      return [];
     }
 
     const contentType = response.headers.get("content-type") ?? "";
     if (!contentType.includes("application/json")) {
-      return null;
+      return [];
     }
 
-    const listings = (await response.json()) as SupplierListing[];
-    return listings.find((listing) => listing.id === productId) ?? null;
+    return (await response.json()) as SupplierListing[];
   } catch {
-    return null;
+    return [];
   }
+}
+
+function toResolutionCandidate(listing: SupplierListing): ResolutionCandidate {
+  const pricingTiers =
+    Array.isArray(listing.pricingTiersRaw) && listing.pricingTiersRaw.length > 0
+      ? listing.pricingTiersRaw
+      : [
+          {
+            minQty: 1,
+            maxQty:
+              listing.maxServiceableQtyRaw ??
+              (listing.maxServiceableQty ? parseQuantityLabel(listing.maxServiceableQty) : parseQuantityLabel(listing.stock)),
+            tierPrice: listing.basePriceRaw ?? parseNumberLabel(listing.price),
+          },
+        ];
+
+  return {
+    listingId: listing.id,
+    supplierId: listing.headlineSupplierId ?? "",
+    basePrice: listing.basePriceRaw ?? parseNumberLabel(listing.price),
+    stock: listing.stockRaw ?? parseQuantityLabel(listing.stock),
+    maxServiceableQty:
+      listing.maxServiceableQtyRaw ??
+      (listing.maxServiceableQty ? parseQuantityLabel(listing.maxServiceableQty) : parseQuantityLabel(listing.stock)),
+    pricingTiers,
+    isActive: listing.active,
+  };
+}
+
+/**
+ * Resolves, for a given listing's cross-supplier canonical group, which
+ * specific listing currently offers the lowest price for `quantity` units —
+ * per the "Product Discovery Duplicate Listings — Cross-Supplier Price
+ * Resolution" spec's cart-add-time resolution step. Falls back to the
+ * listing's own price if no canonical group / no other listings resolve.
+ */
+function resolveForListing(
+  listing: SupplierListing,
+  allListings: SupplierListing[],
+  quantity: number
+) {
+  const groupIds = new Set(
+    listing.groupedListingIds && listing.groupedListingIds.length > 0
+      ? listing.groupedListingIds
+      : listing.canonicalProductId
+        ? allListings.filter((item) => item.canonicalProductId === listing.canonicalProductId).map((item) => item.id)
+        : [listing.id]
+  );
+
+  const group = allListings.filter((item) => groupIds.has(item.id));
+  const candidates = (group.length > 0 ? group : [listing]).map(toResolutionCandidate);
+
+  return resolveLowestPriceForQuantity(candidates, quantity);
 }
 
 async function ensureMarketplaceProduct(listing: SupplierListing) {
@@ -135,22 +203,33 @@ export async function GET(request: Request) {
 
     const subtotal = items.reduce(
       (acc, item) =>
-        acc + resolveUnitPrice(item.product, item.quantity) * item.quantity,
+        acc +
+        (item.resolvedUnitPrice != null
+          ? Number(item.resolvedUnitPrice)
+          : resolveUnitPrice(item.product, item.quantity)) *
+          item.quantity,
       0
     );
 
     return NextResponse.json({
-      items: items.map((item) => ({
-        id: item.id,
-        productId: item.productId,
-        name: item.product.name,
-        unit: item.product.unit,
-        supplierId: item.product.supplierId,
-        supplierName: item.product.supplier.companyName,
-        quantity: item.quantity,
-        unitPrice: resolveUnitPrice(item.product, item.quantity),
-        lineTotal: resolveUnitPrice(item.product, item.quantity) * item.quantity,
-      })),
+      items: items.map((item) => {
+        const unitPrice =
+          item.resolvedUnitPrice != null
+            ? Number(item.resolvedUnitPrice)
+            : resolveUnitPrice(item.product, item.quantity);
+
+        return {
+          id: item.id,
+          productId: item.productId,
+          name: item.product.name,
+          unit: item.product.unit,
+          supplierId: item.resolvedSupplierId ?? item.product.supplierId,
+          supplierName: item.product.supplier.companyName,
+          quantity: item.quantity,
+          unitPrice,
+          lineTotal: unitPrice * item.quantity,
+        };
+      }),
       summary: {
         itemCount: items.length,
         subtotal,
@@ -180,33 +259,67 @@ export async function POST(request: Request) {
 
     const product = await prisma.product.findUnique({
       where: { id: productId },
-      select: { id: true, isActive: true },
+      select: { id: true, isActive: true, canonicalProductId: true },
     });
     let resolvedProduct = product;
 
+    // Fetch the full public supplier listings once — used both to bridge a
+    // not-yet-mirrored marketplace product locally (existing behaviour) and
+    // to perform cross-supplier canonical-group price resolution for the
+    // added item (new behaviour, spec: resolve at add-to-cart time).
+    const allListings = await fetchAllSupplierListings();
+
     if (!resolvedProduct || !resolvedProduct.isActive) {
-      const listing = await fetchSupplierListing(productId);
+      const listing = allListings.find((item) => item.id === productId) ?? null;
       if (!listing || !listing.active) {
         return NextResponse.json({ error: "Product not found" }, { status: 404 });
       }
 
-      resolvedProduct = await ensureMarketplaceProduct(listing);
+      const created = await ensureMarketplaceProduct(listing);
+      resolvedProduct = {
+        id: created.id,
+        isActive: created.isActive,
+        canonicalProductId: (created as any).canonicalProductId ?? listing.canonicalProductId ?? null,
+      };
     }
 
     if (!resolvedProduct.isActive) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
+    // Cross-supplier price resolution: find the matching public listing (by
+    // id) so we know its canonical group, then resolve the lowest-price
+    // listing across that group for the requested quantity.
+    const matchedListing = allListings.find((item) => item.id === productId);
+    let resolution: ReturnType<typeof resolveForListing> | null = null;
+
+    if (matchedListing) {
+      resolution = resolveForListing(matchedListing, allListings, quantity);
+    }
+
+    const resolvedFields = resolution
+      ? {
+          resolvedListingId: resolution.listingId,
+          resolvedSupplierId: resolution.supplierId || null,
+          resolvedTierMinQty: resolution.tierMinQty,
+          resolvedTierMaxQty: resolution.tierMaxQty,
+          resolvedUnitPrice: resolution.unitPrice,
+          resolvedAt: new Date(),
+        }
+      : {};
+
     const item = await prisma.cartItem.upsert({
       where: { userId_productId: { userId: user.id, productId } },
-      update: { quantity },
-      create: { userId: user.id, productId, quantity },
+      update: { quantity, ...resolvedFields },
+      create: { userId: user.id, productId, quantity, ...resolvedFields },
     });
 
     return NextResponse.json({
       id: item.id,
       productId: item.productId,
       quantity: item.quantity,
+      resolvedSupplierId: item.resolvedSupplierId,
+      resolvedUnitPrice: item.resolvedUnitPrice != null ? Number(item.resolvedUnitPrice) : null,
     });
   } catch (error) {
     console.error("Cart items POST error:", error);

@@ -5,6 +5,7 @@ import { formatDate } from "src/supplier/utils";
 import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { BestPriceSelectionService } from "./best-price-selection.service";
 import { NotificationService } from "src/notifications/notification.service";
+import { WhatsAppAlertService } from "src/notifications/whatsapp-alerts/whatsapp-alert.service";
 
 @Injectable()
 export class RfqsService {
@@ -14,7 +15,8 @@ export class RfqsService {
     private readonly prisma: PrismaService,
     private readonly supplierContext: SupplierContextService,
     private readonly bestPriceSelectionService: BestPriceSelectionService,
-    private readonly notificationService: NotificationService
+    private readonly notificationService: NotificationService,
+    private readonly whatsAppAlertService: WhatsAppAlertService
   ) {}
 
   async findAll(user: any) {
@@ -165,6 +167,22 @@ export class RfqsService {
         .catch((error) => {
           this.logger.warn(
             `Failed to queue builder best-price notification for enquiry ${enquiryId}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
+
+      // Additive WhatsApp business alert (RFQ quote-received) — gated by
+      // WHATSAPP_ENABLED + per-user opt-in inside WhatsAppAlertService; non-blocking
+      // and never throws, alongside the existing notification above.
+      void this.whatsAppAlertService
+        .sendRfqQuoteReceived({
+          userId: enquiry.userId,
+          enquiryId,
+          supplierName: bestPriceResult.selectedSupplierName,
+          bestPriceTotal: bestPriceResult.bestPriceTotal?.toString(),
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `Failed to send WhatsApp RFQ quote-received alert for enquiry ${enquiryId}: ${error instanceof Error ? error.message : String(error)}`
           );
         });
     }

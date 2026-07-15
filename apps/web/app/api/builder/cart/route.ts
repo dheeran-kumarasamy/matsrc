@@ -38,28 +38,36 @@ export async function GET(request: Request) {
       orderBy: { updatedAt: "desc" },
     });
 
-    const subtotal = items.reduce(
-      (acc, item) =>
-        acc + resolveUnitPrice(item.product, item.quantity) * item.quantity,
-      0
-    );
+    const subtotal = items.reduce((acc, item) => {
+      const unitPrice =
+        item.resolvedUnitPrice != null
+          ? Number(item.resolvedUnitPrice)
+          : resolveUnitPrice(item.product, item.quantity);
+      return acc + unitPrice * item.quantity;
+    }, 0);
 
     return NextResponse.json({
-      items: items.map((item) => ({
-        id: item.id,
-        productId: item.productId,
-        name: item.product.name,
-        unit: item.product.unit,
-        supplierId: item.product.supplierId,
-        supplierName: item.product.supplier.companyName,
-        quantity: item.quantity,
-        unitPrice: resolveUnitPrice(item.product, item.quantity),
-        lineTotal:
-          resolveUnitPrice(item.product, item.quantity) * item.quantity,
-        aggregationEnabled: item.product.aggregationEnabled,
-        aggregationPriceTiers: item.product.aggregationPriceTiers,
-        aggregationWindowDays: item.product.aggregationWindowDays,
-      })),
+      items: items.map((item) => {
+        const unitPrice =
+          item.resolvedUnitPrice != null
+            ? Number(item.resolvedUnitPrice)
+            : resolveUnitPrice(item.product, item.quantity);
+
+        return {
+          id: item.id,
+          productId: item.productId,
+          name: item.product.name,
+          unit: item.product.unit,
+          supplierId: item.resolvedSupplierId ?? item.product.supplierId,
+          supplierName: item.product.supplier.companyName,
+          quantity: item.quantity,
+          unitPrice,
+          lineTotal: unitPrice * item.quantity,
+          aggregationEnabled: item.product.aggregationEnabled,
+          aggregationPriceTiers: item.product.aggregationPriceTiers,
+          aggregationWindowDays: item.product.aggregationWindowDays,
+        };
+      }),
 
       summary: {
         itemCount: items.length,

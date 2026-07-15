@@ -27,7 +27,16 @@ export type SupplierListing = {
   active: boolean;
   pricingTiers: PricingTier[];
   images?: string[];
+  // Cross-supplier canonical-product resolution fields (additive). Present
+  // when the listing's Category/Brand/Grade/Unit match another supplier's
+  // listing exactly (per admin-configured master data) — see
+  // apps/supplier/lib/supplier-data.ts `getPublicSupplierListings()`.
+  canonicalProductId?: string | null;
+  groupedListingIds?: string[];
+  headlinePrice?: string;
+  headlineSupplierId?: string;
 };
+
 
 export async function getSupplierListings(): Promise<SupplierListing[]> {
   try {
@@ -61,3 +70,48 @@ export function parseNumericLabel(value: string) {
 export function parseListingPrice(value: string) {
   return parseNumericLabel(value);
 }
+
+// Collapses a full listings array down to one representative "headline" card
+// per canonical product group — fixes the Display bug from the cross-supplier
+// price resolution spec (duplicate cards for the same product from different
+// suppliers). Groups are keyed by canonicalProductId when present (exact
+// admin-configured Category/Brand/Grade/Unit match); listings without a
+// canonicalProductId (legacy / ungrouped data) fall back to being their own
+// singleton group keyed by their own id, preserving backward compatibility.
+//
+// The representative listing shown is the one matching headlineSupplierId
+// (the lowest-priced supplier for the group), with its own `price` field
+// overridden to the group's `headlinePrice` for display. All sibling listing
+// ids are preserved on `groupedListingIds` so PDP/quick-view can still surface
+// per-supplier tier detail if needed.
+export function dedupeByCanonicalGroup(listings: SupplierListing[]): SupplierListing[] {
+  const seenGroupKeys = new Set<string>();
+  const result: SupplierListing[] = [];
+
+  for (const listing of listings) {
+    const groupKey = listing.canonicalProductId || listing.id;
+    if (seenGroupKeys.has(groupKey)) continue;
+    seenGroupKeys.add(groupKey);
+
+    const groupedIds = listing.groupedListingIds && listing.groupedListingIds.length > 0
+      ? listing.groupedListingIds
+      : [listing.id];
+
+    let representative = listing;
+    if (listing.headlineSupplierId && listing.headlineSupplierId !== listing.supplierId) {
+      const headlineListing = listings.find(
+        (candidate) => candidate.supplierId === listing.headlineSupplierId && groupedIds.includes(candidate.id)
+      );
+      if (headlineListing) representative = headlineListing;
+    }
+
+    result.push({
+      ...representative,
+      price: listing.headlinePrice || representative.price,
+      groupedListingIds: groupedIds,
+    });
+  }
+
+  return result;
+}
+

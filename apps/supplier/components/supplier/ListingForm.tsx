@@ -2,7 +2,37 @@
 
 import axios from "axios";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+
+type CatalogOption = { id: string; name: string; code?: string | null };
+
+function useCatalogOptions(entity: "category" | "brand" | "grade" | "unit") {
+  const [options, setOptions] = useState<CatalogOption[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`${API_BASE_URL}/public/catalog/${entity}`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (!cancelled) setOptions(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entity]);
+
+  return { options, loading };
+}
 
 type PricingTierRow = {
   minQty: string;
@@ -42,9 +72,9 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
     () =>
       initial ?? {
         title: "",
-        category: "Steel",
-        grade: "Fe500",
-        unit: "MT",
+        category: "",
+        grade: "",
+        unit: "",
         maxServiceableQty: "",
         price: "",
         brand: "",
@@ -54,6 +84,11 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
   );
 
   const [form, setForm] = useState(seed);
+
+  const { options: categoryOptions, loading: categoriesLoading } = useCatalogOptions("category");
+  const { options: brandOptions, loading: brandsLoading } = useCatalogOptions("brand");
+  const { options: gradeOptions, loading: gradesLoading } = useCatalogOptions("grade");
+  const { options: unitOptions, loading: unitsLoading } = useCatalogOptions("unit");
   const [images, setImages] = useState<string[]>(
     initial?.images && initial.images.length > 0 ? initial.images : [""]
   );
@@ -308,39 +343,54 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
         <label className="space-y-1 text-sm text-slate-700">
           <span>Category</span>
           <select
+            required
             value={form.category}
             onChange={(e) => updateField("category", e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            disabled={categoriesLoading}
           >
-            <option>Steel</option>
-            <option>Cement</option>
-            <option>Aggregates</option>
-            <option>Pipes</option>
+            <option value="">{categoriesLoading ? "Loading..." : "Select category"}</option>
+            {categoryOptions.map((option) => (
+              <option key={option.id} value={option.name}>
+                {option.name}
+              </option>
+            ))}
           </select>
         </label>
 
         <label className="space-y-1 text-sm text-slate-700">
           <span>Grade / Spec</span>
-          <input
+          <select
             required
             value={form.grade}
             onChange={(e) => updateField("grade", e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            placeholder="Fe500"
-          />
+            disabled={gradesLoading}
+          >
+            <option value="">{gradesLoading ? "Loading..." : "Select grade"}</option>
+            {gradeOptions.map((option) => (
+              <option key={option.id} value={option.name}>
+                {option.name}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="space-y-1 text-sm text-slate-700">
           <span>Unit</span>
           <select
+            required
             value={form.unit}
             onChange={(e) => updateField("unit", e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            disabled={unitsLoading}
           >
-            <option value="MT">MT</option>
-            <option value="BAG">BAG</option>
-            <option value="TON">TON</option>
-            <option value="PCS">PCS</option>
+            <option value="">{unitsLoading ? "Loading..." : "Select unit"}</option>
+            {unitOptions.map((option) => (
+              <option key={option.id} value={option.code || option.name}>
+                {option.name} {option.code ? `(${option.code})` : ""}
+              </option>
+            ))}
           </select>
         </label>
 
@@ -369,12 +419,19 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
 
         <label className="space-y-1 text-sm text-slate-700">
           <span>Brand</span>
-          <input
+          <select
             value={form.brand}
             onChange={(e) => updateField("brand", e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            placeholder="TATA"
-          />
+            disabled={brandsLoading}
+          >
+            <option value="">{brandsLoading ? "Loading..." : "Select brand"}</option>
+            {brandOptions.map((option) => (
+              <option key={option.id} value={option.name}>
+                {option.name}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="space-y-1 text-sm text-slate-700 md:col-span-2">

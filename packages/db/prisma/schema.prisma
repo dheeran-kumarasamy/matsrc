@@ -121,11 +121,77 @@ model SupplierProfile {
 }
 
 model Category {
-
   id       String    @id @default(cuid())
   name     String    @unique
   slug     String    @unique
+  isActive Boolean   @default(true)
   products Product[]
+  canonicalProducts CanonicalProduct[]
+}
+
+// ─────────────────────────────────────────────
+// Standardized catalog master data (admin-configured)
+// Brand / Grade / Unit are enumerated, admin-managed lists —
+// supplier listing creation and builder search/filter must select
+// from these lists rather than free text. Mirrors the existing
+// Category model shape for consistency.
+// ─────────────────────────────────────────────
+
+model Brand {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+  canonicalProducts CanonicalProduct[]
+}
+
+model Grade {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+  canonicalProducts CanonicalProduct[]
+}
+
+model Unit {
+  id        String    @id @default(cuid())
+  name      String    @unique // display label, e.g. "Metric Ton"
+  code      String    @unique // short code, e.g. "MT"
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+  canonicalProducts CanonicalProduct[]
+}
+
+// Canonical "same physical product across suppliers" grouping.
+// A CanonicalProduct is derived deterministically from
+// category + brand + grade + unit (all now FK-constrained master data)
+// so matching is exact, not fuzzy.
+model CanonicalProduct {
+  id           String    @id @default(cuid())
+  canonicalKey String    @unique
+  categoryId   String
+  category     Category  @relation(fields: [categoryId], references: [id])
+  brandId      String?
+  brand        Brand?    @relation(fields: [brandId], references: [id])
+  gradeId      String?
+  grade        Grade?    @relation(fields: [gradeId], references: [id])
+  unitId       String?
+  unit         Unit?     @relation(fields: [unitId], references: [id])
+  title        String    // display name for the merged discovery card
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  products     Product[]
+
+  @@index([categoryId])
 }
 
 model Product {
@@ -136,12 +202,18 @@ model Product {
   category        Category        @relation(fields: [categoryId], references: [id])
   name            String
   slug            String          @unique
-  brand           String?
-  grade           String?
+  brand           String?         // deprecated free-text value, retained for backfill/history only
+  grade           String?         // deprecated free-text value, retained for backfill/history only
+  brandId         String?
+  brandRef        Brand?          @relation(fields: [brandId], references: [id])
+  gradeId         String?
+  gradeRef        Grade?          @relation(fields: [gradeId], references: [id])
+  unitId          String?
+  unitRef         Unit?           @relation(fields: [unitId], references: [id])
   isCode          String?
   bisStatus       String?         // CERTIFIED | PENDING | NA
   description     String?
-  unit            String          // MT | BAG | SQM | PCS
+  unit            String          // deprecated free-text value (MT | BAG | SQM | PCS), retained for backfill/history only
   basePrice       Decimal         @db.Decimal(12, 2)
   stock           Int             @default(0)
   maxServiceableQty Int?          
@@ -156,6 +228,10 @@ model Product {
   aggregationZoneRules  Json?    // reserved for future zone-grouping configuration
   aggregationWindowDays Int?     @default(7)
 
+  // Cross-supplier canonical product grouping (additive; nullable until backfilled)
+  canonicalProductId String?
+  canonicalProduct   CanonicalProduct? @relation(fields: [canonicalProductId], references: [id])
+
   prices          PricePoint[]
   pricingTiers    PricingTier[]
   cartItems       CartItem[]
@@ -169,6 +245,10 @@ model Product {
   @@index([supplierId])
   @@index([categoryId])
   @@index([slug])
+  @@index([canonicalProductId])
+  @@index([brandId])
+  @@index([gradeId])
+  @@index([unitId])
 }
 
 
@@ -288,6 +368,16 @@ model CartItem {
   quantity  Int
   updatedAt DateTime @updatedAt
 
+  // Cross-supplier resolution snapshot (populated at add-to-cart time; re-resolved
+  // at checkout). Nullable/additive so existing rows and single-supplier products
+  // keep working unchanged.
+  resolvedListingId   String?
+  resolvedSupplierId  String?
+  resolvedTierMinQty  Int?
+  resolvedTierMaxQty  Int?
+  resolvedUnitPrice   Decimal? @db.Decimal(12, 2)
+  resolvedAt          DateTime?
+
   @@unique([userId, productId])
   @@index([userId])
 }
@@ -373,6 +463,16 @@ model OrderItem {
   deliveryDate DateTime?
   supplierQuotes SupplierQuote[]
 
+  // Cross-supplier resolution audit trail (additive). Captures which canonical
+  // product/tier/listing this line item resolved to and when, so disputes/admin
+  // can answer "why was this assigned to Supplier X".
+  canonicalProductId  String?
+  resolvedListingId   String?
+  tierMinQty          Int?
+  tierMaxQty          Int?
+  priceAtResolution   Decimal?  @db.Decimal(12, 2)
+  resolvedAt          DateTime?
+
   @@index([orderId])
   @@index([supplierId])
 }
@@ -441,11 +541,19 @@ model NotificationPreference {
   emailEnabled    Boolean  @default(true)
   pushEnabled     Boolean  @default(true)
   inAppEnabled    Boolean  @default(true)
+  // Explicit consent to receive outbound WhatsApp *business alert* messages
+  // (watchlist price hits, order-status updates, RFQ quote-received notices)
+  // via the Twilio/Meta WhatsApp alert provider. Deliberately separate from
+  // `whatsappEnabled` above (which gates the pre-existing mock/basic WhatsApp
+  // channel) — defaults to false so no user is ever messaged without
+  // explicit opt-in.
+  whatsappOptIn   Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@index([userId])
 }
+
 
 enum NotificationTemplateType {
   ORDER_SUBMITTED

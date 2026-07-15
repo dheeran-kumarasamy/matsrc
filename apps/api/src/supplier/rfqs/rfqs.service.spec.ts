@@ -61,12 +61,18 @@ describe("RfqsService.createQuote", () => {
       notifyBuilderBestPriceSelected: vi.fn().mockResolvedValue(undefined),
     };
 
+    const whatsAppAlertService = {
+      sendRfqQuoteReceived: vi.fn().mockResolvedValue(undefined),
+    };
+
     const service = new RfqsService(
       prisma as any,
       supplierContext as any,
       bestPriceSelectionService as any,
-      notificationService as any
+      notificationService as any,
+      whatsAppAlertService as any
     );
+
 
     await service.createQuote(
       "enq-1",

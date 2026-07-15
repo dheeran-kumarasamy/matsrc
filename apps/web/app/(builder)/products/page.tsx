@@ -1,9 +1,8 @@
 import ProductCard from "@/components/products/ProductCard";
+import { getSupplierListings, dedupeByCanonicalGroup, parseListingPrice } from "@/lib/listings";
 
 
 export const dynamic = "force-dynamic";
-
-const SUPPLIER_APP_URL = process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://matsrc-supplier.vercel.app";
 
 interface SearchParams {
   category?: string;
@@ -24,44 +23,6 @@ function parseNumber(value?: string) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function parseListingPrice(value: string) {
-  const numeric = value.replace(/[^\d.]/g, "");
-  return Number(numeric || 0);
-}
-
-type SupplierListing = {
-  id: string;
-  name: string;
-  category: string;
-  grade: string;
-  price: string;
-  stock: string;
-  active: boolean;
-  images?: string[];
-};
-
-async function getSupplierListings(): Promise<SupplierListing[]> {
-  try {
-    const response = await fetch(`${SUPPLIER_APP_URL}/api/public/listings`, {
-      cache: "no-store",
-      redirect: "manual",
-    });
-
-    if (!response.ok) {
-      return [];
-    }
-
-    const contentType = response.headers.get("content-type") ?? "";
-    if (!contentType.includes("application/json")) {
-      return [];
-    }
-
-    return response.json() as Promise<SupplierListing[]>;
-  } catch {
-    return [];
-  }
-}
-
 // UF-02: Material Discovery — FR-04 Faceted Search & Browse
 export default async function ProductsPage({ searchParams }: { searchParams: SearchParams }) {
   const q = normalizeParam(searchParams.q);
@@ -73,9 +34,16 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
 
   const minPrice = parseNumber(minPriceRaw);
   const maxPrice = parseNumber(maxPriceRaw);
-  const listings = await getSupplierListings();
+  const allListings = await getSupplierListings();
 
-  let filtered = listings.filter((listing) => listing.active);
+  let filtered = allListings.filter((listing) => listing.active);
+
+  // Collapse cross-supplier duplicate listings for the same canonical
+  // product into a single card, priced at the group's lowest price
+  // (headlinePrice) — fixes the Display bug from the cross-supplier price
+  // resolution spec. Done BEFORE search/filter/sort so those operate on the
+  // already-deduped, headline-priced representative listings.
+  filtered = dedupeByCanonicalGroup(filtered);
 
   if (q) {
     const query = q.toLowerCase();

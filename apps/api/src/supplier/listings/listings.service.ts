@@ -1,16 +1,20 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
 import { formatCurrency, slugify } from "src/supplier/utils";
 import { CreateListingDto } from "./dto/create-listing.dto";
 import { UpdateListingDto } from "./dto/update-listing.dto";
 import { UpdateAggregationSettingsDto } from "./dto/update-aggregation-settings.dto";
+import { WhatsAppAlertService } from "src/notifications/whatsapp-alerts/whatsapp-alert.service";
 
 @Injectable()
 export class ListingsService {
+  private readonly logger = new Logger(ListingsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly supplierContext: SupplierContextService
+    private readonly supplierContext: SupplierContextService,
+    private readonly whatsAppAlertService: WhatsAppAlertService
   ) {}
 
   async findAll(user: any) {
@@ -96,7 +100,7 @@ export class ListingsService {
   }
 
   async update(id: string, dto: UpdateListingDto, user: any): Promise<{ id: string; name: string; unit: string }> {
-    await this.findOne(id, user);
+    const previous = await this.findOne(id, user);
     const categoryName = dto.category?.trim();
 
     let categoryId: string | undefined;
@@ -123,11 +127,70 @@ export class ListingsService {
       },
     });
 
+    // Watchlist price-alert hook (additive, non-blocking): only worth checking when the
+    // price actually changed and dropped, avoiding unnecessary DB reads on every update.
+    const previousPrice = Number(previous.price);
+    const newPrice = Number(product.basePrice);
+    if (dto.price && newPrice < previousPrice) {
+      void this.checkWatchlistPriceHits(product.id, product.name, newPrice).catch((error) => {
+        this.logger.warn(
+          `Failed to process watchlist price-hit check for product ${product.id}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+    }
+
     return {
       id: product.id,
       name: product.name,
       unit: product.unit,
     };
+  }
+
+  /**
+   * Watchlist price-alert (UF-09) — checks all builders watching this product whose
+   * `targetPrice` has now been met/beaten by the new price, and sends each an
+   * additive WhatsApp business alert (gated by `WHATSAPP_ENABLED` + per-user opt-in
+   * inside `WhatsAppAlertService`). Marks `alertSent` so the same watchlist row isn't
+   * re-alerted on every subsequent price update once its target has already been hit.
+   *
+   * Deliberately non-blocking/best-effort — never affects the underlying listing
+   * price update this is triggered from.
+   */
+  private async checkWatchlistPriceHits(productId: string, productName: string, newPrice: number): Promise<void> {
+    const hits = await this.prisma.watchlist.findMany({
+      where: {
+        productId,
+        alertSent: false,
+        targetPrice: { not: null, gte: newPrice },
+      },
+    });
+
+    for (const hit of hits) {
+      void this.whatsAppAlertService
+        .sendWatchlistPriceHit({
+          userId: hit.userId,
+          productId,
+          productName,
+          currentPrice: newPrice.toString(),
+          targetPrice: hit.targetPrice?.toString() ?? "",
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `Failed to send WhatsApp watchlist price-hit alert for user ${hit.userId}/product ${productId}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
+
+      await this.prisma.watchlist
+        .update({
+          where: { id: hit.id },
+          data: { alertSent: true },
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `Failed to mark watchlist entry ${hit.id} as alerted: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
+    }
   }
 
   /**

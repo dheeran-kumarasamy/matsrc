@@ -3,59 +3,50 @@ import { notFound } from "next/navigation";
 import EnquiryPanel from "@/components/products/EnquiryPanel";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import { getDefaultCategoryImage } from "@/lib/category-images";
+import { getSupplierListings, parseNumericLabel, type SupplierListing } from "@/lib/listings";
 
 export const dynamic = "force-dynamic";
 
-const SUPPLIER_APP_URL = process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://matsrc-supplier.vercel.app";
+// Given the requested listing (by slug/id), resolve the full cross-supplier
+// canonical group it belongs to so the PDP can show the group's lowest
+// (headline) price rather than just this one supplier's own price — fixes
+// the Display bug from the cross-supplier price resolution spec. Falls back
+// to the single listing itself when it has no canonicalProductId /
+// groupedListingIds (legacy / ungrouped data).
+function resolveProductGroup(allListings: SupplierListing[], slug: string) {
+  const requested = allListings.find((listing) => listing.id === slug);
+  if (!requested) return null;
 
-type PricingTier = {
-  minQty: string;
-  maxQty: string;
-  price: string;
-};
+  const groupedIds = requested.groupedListingIds && requested.groupedListingIds.length > 0
+    ? requested.groupedListingIds
+    : [requested.id];
 
-type SupplierListing = {
-  id: string;
-  supplierId: string;
-  name: string;
-  category: string;
-  grade: string;
-  unit: string;
-  price: string;
-  stock: string;
-  maxServiceableQty: string;
-  active: boolean;
-  pricingTiers: PricingTier[];
-  images?: string[];
-};
+  const siblings = allListings.filter((listing) => groupedIds.includes(listing.id));
 
-async function getSupplierProduct(slug: string): Promise<SupplierListing | null> {
-  try {
-    const response = await fetch(`${SUPPLIER_APP_URL}/api/public/listings`, { cache: "no-store" });
-    if (!response.ok) return null;
+  const headline = requested.headlineSupplierId
+    ? siblings.find((listing) => listing.supplierId === requested.headlineSupplierId) ?? requested
+    : requested;
 
-    const contentType = response.headers.get("content-type") ?? "";
-    if (!contentType.includes("application/json")) return null;
-
-    const listings = (await response.json()) as SupplierListing[];
-    return listings.find((listing) => listing.id === slug) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function parseNumericLabel(value: string) {
-  const numeric = Number(value.replace(/[^\d.]/g, ""));
-  return Number.isFinite(numeric) ? numeric : 0;
+  return {
+    displayListing: {
+      ...headline,
+      price: requested.headlinePrice || headline.price,
+    },
+    siblings,
+  };
 }
 
 export default async function ProductDetailPage({ params }: { params: { slug: string } }) {
-  const product = await getSupplierProduct(params.slug);
-  if (!product) notFound();
+  const allListings = await getSupplierListings();
+  const group = resolveProductGroup(allListings, params.slug);
+  if (!group) notFound();
+
+  const { displayListing: product, siblings } = group;
 
   const maxServiceableQty = parseNumericLabel(product.maxServiceableQty);
   const basePrice = parseNumericLabel(product.price);
   const imageUrl = product.images && product.images.length > 0 ? product.images[0] : getDefaultCategoryImage(product.category);
+  const otherSuppliersCount = siblings.filter((listing) => listing.supplierId !== product.supplierId).length;
 
   return (
     <div className="space-y-6">
@@ -87,6 +78,11 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
                   Live enquiry pricing
                 </div>
               </div>
+              {otherSuppliersCount > 0 ? (
+                <p className="mt-3 text-xs text-slate-500">
+                  Showing the lowest price across {otherSuppliersCount + 1} verified suppliers for this product.
+                </p>
+              ) : null}
             </div>
 
             <div className="grid gap-4 border-t border-slate-100 p-6 sm:grid-cols-2 lg:grid-cols-3">

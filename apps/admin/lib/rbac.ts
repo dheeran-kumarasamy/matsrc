@@ -7,6 +7,7 @@ export const MENU_CONFIG = [
   { key: "kyc", href: "/kyc", label: "KYC Queue" },
   { key: "disputes", href: "/disputes", label: "Disputes" },
   { key: "aggregation", href: "/aggregation", label: "Aggregation Pools" },
+  { key: "catalog", href: "/catalog", label: "Catalog Master Data" },
   { key: "audit", href: "/audit", label: "Audit Logs" },
   { key: "access", href: "/access", label: "Access Control" },
 ] as const;

@@ -4,6 +4,7 @@ import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
 import { formatDate, humanizeToken } from "src/supplier/utils";
 import { NotificationService } from "src/notifications/notification.service";
+import { WhatsAppAlertService } from "src/notifications/whatsapp-alerts/whatsapp-alert.service";
 
 @Injectable()
 export class OrdersService {
@@ -12,7 +13,8 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly supplierContext: SupplierContextService,
-    private readonly notificationService: NotificationService
+    private readonly notificationService: NotificationService,
+    private readonly whatsAppAlertService: WhatsAppAlertService
   ) {}
 
   async findAll(user: any) {
@@ -74,6 +76,13 @@ export class OrdersService {
     const order = await this.prisma.order.update({
       where: { id },
       data: { status },
+      include: {
+        items: {
+          include: {
+            supplier: true,
+          },
+        },
+      },
     });
 
     await this.prisma.orderTracking.create({
@@ -88,6 +97,20 @@ export class OrdersService {
     void this.notificationService.notifyBuilderOrderDecision(id, status).catch((error) => {
       this.logger.warn(`Failed to queue builder notification for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
     });
+
+    // Additive WhatsApp business alert — gated by WHATSAPP_ENABLED + per-user opt-in
+    // inside WhatsAppAlertService itself; never blocks/affects the order-status update
+    // above, and never throws.
+    void this.whatsAppAlertService
+      .sendOrderStatusUpdate({
+        userId: order.userId,
+        orderId: order.id,
+        status: order.status,
+        supplierName: order.items[0]?.supplier.companyName,
+      })
+      .catch((error) => {
+        this.logger.warn(`Failed to send WhatsApp order-status alert for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
+      });
 
     return { id: order.id, status: order.status };
   }

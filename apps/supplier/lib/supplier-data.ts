@@ -1,6 +1,12 @@
 import { prisma } from "@matsrc/db";
 import { parsePhoneNumber } from "libphonenumber-js";
 import { getDefaultCategoryImage } from "./category-images";
+import {
+  groupByCanonicalProduct,
+  resolveHeadlinePrice,
+  type ResolutionCandidate,
+} from "./resolution";
+
 
 type OrderStatus = "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
 
@@ -411,7 +417,7 @@ export async function getPublicSupplierListings() {
     });
   }
 
-  return listings.map((product: any) => {
+  const mapped = listings.map((product: any) => {
     const fallbackMaxQty = product.maxServiceableQty ?? product.stock;
     const pricingTiers = Array.isArray(product.pricingTiers) && product.pricingTiers.length > 0
       ? product.pricingTiers
@@ -426,6 +432,7 @@ export async function getPublicSupplierListings() {
     return {
       id: product.id,
       supplierId: product.supplierId,
+      canonicalProductId: product.canonicalProductId ?? null,
       name: product.name,
       category: product.category.name,
       grade: product.grade ?? "NA",
@@ -443,9 +450,65 @@ export async function getPublicSupplierListings() {
         maxQty: String(tier.maxQty),
         price: String(tier.tierPrice),
       })),
+      // Raw numeric fields kept alongside the formatted display fields above
+      // (which existing consumers rely on) so the cross-supplier resolution
+      // engine below can compute headline/grouped pricing without re-parsing
+      // formatted strings.
+      _basePriceRaw: Number(product.basePrice),
+      _stockRaw: Number(product.stock),
+      _maxServiceableQtyRaw: Number(fallbackMaxQty),
+      _pricingTiersRaw: pricingTiers.map((tier: any) => ({
+        minQty: Number(tier.minQty),
+        maxQty: Number(tier.maxQty),
+        tierPrice: Number(tier.tierPrice),
+      })),
+    };
+  });
+
+  // Cross-supplier canonical grouping (spec: "Product Discovery Duplicate
+  // Listings — Cross-Supplier Price Resolution"): group listings that
+  // represent the same physical product (same canonicalProductId) and
+  // compute the lowest headline price + list of grouped listing ids, so the
+  // builder discovery feed can collapse duplicates into a single card priced
+  // at the lowest available price, while still returning every individual
+  // listing (backward compatible for any consumer not yet updated).
+  const groups = groupByCanonicalProduct(mapped as any);
+
+  return mapped.map((listing: any) => {
+    const groupKey = listing.canonicalProductId ?? listing.id;
+    const group = groups.get(groupKey) ?? [listing];
+
+    const candidates: ResolutionCandidate[] = group.map((item: any) => ({
+      listingId: item.id,
+      supplierId: item.supplierId,
+      basePrice: item._basePriceRaw,
+      stock: item._stockRaw,
+      maxServiceableQty: item._maxServiceableQtyRaw,
+      pricingTiers: item._pricingTiersRaw,
+      isActive: item.active,
+    }));
+
+    const headline = resolveHeadlinePrice(candidates);
+
+    const {
+      _basePriceRaw,
+      _stockRaw,
+      _maxServiceableQtyRaw,
+      _pricingTiersRaw,
+      ...publicFields
+    } = listing;
+
+    return {
+      ...publicFields,
+      groupedListingIds: group.map((item: any) => item.id),
+      headlinePrice: headline
+        ? `${formatCurrency(headline.unitPrice)} / ${listing.unit}`
+        : publicFields.price,
+      headlineSupplierId: headline?.supplierId ?? listing.supplierId,
     };
   });
 }
+
 
 export type SupplierListingRow = {
   id: string;
@@ -575,6 +638,66 @@ function normalizePricingTiers(tiers: PricingTierInput[] | undefined, maxService
   return normalized;
 }
 
+// Resolves Brand/Grade/Unit free-text values (now guaranteed to be exact
+// master-data matches since ListingForm only sends dropdown-selected values)
+// to their FK ids, and finds-or-creates the CanonicalProduct row that groups
+// this listing with any other supplier's listing for the "same" product
+// (category + brand + grade + unit). Mirrors the logic in
+// packages/db/scripts/backfill-catalog-master-data.js so canonicalKey stays
+// consistent between the one-off backfill and ongoing listing writes.
+async function resolveCanonicalAssignment(
+  transaction: any,
+  params: {
+    categoryId: string;
+    categoryName: string;
+    brandName?: string | null;
+    gradeName?: string | null;
+    unitValue: string;
+    title: string;
+  }
+) {
+  const { categoryId, categoryName, brandName, gradeName, unitValue, title } = params;
+
+  let brandId: string | null = null;
+  if (brandName && brandName.trim()) {
+    const brand = await transaction.brand.findFirst({ where: { name: brandName.trim() } });
+    brandId = brand?.id ?? null;
+  }
+
+  let gradeId: string | null = null;
+  if (gradeName && gradeName.trim()) {
+    const grade = await transaction.grade.findFirst({ where: { name: gradeName.trim() } });
+    gradeId = grade?.id ?? null;
+  }
+
+  let unitId: string | null = null;
+  if (unitValue && unitValue.trim()) {
+    const unit = await transaction.unit.findFirst({
+      where: { OR: [{ code: unitValue.trim() }, { name: unitValue.trim() }] },
+    });
+    unitId = unit?.id ?? null;
+  }
+
+  const canonicalKey = [categoryId, brandId ?? "none", gradeId ?? "none", unitId ?? "none"].join(":");
+
+  let canonical = await transaction.canonicalProduct.findUnique({ where: { canonicalKey } });
+  if (!canonical) {
+    const canonicalTitle = [categoryName, brandName, gradeName].filter(Boolean).join(" ") || title;
+    canonical = await transaction.canonicalProduct.create({
+      data: {
+        canonicalKey,
+        categoryId,
+        brandId: brandId ?? undefined,
+        gradeId: gradeId ?? undefined,
+        unitId: unitId ?? undefined,
+        title: canonicalTitle,
+      },
+    });
+  }
+
+  return { brandId, gradeId, unitId, canonicalProductId: canonical.id as string };
+}
+
 export async function createSupplierListing(input: ListingInput, email: string) {
   const { supplierProfile } = await ensureSupplierContext(email);
   const categoryName = input.category.trim();
@@ -592,6 +715,15 @@ export async function createSupplierListing(input: ListingInput, email: string) 
 
   const createWithPricingSchema = () =>
     prisma.$transaction(async (transaction) => {
+      const assignment = await resolveCanonicalAssignment(transaction, {
+        categoryId: category.id,
+        categoryName: category.name,
+        brandName: input.brand,
+        gradeName: input.grade,
+        unitValue: input.unit,
+        title: input.title,
+      });
+
       const product = await transaction.product.create({
         data: {
           supplierId: supplierProfile.id,
@@ -600,6 +732,10 @@ export async function createSupplierListing(input: ListingInput, email: string) 
           slug: `${slugBase}-${suffix}`,
           brand: input.brand?.trim() || null,
           grade: input.grade.trim() || null,
+          brandId: assignment.brandId ?? undefined,
+          gradeId: assignment.gradeId ?? undefined,
+          unitId: assignment.unitId ?? undefined,
+          canonicalProductId: assignment.canonicalProductId,
           description: input.description?.trim() || null,
           unit: input.unit.trim().toUpperCase(),
           basePrice,
@@ -609,6 +745,7 @@ export async function createSupplierListing(input: ListingInput, email: string) 
           isActive: true,
         },
       });
+
 
       await transaction.pricingTier.createMany({
         data: pricingTiers.map((tier) => ({
@@ -648,6 +785,15 @@ export async function updateSupplierListing(id: string, input: ListingInput, ema
 
   const updateWithPricingSchema = () =>
     prisma.$transaction(async (transaction) => {
+      const assignment = await resolveCanonicalAssignment(transaction, {
+        categoryId: category.id,
+        categoryName: category.name,
+        brandName: input.brand,
+        gradeName: input.grade,
+        unitValue: input.unit,
+        title: input.title,
+      });
+
       const product = await transaction.product.update({
         where: { id },
         data: {
@@ -655,6 +801,10 @@ export async function updateSupplierListing(id: string, input: ListingInput, ema
           name: input.title.trim(),
           brand: input.brand?.trim() || null,
           grade: input.grade.trim() || null,
+          brandId: assignment.brandId ?? undefined,
+          gradeId: assignment.gradeId ?? undefined,
+          unitId: assignment.unitId ?? undefined,
+          canonicalProductId: assignment.canonicalProductId,
           description: input.description?.trim() || null,
           unit: input.unit.trim().toUpperCase(),
           basePrice,
@@ -665,6 +815,7 @@ export async function updateSupplierListing(id: string, input: ListingInput, ema
             : {}),
         },
       });
+
 
       await transaction.pricingTier.deleteMany({ where: { productId: id } });
       await transaction.pricingTier.createMany({

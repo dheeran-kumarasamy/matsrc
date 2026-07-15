@@ -9,9 +9,113 @@ import {
   getUserCtx,
 } from "@/lib/builder-db";
 import { notifySupplierOrderSubmitted } from "@/lib/notify";
+import {
+  resolveLowestPriceForQuantity,
+  type ResolutionCandidate,
+} from "@/lib/resolution";
 
 
 export const dynamic = "force-dynamic";
+
+const SUPPLIER_APP_URL = process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://matsrc-supplier.vercel.app";
+
+type SupplierListing = {
+  id: string;
+  price: string;
+  stock: string;
+  maxServiceableQty?: string;
+  active: boolean;
+  canonicalProductId?: string | null;
+  groupedListingIds?: string[];
+  headlineSupplierId?: string;
+  basePriceRaw?: number;
+  stockRaw?: number;
+  maxServiceableQtyRaw?: number;
+  pricingTiersRaw?: { minQty: number; maxQty: number; tierPrice: number }[];
+};
+
+function parseNumberLabel(value: string) {
+  const numeric = Number(value.replace(/[^\d.]/g, ""));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function parseQuantityLabel(value: string) {
+  const numeric = Number(value.replace(/[^\d]/g, ""));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+async function fetchAllSupplierListings(): Promise<SupplierListing[]> {
+  try {
+    const response = await fetch(`${SUPPLIER_APP_URL}/api/public/listings`, { cache: "no-store" });
+    if (!response.ok) return [];
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) return [];
+
+    return (await response.json()) as SupplierListing[];
+  } catch {
+    return [];
+  }
+}
+
+function toResolutionCandidate(listing: SupplierListing): ResolutionCandidate {
+  const pricingTiers =
+    Array.isArray(listing.pricingTiersRaw) && listing.pricingTiersRaw.length > 0
+      ? listing.pricingTiersRaw
+      : [
+          {
+            minQty: 1,
+            maxQty:
+              listing.maxServiceableQtyRaw ??
+              (listing.maxServiceableQty ? parseQuantityLabel(listing.maxServiceableQty) : parseQuantityLabel(listing.stock)),
+            tierPrice: listing.basePriceRaw ?? parseNumberLabel(listing.price),
+          },
+        ];
+
+  return {
+    listingId: listing.id,
+    supplierId: listing.headlineSupplierId ?? "",
+    basePrice: listing.basePriceRaw ?? parseNumberLabel(listing.price),
+    stock: listing.stockRaw ?? parseQuantityLabel(listing.stock),
+    maxServiceableQty:
+      listing.maxServiceableQtyRaw ??
+      (listing.maxServiceableQty ? parseQuantityLabel(listing.maxServiceableQty) : parseQuantityLabel(listing.stock)),
+    pricingTiers,
+    isActive: listing.active,
+  };
+}
+
+/**
+ * Re-resolves, at checkout time (per spec: "re-resolve at checkout"), which
+ * specific listing in a canonical product's cross-supplier group currently
+ * offers the lowest price for the given quantity. Falls back to null if the
+ * listing isn't found among the currently fetched public listings (e.g. a
+ * legacy/local-only mirrored product with no live supplier listing).
+ */
+function resolveForProductId(
+  productId: string,
+  canonicalProductId: string | null | undefined,
+  allListings: SupplierListing[],
+  quantity: number
+) {
+  const matched = allListings.find((item) => item.id === productId);
+
+  const groupIds = new Set(
+    matched?.groupedListingIds && matched.groupedListingIds.length > 0
+      ? matched.groupedListingIds
+      : canonicalProductId
+        ? allListings.filter((item) => item.canonicalProductId === canonicalProductId).map((item) => item.id)
+        : matched
+          ? [matched.id]
+          : []
+  );
+
+  const group = allListings.filter((item) => groupIds.has(item.id));
+  if (group.length === 0) return null;
+
+  const candidates = group.map(toResolutionCandidate);
+  return resolveLowestPriceForQuantity(candidates, quantity);
+}
 
 export async function GET(request: Request) {
   try {
@@ -80,6 +184,7 @@ export async function POST(request: Request) {
         product: {
           select: {
             supplierId: true,
+            canonicalProductId: true,
             basePrice: true,
             supplier: { select: { companyName: true } },
             pricingTiers: {
@@ -95,21 +200,82 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
     }
 
-    // Group by supplier
-    const groups = new Map<
-      string,
-      { supplierId: string; supplierName: string; items: Array<{ productId: string; quantity: number; unitPrice: number }> }
-    >();
+    // Re-resolve each cart item's canonical group fresh against the latest
+    // supplier listings (spec: "re-resolve at checkout" — prices/stock may
+    // have changed since add-to-cart). Falls back to the item's own
+    // supplier/product pricing if no live resolution is available (e.g.
+    // legacy local-only product with no matching public listing).
+    const allListings = await fetchAllSupplierListings();
 
-    for (const item of cartItems) {
-      const unitPrice = resolveUnitPrice(item.product, item.quantity);
-      const group = groups.get(item.product.supplierId) ?? {
+    type ResolvedLine = {
+      productId: string;
+      quantity: number;
+      unitPrice: number;
+      supplierId: string;
+      supplierName: string;
+      canonicalProductId: string | null;
+      resolvedListingId: string | null;
+      tierMinQty: number | null;
+      tierMaxQty: number | null;
+    };
+
+    const resolvedLines: ResolvedLine[] = cartItems.map((item) => {
+      const resolution = resolveForProductId(
+        item.productId,
+        item.product.canonicalProductId,
+        allListings,
+        item.quantity
+      );
+
+      if (resolution && resolution.supplierId) {
+        return {
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPrice: resolution.unitPrice,
+          supplierId: resolution.supplierId,
+          supplierName: item.product.supplier.companyName,
+          canonicalProductId: item.product.canonicalProductId,
+          resolvedListingId: resolution.listingId,
+          tierMinQty: resolution.tierMinQty,
+          tierMaxQty: resolution.tierMaxQty,
+        };
+      }
+
+      // Fallback: legacy single-listing pricing, grouped by the item's own
+      // product/supplier (unchanged pre-resolution behaviour).
+      return {
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: resolveUnitPrice(item.product, item.quantity),
         supplierId: item.product.supplierId,
         supplierName: item.product.supplier.companyName,
+        canonicalProductId: item.product.canonicalProductId,
+        resolvedListingId: null,
+        tierMinQty: null,
+        tierMaxQty: null,
+      };
+    });
+
+    // Group by the RESOLVED supplier (routing-bug fix: an enquiry must be
+    // assigned to the specific supplier whose price is lowest for the tier
+    // the builder selected — not just whichever card/listing they clicked).
+    const groups = new Map<
+      string,
+      {
+        supplierId: string;
+        supplierName: string;
+        items: ResolvedLine[];
+      }
+    >();
+
+    for (const line of resolvedLines) {
+      const group = groups.get(line.supplierId) ?? {
+        supplierId: line.supplierId,
+        supplierName: line.supplierName,
         items: [],
       };
-      group.items.push({ productId: item.productId, quantity: item.quantity, unitPrice });
-      groups.set(item.product.supplierId, group);
+      group.items.push(line);
+      groups.set(line.supplierId, group);
     }
 
     const createdOrders = [];
@@ -120,6 +286,7 @@ export async function POST(request: Request) {
         0
       );
       const deliveryDate = body.deliveryDate ? new Date(body.deliveryDate) : null;
+      const resolvedAt = new Date();
 
       const order = await prisma.order.create({
         data: {
@@ -136,6 +303,12 @@ export async function POST(request: Request) {
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               deliveryDate,
+              canonicalProductId: item.canonicalProductId ?? undefined,
+              resolvedListingId: item.resolvedListingId ?? undefined,
+              tierMinQty: item.tierMinQty ?? undefined,
+              tierMaxQty: item.tierMaxQty ?? undefined,
+              priceAtResolution: item.resolvedListingId ? item.unitPrice : undefined,
+              resolvedAt: item.resolvedListingId ? resolvedAt : undefined,
             })),
           },
           tracking: {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { adminApiPatch, adminApiPost } from "@/lib/api";
+import { adminApiPatch, adminApiPost } from "@/lib/api-client";
 
 type CatalogEntity = "category" | "brand" | "grade" | "unit";
 

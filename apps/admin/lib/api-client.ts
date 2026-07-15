@@ -1,5 +1,7 @@
-import "server-only";
-import { auth } from "@/auth";
+// Client-safe admin API helpers.
+// This module must NOT import "@/auth" or "@/lib/password" (directly or transitively),
+// since it is imported by "use client" components and would otherwise pull
+// server-only Node crypto code into the browser bundle.
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
 
@@ -11,7 +13,8 @@ type AdminSessionUser = {
 };
 
 async function getSessionUser(): Promise<AdminSessionUser | null> {
-  const session = await auth();
+  const { getSession } = await import("next-auth/react");
+  const session = await getSession();
   return (session?.user as AdminSessionUser) || null;
 }
 

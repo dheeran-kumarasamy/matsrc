@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { adminApiPost } from "@/lib/api";
+import { adminApiPost } from "@/lib/api-client";
 
 export type AdminAggregationPool = {
   id: string;

@@ -92,6 +92,7 @@ describe("WhatsAppController", () => {
   let router: { handleInboundMessage: ReturnType<typeof vi.fn> };
   let sessionService: { withIdempotency: ReturnType<typeof vi.fn> };
   let auditHelper: { recordDeliveryStatus: ReturnType<typeof vi.fn>; recordEscalation: ReturnType<typeof vi.fn> };
+  let sendAdapter: { send: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     process.env.WHATSAPP_APP_SECRET = APP_SECRET;
@@ -105,9 +106,13 @@ describe("WhatsAppController", () => {
       recordDeliveryStatus: vi.fn().mockResolvedValue(undefined),
       recordEscalation: vi.fn().mockResolvedValue(undefined),
     };
+    sendAdapter = {
+      send: vi.fn().mockResolvedValue({ externalId: "mock-id", provider: "mock" }),
+    };
 
-    controller = new WhatsAppController(router as any, sessionService as any, auditHelper as any);
+    controller = new WhatsAppController(router as any, sessionService as any, auditHelper as any, sendAdapter as any);
   });
+
 
   describe("GET verify (webhook handshake)", () => {
     it("returns the hub.challenge with 200 when the verify token matches", () => {

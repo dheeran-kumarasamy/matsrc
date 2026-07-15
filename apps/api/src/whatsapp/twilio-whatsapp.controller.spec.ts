@@ -21,6 +21,7 @@ describe("TwilioWhatsAppController", () => {
   let router: { handleInboundMessage: ReturnType<typeof vi.fn> };
   let sessionService: { withIdempotency: ReturnType<typeof vi.fn> };
   let auditHelper: { recordDeliveryStatus: ReturnType<typeof vi.fn> };
+  let sendAdapter: { send: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     delete process.env.TWILIO_WEBHOOK_VALIDATE_SIGNATURE;
@@ -32,9 +33,13 @@ describe("TwilioWhatsAppController", () => {
     auditHelper = {
       recordDeliveryStatus: vi.fn().mockResolvedValue(undefined),
     };
+    sendAdapter = {
+      send: vi.fn().mockResolvedValue({ externalId: "mock-id", provider: "mock" }),
+    };
 
-    controller = new TwilioWhatsAppController(router as any, sessionService as any, auditHelper as any);
+    controller = new TwilioWhatsAppController(router as any, sessionService as any, auditHelper as any, sendAdapter as any);
   });
+
 
   describe("POST messages — inbound message handling", () => {
     it("routes an inbound message using the normalized (whatsapp: prefix stripped) From number", async () => {

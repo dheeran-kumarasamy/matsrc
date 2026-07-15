@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { menuLabel, type AdminMenu } from "@/lib/rbac";
+import { menuLabel, type AdminMenu } from "@/lib/rbac-shared";
 
 type AdminUser = {
   id: string;

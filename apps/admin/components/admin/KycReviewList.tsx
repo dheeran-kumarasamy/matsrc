@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { adminApiPatch } from "@/lib/api";
+import { adminApiPatch } from "@/lib/api-client";
 
 type KycItem = {
   id: string;

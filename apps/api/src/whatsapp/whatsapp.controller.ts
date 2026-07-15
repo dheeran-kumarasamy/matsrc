@@ -1,9 +1,11 @@
 import { createHmac, timingSafeEqual } from "crypto";
-import { Controller, Get, Headers, HttpCode, HttpStatus, Post, Query, RawBodyRequest, Req, Res } from "@nestjs/common";
+import { Controller, Get, Headers, HttpCode, HttpStatus, Inject, Logger, Post, Query, RawBodyRequest, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { WhatsAppRouterService } from "./whatsapp-router.service";
 import { WhatsAppSessionService } from "./whatsapp-session.service";
 import { WhatsAppAuditHelper } from "./whatsapp-audit.helper";
+import { WHATSAPP_SEND_PROVIDER, WhatsAppSendAdapter } from "./adapters/whatsapp-send.interface";
+
 
 type MetaWebhookMessage = {
   id: string;
@@ -60,11 +62,15 @@ type MetaWebhookPayload = {
  */
 @Controller("whatsapp/webhook")
 export class WhatsAppController {
+  private readonly logger = new Logger(WhatsAppController.name);
+
   constructor(
     private readonly router: WhatsAppRouterService,
     private readonly sessionService: WhatsAppSessionService,
-    private readonly auditHelper: WhatsAppAuditHelper
+    private readonly auditHelper: WhatsAppAuditHelper,
+    @Inject(WHATSAPP_SEND_PROVIDER) private readonly sendAdapter: WhatsAppSendAdapter
   ) {}
+
 
   /** WhatsApp Cloud API verification handshake. */
   @Get()
@@ -133,8 +139,23 @@ export class WhatsAppController {
         )
       : await this.router.handleInboundMessage(phone, text);
 
+    // Actually deliver the computed reply back to the sender via the configured
+    // `WHATSAPP_SEND_PROVIDER` adapter (`MetaCloudApiSendAdapter` when
+    // `WHATSAPP_ADAPTER=meta`). The JSON response below is only useful for our own
+    // debugging/logging — Meta's webhook contract doesn't deliver anything based on it —
+    // so the reply must be sent out-of-band here, not merely included in the HTTP response.
+    try {
+      await this.sendAdapter.send(phone, reply);
+    } catch (error) {
+      // Best-effort: never fail the webhook ack over a downstream send failure — Meta
+      // would otherwise retry the webhook delivery, which would double-process the
+      // inbound message via the idempotency key path above.
+      this.logger.error(`Failed to send reply to ${phone}`, error as Error);
+    }
+
     res.status(HttpStatus.OK).json({ ok: true, reply });
   }
+
 
   private isValidSignature(rawBody: Buffer | undefined, signatureHeader: string | undefined, appSecret: string): boolean {
     if (!rawBody || !signatureHeader || !signatureHeader.startsWith("sha256=")) {

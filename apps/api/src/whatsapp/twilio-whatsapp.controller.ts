@@ -1,10 +1,11 @@
 import { createHmac, timingSafeEqual } from "crypto";
-import { Body, Controller, Headers, HttpCode, HttpStatus, Post, Res } from "@nestjs/common";
+import { Body, Controller, Headers, HttpCode, HttpStatus, Inject, Logger, Post, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { WhatsAppRouterService } from "./whatsapp-router.service";
 import { WhatsAppSessionService } from "./whatsapp-session.service";
 import { WhatsAppAuditHelper } from "./whatsapp-audit.helper";
 import { BotMessage } from "./whatsapp.types";
+import { WHATSAPP_SEND_PROVIDER, WhatsAppSendAdapter } from "./adapters/whatsapp-send.interface";
 
 /**
  * Twilio's inbound WhatsApp webhook payload shape — sent as
@@ -51,10 +52,13 @@ type TwilioStatusCallbackBody = {
  */
 @Controller("whatsapp/twilio-webhook")
 export class TwilioWhatsAppController {
+  private readonly logger = new Logger(TwilioWhatsAppController.name);
+
   constructor(
     private readonly router: WhatsAppRouterService,
     private readonly sessionService: WhatsAppSessionService,
-    private readonly auditHelper: WhatsAppAuditHelper
+    private readonly auditHelper: WhatsAppAuditHelper,
+    @Inject(WHATSAPP_SEND_PROVIDER) private readonly sendAdapter: WhatsAppSendAdapter
   ) {}
 
   /** Inbound message webhook — configured as the number/Messaging Service's "A MESSAGE COMES IN" webhook. */
@@ -102,10 +106,24 @@ export class TwilioWhatsAppController {
         )
       : await this.router.handleInboundMessage(phone, text);
 
-    // Twilio's webhook contract accepts either an empty 200 or TwiML — we already send
-    // the reply out-of-band via the `TwilioSupplierSendAdapter` (through
-    // `WHATSAPP_SEND_PROVIDER`) at the point each flow calls `send()`, so no TwiML body
-    // is required here; a plain 200 JSON ack is sufficient (mirrors `WhatsAppController`).
+    // Actually deliver the computed reply back to the sender via the configured
+    // `WHATSAPP_SEND_PROVIDER` adapter (`TwilioSupplierSendAdapter` when
+    // `WHATSAPP_ADAPTER=twilio`). Twilio's webhook contract doesn't deliver anything
+    // based on the JSON response body below — that's only useful for our own
+    // debugging/logging — so the reply must be sent out-of-band here, not merely
+    // included in the HTTP response.
+    try {
+      await this.sendAdapter.send(phone, reply);
+    } catch (error) {
+      // Best-effort: never fail the webhook ack over a downstream send failure — Twilio
+      // would otherwise retry the webhook delivery, which would double-process the
+      // inbound message via the idempotency key path above.
+      this.logger.error(`Failed to send reply to ${phone}`, error as Error);
+    }
+
+    // Twilio's webhook contract accepts either an empty 200 or TwiML; we've already sent
+    // the reply out-of-band above, so a plain 200 JSON ack is sufficient (mirrors
+    // `WhatsAppController`).
     res.status(HttpStatus.OK).json({ ok: true, reply });
   }
 

@@ -1,21 +1,17 @@
 {
   "version": 2,
   "installCommand": "cd ../.. && pnpm install",
-  "buildCommand": "cd ../.. && pnpm --filter @matsrc/db db:generate && pnpm --filter @matsrc/api build",
-  "builds": [
-    {
-      "src": "api/index.ts",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": ["dist/**", "src/**"],
-        "maxLambdaSize": "50mb"
-      }
+  "buildCommand": "cd ../.. && NODE_OPTIONS=--max-old-space-size=6144 pnpm --filter @matsrc/api build",
+
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 30
     }
-  ],
-  "routes": [
+  },
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "api/index.ts"
+      "source": "/(.*)",
+      "destination": "/api/index"
     }
   ]
 }

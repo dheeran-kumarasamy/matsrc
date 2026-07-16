@@ -1,7 +1,9 @@
+import Link from "next/link";
+import { Search } from "lucide-react";
 import { BuilderNav, BuilderNavMobileTrigger } from "@/components/builder/BuilderNav";
-import QuickRequestForm from "@/components/cart/QuickRequestForm";
 import CartLauncher from "@/components/cart/CartLauncher";
 import CartDrawer from "@/components/cart/CartDrawer";
+
 
 
 // `modal` is the @modal parallel route slot (see app/(builder)/@modal/).
@@ -37,9 +39,17 @@ export default function BuilderLayout({
         {children}
       </main>
 
-      {/* FR-32: Floating Quick Request Form */}
-      <QuickRequestForm floating />
+      {/* Floating Browse Materials shortcut — always available access to the
+          products listing page from anywhere in the builder portal. */}
+      <Link
+        href="/products"
+        className="fixed bottom-6 right-6 z-40 flex min-h-[44px] items-center gap-2 rounded-full bg-accent-500 px-5 py-3 text-sm font-medium text-white shadow-lg transition-colors hover:bg-accent-600"
+      >
+        <Search size={18} />
+        <span className="hidden sm:inline">Browse Materials</span>
+      </Link>
       {/* Persistent cart drawer + inline stepped checkout wizard (spec 5A) */}
+
       <CartDrawer />
       {/* Product quick-view overlay (spec 5A) */}
       {modal}

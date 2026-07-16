@@ -102,8 +102,11 @@ To create them:
 
 ## 6. Configure the webhook
 
-The webhook needs a **public HTTPS URL** for Meta to call — `/whatsapp/webhook` on
-whatever this API deploys to (e.g. `https://api.matsrc.example.com/whatsapp/webhook`).
+The webhook needs a **public HTTPS URL** for Meta to call. Note that `main.ts`/
+`api/index.ts` call `app.setGlobalPrefix("api")`, so the actual route is
+`/api/whatsapp/webhook` on whatever this API deploys to (e.g.
+`https://api.matsrc.example.com/api/whatsapp/webhook`) — omitting the `/api` prefix here
+is the most common cause of the webhook silently 404ing and no messages ever arriving.
 
 ### Local development (before you have a public URL)
 
@@ -114,12 +117,13 @@ ngrok http 3000   # or whatever port apps/api listens on locally
 ```
 
 Take the resulting `https://xxxx.ngrok-free.app` URL and use
-`https://xxxx.ngrok-free.app/whatsapp/webhook` below.
+`https://xxxx.ngrok-free.app/api/whatsapp/webhook` below.
 
 ### Register the webhook
 
 1. In the Meta App dashboard → **WhatsApp → Configuration**.
-2. **Callback URL**: `https://<your-domain>/whatsapp/webhook`.
+2. **Callback URL**: `https://<your-domain>/api/whatsapp/webhook`.
+
 3. **Verify Token**: any string you choose — set the *same* value as
    `WHATSAPP_WEBHOOK_VERIFY_TOKEN` in your env. Meta calls your `GET` endpoint with
    `hub.verify_token` and expects it to match before accepting the subscription

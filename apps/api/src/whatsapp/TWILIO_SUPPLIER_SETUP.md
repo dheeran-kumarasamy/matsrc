@@ -22,9 +22,13 @@ time, selected by `WHATSAPP_ADAPTER`.
   (`TwilioWhatsAppController`) — a dedicated controller (separate from the Meta-specific
   `WhatsAppController`) since Twilio's form-encoded webhook payload shape
   (`From`/`Body`/`MessageSid`/`WaId`/`ButtonText`) is structurally different from Meta's
-  nested JSON. Routes:
-  - `POST /whatsapp/twilio-webhook/messages` — inbound message webhook.
-  - `POST /whatsapp/twilio-webhook/status` — delivery-status callback webhook.
+  nested JSON. Routes (NOTE: `main.ts`/`api/index.ts` call `app.setGlobalPrefix("api")`,
+  so every route below is actually served under `/api/...` — this prefix is easy to miss
+  and, if omitted when configuring Twilio's webhook URL, causes every inbound webhook
+  POST to 404 and suppliers never receive a bot reply):
+  - `POST /api/whatsapp/twilio-webhook/messages` — inbound message webhook.
+  - `POST /api/whatsapp/twilio-webhook/status` — delivery-status callback webhook.
+
 - Both controllers converge on the same `WhatsAppRouterService.handleInboundMessage()`
   and session/flow/auth logic — no bot logic is duplicated between Meta and Twilio.
 - **Interactive messages**: Twilio WhatsApp has no native "list"/"reply buttons" message
@@ -63,7 +67,8 @@ TWILIO_CONTENT_SID_SUPPLIER_REENGAGEMENT=""
 
 # Optional — inbound webhook signature validation (recommended for production)
 TWILIO_WEBHOOK_VALIDATE_SIGNATURE="false"
-TWILIO_WEBHOOK_PUBLIC_URL=""                    # e.g. "https://api.matsrc.example.com/whatsapp/twilio-webhook/messages"
+TWILIO_WEBHOOK_PUBLIC_URL=""                    # e.g. "https://api.matsrc.example.com/api/whatsapp/twilio-webhook/messages" (note the /api global prefix — see §1)
+
 ```
 
 Leaving `WHATSAPP_ADAPTER` unset (or set to anything other than `meta`/`twilio`) keeps
@@ -97,9 +102,10 @@ The Sandbox lets you test immediately with no Business Verification/template app
    ```bash
    ngrok http 3000   # or whatever port apps/api listens on locally
    ```
-6. In the Sandbox Settings page, set:
-   - **"WHEN A MESSAGE COMES IN"**: `https://<your-ngrok-domain>/whatsapp/twilio-webhook/messages` (HTTP POST)
-   - **"STATUS CALLBACK URL"** (optional, if you want delivery-status audit logging): `https://<your-ngrok-domain>/whatsapp/twilio-webhook/status` (HTTP POST)
+6. In the Sandbox Settings page, set (note the `/api` global prefix — see §1):
+   - **"WHEN A MESSAGE COMES IN"**: `https://<your-ngrok-domain>/api/whatsapp/twilio-webhook/messages` (HTTP POST)
+   - **"STATUS CALLBACK URL"** (optional, if you want delivery-status audit logging): `https://<your-ngrok-domain>/api/whatsapp/twilio-webhook/status` (HTTP POST)
+
 7. Start the API: `pnpm --filter @matsrc/api dev` (or however you run it locally).
 8. From the joined WhatsApp number, send `HI` to the Sandbox number.
 9. You should receive the bot's main menu back as a flattened numbered list, e.g.:
@@ -150,10 +156,14 @@ The Sandbox lets you test immediately with no Business Verification/template app
 ## 5. Troubleshooting
 
 - **No reply received**: confirm ngrok/production URL is reachable, the Sandbox/sender's
-  "A MESSAGE COMES IN" webhook points at `/whatsapp/twilio-webhook/messages` (not
-  `/messages/status` or the Meta `/whatsapp/webhook` path), and that
-  `WHATSAPP_ADAPTER=twilio` is actually set in the running process's env (restart
-  required after changing `.env`).
+  "A MESSAGE COMES IN" webhook points at `/api/whatsapp/twilio-webhook/messages`
+  (**including the `/api` global prefix set by `app.setGlobalPrefix("api")` in
+  `main.ts`/`api/index.ts` — the single most common cause of "suppliers never get a
+  reply": the webhook silently 404s if `/api` is omitted, and Twilio does not retry
+  configuration errors the way it retries 5xx responses**), not `/messages/status` or
+  the Meta `/whatsapp/webhook` path, and that `WHATSAPP_ADAPTER=twilio` is actually set
+  in the running process's env (restart required after changing `.env`).
+
 - **`Twilio WhatsApp send failed: ... (code=63016)`**: the 24h customer-service session
   window has closed and no Content Template SID is mapped — either have the user message
   first, or configure `TWILIO_CONTENT_SID_SUPPLIER_REENGAGEMENT`.

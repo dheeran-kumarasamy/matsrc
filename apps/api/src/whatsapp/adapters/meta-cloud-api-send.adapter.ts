@@ -151,7 +151,7 @@ export class MetaCloudApiSendAdapter implements WhatsAppSendAdapter {
             ...(message.header ? { header: { type: "text", text: message.header } } : {}),
             body: { text: message.body },
             action: {
-              button: "Select",
+              button: message.buttonLabel ?? "View Options",
               sections: [
                 {
                   rows: message.rows.map((row) => ({

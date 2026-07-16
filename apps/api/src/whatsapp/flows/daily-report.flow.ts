@@ -3,11 +3,21 @@ import { SupplierReportsService } from "src/supplier/reports/reports.service";
 import { WhatsAppSession, BotMessage, MENU_FOOTER } from "../whatsapp.types";
 import { WhatsAppSessionService } from "../whatsapp-session.service";
 
-const REPORT_ROWS = [
-  { id: "SUMMARY", title: "Last 1 Month", description: "Overall enquiry/order summary" },
-  { id: "BY_PRODUCT", title: "By Product", description: "Pick a product to see its numbers" },
-  { id: "BY_VALUE", title: "By Transaction Value", description: "Top orders ranked by value" },
+// Only 3 options, within WhatsApp's Reply Button limit (max 3) — so this menu uses
+// native Reply Buttons rather than an Interactive List Message.
+const REPORT_BUTTONS = [
+  { id: "SUMMARY", title: "Last 1 Month" },
+  { id: "BY_PRODUCT", title: "By Product" },
+  { id: "BY_VALUE", title: "By Transaction Value" },
 ];
+
+/** Numeric free-text fallback (1-3), mirroring the Main Menu's dual-path pattern. */
+const REPORT_NUMERIC_FALLBACK: Record<string, string> = {
+  "1": "SUMMARY",
+  "2": "BY_PRODUCT",
+  "3": "BY_VALUE",
+};
+
 
 /**
  * Flow 4 — Daily Report (see spec §7).
@@ -26,12 +36,12 @@ export class DailyReportFlow {
   async start(session: WhatsAppSession): Promise<BotMessage> {
     this.sessionService.setFlow(session.phone, "DAILY_REPORT", "MENU");
     return {
-      kind: "list",
-      header: "Daily Report",
+      kind: "buttons",
       body: "Which report would you like?",
-      rows: REPORT_ROWS.map((row) => ({ id: row.id, title: row.title, description: row.description })),
+      buttons: REPORT_BUTTONS.map((button) => ({ id: button.id, title: button.title })),
     };
   }
+
 
   async handle(session: WhatsAppSession, text: string): Promise<BotMessage> {
     switch (session.step) {
@@ -49,9 +59,14 @@ export class DailyReportFlow {
   }
 
   private async handleMenuSelect(session: WhatsAppSession, text: string): Promise<BotMessage> {
-    const choice = text.trim().toUpperCase();
+    const trimmed = text.trim();
+    // Path 1: a tapped Reply Button arrives as its `id` (e.g. "SUMMARY") via
+    // `interactive.button_reply.id`. Path 2: numeric free-text fallback ("1"-"3") for
+    // users who type instead of tapping. Both converge on the same handlers below.
+    const choice = REPORT_NUMERIC_FALLBACK[trimmed] ?? trimmed.toUpperCase();
 
     if (choice === "SUMMARY") {
+
       return this.presentSummary(session);
     }
 

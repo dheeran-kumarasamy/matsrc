@@ -100,8 +100,9 @@ describe("MetaCloudApiSendAdapter", () => {
       kind: "list",
       header: "Matsrc Supplier Bot",
       body: "How can I help you today?",
+      buttonLabel: "View Options",
       rows: [
-        { id: "PRICE_UPDATE", title: "1. Update Product Price", description: "Change price of an active listing" },
+        { id: "PRICE_UPDATE", title: "Update Product Price", description: "Change price of an active listing" },
       ],
     };
     const result = await adapter.send("919876543210", message);
@@ -110,13 +111,17 @@ describe("MetaCloudApiSendAdapter", () => {
     expect(body.type).toBe("interactive");
     expect(body.interactive.type).toBe("list");
     expect(body.interactive.header).toEqual({ type: "text", text: "Matsrc Supplier Bot" });
+    expect(body.interactive.action.button).toBe("View Options");
     expect(body.interactive.action.sections[0].rows[0]).toEqual({
       id: "PRICE_UPDATE",
-      title: "1. Update Product Price",
+      title: "Update Product Price",
       description: "Change price of an active listing",
     });
+    // Row titles must not carry manual numbering — WhatsApp lists are already visually ordered.
+    expect(body.interactive.action.sections[0].rows[0].title).not.toMatch(/^\d+\.\s/);
     expect(result.externalId).toBe(GRAPH_SUCCESS_FIXTURE.messages[0].id);
   });
+
 
   it("sends an interactive reply-buttons message with the correct Graph payload shape", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(GRAPH_SUCCESS_FIXTURE));

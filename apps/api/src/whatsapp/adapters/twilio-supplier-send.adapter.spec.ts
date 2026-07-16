@@ -71,7 +71,7 @@ describe("TwilioSupplierSendAdapter", () => {
     expect(callArgs.from).toBeUndefined();
   });
 
-  it("flattens a list message into numbered plain text (no native Twilio list type)", async () => {
+  it("flattens a list message into numbered plain text (no native Twilio list type), without duplicate numbering", async () => {
     createMock.mockResolvedValueOnce({ sid: "SM-list-1" });
 
     await adapter.send("919876543210", {
@@ -79,18 +79,21 @@ describe("TwilioSupplierSendAdapter", () => {
       header: "Matsrc Supplier Bot",
       body: "How can I help you today?",
       rows: [
-        { id: "PRICE_UPDATE", title: "1. Update Product Price", description: "Change price" },
-        { id: "ORDER_STATUS", title: "3. Order Status", description: "View orders" },
+        { id: "PRICE_UPDATE", title: "Update Product Price", description: "Change price" },
+        { id: "ORDER_STATUS", title: "Order Status", description: "View orders" },
       ],
     });
 
     const callArgs = createMock.mock.calls[0][0];
     expect(callArgs.body).toContain("Matsrc Supplier Bot");
     expect(callArgs.body).toContain("How can I help you today?");
-    expect(callArgs.body).toContain("1. 1. Update Product Price — Change price");
-    expect(callArgs.body).toContain("2. 3. Order Status — View orders");
+    // Single numbering source (adapter-injected index), no "N. N." duplication.
+    expect(callArgs.body).toContain("1. Update Product Price — Change price");
+    expect(callArgs.body).toContain("2. Order Status — View orders");
+    expect(callArgs.body).not.toMatch(/\d+\.\s*\d+\./);
     expect(callArgs.body).toContain("Reply with the number of your choice.");
   });
+
 
   it("flattens a buttons message into numbered plain text", async () => {
     createMock.mockResolvedValueOnce({ sid: "SM-buttons-1" });

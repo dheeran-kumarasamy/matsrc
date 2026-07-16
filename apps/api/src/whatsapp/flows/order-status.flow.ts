@@ -17,6 +17,16 @@ const BUCKET_ROWS: Array<{ id: Bucket; title: string; description: string }> = [
   { id: "DELIVERED", title: "Delivered", description: "Completed deliveries" },
 ];
 
+/** Numeric free-text fallback (1-5), mirroring the Main Menu's dual-path pattern. */
+const BUCKET_NUMERIC_FALLBACK: Record<string, Bucket> = {
+  "1": "REQUESTED",
+  "2": "ACCEPTED",
+  "3": "REJECTED",
+  "4": "CONFIRMED",
+  "5": "DELIVERED",
+};
+
+
 /**
  * Flow 3 — Order Status (see spec §6).
  *
@@ -74,12 +84,18 @@ export class OrderStatusFlow {
   }
 
   private async handleMenuSelect(session: WhatsAppSession, text: string): Promise<BotMessage> {
-    const bucket = BUCKET_ROWS.find((row) => row.id === text.trim().toUpperCase())?.id;
+    const trimmed = text.trim();
+    // Path 1: a tapped Interactive List Message row arrives as its `id` (e.g.
+    // "REQUESTED") via `interactive.list_reply.id`. Path 2: numeric free-text fallback
+    // ("1"-"5") for users who type instead of tapping. Both converge on presentBucket().
+    const upper = trimmed.toUpperCase();
+    const bucket = BUCKET_ROWS.find((row) => row.id === upper)?.id ?? BUCKET_NUMERIC_FALLBACK[trimmed];
     if (!bucket) {
       return { kind: "text", text: "Please select a valid status from the list." };
     }
     return this.presentBucket(session, bucket);
   }
+
 
   private async presentBucket(session: WhatsAppSession, bucket: Bucket): Promise<BotMessage> {
     if (bucket === "CONFIRMED") {

@@ -17,11 +17,28 @@ import {
 } from "./whatsapp.types";
 
 const MAIN_MENU_ROWS: Array<{ id: MainFlow; title: string; description: string }> = [
-  { id: "PRICE_UPDATE", title: "1. Update Product Price", description: "Change price of an active listing" },
-  { id: "ENQUIRY_DECISION", title: "2. Accept/Reject Enquiry", description: "Action pending buyer enquiries" },
-  { id: "ORDER_STATUS", title: "3. Order Status", description: "View orders & confirm delivery" },
-  { id: "DAILY_REPORT", title: "4. Daily Report", description: "See your performance numbers" },
+  { id: "PRICE_UPDATE", title: "Update Product Price", description: "Change price of an active listing" },
+  { id: "ENQUIRY_DECISION", title: "Accept/Reject Enquiry", description: "Action pending buyer enquiries" },
+  { id: "ORDER_STATUS", title: "Order Status", description: "View orders & confirm delivery" },
+  { id: "DAILY_REPORT", title: "Daily Report", description: "See your performance numbers" },
 ];
+
+/**
+ * Numeric free-text fallback for the main menu (in addition to matching the row `id`
+ * directly, which is how a native WhatsApp Interactive List Message tap arrives —
+ * `interactive.list_reply.id` is forwarded as inbound `text` by the controllers).
+ * WhatsApp list rows are already visually numbered/ordered by the client itself, so row
+ * `title`s must NOT also carry a manual "N. " prefix — that was the source of the
+ * previous duplicate-numbering bug ("1. 1. Update Product Price") once flattened to
+ * plain text by `TwilioSupplierSendAdapter`.
+ */
+const MAIN_MENU_NUMERIC_FALLBACK: Record<string, MainFlow> = {
+  "1": "PRICE_UPDATE",
+  "2": "ENQUIRY_DECISION",
+  "3": "ORDER_STATUS",
+  "4": "DAILY_REPORT",
+};
+
 
 /**
  * Top-level message router for the Supplier WhatsApp bot (spec §3 — Main menu &
@@ -140,16 +157,16 @@ export class WhatsAppRouterService {
     const trimmed = text.trim();
     const upper = trimmed.toUpperCase();
 
+    // Path 1: a tapped Interactive List Message row arrives as its `id` (e.g.
+    // "PRICE_UPDATE") via `interactive.list_reply.id`.
     const byId = MAIN_MENU_ROWS.find((row) => row.id === upper);
     if (byId) return byId.id;
 
-    if (trimmed === "1") return "PRICE_UPDATE";
-    if (trimmed === "2") return "ENQUIRY_DECISION";
-    if (trimmed === "3") return "ORDER_STATUS";
-    if (trimmed === "4") return "DAILY_REPORT";
-
-    return null;
+    // Path 2: numeric free-text fallback for users who type instead of tapping.
+    // Both paths converge on the same `resolveFlow(choice).start(session)` call below.
+    return MAIN_MENU_NUMERIC_FALLBACK[trimmed] ?? null;
   }
+
 
   private resolveFlow(flow: MainFlow) {
     switch (flow) {
@@ -185,9 +202,11 @@ export class WhatsAppRouterService {
       kind: "list",
       header: "Matsrc Supplier Bot",
       body: "How can I help you today?",
+      buttonLabel: "View Options",
       rows: MAIN_MENU_ROWS.map((row) => ({ id: row.id, title: row.title, description: row.description })),
     };
   }
+
 
   private registrationRequiredMessage(): BotMessage {
     return {

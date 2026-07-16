@@ -35,9 +35,10 @@ export type BotTemplateComponent = {
  */
 export type BotMessage =
   | { kind: "text"; text: string }
-  | { kind: "list"; header?: string; body: string; rows: BotListRow[] }
+  | { kind: "list"; header?: string; body: string; buttonLabel?: string; rows: BotListRow[] }
   | { kind: "buttons"; body: string; buttons: BotButton[] }
   | { kind: "template"; name: string; languageCode: string; components?: BotTemplateComponent[] };
+
 
 
 export type MainFlow = "MAIN" | "PRICE_UPDATE" | "ENQUIRY_DECISION" | "ORDER_STATUS" | "DAILY_REPORT" | "HUMAN_HANDOFF";

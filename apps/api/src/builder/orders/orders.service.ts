@@ -6,6 +6,7 @@ import { BuilderContextService } from "src/builder/builder-context.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { NotificationService } from "src/notifications/notification.service";
 import { UpsertOrderRatingDto } from "./dto/upsert-order-rating.dto";
+import { WhatsAppLifecycleService } from "src/whatsapp/lifecycle/whatsapp-lifecycle.service";
 
 function resolveUnitPrice(product: any, quantity: number) {
   const tiers = Array.isArray(product.pricingTiers) ? product.pricingTiers : [];
@@ -25,7 +26,8 @@ export class BuilderOrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly builderContext: BuilderContextService,
-    private readonly notificationService: NotificationService
+    private readonly notificationService: NotificationService,
+    private readonly whatsAppLifecycleService: WhatsAppLifecycleService
   ) {}
 
   async findAll(userCtx: any) {
@@ -189,7 +191,7 @@ export class BuilderOrdersService {
       groupedItems.set(item.product.supplierId, currentGroup);
     }
 
-    const createdOrders: Array<{ id: string; supplierName: string; total: number; itemCount: number; status: OrderStatus }> = [];
+    const createdOrders: Array<{ id: string; supplierId: string; supplierName: string; total: number; itemCount: number; status: OrderStatus }> = [];
 
     for (const group of groupedItems.values()) {
       const totalAmount = group.items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
@@ -232,6 +234,7 @@ export class BuilderOrdersService {
 
       createdOrders.push({
         id: order.id,
+        supplierId: group.supplierId,
         supplierName: group.supplierName,
         total: Number(order.totalAmount),
         itemCount: order.items.length,
@@ -244,6 +247,14 @@ export class BuilderOrdersService {
     for (const order of createdOrders) {
       void this.notificationService.notifySupplierOrderSubmitted(order.id).catch((error) => {
         this.logger.warn(`Failed to queue supplier notification for order ${order.id}: ${error instanceof Error ? error.message : String(error)}`);
+      });
+
+      // Additive WhatsApp lifecycle notifications — never block/affect order creation.
+      void this.whatsAppLifecycleService.notifyBuilderOrderPlaced(order.id).catch((error) => {
+        this.logger.warn(`Failed to send WhatsApp order-placed notification for order ${order.id}: ${error instanceof Error ? error.message : String(error)}`);
+      });
+      void this.whatsAppLifecycleService.notifySupplierNewEnquiry(order.id, order.supplierId).catch((error) => {
+        this.logger.warn(`Failed to send WhatsApp new-enquiry notification for order ${order.id}: ${error instanceof Error ? error.message : String(error)}`);
       });
     }
 

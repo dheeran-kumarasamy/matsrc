@@ -425,8 +425,13 @@ model Order {
   bestPriceTotal     Decimal?      @db.Decimal(12, 2)
   tentativeDeliveryDate DateTime?
   quoteSelectionCompletedAt DateTime?
+  // WhatsApp lifecycle notifications: tracks whether the "enquiry pending update" nudge
+  // (builder_enquiry_pending_update) has already been sent for this enquiry, so the
+  // scheduled sweep in WhatsAppLifecycle never sends it more than once per enquiry.
+  reminderSentAt  DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+
 
   // Order Aggregation ("Group & Save")
   aggregationPoolId      String?

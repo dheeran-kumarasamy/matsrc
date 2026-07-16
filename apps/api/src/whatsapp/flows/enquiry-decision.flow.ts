@@ -201,6 +201,7 @@ export class EnquiryDecisionFlow {
 
     const enquiryId = session.context.enquiryId as string;
     const productName = session.context.productName as string;
+    const builderName = (session.context.builderName as string) ?? "Builder";
     const idempotencyKey = `enquiry-reject:${enquiryId}:${reason}`;
 
     await this.sessionService.withIdempotency(idempotencyKey, async () => {
@@ -211,12 +212,31 @@ export class EnquiryDecisionFlow {
         `Supplier rejected enquiry — reason: ${reason}`
       );
 
+      // Rejection deliberately routes to Admin, not the Builder — no WhatsApp message
+      // to the Builder is sent on this path (see WhatsAppLifecycleService, which has
+      // no "order rejected" builder-facing template). Instead a flagged Admin ops-queue
+      // record is written to AuditLog with `requiresAdminAction: true`, tagged
+      // `channel: "whatsapp"`, so it's filterable/surfacable the same way as the
+      // existing WHATSAPP_ESCALATION queue.
+      const supplierProfile = await this.prisma.supplierProfile.findUnique({
+        where: { id: session.supplierProfileId },
+        select: { companyName: true },
+      });
+
       await this.audit.record({
         actorId: session.userId,
         action: "ENQUIRY_REJECT",
         entityType: "Order",
         entityId: enquiryId,
-        metadata: { reason, productName },
+        metadata: {
+          reason,
+          productName,
+          builderName,
+          supplierId: session.supplierProfileId,
+          supplierName: supplierProfile?.companyName ?? "Supplier",
+          channel: "whatsapp",
+          requiresAdminAction: true,
+        },
       });
     });
 

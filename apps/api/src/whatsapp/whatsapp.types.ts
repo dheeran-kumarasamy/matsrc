@@ -23,8 +23,18 @@ export type BotTemplateComponent = {
   type: "header" | "body" | "button";
   sub_type?: "url" | "quick_reply";
   index?: number;
-  parameters: Array<{ type: "text"; text: string } | { type: "payload"; payload: string }>;
+  parameters: Array<
+    | { type: "text"; text: string }
+    | { type: "payload"; payload: string }
+    // Document-header parameter (Meta template "document" header type) — used by
+    // lifecycle notifications that attach a PDF (e.g. builder_po_issued,
+    // supplier_invoice_generated). `link` must be a publicly reachable HTTPS URL to
+    // the already-generated PDF (reusing the existing export endpoint), not inline
+    // base64 content.
+    | { type: "document"; document: { link: string; filename?: string } }
+  >;
 };
+
 
 /**
  * A structured outbound message. The mock adapter just logs these; a real BSP/Cloud API

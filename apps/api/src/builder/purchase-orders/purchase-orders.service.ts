@@ -8,6 +8,7 @@ import { PurchaseOrderStatus } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { BuilderContextService } from "src/builder/builder-context.service";
 import { NotificationService } from "src/notifications/notification.service";
+import { WhatsAppLifecycleService } from "src/whatsapp/lifecycle/whatsapp-lifecycle.service";
 import { CreatePurchaseOrderDto } from "./dto/create-purchase-order.dto";
 import { UpdatePurchaseOrderDto } from "./dto/update-purchase-order.dto";
 import { ApprovePurchaseOrderDto } from "./dto/approve-purchase-order.dto";
@@ -21,7 +22,8 @@ export class PurchaseOrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly builderContext: BuilderContextService,
-    private readonly notificationService: NotificationService
+    private readonly notificationService: NotificationService,
+    private readonly whatsAppLifecycleService: WhatsAppLifecycleService
   ) {}
 
   private async generatePoNumber(): Promise<string> {
@@ -311,6 +313,17 @@ export class PurchaseOrdersService {
         body: `PO ${po.poNumber} has been issued for enquiry ${po.orderId.slice(0, 8)}. Please acknowledge in your supplier portal.`,
         context: { poId: po.id, poNumber: po.poNumber },
         idempotencyKey: `po-issued:${po.id}`,
+      })
+      .catch(() => undefined);
+
+    // Additive WhatsApp lifecycle notification to the Builder (builder_po_issued) —
+    // attaches the PO PDF via the existing export URL, never blocks/affects approval.
+    void this.whatsAppLifecycleService
+      .notifyBuilderPoIssued({
+        purchaseOrderId: updated.id,
+        orderId: updated.orderId,
+        poNumber: updated.poNumber,
+        exportUrl: `/builder/purchase-orders/${updated.id}/export`,
       })
       .catch(() => undefined);
 

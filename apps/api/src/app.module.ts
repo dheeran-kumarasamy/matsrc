@@ -22,6 +22,7 @@ import { KycModule } from "./admin/kyc/kyc.module";
 import { DisputesModule } from "./admin/disputes/disputes.module";
 import { AuditModule } from "./admin/audit/audit.module";
 import { WhatsAppEscalationsModule } from "./admin/whatsapp-escalations/whatsapp-escalations.module";
+import { SupplierRejectionsModule } from "./admin/supplier-rejections/supplier-rejections.module";
 import { CatalogModule } from "./admin/catalog/catalog.module";
 
 import { NotificationsModule } from "./notifications/notifications.module";
@@ -66,6 +67,7 @@ import { WhatsAppModule } from "./whatsapp/whatsapp.module";
     DisputesModule,
     AuditModule,
     WhatsAppEscalationsModule,
+    SupplierRejectionsModule,
     SupplierReportsModule,
     CatalogModule,
 

@@ -5,6 +5,7 @@ import { SupplierContextService } from "src/supplier/supplier-context.service";
 import { formatDate, humanizeToken } from "src/supplier/utils";
 import { NotificationService } from "src/notifications/notification.service";
 import { WhatsAppAlertService } from "src/notifications/whatsapp-alerts/whatsapp-alert.service";
+import { WhatsAppLifecycleService } from "src/whatsapp/lifecycle/whatsapp-lifecycle.service";
 
 @Injectable()
 export class OrdersService {
@@ -14,7 +15,8 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly supplierContext: SupplierContextService,
     private readonly notificationService: NotificationService,
-    private readonly whatsAppAlertService: WhatsAppAlertService
+    private readonly whatsAppAlertService: WhatsAppAlertService,
+    private readonly whatsAppLifecycleService: WhatsAppLifecycleService
   ) {}
 
   async findAll(user: any) {
@@ -111,6 +113,12 @@ export class OrdersService {
       .catch((error) => {
         this.logger.warn(`Failed to send WhatsApp order-status alert for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
       });
+
+    // Additive WhatsApp lifecycle notifications (order-status template dispatcher) —
+    // never blocks/affects the order-status update above, and never throws.
+    void this.whatsAppLifecycleService.notifyBuilderOrderStatusTransition(id, order.status).catch((error) => {
+      this.logger.warn(`Failed to send WhatsApp lifecycle notification for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
+    });
 
     return { id: order.id, status: order.status };
   }

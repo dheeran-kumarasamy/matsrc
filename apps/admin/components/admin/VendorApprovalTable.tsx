@@ -1,4 +1,9 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { adminApiPatch } from "@/lib/api-client";
 
 type Vendor = {
   id: string;
@@ -15,6 +20,19 @@ const riskStyle: Record<Vendor["risk"], string> = {
 };
 
 export function VendorApprovalTable({ vendors }: { vendors: Vendor[] }) {
+  const router = useRouter();
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  async function decide(vendorId: string, status: "APPROVED" | "REJECTED") {
+    setLoadingId(vendorId);
+    try {
+      await adminApiPatch(`/admin/vendors/${vendorId}/kyc`, { status });
+      router.refresh();
+    } finally {
+      setLoadingId(null);
+    }
+  }
+
   return (
     <section className="panel overflow-hidden">
       <div className="border-b border-slate-200 px-4 py-3">
@@ -41,9 +59,25 @@ export function VendorApprovalTable({ vendors }: { vendors: Vendor[] }) {
                   <span className={`rounded-full px-2 py-1 text-xs font-bold ${riskStyle[vendor.risk]}`}>{vendor.risk}</span>
                 </td>
                 <td className="px-4 py-3">
-                  <Link href={`/vendors/${vendor.id}`} className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700">
-                    Review
-                  </Link>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      disabled={loadingId === vendor.id}
+                      onClick={() => void decide(vendor.id, "APPROVED")}
+                      className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-bold text-white disabled:opacity-50"
+                    >
+                      {loadingId === vendor.id ? "…" : "Approve"}
+                    </button>
+                    <button
+                      disabled={loadingId === vendor.id}
+                      onClick={() => void decide(vendor.id, "REJECTED")}
+                      className="rounded-md bg-red-600 px-3 py-1 text-xs font-bold text-white disabled:opacity-50"
+                    >
+                      {loadingId === vendor.id ? "…" : "Reject"}
+                    </button>
+                    <Link href={`/vendors/${vendor.id}`} className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700">
+                      Review
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -53,3 +87,4 @@ export function VendorApprovalTable({ vendors }: { vendors: Vendor[] }) {
     </section>
   );
 }
+

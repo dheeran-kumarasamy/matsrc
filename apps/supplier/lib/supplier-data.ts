@@ -7,6 +7,8 @@ import {
   resolvePriceRange,
   type ResolutionCandidate,
 } from "./resolution";
+import { notifyBuilderOrderStatusUpdate } from "./notify";
+
 
 
 
@@ -1032,8 +1034,17 @@ export async function updateSupplierOrderStatus(orderId: string, status: OrderSt
     },
   });
 
+  // REQ-08: Notify the builder/customer (best-effort, non-blocking) —
+  // WhatsApp notification for each order status transition. Never blocks or
+  // affects the status update above; failures are logged and swallowed
+  // inside notifyBuilderOrderStatusUpdate itself.
+  void notifyBuilderOrderStatusUpdate(orderId, status).catch((error) => {
+    console.error(`Failed to send builder notification for order ${orderId}:`, error);
+  });
+
   return order;
 }
+
 
 
 export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]> {

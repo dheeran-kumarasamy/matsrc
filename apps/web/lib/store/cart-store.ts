@@ -59,6 +59,7 @@ interface CartState {
 
   fetchCart: () => Promise<void>;
   addItem: (productId: string, quantity: number) => Promise<void>;
+  updateQuantity: (productId: string, cartItemId: string, quantity: number) => Promise<void>;
   removeItem: (productId: string, cartItemId: string) => Promise<void>;
 }
 
@@ -94,7 +95,37 @@ export const useCartStore = create<CartState>((set, get) => ({
     }
   },
 
+  async updateQuantity(productId, cartItemId, quantity) {
+    // REQ-01: editable cart quantity. Reuses the existing cart upsert
+    // endpoint (CartService.upsert on the API) which already recomputes
+    // tiered pricing server-side — so we optimistically update the local
+    // quantity for a snappy UI, then re-fetch to reconcile unitPrice/
+    // lineTotal against the server (source of truth for pricing tiers).
+    const safeQuantity = Math.max(1, Math.floor(quantity) || 1);
+    const previousItems = get().items;
+    const optimisticItems = previousItems.map((item) =>
+      item.id === cartItemId
+        ? { ...item, quantity: safeQuantity, lineTotal: item.unitPrice * safeQuantity }
+        : item
+    );
+    set({ items: optimisticItems, summary: recomputeSummary(optimisticItems), isMutating: true, error: null });
+    try {
+      await builderApiPost("/cart/items", { productId, quantity: safeQuantity });
+      const payload = await builderApiGet<CartResponse>("/cart");
+      set({ items: payload.items, summary: payload.summary, isMutating: false, hasLoaded: true });
+    } catch {
+      set({
+        items: previousItems,
+        summary: recomputeSummary(previousItems),
+        isMutating: false,
+        error: "Unable to update quantity. Please try again.",
+      });
+      throw new Error("update-quantity-failed");
+    }
+  },
+
   async removeItem(productId, cartItemId) {
+
     const previousItems = get().items;
     // Optimistic removal for a snappy drawer experience.
     const nextItems = previousItems.filter((item) => item.id !== cartItemId);

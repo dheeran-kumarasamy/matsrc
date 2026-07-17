@@ -85,12 +85,15 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
     slug: listing.id,
     name: listing.name,
     price: parseListingPrice(listing.price),
+    minPrice: listing.minPrice ?? undefined,
+    maxPrice: listing.maxPrice ?? undefined,
     supplier: "Verified Supplier",
     rating: 4.6,
     change: 0,
     image: listing.images && listing.images.length > 0 ? listing.images[0] : undefined,
     category: listing.category,
   }));
+
 
   return (
     <div className="space-y-4">

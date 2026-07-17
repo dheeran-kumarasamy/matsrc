@@ -1,27 +1,48 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { builderApiGet } from "@/lib/api";
+import { builderApiGet, builderApiPost } from "@/lib/api";
+
+type BankGuaranteeSummary = {
+  enabled: boolean;
+  status: string;
+  amount: number | null;
+  issuerName: string | null;
+  validTill: string | null;
+  docUrl: string | null;
+  acceptedAt: string | null;
+};
 
 // UF-05: Credit / BNPL Activation — FR-20, FR-27, FR-28, FR-29
+// REQ-09: Bank Guarantee registration, added to builder onboarding alongside
+// the existing EMI/BNPL/Working Capital options below.
 export default function CreditPage() {
-  const [step, setStep] = useState<"options" | "consent" | "scoring" | "kfs" | "approved">("options");
+  const [step, setStep] = useState<"options" | "consent" | "scoring" | "kfs" | "approved" | "bankGuarantee">("options");
   const [availableLimit, setAvailableLimit] = useState<number>(0);
   const [creditStatus, setCreditStatus] = useState<string>("NOT_APPLIED");
+
+  const [bankGuarantee, setBankGuarantee] = useState<BankGuaranteeSummary | null>(null);
+  const [bgIssuerName, setBgIssuerName] = useState("");
+  const [bgAmount, setBgAmount] = useState("");
+  const [bgValidTill, setBgValidTill] = useState("");
+  const [bgSubmitting, setBgSubmitting] = useState(false);
+  const [bgError, setBgError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
 
     async function loadCreditSummary() {
       try {
-        const data = await builderApiGet<{ availableLimit: number; status: string }>("/credit");
+        const data = await builderApiGet<{ availableLimit: number; status: string; bankGuarantee: BankGuaranteeSummary }>("/credit");
         if (!active) return;
         setAvailableLimit(Number(data.availableLimit || 0));
         setCreditStatus(String(data.status || "NOT_APPLIED"));
+        setBankGuarantee(data.bankGuarantee ?? null);
       } catch {
         if (!active) return;
         setAvailableLimit(0);
         setCreditStatus("NOT_APPLIED");
+        setBankGuarantee(null);
       }
     }
 
@@ -30,6 +51,30 @@ export default function CreditPage() {
       active = false;
     };
   }, []);
+
+  async function submitBankGuarantee() {
+    setBgError(null);
+    const amountNum = Number(bgAmount);
+    if (!bgIssuerName.trim() || !amountNum || amountNum <= 0) {
+      setBgError("Please enter the issuing bank name and a valid guarantee amount.");
+      return;
+    }
+    setBgSubmitting(true);
+    try {
+      const result = await builderApiPost<BankGuaranteeSummary>("/credit/bank-guarantee", {
+        issuerName: bgIssuerName.trim(),
+        amount: amountNum,
+        validTill: bgValidTill || undefined,
+      });
+      setBankGuarantee(result);
+      setStep("options");
+    } catch {
+      setBgError("Failed to submit Bank Guarantee registration. Please try again.");
+    } finally {
+      setBgSubmitting(false);
+    }
+  }
+
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
@@ -56,9 +101,95 @@ export default function CreditPage() {
                 <div className="text-xs text-slate-400 mt-1">{desc}</div>
               </button>
             ))}
+
+            {/* REQ-09: Bank Guarantee registration, part of builder onboarding */}
+            <button
+              onClick={() => setStep("bankGuarantee")}
+              className="panel p-5 text-left hover:shadow-md hover:border-blue-700 transition-all"
+            >
+              <div className="text-2xl mb-2">🏦</div>
+              <div className="font-semibold text-sm text-slate-800">Bank Guarantee</div>
+              <div className="text-xs text-slate-400 mt-1">Register a bank guarantee to unlock the Bank Guarantee payment option at checkout</div>
+              {bankGuarantee?.enabled ? (
+                <div className="mt-2 inline-block bg-emerald-50 text-emerald-700 text-xs font-semibold px-2 py-0.5 rounded">
+                  {bankGuarantee.status}
+                </div>
+              ) : null}
+            </button>
           </div>
         </div>
       )}
+
+      {/* Step: Bank Guarantee registration — REQ-09 */}
+      {step === "bankGuarantee" && (
+        <div className="panel p-6 space-y-4">
+          <h2 className="font-semibold text-slate-800">Register Bank Guarantee</h2>
+          <p className="text-sm text-slate-500">
+            Submit your bank guarantee details below. Once verified, you&apos;ll be able to select
+            &quot;Bank Guarantee&quot; as a payment method when checking out an order.
+          </p>
+
+          {bankGuarantee?.enabled ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+              A bank guarantee is already registered (status: <strong>{bankGuarantee.status}</strong>) from{" "}
+              <strong>{bankGuarantee.issuerName}</strong> for ₹{Number(bankGuarantee.amount ?? 0).toLocaleString("en-IN")}.
+              Submitting again will update these details.
+            </div>
+          ) : null}
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium text-slate-600">Issuing Bank Name</label>
+              <input
+                type="text"
+                value={bgIssuerName}
+                onChange={(e) => setBgIssuerName(e.target.value)}
+                placeholder="e.g. State Bank of India"
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600">Guarantee Amount (INR)</label>
+              <input
+                type="number"
+                min={1}
+                value={bgAmount}
+                onChange={(e) => setBgAmount(e.target.value)}
+                placeholder="e.g. 500000"
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600">Valid Till (optional)</label>
+              <input
+                type="date"
+                value={bgValidTill}
+                onChange={(e) => setBgValidTill(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+
+          {bgError ? <p className="text-xs text-rose-600">{bgError}</p> : null}
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => setStep("options")}
+              className="flex-1 border border-slate-200 text-slate-600 rounded-lg py-2.5 text-sm"
+            >
+              Back
+            </button>
+            <button
+              onClick={submitBankGuarantee}
+              disabled={bgSubmitting}
+              className="flex-1 bg-blue-700 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-60"
+            >
+              {bgSubmitting ? "Submitting..." : "Submit for Verification"}
+            </button>
+          </div>
+        </div>
+      )}
+
 
       {/* Step: consent — FR-29 */}
       {step === "consent" && (

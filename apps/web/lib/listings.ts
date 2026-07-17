@@ -35,7 +35,14 @@ export type SupplierListing = {
   groupedListingIds?: string[];
   headlinePrice?: string;
   headlineSupplierId?: string;
+  // Min–max price range (raw numeric) across the canonical group's active
+  // listings (REQ-02) — see apps/supplier/lib/supplier-data.ts
+  // `getPublicSupplierListings()` / `resolvePriceRange()`. Null when
+  // unresolvable (no active candidates in the group).
+  minPrice?: number | null;
+  maxPrice?: number | null;
 };
+
 
 
 export async function getSupplierListings(): Promise<SupplierListing[]> {

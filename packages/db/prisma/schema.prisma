@@ -420,7 +420,15 @@ model Order {
   irn             String?
   totalAmount     Decimal       @db.Decimal(12, 2)
   deliveryDate    DateTime?
+  // REQ-07: map-based geolocation capture, replacing the checkout pincode
+  // field. Nullable so existing rows and any flow that doesn't collect a
+  // location (e.g. the separate Group & Save checkout page, which still
+  // uses its own pincode-based zoneKey) are unaffected.
+  deliveryLat        Float?
+  deliveryLng         Float?
+  deliveryAddress     String?
   selectedSupplierId String?
+
   selectedSupplier   SupplierProfile? @relation("SelectedSupplierOrders", fields: [selectedSupplierId], references: [id])
   bestPriceTotal     Decimal?      @db.Decimal(12, 2)
   tentativeDeliveryDate DateTime?
@@ -478,9 +486,17 @@ model OrderItem {
   priceAtResolution   Decimal?  @db.Decimal(12, 2)
   resolvedAt          DateTime?
 
+  // REQ-06: the minimum price across the canonical product's cross-supplier
+  // price range at the time the enquiry was submitted — this is the only
+  // price figure surfaced to the supplier (the builder-facing UI continues
+  // to show the full min–max range). Nullable so existing rows are
+  // unaffected; falls back to unitPrice when absent (legacy orders).
+  askPrice            Decimal?  @db.Decimal(12, 2)
+
   @@index([orderId])
   @@index([supplierId])
 }
+
 
 // ─────────────────────────────────────────────
 // M06 Order Tracking
@@ -521,9 +537,23 @@ model CreditProfile {
   status          CreditStatus @default(NOT_APPLIED)
   kfsAcceptedAt   DateTime?
   nbfcRef         String?
+
+  // REQ-09: Bank Guarantee registration, moved into BUILDER onboarding
+  // (previously not modeled anywhere in the schema). Kept on CreditProfile
+  // since it is conceptually another credit/lending product alongside
+  // EMI/BNPL/Working Capital, reusing the same status lifecycle pattern.
+  bankGuaranteeEnabled     Boolean       @default(false)
+  bankGuaranteeStatus      CreditStatus  @default(NOT_APPLIED)
+  bankGuaranteeAmount      Decimal?      @db.Decimal(12, 2)
+  bankGuaranteeDocUrl      String?
+  bankGuaranteeIssuerName  String?
+  bankGuaranteeValidTill   DateTime?
+  bankGuaranteeAcceptedAt  DateTime?
+
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 }
+
 
 // ─────────────────────────────────────────────
 // M09 Notifications, Reviews & Admin

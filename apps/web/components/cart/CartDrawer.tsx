@@ -6,13 +6,15 @@
 // (nav cart icon, quick-view "Add to Enquiry Basket", product cards) without
 // the PLP (or any page) underneath ever unmounting.
 //
-// Steps: review (line items) -> delivery (date/pincode) -> confirm (submit)
+// Steps: review (line items) -> delivery (geolocation) -> confirm (submit)
 // -> success (mocked confirmation + payment-link messaging).
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Trash2, CheckCircle2, ChevronLeft } from "lucide-react";
+import { Trash2, CheckCircle2, ChevronLeft, Minus, Plus, MapPin, LocateFixed } from "lucide-react";
+
+
 import {
   Sheet,
   SheetContent,
@@ -78,11 +80,40 @@ export default function CartDrawer() {
   const isMutating = useCartStore((state) => state.isMutating);
   const fetchCart = useCartStore((state) => state.fetchCart);
   const removeItem = useCartStore((state) => state.removeItem);
+  const updateQuantity = useCartStore((state) => state.updateQuantity);
 
-  const [deliveryDate, setDeliveryDate] = useState("");
-  const [pincode, setPincode] = useState("");
+
+  // REQ-07: delivery date input removed from checkout; pincode replaced with
+  // browser-geolocation-based lat/lng capture (+ optional free-text address).
+  const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
+  const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  function handleUseMyLocation() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocationError("Geolocation is not supported on this device/browser.");
+      return;
+    }
+    setLocating(true);
+    setLocationError(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setDeliveryLat(position.coords.latitude);
+        setDeliveryLng(position.coords.longitude);
+        setLocating(false);
+      },
+      () => {
+        setLocationError("Unable to fetch your location. You can still continue without it.");
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
 
   useEffect(() => {
     if (isCartOpen && !hasLoaded) {
@@ -118,8 +149,11 @@ export default function CartDrawer() {
     setSubmitError(null);
     try {
       const response = await builderApiPost<{ orders: Array<{ id: string }> }>("/orders/checkout", {
-        deliveryDate: deliveryDate || undefined,
+        deliveryLat: deliveryLat ?? undefined,
+        deliveryLng: deliveryLng ?? undefined,
+        deliveryAddress: deliveryAddress.trim() || undefined,
       });
+
       const reference = response.orders?.[0]?.id ?? "submitted";
       completeCheckout(reference);
       void fetchCart();
@@ -180,13 +214,51 @@ export default function CartDrawer() {
                     <div className="flex-1">
                       <p className="text-sm font-medium text-slate-800">{item.name}</p>
                       <p className="text-xs text-slate-400">{item.supplierName}</p>
-                      <p className="text-xs text-slate-400">
-                        Qty: {item.quantity} {item.unit} · ₹{item.unitPrice.toLocaleString("en-IN")}/unit
-                      </p>
+                      <p className="text-xs text-slate-400">₹{item.unitPrice.toLocaleString("en-IN")}/unit</p>
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <div className="flex items-center rounded-lg border border-slate-200">
+                          <button
+                            type="button"
+                            disabled={isMutating || item.quantity <= 1}
+                            onClick={() => void updateQuantity(item.productId, item.id, item.quantity - 1)}
+                            aria-label={`Decrease quantity for ${item.name}`}
+                            className="flex h-7 w-7 items-center justify-center text-slate-500 transition hover:text-blue-700 disabled:opacity-40"
+                          >
+                            <Minus size={12} />
+                          </button>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            inputMode="numeric"
+                            value={item.quantity}
+                            disabled={isMutating}
+                            onChange={(event) => {
+                              const parsed = parseInt(event.target.value, 10);
+                              if (!Number.isNaN(parsed)) {
+                                void updateQuantity(item.productId, item.id, parsed);
+                              }
+                            }}
+                            className="h-7 w-10 border-x border-slate-200 text-center text-xs focus:outline-none disabled:opacity-40"
+                            aria-label={`Quantity for ${item.name}`}
+                          />
+                          <button
+                            type="button"
+                            disabled={isMutating}
+                            onClick={() => void updateQuantity(item.productId, item.id, item.quantity + 1)}
+                            aria-label={`Increase quantity for ${item.name}`}
+                            className="flex h-7 w-7 items-center justify-center text-slate-500 transition hover:text-blue-700 disabled:opacity-40"
+                          >
+                            <Plus size={12} />
+                          </button>
+                        </div>
+                        <span className="text-xs text-slate-400">{item.unit}</span>
+                      </div>
                       <p className="mt-1 text-sm font-semibold text-slate-900">
                         ₹{item.lineTotal.toLocaleString("en-IN")}
                       </p>
                     </div>
+
                     <button
                       onClick={() => void removeItem(item.productId, item.id)}
                       disabled={isMutating}
@@ -210,21 +282,30 @@ export default function CartDrawer() {
           {checkoutStep === "delivery" ? (
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Preferred delivery date (optional)</label>
-                <input
-                  type="date"
-                  value={deliveryDate}
-                  onChange={(event) => setDeliveryDate(event.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
+                <label className="mb-1 block text-xs font-medium text-slate-500">Delivery location (optional)</label>
+                <button
+                  type="button"
+                  onClick={handleUseMyLocation}
+                  disabled={locating}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <LocateFixed size={14} />
+                  {locating ? "Fetching location..." : "Use my current location"}
+                </button>
+                {deliveryLat !== null && deliveryLng !== null ? (
+                  <p className="mt-2 flex items-center gap-1 text-xs text-emerald-700">
+                    <MapPin size={12} />
+                    Location captured ({deliveryLat.toFixed(4)}, {deliveryLng.toFixed(4)})
+                  </p>
+                ) : null}
+                {locationError ? <p className="mt-2 text-xs text-red-600">{locationError}</p> : null}
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Delivery pincode (optional)</label>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Delivery address (optional)</label>
                 <input
-                  placeholder="e.g. 560001"
-                  maxLength={6}
-                  value={pincode}
-                  onChange={(event) => setPincode(event.target.value.replace(/\D/g, ""))}
+                  placeholder="e.g. Site name, street, area"
+                  value={deliveryAddress}
+                  onChange={(event) => setDeliveryAddress(event.target.value)}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
               </div>
@@ -234,6 +315,7 @@ export default function CartDrawer() {
               </p>
             </div>
           ) : null}
+
 
           {checkoutStep === "confirm" ? (
             <div className="space-y-4">
@@ -254,12 +336,13 @@ export default function CartDrawer() {
                   </div>
                 </div>
               </div>
-              {deliveryDate ? (
+              {deliveryLat !== null && deliveryLng !== null ? (
                 <p className="text-xs text-slate-500">
-                  Preferred delivery: <span className="font-medium text-slate-700">{deliveryDate}</span>
-                  {pincode ? ` · Pincode ${pincode}` : ""}
+                  Delivery location: <span className="font-medium text-slate-700">{deliveryLat.toFixed(4)}, {deliveryLng.toFixed(4)}</span>
+                  {deliveryAddress ? ` · ${deliveryAddress}` : ""}
                 </p>
               ) : null}
+
               <p className="text-xs text-slate-400">
                 Submitting will send a separate enquiry to each supplier represented in your basket. No payment is
                 collected now.

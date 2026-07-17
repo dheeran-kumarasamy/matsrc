@@ -30,6 +30,8 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
         <p className="mt-1 text-sm text-slate-600">
           Buyer: {order.buyer} | Material: {order.material} | Delivery: {order.deliveryDate}
         </p>
+        <p className="mt-1 text-sm font-semibold text-slate-800">Ask Price: {order.askPrice}</p>
+
 
         <div className="mt-4 space-y-3">
           {order.tracking.map((step: TrackingStep, i: number) => (

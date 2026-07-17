@@ -7,6 +7,11 @@ interface Props {
   product?: {
     name: string;
     price: number;
+    // Min–max price range across the canonical product's cross-supplier
+    // listings (REQ-02). Optional/backward compatible — when both are
+    // present and differ, the card shows a range instead of a single price.
+    minPrice?: number | null;
+    maxPrice?: number | null;
     supplier: string;
     rating: number;
     change: number;
@@ -15,6 +20,7 @@ interface Props {
     category?: string;
   };
 }
+
 
 export default function ProductCard({ skeleton, product }: Props) {
   if (skeleton) {
@@ -47,13 +53,20 @@ export default function ProductCard({ skeleton, product }: Props) {
       <p className="text-xs text-slate-400 mt-0.5">{product.supplier}</p>
       <div className="flex items-end justify-between mt-2">
         <div>
-          <div className="text-lg font-bold text-slate-900">₹{product.price.toLocaleString("en-IN")}</div>
+          {product.minPrice != null && product.maxPrice != null && product.maxPrice > product.minPrice ? (
+            <div className="text-lg font-bold text-slate-900">
+              ₹{product.minPrice.toLocaleString("en-IN")} – ₹{product.maxPrice.toLocaleString("en-IN")}
+            </div>
+          ) : (
+            <div className="text-lg font-bold text-slate-900">₹{product.price.toLocaleString("en-IN")}</div>
+          )}
           <div className={`text-xs ${product.change < 0 ? "text-red-500" : "text-green-600"}`}>
             {product.change < 0 ? "↓" : "↑"} {Math.abs(product.change)}% today
           </div>
         </div>
         <span className="text-yellow-400 text-xs">★ {product.rating}</span>
       </div>
+
     </Link>
   );
 }

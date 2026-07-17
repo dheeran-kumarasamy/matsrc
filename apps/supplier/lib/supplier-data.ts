@@ -4,8 +4,10 @@ import { getDefaultCategoryImage } from "./category-images";
 import {
   groupByCanonicalProduct,
   resolveHeadlinePrice,
+  resolvePriceRange,
   type ResolutionCandidate,
 } from "./resolution";
+
 
 
 type OrderStatus = "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
@@ -489,6 +491,7 @@ export async function getPublicSupplierListings() {
     }));
 
     const headline = resolveHeadlinePrice(candidates);
+    const range = resolvePriceRange(candidates);
 
     const {
       _basePriceRaw,
@@ -505,9 +508,16 @@ export async function getPublicSupplierListings() {
         ? `${formatCurrency(headline.unitPrice)} / ${listing.unit}`
         : publicFields.price,
       headlineSupplierId: headline?.supplierId ?? listing.supplierId,
+      // Min–max price range across the canonical group's active listings
+      // (REQ-02). Raw numeric values (not formatted strings) so consumers
+      // can format/compare as needed; null when unresolvable (no active
+      // candidates), mirroring headline's fallback behavior.
+      minPrice: range ? range.minPrice : null,
+      maxPrice: range ? range.maxPrice : null,
     };
   });
 }
+
 
 
 export type SupplierListingRow = {
@@ -901,7 +911,12 @@ export type SupplierOrderDetail = {
   status: OrderStatus;
   tracking: SupplierTrackingStep[];
   purchaseOrder: SupplierOrderPurchaseOrderSummary | null;
+  // REQ-06: the minimum price of the builder-facing price range at enquiry
+  // time — the only price figure surfaced to the supplier. Falls back to
+  // unitPrice for legacy orders created before this field existed.
+  askPrice: string;
 };
+
 
 
 export type SupplierRfqCard = {
@@ -948,12 +963,14 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     quantity: `${item.quantity} ${item.product.unit}`,
     material: item.product.name,
     status: item.order.status,
+    askPrice: `${formatCurrency((item as any).askPrice ?? item.unitPrice)} / ${item.product.unit}`,
     tracking: item.order.tracking.map((entry: any) => ({
       id: entry.id,
       label: entry.note ?? humanizeToken(entry.status),
       status: entry.status,
     })),
     purchaseOrder: purchaseOrder
+
       ? {
           id: purchaseOrder.id,
           poNumber: purchaseOrder.poNumber,

@@ -11,8 +11,10 @@ import {
 import { notifySupplierOrderSubmitted } from "@/lib/notify";
 import {
   resolveLowestPriceForQuantity,
+  resolvePriceRange,
   type ResolutionCandidate,
 } from "@/lib/resolution";
+
 
 
 export const dynamic = "force-dynamic";
@@ -111,11 +113,20 @@ function resolveForProductId(
   );
 
   const group = allListings.filter((item) => groupIds.has(item.id));
-  if (group.length === 0) return null;
+  if (group.length === 0) return { resolution: null, minPrice: null as number | null };
 
   const candidates = group.map(toResolutionCandidate);
-  return resolveLowestPriceForQuantity(candidates, quantity);
+  const resolution = resolveLowestPriceForQuantity(candidates, quantity);
+
+  // REQ-06: the "ask price" sent to the supplier must be the floor of the
+  // full min–max price range shown to the builder across the canonical
+  // group (not the quantity-tiered resolved price) — re-uses the same
+  // range computation that powers the customer-facing product card.
+  const range = resolvePriceRange(candidates);
+
+  return { resolution, minPrice: range?.minPrice ?? null };
 }
+
 
 export async function GET(request: Request) {
   try {
@@ -211,6 +222,7 @@ export async function POST(request: Request) {
       productId: string;
       quantity: number;
       unitPrice: number;
+      askPrice: number | null;
       supplierId: string;
       supplierName: string;
       canonicalProductId: string | null;
@@ -220,7 +232,7 @@ export async function POST(request: Request) {
     };
 
     const resolvedLines: ResolvedLine[] = cartItems.map((item) => {
-      const resolution = resolveForProductId(
+      const { resolution, minPrice } = resolveForProductId(
         item.productId,
         item.product.canonicalProductId,
         allListings,
@@ -232,6 +244,11 @@ export async function POST(request: Request) {
           productId: item.productId,
           quantity: item.quantity,
           unitPrice: resolution.unitPrice,
+          // REQ-06: askPrice is the minimum of the full canonical price
+          // range shown to the builder — the only price figure surfaced
+          // to the supplier. Falls back to the resolved unitPrice if no
+          // range could be computed (e.g. single-listing canonical group).
+          askPrice: minPrice ?? resolution.unitPrice,
           supplierId: resolution.supplierId,
           supplierName: item.product.supplier.companyName,
           canonicalProductId: item.product.canonicalProductId,
@@ -243,10 +260,12 @@ export async function POST(request: Request) {
 
       // Fallback: legacy single-listing pricing, grouped by the item's own
       // product/supplier (unchanged pre-resolution behaviour).
+      const fallbackUnitPrice = resolveUnitPrice(item.product, item.quantity);
       return {
         productId: item.productId,
         quantity: item.quantity,
-        unitPrice: resolveUnitPrice(item.product, item.quantity),
+        unitPrice: fallbackUnitPrice,
+        askPrice: minPrice ?? fallbackUnitPrice,
         supplierId: item.product.supplierId,
         supplierName: item.product.supplier.companyName,
         canonicalProductId: item.product.canonicalProductId,
@@ -255,6 +274,7 @@ export async function POST(request: Request) {
         tierMaxQty: null,
       };
     });
+
 
     // Group by the RESOLVED supplier (routing-bug fix: an enquiry must be
     // assigned to the specific supplier whose price is lowest for the tier
@@ -286,6 +306,14 @@ export async function POST(request: Request) {
         0
       );
       const deliveryDate = body.deliveryDate ? new Date(body.deliveryDate) : null;
+      // REQ-07: map-based geolocation capture, replacing the checkout pincode
+      // field. All optional/nullable — existing flows that don't send these
+      // (e.g. the separate Group & Save checkout page) are unaffected.
+      const deliveryLat = typeof body.deliveryLat === "number" ? body.deliveryLat : null;
+      const deliveryLng = typeof body.deliveryLng === "number" ? body.deliveryLng : null;
+      const deliveryAddress = typeof body.deliveryAddress === "string" && body.deliveryAddress.trim()
+        ? body.deliveryAddress.trim()
+        : null;
       const resolvedAt = new Date();
 
       const order = await prisma.order.create({
@@ -296,12 +324,22 @@ export async function POST(request: Request) {
           paymentStatus: PaymentStatus.PENDING,
           totalAmount,
           deliveryDate,
+          deliveryLat: deliveryLat ?? undefined,
+          deliveryLng: deliveryLng ?? undefined,
+          deliveryAddress: deliveryAddress ?? undefined,
+
           items: {
             create: group.items.map((item) => ({
               productId: item.productId,
               supplierId: group.supplierId,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
+              // REQ-06: the only price figure surfaced to the supplier —
+              // the minimum of the canonical product's cross-supplier price
+              // range at enquiry time (builder UI continues to show the
+              // full min–max range; the actual order total/routing still
+              // uses unitPrice above, unaffected by this addition).
+              askPrice: item.askPrice ?? item.unitPrice,
               deliveryDate,
               canonicalProductId: item.canonicalProductId ?? undefined,
               resolvedListingId: item.resolvedListingId ?? undefined,
@@ -310,6 +348,7 @@ export async function POST(request: Request) {
               priceAtResolution: item.resolvedListingId ? item.unitPrice : undefined,
               resolvedAt: item.resolvedListingId ? resolvedAt : undefined,
             })),
+
           },
           tracking: {
             create: {

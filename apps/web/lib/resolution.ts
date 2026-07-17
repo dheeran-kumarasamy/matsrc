@@ -108,6 +108,32 @@ export function resolveHeadlinePrice(candidates: ResolutionCandidate[]): Resolut
   return resolveLowestPriceForQuantity(candidates, 1);
 }
 
+export type PriceRange = {
+  minPrice: number;
+  maxPrice: number;
+};
+
+/**
+ * Computes the min–max price range across a canonical group of listings
+ * (spec: REQ-02 "discovery should show one consolidated card per canonical
+ * id with min–max price range across active listings"). Uses each active
+ * candidate's quantity=1 effective unit price (the same basis as
+ * resolveHeadlinePrice) so the range is directly comparable to the headline
+ * price. Returns null if there are no eligible (active) candidates.
+ */
+export function resolvePriceRange(candidates: ResolutionCandidate[]): PriceRange | null {
+  const eligible = candidates.filter((candidate) => candidate.isActive);
+  if (eligible.length === 0) return null;
+
+  const unitPrices = eligible.map((candidate) => effectiveTierForQuantity(candidate, 1).tierPrice);
+
+  return {
+    minPrice: Math.min(...unitPrices),
+    maxPrice: Math.max(...unitPrices),
+  };
+}
+
+
 export type GroupKeyedListing<T> = T & { canonicalProductId: string | null; id: string };
 
 export function groupByCanonicalProduct<T>(

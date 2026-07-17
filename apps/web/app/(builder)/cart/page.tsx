@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Trash2 } from "lucide-react";
+import { Minus, Plus, Trash2 } from "lucide-react";
 import { builderApiDelete, builderApiGet, builderApiPost } from "@/lib/api";
+
 
 type CartResponse = {
   items: Array<{
@@ -30,8 +31,10 @@ export default function CartPage() {
   const router = useRouter();
   const [data, setData] = useState<CartResponse>({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: "INR 0" } });
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
 
   useEffect(() => {
     let active = true;
@@ -77,6 +80,36 @@ export default function CartPage() {
     }
   }
 
+  // REQ-01: editable cart quantity. Enforces min 1 / integer bounds, then
+  // persists via the existing cart upsert endpoint (CartService.upsert),
+  // and re-fetches the cart so unitPrice/lineTotal reflect any tiered
+  // pricing recomputed server-side.
+  async function handleUpdateQuantity(productId: string, id: string, nextQuantity: number) {
+    const safeQuantity = Math.max(1, Math.floor(nextQuantity) || 1);
+    const previous = data;
+    setUpdatingId(id);
+    setData((prev) => {
+      const items = prev.items.map((item) =>
+        item.id === id ? { ...item, quantity: safeQuantity, lineTotal: item.unitPrice * safeQuantity } : item
+      );
+      const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
+      return {
+        items,
+        summary: { itemCount: items.length, subtotal, subtotalLabel: `INR ${subtotal.toLocaleString("en-IN")}` },
+      };
+    });
+    try {
+      await builderApiPost("/cart/items", { productId, quantity: safeQuantity });
+      const payload = await builderApiGet<CartResponse>("/cart");
+      setData(payload);
+    } catch {
+      setData(previous);
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+
   async function handleSubmitEnquiry() {
     if (data.items.length === 0) {
       return;
@@ -117,11 +150,48 @@ export default function CartPage() {
                 <div className="flex-1">
                   <p className="font-medium text-slate-800 text-sm">{item.name}</p>
                   <p className="text-xs text-slate-400 mt-0.5">Supplier: {item.supplierName}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Qty: {item.quantity} {item.unit}</p>
                   <p className="text-xs text-slate-400 mt-0.5">Unit price: INR {item.unitPrice.toLocaleString("en-IN")}</p>
                   <div className="flex items-center gap-3 mt-2">
+                    <div className="flex items-center rounded-lg border border-slate-200">
+                      <button
+                        type="button"
+                        disabled={updatingId === item.id || item.quantity <= 1}
+                        onClick={() => void handleUpdateQuantity(item.productId, item.id, item.quantity - 1)}
+                        aria-label={`Decrease quantity for ${item.name}`}
+                        className="flex h-8 w-8 items-center justify-center text-slate-500 transition hover:text-blue-700 disabled:opacity-40"
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        inputMode="numeric"
+                        value={item.quantity}
+                        disabled={updatingId === item.id}
+                        onChange={(event) => {
+                          const parsed = parseInt(event.target.value, 10);
+                          if (!Number.isNaN(parsed)) {
+                            void handleUpdateQuantity(item.productId, item.id, parsed);
+                          }
+                        }}
+                        className="h-8 w-12 border-x border-slate-200 text-center text-sm focus:outline-none disabled:opacity-40"
+                        aria-label={`Quantity for ${item.name}`}
+                      />
+                      <button
+                        type="button"
+                        disabled={updatingId === item.id}
+                        onClick={() => void handleUpdateQuantity(item.productId, item.id, item.quantity + 1)}
+                        aria-label={`Increase quantity for ${item.name}`}
+                        className="flex h-8 w-8 items-center justify-center text-slate-500 transition hover:text-blue-700 disabled:opacity-40"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                    <span className="text-xs text-slate-400">{item.unit}</span>
                     <span className="text-sm font-semibold text-slate-800">INR {item.lineTotal.toLocaleString("en-IN")}</span>
                   </div>
+
                 </div>
                 <button
                   disabled={loadingId === item.id}

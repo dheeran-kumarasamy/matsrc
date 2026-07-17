@@ -2,12 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { builderApiGet } from "@/lib/api";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
+import PaymentMethodSelector from "@/components/orders/PaymentMethodSelector";
 
 type OrderPayment = {
   id: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
   paymentStatus: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
+  paymentMethod: "UPI" | "CARD" | "NET_BANKING" | "COD" | "CREDIT" | "BANK_TRANSFER";
   paymentLinkAvailable: boolean;
+  bankGuaranteeAvailable: boolean;
   supplierName: string;
   total: number;
   totalLabel: string;
@@ -55,6 +58,18 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
             <p className="mt-1 font-semibold text-slate-900">INR {order.total.toLocaleString("en-IN")}</p>
           </div>
         </div>
+
+        {/* REQ-10: Standard vs Bank Guarantee payment method selector, gated by
+            REQ-09's bank guarantee approval flag. Only editable while payment
+            is still pending. */}
+        {order.paymentStatus === "PENDING" && order.status !== "CANCELLED" ? (
+          <PaymentMethodSelector
+            orderId={order.id}
+            currentMethod={order.paymentMethod}
+            bankGuaranteeAvailable={order.bankGuaranteeAvailable}
+          />
+        ) : null}
+
         <div className="flex flex-wrap gap-3">
           <Link href={`/orders/${order.id}`} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
             Back to order
@@ -90,4 +105,3 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
     </div>
   );
 }
-

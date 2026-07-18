@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Search, Bell, Flag } from "lucide-react";
+import { Search, Bell, FileBarChart } from "lucide-react";
+
 import { BuilderNav, BuilderNavMobileTrigger } from "@/components/builder/BuilderNav";
 import CartLauncher from "@/components/cart/CartLauncher";
 import CartDrawer from "@/components/cart/CartDrawer";
@@ -24,10 +25,11 @@ export default function BuilderLayout({
       <main className="space-y-4">
         {/* REQ-03/04/05: "Builder Portal" title removed. This header row is
             now the persistent search-bar row — the search input flex-grows,
-            and Cart → Bell (notifications) → Report sit at the far right,
+            and Cart → Bell (notifications) → Reports sit at the far right,
             in that order, on every builder page. No global search API is
             wired here yet, so the input just deep-links into the existing
             products-page search form via its `q` query param on submit. */}
+
         <header className="panel flex items-center gap-3 p-4">
           <BuilderNavMobileTrigger />
           <form action="/products" method="GET" className="flex-1">
@@ -41,12 +43,13 @@ export default function BuilderLayout({
           <div className="flex items-center gap-2 sm:gap-3">
             <CartLauncher />
             <HeaderIconLink href="/notifications" label="Alerts" icon={Bell} ariaLabel="Notifications" />
-            {/* "Report" entry point: no existing Report page was found in
-                the builder app, so this reuses the existing Disputes flow
-                (the closest existing "raise an issue" destination) — flagged
-                as an assumption; swap the href/icon if a dedicated Report
-                feature is introduced later. */}
-            <HeaderIconLink href="/disputes" label="Report" icon={Flag} ariaLabel="Report an issue" />
+            {/* "Reports" entry point: opens the Reports catalogue overlay
+                (Material Consumption, Best Supplier Pricing, etc). Raising a
+                dispute/issue report lives only in the Dashboard's Quick
+                Actions panel now, to avoid confusion between the two
+                different "report" concepts. */}
+            <HeaderIconLink href="/reports" label="Reports" icon={FileBarChart} ariaLabel="View reports" />
+
           </div>
         </header>
         {children}

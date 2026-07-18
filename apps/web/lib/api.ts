@@ -86,6 +86,7 @@ export async function builderApiPost<TResponse>(path: string, body: unknown): Pr
 }
 
 export async function builderApiPatch<TResponse>(path: string, body: unknown): Promise<TResponse> {
+
   const response = await fetch(buildApiUrl(path), {
     method: "PATCH",
     headers: {

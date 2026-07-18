@@ -22,8 +22,10 @@ const links = [
   { href: "/purchase-orders", label: "Purchase Orders" },
   { href: "/cart", label: "Cart" },
   { href: "/watchlist", label: "Watchlist" },
+  { href: "/reports", label: "Reports" },
   { href: "/disputes", label: "Disputes" },
 ];
+
 
 type RecentOrder = {
   id: string;

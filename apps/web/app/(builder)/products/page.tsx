@@ -108,21 +108,18 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
         {/* Product grid */}
         <div className="flex-1">
 
-          {/* Search bar */}
+          {/* Sort / filter form — the search input lives in the persistent
+              header bar (see (builder)/layout.tsx) so it isn't duplicated
+              here; the current `q` value is preserved via a hidden field. */}
           <form method="GET" className="mb-4 space-y-3">
             {category ? <input type="hidden" name="category" value={category} /> : null}
             {brand ? <input type="hidden" name="brand" value={brand} /> : null}
             {minPriceRaw ? <input type="hidden" name="minPrice" value={minPriceRaw} /> : null}
             {maxPriceRaw ? <input type="hidden" name="maxPrice" value={maxPriceRaw} /> : null}
-
-            <input
-              name="q"
-              defaultValue={q}
-              placeholder="Search TMT bars, cement, bricks..."
-              className="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
-            />
+            {q ? <input type="hidden" name="q" value={q} /> : null}
 
             {/* Sort */}
+
             <div className="flex items-center justify-between">
               <p className="text-xs text-slate-400">Showing active supplier listings</p>
               <div className="flex items-center gap-2">

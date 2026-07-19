@@ -30,7 +30,8 @@ export default function BuilderLayout({
             wired here yet, so the input just deep-links into the existing
             products-page search form via its `q` query param on submit. */}
 
-        <header className="panel flex items-center gap-3 p-4">
+        <header className="panel sticky top-4 z-30 flex items-center gap-3 p-4">
+
           <BuilderNavMobileTrigger />
           <form action="/products" method="GET" className="flex-1">
             <input

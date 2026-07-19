@@ -106,15 +106,19 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
       {/* Filters — a single horizontal line directly below the persistent
           header search bar, in the space left by the removed duplicate
           search input. Category, Brand, Price range, and Sort all sit on
-          one row (wrapping on narrow screens). */}
-      <ProductFilters
-        selectedCategory={category}
-        selectedBrand={brand}
-        minPrice={minPriceRaw}
-        maxPrice={maxPriceRaw}
-        q={q}
-        sort={sort}
-      />
+          one row (wrapping on narrow screens). Sticky so it stays visible
+          alongside the header search bar while scrolling the product grid. */}
+      <div className="sticky top-[88px] z-20">
+        <ProductFilters
+          selectedCategory={category}
+          selectedBrand={brand}
+          minPrice={minPriceRaw}
+          maxPrice={maxPriceRaw}
+          q={q}
+          sort={sort}
+        />
+      </div>
+
 
       {/* Products grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

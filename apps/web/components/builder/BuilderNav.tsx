@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
+
 import { Menu } from "lucide-react";
-import ProductFilters from "@/components/products/ProductFilters";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
+
 import { builderApiGet } from "@/lib/api";
 import {
   Sheet,
@@ -161,9 +162,7 @@ function RecentOrdersPanel() {
 // every section.
 export function BuilderNavMobileTrigger() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
-  const showProductFilters = pathname === "/products";
 
   return (
     <>
@@ -184,24 +183,13 @@ export function BuilderNavMobileTrigger() {
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
             <BrandBlock />
             <NavLinks pathname={pathname} onNavigate={() => setOpen(false)} />
-            {showProductFilters ? (
-              <div className="border-t border-slate-100 pt-4">
-                <ProductFilters
-                  selectedCategory={searchParams.get("category") ?? undefined}
-                  selectedBrand={searchParams.get("brand") ?? undefined}
-                  minPrice={searchParams.get("minPrice") ?? undefined}
-                  maxPrice={searchParams.get("maxPrice") ?? undefined}
-                  q={searchParams.get("q") ?? undefined}
-                  sort={searchParams.get("sort") ?? undefined}
-                />
-              </div>
-            ) : null}
           </div>
         </SheetContent>
       </Sheet>
     </>
   );
 }
+
 
 // Desktop sidebar — hidden below `lg`, visible inline at `lg` and up.
 // Shows the brand block + the 5 most recent orders (and their items) in
@@ -210,29 +198,12 @@ export function BuilderNavMobileTrigger() {
 // Recent Orders table.
 export function BuilderNav() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  // FR-04: Show the Browse Materials filters directly below the main panel
-  // when the builder is on the product discovery page.
-  const showProductFilters = pathname === "/products";
 
   return (
     <aside className="panel sticky top-4 hidden h-fit space-y-4 p-4 lg:block">
       <BrandBlock />
       <RecentOrdersPanel />
-
-      {showProductFilters ? (
-        <div className="border-t border-slate-100 pt-4">
-          <ProductFilters
-            selectedCategory={searchParams.get("category") ?? undefined}
-            selectedBrand={searchParams.get("brand") ?? undefined}
-            minPrice={searchParams.get("minPrice") ?? undefined}
-            maxPrice={searchParams.get("maxPrice") ?? undefined}
-            q={searchParams.get("q") ?? undefined}
-            sort={searchParams.get("sort") ?? undefined}
-          />
-        </div>
-      ) : null}
     </aside>
   );
 }
+

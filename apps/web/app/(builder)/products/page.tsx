@@ -1,4 +1,5 @@
 import ProductCard from "@/components/products/ProductCard";
+import ProductFilters from "@/components/products/ProductFilters";
 import { getSupplierListings, dedupeByCanonicalGroup, parseListingPrice } from "@/lib/listings";
 
 
@@ -103,14 +104,26 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
       </div>
 
       <div className="flex flex-col md:flex-row gap-6">
-        {/* Filters now render in the left-hand main menu sidebar (BuilderNav) — FR-04 */}
+        {/* Filters — moved here (in place of the removed duplicate search
+            bar) from the main-menu sidebar, so they sit alongside the
+            product grid on the Browse Materials page itself. */}
+        <div className="w-full md:w-64 shrink-0">
+          <ProductFilters
+            selectedCategory={category}
+            selectedBrand={brand}
+            minPrice={minPriceRaw}
+            maxPrice={maxPriceRaw}
+            q={q}
+            sort={sort}
+          />
+        </div>
 
         {/* Product grid */}
         <div className="flex-1">
 
-          {/* Sort / filter form — the search input lives in the persistent
-              header bar (see (builder)/layout.tsx) so it isn't duplicated
-              here; the current `q` value is preserved via a hidden field. */}
+          {/* Sort control — the search input lives in the persistent header
+              bar (see (builder)/layout.tsx) so it isn't duplicated here; the
+              current `q`/filter values are preserved via hidden fields. */}
           <form method="GET" className="mb-4 space-y-3">
             {category ? <input type="hidden" name="category" value={category} /> : null}
             {brand ? <input type="hidden" name="brand" value={brand} /> : null}
@@ -119,7 +132,6 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
             {q ? <input type="hidden" name="q" value={q} /> : null}
 
             {/* Sort */}
-
             <div className="flex items-center justify-between">
               <p className="text-xs text-slate-400">Showing active supplier listings</p>
               <div className="flex items-center gap-2">

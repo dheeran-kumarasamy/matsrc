@@ -26,6 +26,8 @@ import {
 import { useOverlayStore } from "@/lib/store/overlay-store";
 import { useCartStore } from "@/lib/store/cart-store";
 import { builderApiPost } from "@/lib/api";
+import MapLocationPicker from "./MapLocationPicker";
+
 
 const STEP_LABELS = [
   { key: "review", label: "Review" },
@@ -301,7 +303,22 @@ export default function CartDrawer() {
                 {locationError ? <p className="mt-2 text-xs text-red-600">{locationError}</p> : null}
               </div>
               <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">
+                  Select on map (optional)
+                </label>
+                <MapLocationPicker
+                  lat={deliveryLat}
+                  lng={deliveryLng}
+                  onLocationSelect={(lat, lng) => {
+                    setDeliveryLat(lat);
+                    setDeliveryLng(lng);
+                    setLocationError(null);
+                  }}
+                />
+              </div>
+              <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Delivery address (optional)</label>
+
                 <input
                   placeholder="e.g. Site name, street, area"
                   value={deliveryAddress}

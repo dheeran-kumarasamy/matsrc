@@ -103,66 +103,29 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
         <span className="text-sm text-slate-400">{cardProducts.length} live listings from suppliers</span>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-6">
-        {/* Filters — moved here (in place of the removed duplicate search
-            bar) from the main-menu sidebar, so they sit alongside the
-            product grid on the Browse Materials page itself. */}
-        <div className="w-full md:w-64 shrink-0">
-          <ProductFilters
-            selectedCategory={category}
-            selectedBrand={brand}
-            minPrice={minPriceRaw}
-            maxPrice={maxPriceRaw}
-            q={q}
-            sort={sort}
-          />
-        </div>
+      {/* Filters — a single horizontal line directly below the persistent
+          header search bar, in the space left by the removed duplicate
+          search input. Category, Brand, Price range, and Sort all sit on
+          one row (wrapping on narrow screens). */}
+      <ProductFilters
+        selectedCategory={category}
+        selectedBrand={brand}
+        minPrice={minPriceRaw}
+        maxPrice={maxPriceRaw}
+        q={q}
+        sort={sort}
+      />
 
-        {/* Product grid */}
-        <div className="flex-1">
-
-          {/* Sort control — the search input lives in the persistent header
-              bar (see (builder)/layout.tsx) so it isn't duplicated here; the
-              current `q`/filter values are preserved via hidden fields. */}
-          <form method="GET" className="mb-4 space-y-3">
-            {category ? <input type="hidden" name="category" value={category} /> : null}
-            {brand ? <input type="hidden" name="brand" value={brand} /> : null}
-            {minPriceRaw ? <input type="hidden" name="minPrice" value={minPriceRaw} /> : null}
-            {maxPriceRaw ? <input type="hidden" name="maxPrice" value={maxPriceRaw} /> : null}
-            {q ? <input type="hidden" name="q" value={q} /> : null}
-
-            {/* Sort */}
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-slate-400">Showing active supplier listings</p>
-              <div className="flex items-center gap-2">
-                <select
-                  name="sort"
-                  defaultValue={sort}
-                  className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none"
-                >
-                  <option value="price_asc">Price: Low to High</option>
-                  <option value="price_desc">Price: High to Low</option>
-                  <option value="newest">Newest</option>
-                </select>
-                <button type="submit" className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-700">
-                  Apply
-                </button>
-              </div>
-            </div>
-          </form>
-
-          {/* Products grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {cardProducts.map((product: any) => (
-              <ProductCard key={product.slug} product={product} />
-            ))}
-            {cardProducts.length === 0 ? (
-              <div className="panel p-8 text-center text-sm text-slate-500 sm:col-span-2 lg:col-span-3">
-                No products found for the selected filters.
-              </div>
-            ) : null}
+      {/* Products grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {cardProducts.map((product: any) => (
+          <ProductCard key={product.slug} product={product} />
+        ))}
+        {cardProducts.length === 0 ? (
+          <div className="panel p-8 text-center text-sm text-slate-500 sm:col-span-2 lg:col-span-3">
+            No products found for the selected filters.
           </div>
-        </div>
+        ) : null}
       </div>
     </div>
   );

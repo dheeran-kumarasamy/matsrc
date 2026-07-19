@@ -56,10 +56,13 @@ type ProductFiltersProps = {
   sort?: string;
 };
 
-// FR-04: Faceted filter sidebar
-// Category and Brand are now sourced from admin-configured master data
+// FR-04: Faceted filter bar
+// Category and Brand are sourced from admin-configured master data
 // (GET /public/catalog/:entity) instead of hardcoded free-text lists, so
 // builders can only filter by the standardized set of values.
+// Rendered as a single horizontal line above the product grid (below the
+// persistent header search bar) so every filter + sort control fits on one
+// row on desktop, wrapping gracefully on smaller screens.
 export default function ProductFilters({
   selectedCategory,
   selectedBrand,
@@ -72,88 +75,100 @@ export default function ProductFilters({
   const { options: brandOptions, loading: brandsLoading } = useCatalogOptions("brand");
 
   return (
-    <form method="GET" className="panel p-4 space-y-5">
-      <h3 className="font-semibold text-sm text-slate-800">Filters</h3>
-
-      {/* Preserve top-bar state when applying sidebar filters */}
+    <form
+      method="GET"
+      className="panel flex flex-wrap items-end gap-3 p-3"
+    >
+      {/* Preserve top-bar state when applying filters */}
       {q ? <input type="hidden" name="q" value={q} /> : null}
-      {sort ? <input type="hidden" name="sort" value={sort} /> : null}
 
       {/* Category */}
-      <div>
-        <p className="text-xs font-medium text-slate-500 mb-2">Category</p>
-        {categoriesLoading ? (
-          <p className="text-xs text-slate-400">Loading...</p>
-        ) : (
-          categoryOptions.map((c) => (
-            <label key={c.id} className="flex items-center gap-2 text-xs text-slate-600 mb-1.5 cursor-pointer">
-              <input
-                type="radio"
-                name="category"
-                value={c.name}
-                defaultChecked={selectedCategory === c.name}
-                className="accent-blue-700"
-              /> {c.name}
-            </label>
-          ))
-        )}
-      </div>
-
-      {/* Price range */}
-      <div>
-        <p className="text-xs font-medium text-slate-500 mb-2">Price Range (₹/MT)</p>
-        <div className="flex gap-2">
-          <input
-            type="number"
-            name="minPrice"
-            defaultValue={minPrice}
-            placeholder="Min"
-            className="w-full border border-slate-200 rounded px-2 py-1 text-xs"
-          />
-          <input
-            type="number"
-            name="maxPrice"
-            defaultValue={maxPrice}
-            placeholder="Max"
-            className="w-full border border-slate-200 rounded px-2 py-1 text-xs"
-          />
-        </div>
+      <div className="min-w-[140px] flex-1">
+        <label className="mb-1 block text-[11px] font-medium text-slate-500">Category</label>
+        <select
+          name="category"
+          defaultValue={selectedCategory ?? ""}
+          disabled={categoriesLoading}
+          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
+        >
+          <option value="">All Categories</option>
+          {categoryOptions.map((c) => (
+            <option key={c.id} value={c.name}>
+              {c.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Brand */}
-      <div>
-        <p className="text-xs font-medium text-slate-500 mb-2">Brand</p>
-        {brandsLoading ? (
-          <p className="text-xs text-slate-400">Loading...</p>
-        ) : (
-          brandOptions.map((b) => (
-            <label key={b.id} className="flex items-center gap-2 text-xs text-slate-600 mb-1.5 cursor-pointer">
-              <input
-                type="radio"
-                name="brand"
-                value={b.name}
-                defaultChecked={selectedBrand === b.name}
-                className="accent-blue-700"
-              /> {b.name}
-            </label>
-          ))
-        )}
+      <div className="min-w-[140px] flex-1">
+        <label className="mb-1 block text-[11px] font-medium text-slate-500">Brand</label>
+        <select
+          name="brand"
+          defaultValue={selectedBrand ?? ""}
+          disabled={brandsLoading}
+          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
+        >
+          <option value="">All Brands</option>
+          {brandOptions.map((b) => (
+            <option key={b.id} value={b.name}>
+              {b.name}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* BIS Certified only */}
-      <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
-        <input type="checkbox" disabled className="accent-blue-700" />
-        BIS Certified only
-      </label>
+      {/* Price range */}
+      <div className="min-w-[100px]">
+        <label className="mb-1 block text-[11px] font-medium text-slate-500">Min Price (₹/MT)</label>
+        <input
+          type="number"
+          name="minPrice"
+          defaultValue={minPrice}
+          placeholder="Min"
+          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
+        />
+      </div>
+      <div className="min-w-[100px]">
+        <label className="mb-1 block text-[11px] font-medium text-slate-500">Max Price (₹/MT)</label>
+        <input
+          type="number"
+          name="maxPrice"
+          defaultValue={maxPrice}
+          placeholder="Max"
+          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
+        />
+      </div>
 
-      {/* Verified suppliers only */}
-      <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
-        <input type="checkbox" disabled className="accent-blue-700" />
-        Verified Quality Badge only
-      </label>
+      {/* Sort */}
+      <div className="min-w-[140px]">
+        <label className="mb-1 block text-[11px] font-medium text-slate-500">Sort</label>
+        <select
+          name="sort"
+          defaultValue={sort}
+          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
+        >
+          <option value="price_asc">Price: Low to High</option>
+          <option value="price_desc">Price: High to Low</option>
+          <option value="newest">Newest</option>
+        </select>
+      </div>
 
-      <button type="submit" className="w-full bg-blue-700 text-white rounded-lg py-2 text-xs font-medium hover:bg-blue-800 transition-colors">Apply Filters</button>
-      <a href="/products" className="block w-full text-center text-xs text-slate-400 hover:text-slate-600">Clear all</a>
+      {/* Actions */}
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800"
+        >
+          Apply Filters
+        </button>
+        <a
+          href="/products"
+          className="whitespace-nowrap px-2 py-2 text-xs text-slate-400 hover:text-slate-600"
+        >
+          Clear all
+        </a>
+      </div>
     </form>
   );
 }

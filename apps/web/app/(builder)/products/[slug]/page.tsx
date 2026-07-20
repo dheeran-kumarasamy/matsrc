@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import EnquiryPanel from "@/components/products/EnquiryPanel";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
+import WatchlistButton from "@/components/products/WatchlistButton";
 import { getDefaultCategoryImage } from "@/lib/category-images";
 import { getSupplierListings, parseNumericLabel, type SupplierListing } from "@/lib/listings";
 
@@ -128,6 +129,9 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
             maxServiceableQty={Math.max(maxServiceableQty, 1)}
             pricingTiers={product.pricingTiers.length > 0 ? product.pricingTiers : [{ minQty: "1", maxQty: String(Math.max(maxServiceableQty, 1)), price: String(basePrice) }]}
           />
+          <div className="panel p-5">
+            <WatchlistButton productId={product.id} />
+          </div>
         </aside>
       </div>
     </div>

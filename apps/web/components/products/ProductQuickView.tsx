@@ -11,6 +11,7 @@ import Link from "next/link";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import EnquiryPanel from "@/components/products/EnquiryPanel";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
+import WatchlistButton from "@/components/products/WatchlistButton";
 import { getDefaultCategoryImage } from "@/lib/category-images";
 import { parseNumericLabel, type SupplierListing } from "@/lib/listings";
 
@@ -103,6 +104,7 @@ export default function ProductQuickView({ product }: Props) {
               maxServiceableQty={Math.max(maxServiceableQty, 1)}
               pricingTiers={product.pricingTiers.length > 0 ? product.pricingTiers : [{ minQty: "1", maxQty: String(Math.max(maxServiceableQty, 1)), price: String(basePrice) }]}
             />
+            <WatchlistButton productId={product.id} />
           </aside>
         </div>
       </DialogContent>

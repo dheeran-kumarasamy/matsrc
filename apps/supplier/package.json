@@ -10,24 +10,25 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@matsrc/ui": "workspace:*",
     "@matsrc/db": "workspace:*",
+    "@matsrc/ui": "workspace:*",
+    "@tanstack/react-query": "^5.40.0",
+    "axios": "^1.7.2",
+    "libphonenumber-js": "^1.12.42",
     "next": "^14.2.3",
+    "next-auth": "^5.0.0-beta.19",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@tanstack/react-query": "^5.40.0",
-    "next-auth": "^5.0.0-beta.19",
-    "axios": "^1.7.2",
-    "libphonenumber-js": "^1.12.42"
+    "twilio": "^6.0.2"
   },
   "devDependencies": {
     "@matsrc/config": "workspace:*",
     "@types/node": "^20.14.2",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "typescript": "^5.4.5",
-    "tailwindcss": "^3.4.4",
     "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38"
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.4.5"
   }
 }

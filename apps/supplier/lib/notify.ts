@@ -1,4 +1,5 @@
 import { prisma } from "@matsrc/db";
+import { sendWhatsAppMessage } from "./twilio-whatsapp";
 
 // REQ-08: Best-effort WhatsApp notification writer used by the supplier
 // portal's direct-Prisma order-status update path (apps/supplier/lib/
@@ -102,21 +103,29 @@ export async function notifyBuilderOrderStatusUpdate(orderId: string, status: Bu
       },
     });
 
-    // Simulate provider send (mock — no real WhatsApp API integration yet),
-    // matching apps/web/lib/notify.ts's existing simulation pattern.
-    const externalId = `mock-wa-${notification.id}`;
+    // Send via Twilio WhatsApp (real send; falls back to a "failed" status if
+    // WhatsApp isn't enabled/configured, or the recipient has no number).
+    const recipient = builderUser.whatsappNumber?.trim() || builderUser.phone?.trim();
+    const result = recipient
+      ? await sendWhatsAppMessage(recipient, body)
+      : { error: "Builder has no WhatsApp/phone number on file" };
+
+    const success = "externalId" in result;
     await prisma.notification.update({
       where: { id: notification.id },
-      data: { status: "sent", externalId, deliveredAt: new Date() },
+      data: success
+        ? { status: "sent", externalId: result.externalId, deliveredAt: new Date() }
+        : { status: "failed", failureReason: result.error, failedAt: new Date() },
     });
 
     await prisma.notificationDeliveryLog.create({
       data: {
         notificationId: notification.id,
         previousStatus: "queued",
-        newStatus: "sent",
-        provider: "mock-whatsapp",
-        metadata: JSON.stringify({ recipient: builderUser.whatsappNumber || builderUser.phone }),
+        newStatus: success ? "sent" : "failed",
+        provider: "twilio-whatsapp",
+        errorMessage: success ? null : result.error,
+        metadata: JSON.stringify({ recipient }),
       },
     });
   } catch (error) {

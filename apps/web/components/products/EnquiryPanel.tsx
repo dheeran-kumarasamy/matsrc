@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { ShoppingCart } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart-store";
 import { useOverlayStore } from "@/lib/store/overlay-store";
@@ -36,6 +38,8 @@ function findTier(pricingTiers: PricingTier[], quantity: number) {
 export default function EnquiryPanel({ productId, unit, maxServiceableQty, pricingTiers }: Props) {
   const addItem = useCartStore((state) => state.addItem);
   const openCart = useOverlayStore((state) => state.openCart);
+  const router = useRouter();
+  const { status: sessionStatus } = useSession();
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState(false);
@@ -67,8 +71,16 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
       return;
     }
 
+    // Ordering must require login — prompt the builder to sign in before
+    // this first cart-mutation action instead of failing silently later.
+    if (sessionStatus !== "authenticated") {
+      router.push(`/auth/login?callbackUrl=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+
     await handleAddToEnquiry();
   }
+
 
 
   return (

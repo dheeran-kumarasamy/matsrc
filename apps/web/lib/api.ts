@@ -37,13 +37,29 @@ async function getCurrentUserHeaders(): Promise<Record<string, string>> {
   if (!session?.user?.email) {
     return {};
   }
-  return {
+  const headers: Record<string, string> = {
     "X-User-Id": session.user.email,
     "X-User-Email": session.user.email,
     "X-User-Name": session.user.name || "",
     "X-User-Role": (session.user as any).role || "BUILDER",
   };
+
+  // The server-side branch of this module makes an internal, server-to-server
+  // HTTP call back into this same Next.js app's own /api/builder/* routes.
+  // That internal fetch does NOT automatically carry the original browser
+  // request's session cookie, which means middleware.ts's auth() check would
+  // otherwise see it as unauthenticated and reject it with a 401 even though
+  // the real user is logged in. Forward the incoming request's cookies so
+  // middleware can validate the internal call exactly like the original one.
+  const { cookies } = await import("next/headers");
+  const cookieHeader = cookies().toString();
+  if (cookieHeader) {
+    headers["Cookie"] = cookieHeader;
+  }
+
+  return headers;
 }
+
 
 function getServerOrigin() {
   const configuredOrigin =

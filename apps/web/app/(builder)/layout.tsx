@@ -5,6 +5,8 @@ import { BuilderNav, BuilderNavMobileTrigger } from "@/components/builder/Builde
 import CartLauncher from "@/components/cart/CartLauncher";
 import CartDrawer from "@/components/cart/CartDrawer";
 import HeaderIconLink from "@/components/builder/HeaderIconLink";
+import UserSessionBadge from "@/components/builder/UserSessionBadge";
+
 
 
 
@@ -50,8 +52,10 @@ export default function BuilderLayout({
                 Actions panel now, to avoid confusion between the two
                 different "report" concepts. */}
             <HeaderIconLink href="/reports" label="Reports" icon={FileBarChart} ariaLabel="View reports" />
+            <UserSessionBadge />
 
           </div>
+
         </header>
         {children}
       </main>

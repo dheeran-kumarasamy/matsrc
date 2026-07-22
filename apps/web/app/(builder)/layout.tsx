@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { Search, Bell, FileBarChart } from "lucide-react";
+import { Search, FileBarChart } from "lucide-react";
 
 import { BuilderNav, BuilderNavMobileTrigger } from "@/components/builder/BuilderNav";
 import CartLauncher from "@/components/cart/CartLauncher";
 import CartDrawer from "@/components/cart/CartDrawer";
 import HeaderIconLink from "@/components/builder/HeaderIconLink";
+import NotificationBell from "@/components/builder/NotificationBell";
 import UserSessionBadge from "@/components/builder/UserSessionBadge";
+
 
 
 
@@ -45,8 +47,14 @@ export default function BuilderLayout({
           </form>
           <div className="flex items-center gap-2 sm:gap-3">
             <CartLauncher />
-            <HeaderIconLink href="/notifications" label="Alerts" icon={Bell} ariaLabel="Notifications" />
+            {/* Alerts: overlay dropdown from the bell icon (not a separate
+                page) — see NotificationBell.tsx. Every order status change
+                already creates a Notification row via apps/api's
+                NotificationService; this surfaces them here with an unread
+                badge + read/unread markers inside the dropdown. */}
+            <NotificationBell />
             {/* "Reports" entry point: opens the Reports catalogue overlay
+
                 (Material Consumption, Best Supplier Pricing, etc). Raising a
                 dispute/issue report lives only in the Dashboard's Quick
                 Actions panel now, to avoid confusion between the two

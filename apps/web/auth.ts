@@ -1,8 +1,9 @@
-import { NextAuthConfig } from "next-auth";
+import NextAuth, { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 
 export const authConfig: NextAuthConfig = {
+
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "matsrc-web-dev-secret",
   pages: {
     signIn: "/auth/login",
@@ -58,3 +59,6 @@ export const authConfig: NextAuthConfig = {
     }),
   ],
 };
+
+export const { auth, handlers, signIn, signOut } = NextAuth(authConfig);
+

@@ -11,8 +11,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Trash2, CheckCircle2, ChevronLeft, Minus, Plus, MapPin, LocateFixed } from "lucide-react";
+
 
 
 import {
@@ -66,7 +68,9 @@ function StepIndicator({ current }: { current: string }) {
 
 export default function CartDrawer() {
   const router = useRouter();
+  const { status: sessionStatus } = useSession();
   const isCartOpen = useOverlayStore((state) => state.isCartOpen);
+
   const checkoutStep = useOverlayStore((state) => state.checkoutStep);
   const lastOrderReference = useOverlayStore((state) => state.lastOrderReference);
   const closeCart = useOverlayStore((state) => state.closeCart);
@@ -147,9 +151,19 @@ export default function CartDrawer() {
 
   async function handleSubmitEnquiry() {
     if (items.length === 0) return;
+
+    // Ordering is only allowed for signed-in users — redirect to login and
+    // return to this same flow once authenticated.
+    if (sessionStatus !== "authenticated") {
+      closeCart();
+      router.push(`/auth/login?callbackUrl=${encodeURIComponent("/checkout")}`);
+      return;
+    }
+
     setSubmitting(true);
     setSubmitError(null);
     try {
+
       const response = await builderApiPost<{ orders: Array<{ id: string }> }>("/orders/checkout", {
         deliveryLat: deliveryLat ?? undefined,
         deliveryLng: deliveryLng ?? undefined,

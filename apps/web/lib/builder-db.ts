@@ -44,11 +44,24 @@ export async function getOrCreateBuilder(
   return user;
 }
 
+// Middleware (apps/web/middleware.ts) already rejects unauthenticated
+// requests to /api/builder/* with a 401 before they reach these route
+// handlers, so this should only ever be missing if a route is hit
+// directly bypassing the middleware. Throwing here (instead of silently
+// falling back to a demo identity) ensures no request can leak/mutate
+// another user's data.
 export function getUserCtx(request: Request) {
   const headers = request.headers;
+  const userId = headers.get("X-User-Id");
+  const email = headers.get("X-User-Email");
+  if (!userId || !email) {
+    throw new Error("UNAUTHENTICATED");
+  }
   return {
-    userId: headers.get("X-User-Id") ?? "builder.demo@buildmart.local",
-    email: headers.get("X-User-Email") ?? "builder.demo@buildmart.local",
-    name: headers.get("X-User-Name") ?? "Demo Builder",
+    userId,
+    email,
+    name: headers.get("X-User-Name") || "Builder",
   };
 }
+
+

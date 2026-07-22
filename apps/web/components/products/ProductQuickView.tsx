@@ -12,7 +12,8 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import EnquiryPanel from "@/components/products/EnquiryPanel";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import WatchlistButton from "@/components/products/WatchlistButton";
-import { getDefaultCategoryImage } from "@/lib/category-images";
+import { getCategoryEmoji } from "@/lib/category-images";
+
 import { parseNumericLabel, type SupplierListing } from "@/lib/listings";
 
 type Props = {
@@ -24,7 +25,8 @@ export default function ProductQuickView({ product }: Props) {
 
   const maxServiceableQty = parseNumericLabel(product.maxServiceableQty);
   const basePrice = parseNumericLabel(product.price);
-  const imageUrl = product.images && product.images.length > 0 ? product.images[0] : getDefaultCategoryImage(product.category);
+  const imageUrl = product.images && product.images.length > 0 ? product.images[0] : null;
+
 
   function handleOpenChange(open: boolean) {
     if (!open) {
@@ -38,10 +40,17 @@ export default function ProductQuickView({ product }: Props) {
       <DialogContent className="p-0">
         <div className="grid gap-0 lg:grid-cols-[1.3fr_1fr]">
           <section className="max-h-[88vh] overflow-y-auto sm:max-h-[80vh]">
-            <div className="h-48 w-full overflow-hidden bg-slate-100 sm:h-56">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
+            <div className="flex h-48 w-full items-center justify-center overflow-hidden bg-slate-100 sm:h-56">
+              {imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-6xl" role="img" aria-label={product.category || "Product"}>
+                  {getCategoryEmoji(product.category)}
+                </span>
+              )}
             </div>
+
             <div className="space-y-4 p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">

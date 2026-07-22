@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
+import GlobalLoadingOverlay from "@/components/ui/GlobalLoadingOverlay";
+import NavigationLoadingListener from "@/components/ui/NavigationLoadingListener";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,7 +21,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${inter.className} overflow-x-hidden`}>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <Suspense fallback={null}>
+            <NavigationLoadingListener />
+          </Suspense>
+          <GlobalLoadingOverlay />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

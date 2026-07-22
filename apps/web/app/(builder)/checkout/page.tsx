@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { builderApiGet, builderApiPost } from "@/lib/api";
 import { recordInterestEvent } from "@/lib/interest-events";
+
 
 async function builderAggregationPost<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`/api/builder/aggregation${path}`, {
@@ -65,7 +67,9 @@ function currentBestTier(item: CartResponse["items"][number]) {
 
 export default function CheckoutPage() {
   const router = useRouter();
+  const { status: sessionStatus } = useSession();
   const [deliveryDate, setDeliveryDate] = useState("");
+
   const [pincode, setPincode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,7 +158,14 @@ export default function CheckoutPage() {
       return;
     }
 
+    // Ordering is only allowed for signed-in users.
+    if (sessionStatus !== "authenticated") {
+      router.push(`/auth/login?callbackUrl=${encodeURIComponent("/checkout")}`);
+      return;
+    }
+
     setLoading(true);
+
     setError(null);
     try {
       const listingIds = Array.from(new Set(remainingItems.map((item) => item.productId)));

@@ -78,6 +78,10 @@ const SCREENS: LoadingScreen[] = [
  * so that ANY client-side async action — data fetches (lib/api.ts), route
  * transitions (NavigationLoadingListener) — can show/hide it, unlike the
  * Suspense-only app/loading.tsx which never fires for client useEffect fetches.
+ *
+ * Renders as a small centered card (roughly 20% of the viewport) over a
+ * transparent, click-blocking backdrop — NOT a full-bleed page — so the
+ * rest of the UI stays visible behind it while interaction is paused.
  */
 export default function GlobalLoadingOverlay() {
   const isLoading = useLoadingStore((state) => state.isLoading);
@@ -112,40 +116,34 @@ export default function GlobalLoadingOverlay() {
     return () => window.clearInterval(rotateTimer);
   }, [visible]);
 
-  useEffect(() => {
-    if (!visible) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [visible]);
-
   const screen = useMemo(() => SCREENS[screenIndex], [screenIndex]);
 
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] pointer-events-auto">
-      <div className={`absolute inset-0 bg-gradient-to-br ${screen.accent}`} />
-      <div className="absolute inset-0 bg-black/20" />
-      <div className="relative flex h-full items-center justify-center p-6 text-white">
-        <div className="w-full max-w-3xl rounded-3xl border border-white/20 bg-white/10 p-8 backdrop-blur-md">
-          <p className="text-xs uppercase tracking-[0.3em] text-white/80">BuildMart Loading</p>
-          <h1 className="mt-3 text-3xl font-extrabold leading-tight">{screen.title}</h1>
-          <p className="mt-5 text-lg leading-relaxed text-white/95">"{screen.quote}"</p>
-          <p className="mt-2 text-sm font-semibold text-white/80">{screen.line}</p>
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20 pointer-events-auto"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div className="w-[min(90vw,22rem)] rounded-2xl border border-white/20 bg-white/95 p-5 shadow-2xl backdrop-blur-md">
+        <div className={`-m-5 mb-4 rounded-t-2xl bg-gradient-to-br ${screen.accent} p-4 text-white`}>
+          <p className="text-[10px] uppercase tracking-[0.25em] text-white/80">BuildMart Loading</p>
+          <h1 className="mt-1 text-base font-bold leading-tight">{screen.title}</h1>
+        </div>
 
-          <div className="mt-7 flex items-center gap-3 text-sm text-white/85">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
-            <span>Preparing your workspace. Actions are paused until loading completes.</span>
-          </div>
+        <p className="text-sm leading-relaxed text-slate-700">"{screen.quote}"</p>
+        <p className="mt-1 text-xs font-semibold text-slate-500">{screen.line}</p>
 
-          <div className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-white/20">
-            <div className="h-full w-1/3 animate-[loadingBar_2s_ease-in-out_infinite] rounded-full bg-white" />
-          </div>
+        <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400" />
+          <span>Actions are paused until loading completes.</span>
+        </div>
+
+        <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-slate-200">
+          <div
+            className={`h-full w-1/3 rounded-full bg-gradient-to-r ${screen.accent} animate-[loadingBar_2s_ease-in-out_infinite]`}
+          />
         </div>
       </div>
 

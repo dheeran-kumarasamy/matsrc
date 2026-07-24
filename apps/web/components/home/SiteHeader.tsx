@@ -25,8 +25,9 @@ export default function SiteHeader() {
     <nav className="sticky top-0 z-50 bg-brand-500/95 text-white shadow-md backdrop-blur supports-[backdrop-filter]:bg-brand-500/90">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="text-2xl font-bold tracking-tight">
-          Build<span className="text-accent-500">Mart</span>
+          Buildohub.in
         </Link>
+
 
         {/* Desktop nav — full inline links, hidden below md */}
         <div className="hidden items-center gap-4 md:flex">

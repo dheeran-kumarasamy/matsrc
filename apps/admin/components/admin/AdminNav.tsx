@@ -19,10 +19,14 @@ export function AdminNav({
 
   return (
     <aside className="panel sticky top-4 h-fit p-4">
-      <div className="rounded-xl bg-[linear-gradient(120deg,#0f172a,#1a4f8a)] p-4 text-white">
+      <Link
+        href="/dashboard"
+        className="block rounded-xl bg-[linear-gradient(120deg,#0f172a,#1a4f8a)] p-4 text-white transition hover:opacity-90"
+      >
         <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Buildohub.in</p>
         <h1 className="mt-1 text-xl font-extrabold">Admin Command</h1>
-      </div>
+      </Link>
+
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Signed in as</p>
         <p className="mt-1 text-sm font-bold text-slate-900">{userName}</p>

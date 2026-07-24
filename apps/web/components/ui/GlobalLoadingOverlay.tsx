@@ -96,10 +96,10 @@ export default function GlobalLoadingOverlay() {
 
     setScreenIndex(Math.floor(Math.random() * SCREENS.length));
 
-    // Small delay avoids flashing the overlay for near-instant fetches.
+    // Only show the overlay if loading takes more than 3 seconds.
     const delayedShowTimer = window.setTimeout(() => {
       setVisible(true);
-    }, 250);
+    }, 3000);
 
     return () => {
       window.clearTimeout(delayedShowTimer);
@@ -128,7 +128,7 @@ export default function GlobalLoadingOverlay() {
     >
       <div className="w-[min(90vw,22rem)] rounded-2xl border border-white/20 bg-white/95 p-5 shadow-2xl backdrop-blur-md">
         <div className={`-m-5 mb-4 rounded-t-2xl bg-gradient-to-br ${screen.accent} p-4 text-white`}>
-          <p className="text-[10px] uppercase tracking-[0.25em] text-white/80">BuildMart Loading</p>
+          <p className="text-[10px] uppercase tracking-[0.25em] text-white/80">Buildohub.in Loading</p>
           <h1 className="mt-1 text-base font-bold leading-tight">{screen.title}</h1>
         </div>
 

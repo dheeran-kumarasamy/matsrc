@@ -9,11 +9,11 @@ import NavigationLoadingListener from "@/components/ui/NavigationLoadingListener
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: { default: "BuildMart", template: "%s | BuildMart" },
+  title: { default: "Buildohub.in", template: "%s | Buildohub.in" },
   description: "India's B2B construction material procurement marketplace",
   manifest: "/manifest.json",
   themeColor: "#1a4f8a",
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "BuildMart" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Buildohub.in" },
   other: { "mobile-web-app-capable": "yes" },
 };
 

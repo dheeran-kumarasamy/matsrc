@@ -35,7 +35,7 @@ export function SupplierHeader({ kycStatus }: SupplierHeaderProps) {
             </svg>
           </span>
           <p className="text-xl leading-none text-slate-800 sm:text-2xl">
-            <span className="font-bold text-slate-900">BuildMart</span> Supplier Portal
+            <span className="font-bold text-slate-900">Buildohub.in</span> Supplier Portal
           </p>
         </Link>
 

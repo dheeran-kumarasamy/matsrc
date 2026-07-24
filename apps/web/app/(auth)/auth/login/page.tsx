@@ -148,7 +148,7 @@ export default function LoginPage() {
       )}
 
       <p className="text-center text-xs text-gray-400 mt-6">
-        New to BuildMart?{" "}
+        New to Buildohub.in?{" "}
         <Link href="/auth/register" className="text-brand-500 font-medium hover:underline">
           Create account
         </Link>

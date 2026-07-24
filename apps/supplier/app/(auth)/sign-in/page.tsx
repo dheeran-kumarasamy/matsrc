@@ -16,7 +16,7 @@ export default function SupplierSignInPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-emerald-700">
-            Build<span className="text-green-500">Mart</span>
+            Buildohub.in
           </h1>
           <p className="text-gray-500 text-sm mt-1">Supplier Portal</p>
         </div>
@@ -40,7 +40,7 @@ export default function SupplierSignInPage() {
           </button>
 
           <p className="text-center text-xs text-gray-400 mt-6">
-            By signing in you agree to BuildMart&apos;s Supplier Terms of Service.
+            By signing in you agree to Buildohub.in&apos;s Supplier Terms of Service.
           </p>
         </div>
       </div>

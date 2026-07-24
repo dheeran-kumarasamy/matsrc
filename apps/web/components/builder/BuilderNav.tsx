@@ -61,7 +61,7 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
 function BrandBlock() {
   return (
     <div className="rounded-xl bg-[linear-gradient(120deg,#1a4f8a,#e87722)] p-4 text-white">
-      <p className="text-xs uppercase tracking-[0.2em] text-blue-100">BuildMart</p>
+      <p className="text-xs uppercase tracking-[0.2em] text-blue-100">Buildohub.in</p>
       <h1 className="mt-1 text-xl font-extrabold">Builder Hub</h1>
     </div>
   );

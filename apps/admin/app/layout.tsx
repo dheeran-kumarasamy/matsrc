@@ -6,7 +6,7 @@ import { AuthProvider } from "@/components/auth-provider";
 const manrope = Manrope({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: { default: "BuildMart Admin", template: "%s | BuildMart Admin" },
+  title: { default: "Buildohub.in Admin", template: "%s | Buildohub.in Admin" },
   description: "Admin portal for vendor approval, KYC reviews, disputes, and audit operations",
 };
 

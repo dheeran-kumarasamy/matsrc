@@ -228,7 +228,7 @@ export default function CreditPage() {
             <h2 className="font-semibold text-slate-800">Key Fact Statement (KFS)</h2>
           </div>
           <div className="bg-slate-50 rounded-lg p-4 text-xs text-slate-600 space-y-2 max-h-48 overflow-y-auto">
-            <p><strong>Lender:</strong> BuildMart NBFC Partner Pvt. Ltd.</p>
+            <p><strong>Lender:</strong> Buildohub.in NBFC Partner Pvt. Ltd.</p>
             <p><strong>Loan Type:</strong> Buy-Now-Pay-Later (BNPL)</p>
             <p><strong>Credit Limit:</strong> ₹5,00,000</p>
             <p><strong>Annual Percentage Rate (APR):</strong> 18% p.a.</p>

@@ -82,7 +82,7 @@ export default function Loading() {
 
     const delayedShowTimer = window.setTimeout(() => {
       setVisible(true);
-    }, 1000);
+    }, 3000);
 
     const rotateTimer = window.setInterval(() => {
       setScreenIndex((prev) => (prev + 1) % SCREENS.length);
@@ -115,7 +115,7 @@ export default function Loading() {
       <div className="absolute inset-0 bg-black/20" />
       <div className="relative flex h-full items-center justify-center p-6 text-white">
         <div className="w-full max-w-3xl rounded-3xl border border-white/20 bg-white/10 p-8 backdrop-blur-md">
-          <p className="text-xs uppercase tracking-[0.3em] text-white/80">BuildMart Loading</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-white/80">Buildohub.in Loading</p>
           <h1 className="mt-3 text-3xl font-extrabold leading-tight">{screen.title}</h1>
           <p className="mt-5 text-lg leading-relaxed text-white/95">"{screen.quote}"</p>
           <p className="mt-2 text-sm font-semibold text-white/80">{screen.line}</p>

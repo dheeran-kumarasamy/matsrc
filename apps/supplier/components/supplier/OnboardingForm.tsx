@@ -247,7 +247,7 @@ export function OnboardingForm({ initial }: Props) {
                 name="companyName"
                 value={bizInfo.companyName}
                 onChange={handleBizChange}
-                placeholder="e.g. BuildMart Steels Pvt Ltd"
+                placeholder="e.g. Buildohub.in Steels Pvt Ltd"
                 className={INPUT_CLS}
               />
               {errors.companyName && <p className="text-xs text-red-600">{errors.companyName}</p>}
@@ -342,7 +342,7 @@ export function OnboardingForm({ initial }: Props) {
                       </h5>
                       <p className="mt-0.5 text-xs text-slate-500">
                         {doc.verified
-                          ? "✅ Verified by BuildMart"
+                          ? "✅ Verified by Buildohub.in"
                           : uploaded
                           ? "⏳ Submitted — awaiting review"
                           : "Not yet submitted"}
@@ -486,7 +486,7 @@ export function OnboardingForm({ initial }: Props) {
           <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
             <p className="text-xs text-amber-700">
               <strong>What happens next:</strong> Your submission is routed to the admin portal for manual KYC
-              approval. BuildMart's compliance team will review your documents within 2 business days. You'll
+              approval. Buildohub.in's compliance team will review your documents within 2 business days. You'll
               receive a confirmation email once approved.
             </p>
           </div>

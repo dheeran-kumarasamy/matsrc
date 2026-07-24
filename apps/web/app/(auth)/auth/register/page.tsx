@@ -170,7 +170,7 @@ export default function RegisterPage() {
 
       {step === "role" && (
         <form onSubmit={handleRoleSelect} className="space-y-4">
-          <p className="text-sm text-gray-500 mb-4">How will you use BuildMart?</p>
+          <p className="text-sm text-gray-500 mb-4">How will you use Buildohub.in?</p>
           <div className="grid grid-cols-2 gap-3">
             {(["BUILDER", "SUPPLIER"] as const).map((r) => (
               <button

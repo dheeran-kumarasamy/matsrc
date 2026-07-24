@@ -182,7 +182,7 @@ export async function ensureSupplierContext(email: string): Promise<SupplierCont
       prisma.supplierProfile.create({
         data: {
           userId: user.id,
-          companyName: user.name ?? "BuildMart Demo Supplies",
+          companyName: user.name ?? "Buildohub.in Demo Supplies",
         },
       }),
     );

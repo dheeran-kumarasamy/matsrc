@@ -52,7 +52,7 @@ export default function RegisterPage() {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-md items-center px-4">
       <div className="panel w-full p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">BuildMart</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Buildohub.in</p>
         <h1 className="mt-2 text-2xl font-extrabold text-slate-950">Admin Registration</h1>
         <p className="mt-1 text-sm text-slate-600">
           First registered user becomes Super Admin. Others are Admin users with assigned menus.
@@ -79,7 +79,7 @@ export default function RegisterPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              placeholder="admin@buildmart.com"
+              placeholder="admin@buildohub.in"
             />
           </div>
 

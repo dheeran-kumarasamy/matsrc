@@ -54,8 +54,42 @@ type Props = {
   order: OverlayOrderDetail;
 };
 
+// Shown instead of the overlay when the order detail fetch fails for a
+// non-404 reason (transient auth/session timing, 5xx, network blip) so the
+// builder sees a retryable error rather than a permanent-looking 404 page.
+export function OrderDetailErrorOverlay({ orderId }: { orderId: string }) {
+  const router = useRouter();
+
+  function handleOpenChange(open: boolean) {
+    if (!open) {
+      router.back();
+    }
+  }
+
+  return (
+    <Dialog defaultOpen onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Order</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 p-5 text-center">
+          <p className="text-sm font-semibold text-slate-700">Could not load this order right now.</p>
+          <p className="text-sm text-slate-500">Please try again in a moment.</p>
+          <Link
+            href={`/orders/${orderId}`}
+            className="inline-block rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+          >
+            Retry
+          </Link>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function OrderDetailOverlay({ order }: Props) {
   const router = useRouter();
+
 
   function handleOpenChange(open: boolean) {
     if (!open) {

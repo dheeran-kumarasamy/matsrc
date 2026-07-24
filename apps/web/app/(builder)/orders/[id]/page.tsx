@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { builderApiGet } from "@/lib/api";
+import { builderApiGet, ApiError } from "@/lib/api";
+
 import OrderTimeline from "@/components/orders/OrderTimeline";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
@@ -45,16 +46,44 @@ type OrderDetail = {
 
 export default async function OrderDetailPage({ params }: { params: { id: string } }) {
   let order: OrderDetail | null = null;
+  let loadError = false;
 
   try {
     order = await builderApiGet<OrderDetail>(`/orders/${params.id}`);
-  } catch {
-    order = null;
+  } catch (error) {
+    // Only a genuine 404 from the API (order doesn't exist / doesn't belong
+    // to this builder) should render Next's not-found page. Any other
+    // failure (auth/session timing, transient 5xx, network blip) should show
+    // a retryable error state instead of a permanent-looking 404 — this was
+    // the root cause of "clicking enquiry button shows 404 page" even for
+    // orders that do exist.
+    if (error instanceof ApiError && error.status === 404) {
+      notFound();
+    }
+    loadError = true;
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <div className="panel space-y-3 p-8 text-center">
+          <p className="text-sm font-semibold text-slate-700">Could not load this order right now.</p>
+          <p className="text-sm text-slate-500">Please try again in a moment.</p>
+          <Link
+            href={`/orders/${params.id}`}
+            className="inline-block rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+          >
+            Retry
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (!order) {
     notFound();
   }
+
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">

@@ -2,6 +2,22 @@ import { useLoadingStore } from "@/lib/store/loading-store";
 
 const API_BASE_PATH = "/api/builder";
 
+// Preserves the HTTP status code of a failed builder API call so callers can
+// distinguish a genuine 404 (resource doesn't exist) from a transient/auth/
+// server error (5xx, network blip, etc). Previously all failures were thrown
+// as generic Errors, so pages using notFound() on ANY catch would incorrectly
+// render a permanent 404 page even for transient issues (e.g. a session/cookie
+// race right after login) instead of retrying or showing a proper error state.
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+
 // Toggle the global "pause the user" loading overlay around client-side
 // builder API calls. Server-side calls (no window) are a no-op since the
 // overlay is a client-only concern.
@@ -90,7 +106,7 @@ export async function builderApiGet<T>(path: string): Promise<T> {
   try {
     const userHeaders = await getCurrentUserHeaders();
     if (!userHeaders["X-User-Email"]) {
-      throw new Error("Not authenticated");
+      throw new ApiError("Not authenticated", 401);
     }
 
     const response = await fetch(buildApiUrl(path), {
@@ -99,7 +115,7 @@ export async function builderApiGet<T>(path: string): Promise<T> {
     });
 
     if (!response.ok) {
-      throw new Error(`Builder API request failed: ${response.status}`);
+      throw new ApiError(`Builder API request failed: ${response.status}`, response.status);
     }
 
     return response.json() as Promise<T>;
@@ -107,6 +123,7 @@ export async function builderApiGet<T>(path: string): Promise<T> {
     stopGlobalLoading();
   }
 }
+
 
 export async function builderApiDelete(path: string): Promise<void> {
   startGlobalLoading();

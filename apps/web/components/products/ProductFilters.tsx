@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+// Fetched via this app's own internal proxy route (direct-Prisma
+// implementation, see apps/web/app/api/proxy/public/catalog/[entity]/route.ts)
+// rather than NEXT_PUBLIC_API_URL (defaults to unreachable localhost:4000 in
+// production), which previously caused net::ERR_CONNECTION_REFUSED and left
+// the Category/Brand filters permanently empty.
+const CATALOG_API_BASE_URL = "/api/proxy/public/catalog";
+
 
 type CatalogOption = { id: string; name: string; code?: string | null };
 
@@ -16,7 +22,8 @@ function useCatalogOptions(entity: "category" | "brand" | "grade" | "unit") {
     async function load() {
       try {
         setLoading(true);
-        const response = await fetch(`${API_BASE_URL}/public/catalog/${entity}`, {
+        const response = await fetch(`${CATALOG_API_BASE_URL}/${entity}`, {
+
           cache: "no-store",
         });
         if (!response.ok) {

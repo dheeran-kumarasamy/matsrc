@@ -3,9 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+// Fetched via this app's own internal proxy route (direct-Prisma
+// implementation, see apps/web/app/api/proxy/public/catalog/[entity]/route.ts)
+// rather than NEXT_PUBLIC_API_URL (defaults to unreachable localhost:4000 in
+// production), which previously caused this fetch to fail with
+// net::ERR_CONNECTION_REFUSED and the category grid to silently render empty.
+const CATALOG_API_BASE_URL = "/api/proxy/public/catalog";
 
 type CatalogCategory = { id: string; name: string; code?: string | null };
+
 
 // BUG-05 fix: previously this grid used a hardcoded list of 8 categories
 // with made-up slugs (e.g. "steel", "cement") that never matched any real
@@ -55,7 +61,8 @@ export default function CategoryGrid() {
 
     async function load() {
       try {
-        const response = await fetch(`${API_BASE_URL}/public/catalog/category`, { cache: "no-store" });
+        const response = await fetch(`${CATALOG_API_BASE_URL}/category`, { cache: "no-store" });
+
         if (!response.ok) throw new Error("Failed to load categories");
         const data = (await response.json()) as CatalogCategory[];
         if (!cancelled) setCategories(data);

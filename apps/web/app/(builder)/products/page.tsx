@@ -59,13 +59,15 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
     filtered = filtered.filter((listing) => listing.category.toLowerCase().includes(selectedCategory));
   }
 
+  // BUG-01 fix: filter against the real `brand` field now returned by the
+  // public listings feed (see apps/supplier/lib/supplier-data.ts
+  // getPublicSupplierListings()), instead of a name+grade substring hack
+  // that had no reliable relationship to the actual brand.
   if (brand) {
     const selectedBrand = brand.toLowerCase();
-    filtered = filtered.filter((listing) => {
-      const haystack = `${listing.name} ${listing.grade}`.toLowerCase();
-      return haystack.includes(selectedBrand);
-    });
+    filtered = filtered.filter((listing) => (listing.brand ?? "").toLowerCase() === selectedBrand);
   }
+
 
   if (minPrice !== undefined || maxPrice !== undefined) {
     filtered = filtered.filter((listing) => {
@@ -76,11 +78,27 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
     });
   }
 
+  // BUG-04 fix: the sort dropdown previously had no branch for "newest"
+  // (the third <option> in ProductFilters.tsx), so selecting it silently did
+  // nothing — the list stayed in whatever order dedupe/filter left it in.
+  // Now every option offered in the UI has an explicit, working sort:
+  // - price_asc / price_desc: numeric compare on the parsed listing price.
+  // - newest: sort by the listing's `updatedAt` timestamp (now exposed by
+  //   getPublicSupplierListings(), which already queries `orderBy:
+  //   { updatedAt: "desc" }`) descending, so the most recently
+  //   created/updated listings surface first regardless of upstream order.
   if (sort === "price_desc") {
     filtered.sort((a, b) => parseListingPrice(b.price) - parseListingPrice(a.price));
   } else if (sort === "price_asc") {
     filtered.sort((a, b) => parseListingPrice(a.price) - parseListingPrice(b.price));
+  } else if (sort === "newest") {
+    filtered.sort((a, b) => {
+      const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return bTime - aTime;
+    });
   }
+
 
   const cardProducts = filtered.map((listing) => ({
     slug: listing.id,

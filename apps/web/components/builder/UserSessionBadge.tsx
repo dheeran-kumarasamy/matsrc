@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { LogIn, LogOut, User } from "lucide-react";
+
 
 // Top-right header indicator showing whether the current session is logged
 // in, and as whom. Click reveals a small dropdown with a sign-out action.
@@ -62,16 +64,28 @@ export default function UserSessionBadge() {
                 ) : null}
               </div>
             </div>
+            {/* BUG-08: "View Profile" entry point reachable in a single
+                click from anywhere in the builder portal via this header
+                dropdown, linking to the existing profile page. */}
+            <Link
+              href="/profile"
+              onClick={() => setOpen(false)}
+              className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              <User size={14} />
+              View Profile
+            </Link>
             <button
               onClick={() => {
                 setOpen(false);
                 void signOut({ callbackUrl: "/auth/login" });
               }}
-              className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-red-600 transition hover:bg-red-50"
+              className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-red-600 transition hover:bg-red-50"
             >
               <LogOut size={14} />
               Sign out
             </button>
+
           </div>
         </>
       ) : null}

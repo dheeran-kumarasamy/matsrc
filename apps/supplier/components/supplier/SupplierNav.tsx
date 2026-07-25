@@ -18,10 +18,14 @@ export function SupplierNav() {
 
   return (
     <aside className="panel sticky top-4 h-fit p-4">
-      <div className="rounded-xl bg-[linear-gradient(120deg,#1a4f8a,#2778cc)] p-4 text-white">
+      <Link
+        href="/dashboard"
+        className="block rounded-xl bg-[linear-gradient(120deg,#1a4f8a,#2778cc)] p-4 text-white transition hover:opacity-90"
+      >
         <p className="text-xs uppercase tracking-[0.2em] text-blue-100">Buildohub.in</p>
         <h1 className="mt-1 text-xl font-extrabold">Supplier Hub</h1>
-      </div>
+      </Link>
+
       <nav className="mt-4 space-y-1">
         {links.map((link) => {
           const active = pathname === link.href || pathname.startsWith(`${link.href}/`);

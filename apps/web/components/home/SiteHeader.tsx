@@ -8,6 +8,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Menu } from "lucide-react";
+import { useSession } from "next-auth/react";
 import {
   Sheet,
   SheetContent,
@@ -20,6 +21,16 @@ const NAV_LINKS = [{ href: "/products", label: "Browse Materials" }];
 
 export default function SiteHeader() {
   const [open, setOpen] = useState(false);
+  // BUG-07 fix: this header previously always rendered the guest
+  // "Login / Register" CTA regardless of session state, even for an
+  // already-authenticated builder (and even on first paint, since the
+  // session wasn't server-hydrated — see app/layout.tsx). Now it checks
+  // `useSession()` and shows a "Go to Dashboard" entry point instead when
+  // authenticated, a neutral skeleton while the session is resolving, and
+  // the guest CTA only once we're certain there's no active session.
+  const { status } = useSession();
+  const isAuthenticated = status === "authenticated";
+  const isLoading = status === "loading";
 
   return (
     <nav className="sticky top-0 z-50 bg-brand-500/95 text-white shadow-md backdrop-blur supports-[backdrop-filter]:bg-brand-500/90">
@@ -36,12 +47,23 @@ export default function SiteHeader() {
               {link.label}
             </Link>
           ))}
-          <Link
-            href="/auth/login"
-            className="rounded-md bg-accent-500 px-4 py-2 text-sm font-medium transition-colors hover:bg-accent-600"
-          >
-            Login / Register
-          </Link>
+          {isLoading ? (
+            <div className="h-9 w-32 animate-pulse rounded-md bg-white/20" />
+          ) : isAuthenticated ? (
+            <Link
+              href="/dashboard"
+              className="rounded-md bg-accent-500 px-4 py-2 text-sm font-medium transition-colors hover:bg-accent-600"
+            >
+              Go to Dashboard
+            </Link>
+          ) : (
+            <Link
+              href="/auth/login"
+              className="rounded-md bg-accent-500 px-4 py-2 text-sm font-medium transition-colors hover:bg-accent-600"
+            >
+              Login / Register
+            </Link>
+          )}
         </div>
 
         {/* Mobile burger — hidden at md and up */}
@@ -71,14 +93,27 @@ export default function SiteHeader() {
                 </Link>
               </SheetClose>
             ))}
-            <SheetClose asChild>
-              <Link
-                href="/auth/login"
-                className="mt-2 flex min-h-[44px] items-center justify-center rounded-lg bg-accent-500 px-3 text-base font-semibold text-white transition hover:bg-accent-600"
-              >
-                Login / Register
-              </Link>
-            </SheetClose>
+            {isLoading ? (
+              <div className="mt-2 h-11 animate-pulse rounded-lg bg-slate-100" />
+            ) : isAuthenticated ? (
+              <SheetClose asChild>
+                <Link
+                  href="/dashboard"
+                  className="mt-2 flex min-h-[44px] items-center justify-center rounded-lg bg-accent-500 px-3 text-base font-semibold text-white transition hover:bg-accent-600"
+                >
+                  Go to Dashboard
+                </Link>
+              </SheetClose>
+            ) : (
+              <SheetClose asChild>
+                <Link
+                  href="/auth/login"
+                  className="mt-2 flex min-h-[44px] items-center justify-center rounded-lg bg-accent-500 px-3 text-base font-semibold text-white transition hover:bg-accent-600"
+                >
+                  Login / Register
+                </Link>
+              </SheetClose>
+            )}
           </div>
         </SheetContent>
       </Sheet>

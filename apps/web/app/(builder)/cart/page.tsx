@@ -1,10 +1,66 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { ChangeEvent, KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { builderApiDelete, builderApiGet, builderApiPost } from "@/lib/api";
+
+// BUG-06 fix: this input keeps its own local editable string state, synced
+// from the `quantity` prop via useEffect (so +/- button clicks and cart
+// refetches still update the displayed value), and only commits the parsed
+// value (on blur or Enter) instead of on every keystroke. Previously the
+// input's `value` was bound directly to `item.quantity` and `onChange` used a
+// `parseInt`/`isNaN` guard that skipped the update whenever the field was
+// cleared to type a new value, making the input appear "stuck".
+function CartPageQuantityInput({
+  quantity,
+  disabled,
+  label,
+  onCommit,
+}: {
+  quantity: number;
+  disabled: boolean;
+  label: string;
+  onCommit: (nextQuantity: number) => void;
+}) {
+  const [value, setValue] = useState(String(quantity));
+
+  useEffect(() => {
+    setValue(String(quantity));
+  }, [quantity]);
+
+  function commit(raw: string) {
+    const parsed = parseInt(raw, 10);
+    const safe = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+    setValue(String(safe));
+    if (safe !== quantity) {
+      onCommit(safe);
+    }
+  }
+
+  return (
+    <input
+      type="number"
+      min={1}
+      step={1}
+      inputMode="numeric"
+      value={value}
+      disabled={disabled}
+      onChange={(event: ChangeEvent<HTMLInputElement>) => setValue(event.target.value)}
+      onBlur={(event) => commit(event.target.value)}
+      onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === "Enter") {
+          commit((event.target as HTMLInputElement).value);
+        }
+      }}
+      className="h-8 w-12 border-x border-slate-200 text-center text-sm focus:outline-none disabled:opacity-40"
+      aria-label={label}
+    />
+  );
+}
+
 
 
 type CartResponse = {
@@ -162,22 +218,13 @@ export default function CartPage() {
                       >
                         <Minus size={14} />
                       </button>
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        inputMode="numeric"
-                        value={item.quantity}
+                      <CartPageQuantityInput
+                        quantity={item.quantity}
                         disabled={updatingId === item.id}
-                        onChange={(event) => {
-                          const parsed = parseInt(event.target.value, 10);
-                          if (!Number.isNaN(parsed)) {
-                            void handleUpdateQuantity(item.productId, item.id, parsed);
-                          }
-                        }}
-                        className="h-8 w-12 border-x border-slate-200 text-center text-sm focus:outline-none disabled:opacity-40"
-                        aria-label={`Quantity for ${item.name}`}
+                        label={`Quantity for ${item.name}`}
+                        onCommit={(nextQuantity) => void handleUpdateQuantity(item.productId, item.id, nextQuantity)}
                       />
+
                       <button
                         type="button"
                         disabled={updatingId === item.id}

@@ -10,6 +10,8 @@
 // -> success (mocked confirmation + payment-link messaging).
 
 import { useEffect, useMemo, useState } from "react";
+import type { ChangeEvent, KeyboardEvent } from "react";
+
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -37,7 +39,63 @@ const STEP_LABELS = [
   { key: "confirm", label: "Confirm" },
 ] as const;
 
+// BUG-06 fix: previously the quantity <input>'s `value` was bound directly
+// to `item.quantity` and `onChange` only called `updateQuantity` when
+// `parseInt` produced a valid number — so clearing the field to type a new
+// value produced NaN, the guard skipped the update, and React immediately
+// re-rendered the input back to the old quantity (feels "stuck"). This local
+// component keeps its own editable string state (synced from the prop when
+// it changes from elsewhere, e.g. +/- buttons or a cart refetch), and only
+// commits/clamps the value on blur or Enter.
+function CartQuantityInput({
+  quantity,
+  disabled,
+  label,
+  onCommit,
+}: {
+  quantity: number;
+  disabled: boolean;
+  label: string;
+  onCommit: (nextQuantity: number) => void;
+}) {
+  const [value, setValue] = useState(String(quantity));
+
+  useEffect(() => {
+    setValue(String(quantity));
+  }, [quantity]);
+
+  function commit(raw: string) {
+    const parsed = parseInt(raw, 10);
+    const safe = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+    setValue(String(safe));
+    if (safe !== quantity) {
+      onCommit(safe);
+    }
+  }
+
+  return (
+    <input
+      type="number"
+      min={1}
+      step={1}
+      inputMode="numeric"
+      value={value}
+      disabled={disabled}
+      onChange={(event: ChangeEvent<HTMLInputElement>) => setValue(event.target.value)}
+      onBlur={(event) => commit(event.target.value)}
+      onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === "Enter") {
+          commit((event.target as HTMLInputElement).value);
+        }
+      }}
+      className="h-7 w-10 border-x border-slate-200 text-center text-xs focus:outline-none disabled:opacity-40"
+      aria-label={label}
+    />
+  );
+}
+
 function StepIndicator({ current }: { current: string }) {
+
   const currentIndex = STEP_LABELS.findIndex((step) => step.key === current);
   return (
     <div className="flex items-center gap-2">
@@ -242,22 +300,13 @@ export default function CartDrawer() {
                           >
                             <Minus size={12} />
                           </button>
-                          <input
-                            type="number"
-                            min={1}
-                            step={1}
-                            inputMode="numeric"
-                            value={item.quantity}
+                          <CartQuantityInput
+                            quantity={item.quantity}
                             disabled={isMutating}
-                            onChange={(event) => {
-                              const parsed = parseInt(event.target.value, 10);
-                              if (!Number.isNaN(parsed)) {
-                                void updateQuantity(item.productId, item.id, parsed);
-                              }
-                            }}
-                            className="h-7 w-10 border-x border-slate-200 text-center text-xs focus:outline-none disabled:opacity-40"
-                            aria-label={`Quantity for ${item.name}`}
+                            label={`Quantity for ${item.name}`}
+                            onCommit={(nextQuantity) => void updateQuantity(item.productId, item.id, nextQuantity)}
                           />
+
                           <button
                             type="button"
                             disabled={isMutating}

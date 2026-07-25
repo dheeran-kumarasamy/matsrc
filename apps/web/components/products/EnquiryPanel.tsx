@@ -41,6 +41,15 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
   const router = useRouter();
   const { status: sessionStatus } = useSession();
   const [quantity, setQuantity] = useState(1);
+  // BUG-06 fix: track the raw text the user is typing separately from the
+  // committed numeric `quantity`. Previously the input's `value` was tied
+  // directly to `quantity`, and clearing the field to type a new multi-digit
+  // number produced an empty string which `Number(value || 1)` treated as
+  // falsy, immediately snapping the field back to 1 mid-keystroke. Now the
+  // input tolerates a transient empty/partial string while typing, and only
+  // clamps/validates to [1, maxServiceableQty] on blur (or Enter).
+  const [quantityInput, setQuantityInput] = useState("1");
+  const [quantityError, setQuantityError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +57,26 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
   const selectedTier = useMemo(() => findTier(pricingTiers, quantity), [pricingTiers, quantity]);
   const unitPrice = useMemo(() => parseTierPrice(selectedTier?.price ?? "0"), [selectedTier]);
   const lineTotal = unitPrice * quantity;
+
+  function commitQuantity(rawValue: string) {
+    const parsed = Number(rawValue);
+    if (!rawValue.trim() || !Number.isFinite(parsed) || parsed < 1) {
+      setQuantityError(`Enter a quantity of at least 1 ${unit}.`);
+      setQuantity(1);
+      setQuantityInput("1");
+      return;
+    }
+    if (parsed > maxServiceableQty) {
+      setQuantityError(`Maximum serviceable quantity is ${maxServiceableQty} ${unit}.`);
+      setQuantity(maxServiceableQty);
+      setQuantityInput(String(maxServiceableQty));
+      return;
+    }
+    setQuantityError(null);
+    const clamped = Math.floor(parsed);
+    setQuantity(clamped);
+    setQuantityInput(String(clamped));
+  }
 
   async function handleAddToEnquiry() {
     setLoading(true);
@@ -103,13 +132,24 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
             type="number"
             min={1}
             max={maxServiceableQty}
-            value={quantity}
+            value={quantityInput}
             onChange={(event) => {
-              const nextQuantity = Number(event.target.value || 1);
-              setQuantity(Math.min(Math.max(nextQuantity, 1), maxServiceableQty));
+              // Allow the user to freely type/clear/edit digits without the
+              // value being clamped or reset on every keystroke.
+              setQuantityInput(event.target.value);
               setAdded(false);
+              if (quantityError) setQuantityError(null);
             }}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
+            onBlur={(event) => commitQuantity(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                commitQuantity((event.target as HTMLInputElement).value);
+              }
+            }}
+            aria-invalid={quantityError ? true : undefined}
+            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
+              quantityError ? "border-red-300 focus:ring-red-500" : "border-slate-200 focus:ring-blue-700"
+            }`}
           />
         </label>
         <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
@@ -119,6 +159,7 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
           </p>
         </div>
       </div>
+      {quantityError ? <p className="text-xs text-red-600">{quantityError}</p> : null}
 
       <div className="rounded-xl border border-dashed border-slate-200 p-3">
         <div className="flex items-center justify-between text-sm text-slate-500">

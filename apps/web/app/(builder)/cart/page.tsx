@@ -230,12 +230,22 @@ export default function CartPage() {
             >
               {submitting ? "Submitting..." : "Submit Enquiry"}
             </button>
-            <Link
-              href="/checkout"
-              className="block w-full text-center text-xs text-slate-500 hover:text-slate-700 hover:underline"
-            >
-              Review on checkout page
-            </Link>
+            {data.items.length === 0 ? (
+              <span
+                aria-disabled="true"
+                className="block w-full cursor-not-allowed text-center text-xs text-slate-300"
+              >
+                Review on checkout page
+              </span>
+            ) : (
+              <Link
+                href="/checkout"
+                className="block w-full text-center text-xs text-slate-500 hover:text-slate-700 hover:underline"
+              >
+                Review on checkout page
+              </Link>
+            )}
+
             {submitError ? <p className="text-xs text-red-600">{submitError}</p> : null}
           </div>
         </div>

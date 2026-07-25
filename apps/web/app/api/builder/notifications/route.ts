@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const ctx = getUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
-    const [items, unreadCount] = await Promise.all([
+    const [rows, unreadCount] = await Promise.all([
       prisma.notification.findMany({
         where: { userId: user.id },
         orderBy: { createdAt: "desc" },
@@ -26,10 +26,30 @@ export async function GET(request: Request) {
           body: true,
           read: true,
           createdAt: true,
+          templateType: true,
+          variables: true,
         },
       }),
       prisma.notification.count({ where: { userId: user.id, read: false } }),
     ]);
+
+    // Order-status notifications (submitted/accepted/declined/dispatched/
+    // out-for-delivery/delivered + best-price-ready) carry the source
+    // orderId inside the JSON `variables` blob written by NotificationService
+    // in apps/api. Surface it here as `orderId` so the bell dropdown can
+    // deep-link straight into that order's detail overlay when clicked.
+    const items = rows.map(({ templateType, variables, ...rest }) => {
+      let orderId: string | null = null;
+      if (variables) {
+        try {
+          const parsed = JSON.parse(variables) as { orderId?: string };
+          orderId = parsed?.orderId || null;
+        } catch {
+          orderId = null;
+        }
+      }
+      return { ...rest, orderId };
+    });
 
     return NextResponse.json({ items, unreadCount });
   } catch (error) {

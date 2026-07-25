@@ -10,6 +10,7 @@
 // so the unread badge stays fresh without a full websocket setup.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 
 import { builderApiGet, builderApiPatch } from "@/lib/api";
@@ -20,7 +21,12 @@ type NotificationItem = {
   body: string;
   read: boolean;
   createdAt: string;
+  // Present for order-status alerts (accepted/declined/dispatched/
+  // out-for-delivery/delivered/best-price-ready) — lets clicking the alert
+  // deep-link straight into that order's detail overlay.
+  orderId?: string | null;
 };
+
 
 type NotificationsResponse = {
   items: NotificationItem[];
@@ -43,7 +49,9 @@ function timeAgo(dateString: string): string {
 }
 
 export default function NotificationBell() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -75,15 +83,26 @@ export default function NotificationBell() {
   }, [open, fetchNotifications]);
 
   const handleItemClick = async (item: NotificationItem) => {
-    if (item.read) return;
-    setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)));
-    setUnreadCount((prev) => Math.max(0, prev - 1));
-    try {
-      await builderApiPatch(`/notifications/${item.id}`, { read: true });
-    } catch {
-      // Best-effort; a subsequent poll will reconcile state if this fails.
+    if (!item.read) {
+      setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)));
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+      try {
+        await builderApiPatch(`/notifications/${item.id}`, { read: true });
+      } catch {
+        // Best-effort; a subsequent poll will reconcile state if this fails.
+      }
+    }
+
+    // Order-status alerts (accepted/declined/dispatched/out-for-delivery/
+    // delivered/best-price-ready) carry an orderId — navigate straight to
+    // that order's detail view (renders as an overlay via the @modal
+    // intercepting route since we're already inside the builder layout).
+    if (item.orderId) {
+      setOpen(false);
+      router.push(`/orders/${item.orderId}`);
     }
   };
+
 
   const handleMarkAllRead = async () => {
     if (unreadCount === 0) return;

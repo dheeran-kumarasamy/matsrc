@@ -61,7 +61,7 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
 function BrandBlock() {
   return (
     <Link
-      href="/dashboard"
+      href="/"
       className="block rounded-xl bg-[linear-gradient(120deg,#1a4f8a,#e87722)] p-4 text-white transition hover:opacity-90"
     >
       <p className="text-xs uppercase tracking-[0.2em] text-blue-100">Buildohub.in</p>
@@ -69,6 +69,7 @@ function BrandBlock() {
     </Link>
   );
 }
+
 
 
 // Fetches the 5 most recent orders (and their items) for the desktop sidebar

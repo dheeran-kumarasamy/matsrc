@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { Search, FileBarChart } from "lucide-react";
+import { FileBarChart } from "lucide-react";
 
 import { BuilderNav, BuilderNavMobileTrigger } from "@/components/builder/BuilderNav";
 import CartLauncher from "@/components/cart/CartLauncher";
@@ -7,6 +6,8 @@ import CartDrawer from "@/components/cart/CartDrawer";
 import HeaderIconLink from "@/components/builder/HeaderIconLink";
 import NotificationBell from "@/components/builder/NotificationBell";
 import UserSessionBadge from "@/components/builder/UserSessionBadge";
+import FloatingBrowseLink from "@/components/builder/FloatingBrowseLink";
+
 
 
 
@@ -69,15 +70,11 @@ export default function BuilderLayout({
       </main>
 
 
-      {/* Floating Browse Materials shortcut — always available access to the
-          products listing page from anywhere in the builder portal. */}
-      <Link
-        href="/products"
-        className="fixed bottom-6 right-6 z-40 flex min-h-[44px] items-center gap-2 rounded-full bg-accent-500 px-5 py-3 text-sm font-medium text-white shadow-lg transition-colors hover:bg-accent-600"
-      >
-        <Search size={18} />
-        <span className="hidden sm:inline">Browse Materials</span>
-      </Link>
+      {/* BUG-03 fix: extracted into FloatingBrowseLink.tsx, which hides
+          itself on the exact /products (Browse Materials) route so it no
+          longer overlaps with the page it links to. */}
+      <FloatingBrowseLink />
+
       {/* Persistent cart drawer + inline stepped checkout wizard (spec 5A) */}
 
       <CartDrawer />

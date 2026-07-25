@@ -409,17 +409,18 @@ export async function getPublicSupplierListings() {
   try {
     listings = await prisma.product.findMany({
       where: { isActive: true },
-      include: { category: true, pricingTiers: { orderBy: { minQty: "asc" } } },
+      include: { category: true, brandRef: true, pricingTiers: { orderBy: { minQty: "asc" } } },
       orderBy: { updatedAt: "desc" },
     });
   } catch (error) {
     if (!isMissingPricingSchemaError(error)) throw error;
     listings = await prisma.product.findMany({
       where: { isActive: true },
-      include: { category: true },
+      include: { category: true, brandRef: true },
       orderBy: { updatedAt: "desc" },
     });
   }
+
 
   const mapped = listings.map((product: any) => {
     const fallbackMaxQty = product.maxServiceableQty ?? product.stock;
@@ -439,12 +440,21 @@ export async function getPublicSupplierListings() {
       canonicalProductId: product.canonicalProductId ?? null,
       name: product.name,
       category: product.category.name,
+      // BUG-01 fix: expose a real brand value on public listings (previously
+      // absent, forcing the builder-side brand filter to hack-match against
+      // name+grade substrings). Prefers the FK-linked Brand master-data
+      // record; falls back to the deprecated free-text `brand` column for
+      // any legacy rows created before brandRef existed.
+      brand: product.brandRef?.name ?? product.brand ?? "",
       grade: product.grade ?? "NA",
       unit: product.unit,
       price: `${formatCurrency(product.basePrice.toString())} / ${product.unit}`,
       stock: `${product.stock} ${product.unit}`,
       maxServiceableQty: `${fallbackMaxQty} ${product.unit}`,
       active: product.isActive,
+      // BUG-04 fix: expose updatedAt so the builder-side "Newest" sort option
+      // has real data to sort against.
+      updatedAt: product.updatedAt ? product.updatedAt.toISOString() : null,
       images:
         Array.isArray(product.images) && product.images.length > 0
           ? product.images
@@ -454,6 +464,7 @@ export async function getPublicSupplierListings() {
         maxQty: String(tier.maxQty),
         price: String(tier.tierPrice),
       })),
+
       // Raw numeric fields kept alongside the formatted display fields above
       // (which existing consumers rely on) so the cross-supplier resolution
       // engine below can compute headline/grouped pricing without re-parsing

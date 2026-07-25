@@ -19,6 +19,10 @@ export type SupplierListing = {
   supplierId: string;
   name: string;
   category: string;
+  // BUG-01 fix: real brand value (Brand master-data name, falling back to
+  // legacy free-text brand column) sourced from
+  // apps/supplier/lib/supplier-data.ts `getPublicSupplierListings()`.
+  brand?: string;
   grade: string;
   unit: string;
   price: string;
@@ -27,6 +31,9 @@ export type SupplierListing = {
   active: boolean;
   pricingTiers: PricingTier[];
   images?: string[];
+  // BUG-04 fix: ISO timestamp used to power the "Newest" sort option.
+  updatedAt?: string | null;
+
   // Cross-supplier canonical-product resolution fields (additive). Present
   // when the listing's Category/Brand/Grade/Unit match another supplier's
   // listing exactly (per admin-configured master data) — see

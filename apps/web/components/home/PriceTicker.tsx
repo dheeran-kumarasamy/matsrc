@@ -21,20 +21,29 @@ export default function PriceTicker() {
   ]);
 
   return (
-    <div className="bg-gray-900 text-white text-xs overflow-hidden h-7 flex items-center">
-      <span className="bg-accent-500 px-3 h-full flex items-center font-semibold shrink-0">LIVE PRICES</span>
-      <div className="flex animate-marquee gap-8 ml-4 whitespace-nowrap">
-        {[...items, ...items].map((item, i) => (
-          <span key={i} className="flex items-center gap-1.5">
-            <span className="text-gray-300">{item.name}</span>
-            <span className="font-semibold">₹{item.price.toLocaleString("en-IN")}</span>
-            <span className={item.change < 0 ? "text-red-400 flex items-center" : item.change > 0 ? "text-green-400 flex items-center" : "text-gray-400"}>
-              {item.change < 0 ? <TrendingDown size={10} /> : item.change > 0 ? <TrendingUp size={10} /> : null}
-              {item.change !== 0 && `${Math.abs(item.change)}%`}
+    <div className="bg-gray-900 text-white text-xs h-7 flex items-center">
+      {/* Solid, higher-stacking badge so the scrolling ticker below can never
+          visually slide over/under it (the marquee's translateX animation
+          moves its content past its own box, so the ticker needs its own
+          clipped wrapper — see the overflow-hidden flex-1 div below). */}
+      <span className="relative z-10 bg-accent-500 px-3 h-full flex items-center font-semibold shrink-0">
+        LIVE PRICES
+      </span>
+      <div className="flex-1 overflow-hidden">
+        <div className="flex animate-marquee gap-8 ml-4 whitespace-nowrap">
+          {[...items, ...items].map((item, i) => (
+            <span key={i} className="flex items-center gap-1.5">
+              <span className="text-gray-300">{item.name}</span>
+              <span className="font-semibold">₹{item.price.toLocaleString("en-IN")}</span>
+              <span className={item.change < 0 ? "text-red-400 flex items-center" : item.change > 0 ? "text-green-400 flex items-center" : "text-gray-400"}>
+                {item.change < 0 ? <TrendingDown size={10} /> : item.change > 0 ? <TrendingUp size={10} /> : null}
+                {item.change !== 0 && `${Math.abs(item.change)}%`}
+              </span>
             </span>
-          </span>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
+
   );
 }

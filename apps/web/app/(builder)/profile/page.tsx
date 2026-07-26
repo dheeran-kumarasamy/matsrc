@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { builderApiPost } from "@/lib/api";
 
 export default function BuilderProfilePage() {
   const { data: session, status } = useSession();
@@ -34,20 +35,15 @@ export default function BuilderProfilePage() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/builder/update-contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone: phone.trim(),
-          whatsappNumber: whatsappNumber.trim() || null,
-          whatsappEnabled,
-        }),
+      // Use the shared builder API helper so the required X-User-* auth
+      // headers (derived from the NextAuth session) are attached — a raw
+      // fetch() here was previously missing them, causing getUserCtx() on
+      // the server to throw and this route to return a 500.
+      await builderApiPost("/update-contact", {
+        phone: phone.trim(),
+        whatsappNumber: whatsappNumber.trim() || null,
+        whatsappEnabled,
       });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Failed to update contact");
-      }
 
       setSuccess("Contact information updated successfully!");
       setTimeout(() => setSuccess(""), 3000);
@@ -57,6 +53,7 @@ export default function BuilderProfilePage() {
       setLoading(false);
     }
   }
+
 
   if (status === "loading") {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;

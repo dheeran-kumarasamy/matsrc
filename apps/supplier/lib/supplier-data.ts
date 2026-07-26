@@ -1,6 +1,6 @@
 import { prisma } from "@matsrc/db";
 import { parsePhoneNumber } from "libphonenumber-js";
-import { getDefaultCategoryImage } from "./category-images";
+import { getProductImage } from "./category-images";
 import {
   groupByCanonicalProduct,
   resolveHeadlinePrice,
@@ -399,7 +399,7 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
     images:
       Array.isArray(product.images) && product.images.length > 0
         ? product.images
-        : [getDefaultCategoryImage(product.category?.name)],
+        : [getProductImage({ category: product.category?.name, brand: product.brand, name: product.name })],
   }));
 }
 
@@ -458,7 +458,13 @@ export async function getPublicSupplierListings() {
       images:
         Array.isArray(product.images) && product.images.length > 0
           ? product.images
-          : [getDefaultCategoryImage(product.category?.name)],
+          : [
+              getProductImage({
+                category: product.category?.name,
+                brand: product.brandRef?.name ?? product.brand,
+                name: product.name,
+              }),
+            ],
       pricingTiers: pricingTiers.map((tier: any) => ({
         minQty: String(tier.minQty),
         maxQty: String(tier.maxQty),

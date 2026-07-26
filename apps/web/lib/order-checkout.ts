@@ -21,8 +21,11 @@ import { notifySupplierOrderSubmitted } from "@/lib/notify";
 import {
   resolveLowestPriceForQuantity,
   resolvePriceRange,
+  rankCandidatesForQuantity,
   type ResolutionCandidate,
+  type ResolutionResult,
 } from "@/lib/resolution";
+
 
 const SUPPLIER_APP_URL = process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://matsrc-supplier.vercel.app";
 
@@ -122,7 +125,9 @@ function resolveForProductId(
   );
 
   const group = allListings.filter((item) => groupIds.has(item.id));
-  if (group.length === 0) return { resolution: null, minPrice: null as number | null };
+  if (group.length === 0) {
+    return { resolution: null, minPrice: null as number | null, ranked: [] as ResolutionResult[] };
+  }
 
   const candidates = group.map(toResolutionCandidate);
   const resolution = resolveLowestPriceForQuantity(candidates, quantity);
@@ -133,8 +138,15 @@ function resolveForProductId(
   // range computation that powers the customer-facing product card.
   const range = resolvePriceRange(candidates);
 
-  return { resolution, minPrice: range?.minPrice ?? null };
+  // Multi-supplier fan-out: the FULL ranked pool of eligible candidates
+  // (not just the winner), used to populate OrderItemSupplierCandidate rows
+  // so a decline can promote the next-ranked supplier instead of cancelling
+  // the whole enquiry (see packages/db/prisma/schema.prisma doc comment).
+  const ranked = rankCandidatesForQuantity(candidates, quantity);
+
+  return { resolution, minPrice: range?.minPrice ?? null, ranked };
 }
+
 
 export type CreateOrdersOptions = {
   deliveryDate?: string | null;
@@ -206,10 +218,14 @@ export async function createOrdersFromCart(
     resolvedListingId: string | null;
     tierMinQty: number | null;
     tierMaxQty: number | null;
+    // Multi-supplier fan-out: full ranked pool of eligible candidate
+    // suppliers (rank 0 = current winner, matches supplierId above).
+    // Empty when no live resolution was available (legacy fallback).
+    candidates: ResolutionResult[];
   };
 
   const resolvedLines: ResolvedLine[] = cartItems.map((item) => {
-    const { resolution, minPrice } = resolveForProductId(
+    const { resolution, minPrice, ranked } = resolveForProductId(
       item.productId,
       item.product.canonicalProductId,
       allListings,
@@ -232,6 +248,7 @@ export async function createOrdersFromCart(
         resolvedListingId: resolution.listingId,
         tierMinQty: resolution.tierMinQty,
         tierMaxQty: resolution.tierMaxQty,
+        candidates: ranked,
       };
     }
 
@@ -249,8 +266,10 @@ export async function createOrdersFromCart(
       resolvedListingId: null,
       tierMinQty: null,
       tierMaxQty: null,
+      candidates: [],
     };
   });
+
 
   // Group by the RESOLVED supplier (routing-bug fix: an enquiry must be
   // assigned to the specific supplier whose price is lowest for the tier
@@ -325,8 +344,25 @@ export async function createOrdersFromCart(
             tierMaxQty: item.tierMaxQty ?? undefined,
             priceAtResolution: item.resolvedListingId ? item.unitPrice : undefined,
             resolvedAt: item.resolvedListingId ? resolvedAt : undefined,
+            // Multi-supplier fan-out: persist the full ranked candidate
+            // pool so a decline by the currently-assigned supplier can
+            // promote the next-ranked one instead of cancelling the whole
+            // enquiry. All start PENDING; only rank 0 (current supplierId
+            // above) is actively notified — see notifySupplierOrderSubmitted.
+            candidates:
+              item.candidates.length > 0
+                ? {
+                    create: item.candidates.map((candidate, index) => ({
+                      supplierId: candidate.supplierId,
+                      listingId: candidate.listingId,
+                      unitPrice: candidate.unitPrice,
+                      rank: index,
+                    })),
+                  }
+                : undefined,
           })),
         },
+
         tracking: {
           create: {
             status: OrderStatus.PLACED,

@@ -73,7 +73,18 @@ export class OrdersService {
   }
 
   async updateStatus(id: string, status: OrderStatus, user: any, note?: string): Promise<{ id: string; status: OrderStatus }> {
+    const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
     await this.findOne(id, user);
+
+    // Multi-supplier fan-out: a decline must not immediately cancel the whole
+    // enquiry if other eligible candidate suppliers are still pending for any
+    // line item — see packages/db/prisma/schema.prisma
+    // OrderItemSupplierCandidate doc comment, and the mirrored implementation
+    // in apps/supplier/lib/supplier-data.ts (declineOrderForSupplier).
+    if (status === OrderStatus.CANCELLED) {
+      const result = await this.declineForSupplier(id, supplierProfile.id, note);
+      if (result) return result;
+    }
 
     const order = await this.prisma.order.update({
       where: { id },
@@ -100,6 +111,7 @@ export class OrdersService {
       this.logger.warn(`Failed to queue builder notification for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
     });
 
+
     // Additive WhatsApp business alert — gated by WHATSAPP_ENABLED + per-user opt-in
     // inside WhatsAppAlertService itself; never blocks/affects the order-status update
     // above, and never throws.
@@ -122,4 +134,108 @@ export class OrdersService {
 
     return { id: order.id, status: order.status };
   }
+
+  // Multi-supplier fan-out: mirrors declineOrderForSupplier in
+  // apps/supplier/lib/supplier-data.ts. When the acting supplier declines,
+  // mark their candidate row DECLINED for every item they're currently
+  // assigned to, promote the next-ranked PENDING candidate (if any) to
+  // become the new active supplier for that item, and only actually cancel
+  // the order (notifying the builder) once every item has no more eligible
+  // candidates left.
+  private async declineForSupplier(
+    orderId: string,
+    supplierId: string,
+    reason?: string
+  ): Promise<{ id: string; status: OrderStatus } | null> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: { include: { candidates: { orderBy: { rank: "asc" } } } } },
+    });
+    if (!order) return null;
+
+    const now = new Date();
+
+    for (const item of order.items) {
+      if (item.supplierId !== supplierId) continue;
+
+      const ownCandidate = item.candidates.find((c) => c.supplierId === supplierId);
+      if (ownCandidate) {
+        await this.prisma.orderItemSupplierCandidate.update({
+          where: { id: ownCandidate.id },
+          data: { status: "DECLINED", declineReason: reason ?? null, respondedAt: now },
+        });
+      }
+
+      const nextCandidate = item.candidates.find(
+        (c) => c.supplierId !== supplierId && c.status === "PENDING"
+      );
+
+      if (nextCandidate) {
+        await this.prisma.orderItem.update({
+          where: { id: item.id },
+          data: {
+            supplierId: nextCandidate.supplierId,
+            unitPrice: nextCandidate.unitPrice,
+            resolvedListingId: nextCandidate.listingId ?? undefined,
+          },
+        });
+
+        void this.notificationService.notifySupplierOrderSubmitted(orderId).catch((error) => {
+          this.logger.warn(
+            `Failed to notify promoted supplier for order ${orderId}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
+      } else {
+        await this.prisma.orderItem.update({
+          where: { id: item.id },
+          data: { allCandidatesDeclined: true },
+        });
+      }
+    }
+
+    const refreshed = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+    if (!refreshed) return null;
+
+    const fullyDeclined = refreshed.items.every((item) => item.allCandidatesDeclined);
+
+    if (fullyDeclined) {
+      const cancelled = await this.prisma.order.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.CANCELLED },
+      });
+
+      await this.prisma.orderTracking.create({
+        data: {
+          orderId,
+          status: OrderStatus.CANCELLED,
+          note: "All eligible suppliers declined this enquiry",
+        },
+      });
+
+      void this.notificationService.notifyBuilderOrderDecision(orderId, OrderStatus.CANCELLED).catch((error) => {
+        this.logger.warn(
+          `Failed to send builder notification for order ${orderId}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+
+      return { id: cancelled.id, status: cancelled.status };
+    }
+
+    // Not fully declined — order remains pending confirmation with the
+    // (possibly newly-promoted) supplier(s); builder should NOT see a
+    // rejection message.
+    await this.prisma.orderTracking.create({
+      data: {
+        orderId,
+        status: OrderStatus.PLACED,
+        note: "A supplier declined this enquiry; reassigned to the next eligible supplier",
+      },
+    });
+
+    return { id: refreshed.id, status: refreshed.status };
+  }
 }
+

@@ -8,6 +8,8 @@ import {
   type ResolutionCandidate,
 } from "./resolution";
 import { notifyBuilderOrderStatusUpdate } from "./notify";
+import { sendWhatsAppMessage } from "./twilio-whatsapp";
+
 
 
 
@@ -1003,7 +1005,170 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
 }
 
 
-export async function updateSupplierOrderStatus(orderId: string, status: OrderStatus) {
+// Multi-supplier fan-out: when the ACTING supplier declines (status ===
+// "CANCELLED"), we must not immediately cancel the whole enquiry if other
+// eligible candidate suppliers are still pending for any line item (see
+// packages/db/prisma/schema.prisma OrderItemSupplierCandidate doc comment).
+// Instead: mark this supplier's candidate row DECLINED for every item they
+// are currently assigned to, promote the next-ranked PENDING candidate (if
+// any) to become the new active supplier for that item, and only actually
+// set Order.status = CANCELLED (and notify the builder) once every item has
+// no more eligible candidates left (allCandidatesDeclined on all items).
+async function declineOrderForSupplier(orderId: string, supplierId: string, reason?: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: { include: { candidates: { orderBy: { rank: "asc" } } } } },
+  });
+  if (!order) return null;
+
+  const now = new Date();
+
+  for (const item of order.items) {
+    // Only act on items currently assigned to the declining supplier.
+    if (item.supplierId !== supplierId) continue;
+
+    // Mark this supplier's own candidate row declined (if one exists —
+    // legacy items created before this feature may have no candidate rows).
+    const ownCandidate = item.candidates.find((c) => c.supplierId === supplierId);
+    if (ownCandidate) {
+      await prisma.orderItemSupplierCandidate.update({
+        where: { id: ownCandidate.id },
+        data: { status: "DECLINED", declineReason: reason ?? null, respondedAt: now },
+      });
+    }
+
+    const nextCandidate = item.candidates.find(
+      (c) => c.supplierId !== supplierId && c.status === "PENDING"
+    );
+
+    if (nextCandidate) {
+      // Promote the next-ranked candidate — the item stays PENDING supplier
+      // confirmation, just with a different supplier now assigned.
+      await prisma.orderItem.update({
+        where: { id: item.id },
+        data: {
+          supplierId: nextCandidate.supplierId,
+          unitPrice: nextCandidate.unitPrice,
+          resolvedListingId: nextCandidate.listingId ?? undefined,
+        },
+      });
+
+      // Best-effort: let the newly-promoted supplier know they have a new enquiry.
+      void notifySupplierOrderSubmittedForCandidate(orderId, nextCandidate.supplierId).catch((error) => {
+        console.error(`Failed to notify promoted supplier for order ${orderId}:`, error);
+      });
+    } else {
+      // No more eligible candidates for this item.
+      await prisma.orderItem.update({
+        where: { id: item.id },
+        data: { allCandidatesDeclined: true },
+      });
+    }
+  }
+
+  const refreshed = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true },
+  });
+  if (!refreshed) return null;
+
+  const fullyDeclined = refreshed.items.every((item) => item.allCandidatesDeclined);
+
+  if (fullyDeclined) {
+    const cancelled = await prisma.order.update({
+      where: { id: orderId },
+      data: { status: "CANCELLED" },
+    });
+
+    await prisma.orderTracking.create({
+      data: {
+        orderId,
+        status: "CANCELLED",
+        note: "All eligible suppliers declined this enquiry",
+      },
+    });
+
+    void notifyBuilderOrderStatusUpdate(orderId, "CANCELLED").catch((error) => {
+      console.error(`Failed to send builder notification for order ${orderId}:`, error);
+    });
+
+    return cancelled;
+  }
+
+  // Not fully declined — order remains pending confirmation with the (possibly
+  // newly-promoted) supplier(s); builder should NOT see a rejection message.
+  await prisma.orderTracking.create({
+    data: {
+      orderId,
+      status: "PLACED",
+      note: "A supplier declined this enquiry; reassigned to the next eligible supplier",
+    },
+  });
+
+  return refreshed;
+}
+
+// Best-effort "new enquiry" notification to a supplier who has just been
+// promoted to active candidate for an OrderItem (mirrors the shape of
+// apps/web/lib/notify.ts's notifySupplierOrderSubmitted, kept local to this
+// app since apps/supplier cannot import from apps/web's lib folder).
+async function notifySupplierOrderSubmittedForCandidate(orderId: string, supplierId: string): Promise<void> {
+  const supplier = await prisma.supplierProfile.findUnique({
+    where: { id: supplierId },
+    include: { user: true },
+  });
+  if (!supplier?.user) return;
+
+  const idempotencyKey = `supplier-enquiry-promoted:${orderId}:${supplierId}`;
+  const existing = await prisma.notification.findFirst({ where: { idempotencyKey }, select: { id: true } });
+  if (existing) return;
+
+  const baseUrl = process.env.SUPPLIER_PORTAL_URL || "https://matsrc-supplier.vercel.app";
+  const deepLink = `${baseUrl.replace(/\/$/, "")}/orders?respond=${orderId}`;
+  const body = `A previous supplier declined an enquiry — you're next in line as the best-priced match. Enquiry ${orderId.slice(0, 8)}. View: ${deepLink}`;
+
+  const notification = await prisma.notification.create({
+    data: {
+      userId: supplier.user.id,
+      audience: "supplier",
+      channel: "WHATSAPP",
+      title: "New order received",
+      body,
+      status: "queued",
+      idempotencyKey,
+      variables: JSON.stringify({ orderId, deepLink }),
+      retryCount: 0,
+    },
+  });
+
+  const recipient = supplier.user.whatsappNumber?.trim() || supplier.user.phone?.trim();
+  const result = recipient
+    ? await sendWhatsAppMessage(recipient, body)
+    : { error: "Supplier has no WhatsApp/phone number on file" };
+
+  const success = "externalId" in result;
+  await prisma.notification.update({
+    where: { id: notification.id },
+    data: success
+      ? { status: "sent", externalId: result.externalId, deliveredAt: new Date() }
+      : { status: "failed", failureReason: result.error, failedAt: new Date() },
+  });
+}
+
+export async function updateSupplierOrderStatus(
+  orderId: string,
+  status: OrderStatus,
+  actingSupplierId?: string,
+  reason?: string
+) {
+  // Decline path: run the multi-supplier fan-out promote-or-cascade logic
+  // instead of blindly setting Order.status = CANCELLED, so the builder only
+  // sees a rejection once every eligible supplier has declined (per spec).
+  if (status === "CANCELLED" && actingSupplierId) {
+    const result = await declineOrderForSupplier(orderId, actingSupplierId, reason);
+    if (result) return result;
+  }
+
   const existing = await prisma.order.findUnique({
     where: { id: orderId },
     include: { items: true },
@@ -1061,6 +1226,7 @@ export async function updateSupplierOrderStatus(orderId: string, status: OrderSt
 
   return order;
 }
+
 
 
 

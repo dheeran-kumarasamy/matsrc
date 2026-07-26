@@ -99,7 +99,11 @@ export async function GET(
       deliveryDate: formatDate(order.deliveryDate),
       supplierName: order.items[0]?.product.supplier.companyName ?? "Supplier",
       // PO trigger point: available once a supplier quote has been accepted for this enquiry.
-      quoteAccepted: Boolean(order.quoteSelectionCompletedAt),
+      // Defensive guard: never true for a cancelled order, even if
+      // quoteSelectionCompletedAt was set earlier (e.g. a supplier confirmed,
+      // then all remaining candidates later declined some other line item).
+      quoteAccepted: Boolean(order.quoteSelectionCompletedAt) && order.status !== OrderStatus.CANCELLED,
+
       isAggregated: order.isAggregated,
       aggregationPoolId: order.aggregationPoolId,
       poolLocked: order.aggregationPool?.status === "LOCKED" || order.aggregationPool?.status === "FULFILLING" || order.aggregationPool?.status === "CLOSED",

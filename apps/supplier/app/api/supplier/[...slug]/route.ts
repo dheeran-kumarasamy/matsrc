@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import {
   createSupplierListing,
   createSupplierQuote,
+  ensureSupplierContext,
   getSupplierListingById,
   getSupplierListings,
   getSupplierOrderDetail,
@@ -16,6 +17,7 @@ import {
   forceLockAggregationPool,
   updateListingAggregationSettings,
 } from "@/lib/supplier-data";
+
 
 
 import {
@@ -172,9 +174,16 @@ export async function PATCH(req: NextRequest) {
     const orderMatch = path.match(/^\/orders\/([^/]+)$/);
     if (orderMatch) {
       const orderId = orderMatch[1];
-      const updated = await updateSupplierOrderStatus(orderId, body.status);
+      const { supplierProfile } = await ensureSupplierContext(email);
+      const updated = await updateSupplierOrderStatus(
+        orderId,
+        body.status,
+        supplierProfile.id,
+        typeof body.reason === "string" ? body.reason : undefined
+      );
       return NextResponse.json(updated);
     }
+
 
     if (path === "/profile") {
       const updated = await updateSupplierProfile(body, email);

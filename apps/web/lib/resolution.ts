@@ -38,7 +38,8 @@ export type ResolutionResult = {
   tierMaxQty: number;
 };
 
-function effectiveTierForQuantity(candidate: ResolutionCandidate, quantity: number) {
+export function effectiveTierForQuantity(candidate: ResolutionCandidate, quantity: number) {
+
   const tiers =
     candidate.pricingTiers.length > 0
       ? candidate.pricingTiers
@@ -107,6 +108,48 @@ export function resolveLowestPriceForQuantity(
 export function resolveHeadlinePrice(candidates: ResolutionCandidate[]): ResolutionResult | null {
   return resolveLowestPriceForQuantity(candidates, 1);
 }
+
+// Multi-supplier fan-out (see packages/db/prisma/schema.prisma
+// OrderItemSupplierCandidate): ranks every active candidate lowest-price
+// first for the requested quantity, so an enquiry line item can be created
+// with the FULL pool of eligible suppliers, not just the single winner.
+// When the top-ranked (currently-assigned) supplier declines, the next
+// candidate in this ranking is promoted instead of cancelling the whole
+// enquiry — the enquiry is only cancelled once every ranked candidate has
+// declined.
+export function rankCandidatesForQuantity(
+  candidates: ResolutionCandidate[],
+  quantity: number
+): ResolutionResult[] {
+  const eligible = candidates.filter((candidate) => candidate.isActive);
+
+  const ranked = eligible
+    .map((candidate) => {
+      const tier = effectiveTierForQuantity(candidate, quantity);
+      return {
+        listingId: candidate.listingId,
+        supplierId: candidate.supplierId,
+        unitPrice: tier.tierPrice,
+        tierMinQty: tier.minQty,
+        tierMaxQty: tier.maxQty,
+        serviceable: candidate.maxServiceableQty || candidate.stock,
+      };
+    })
+    .sort((a, b) => {
+      if (a.unitPrice !== b.unitPrice) return a.unitPrice - b.unitPrice;
+      if (a.serviceable !== b.serviceable) return b.serviceable - a.serviceable;
+      return a.listingId < b.listingId ? -1 : a.listingId > b.listingId ? 1 : 0;
+    });
+
+  return ranked.map(({ listingId, supplierId, unitPrice, tierMinQty, tierMaxQty }) => ({
+    listingId,
+    supplierId,
+    unitPrice,
+    tierMinQty,
+    tierMaxQty,
+  }));
+}
+
 
 export type PriceRange = {
   minPrice: number;

@@ -118,6 +118,7 @@ model SupplierProfile {
   mtcCertificates MtcCertificate[]
   purchaseOrders  PurchaseOrder[]
   aggregationPools AggregationPool[]
+  orderItemCandidates OrderItemSupplierCandidate[]
 }
 
 model Category {
@@ -493,8 +494,49 @@ model OrderItem {
   // unaffected; falls back to unitPrice when absent (legacy orders).
   askPrice            Decimal?  @db.Decimal(12, 2)
 
+  // Multi-supplier fan-out: the ranked pool of candidate suppliers eligible
+  // to fulfil this line item (all active cross-supplier listings for the
+  // same canonical product, ranked lowest price first). `supplierId` above
+  // always mirrors whichever candidate is currently PENDING (the supplier
+  // actively being asked to confirm/decline). When that candidate declines,
+  // the next-ranked PENDING candidate becomes the new active supplier
+  // (supplierId/unitPrice reassigned) instead of the whole enquiry being
+  // cancelled — the item (and therefore the Order) is only considered fully
+  // declined once every candidate has DECLINED.
+  candidates          OrderItemSupplierCandidate[]
+  allCandidatesDeclined Boolean @default(false)
+
   @@index([orderId])
   @@index([supplierId])
+}
+
+enum OrderItemCandidateStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+// One row per eligible candidate supplier for a given OrderItem/enquiry line
+// item (see OrderItem.candidates doc comment above for the fan-out/decline
+// semantics this powers).
+model OrderItemSupplierCandidate {
+  id           String                    @id @default(cuid())
+  orderItemId  String
+  orderItem    OrderItem                 @relation(fields: [orderItemId], references: [id])
+  supplierId   String
+  supplier     SupplierProfile           @relation(fields: [supplierId], references: [id])
+  listingId    String?
+  unitPrice    Decimal                   @db.Decimal(12, 2)
+  rank         Int                       // 0 = lowest price / first to be asked
+  status       OrderItemCandidateStatus  @default(PENDING)
+  declineReason String?
+  respondedAt  DateTime?
+  createdAt    DateTime                  @default(now())
+
+  @@index([orderItemId])
+  @@index([supplierId])
+  @@index([orderItemId, status])
+  @@unique([orderItemId, supplierId])
 }
 
 

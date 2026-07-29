@@ -1,7 +1,7 @@
 {
   "version": 2,
   "installCommand": "cd ../.. && pnpm install",
-  "buildCommand": "cd ../.. && NODE_OPTIONS=--max-old-space-size=6144 pnpm --filter @matsrc/api build",
+  "buildCommand": "cd ../.. && pnpm --filter @matsrc/api build",
 
   "functions": {
     "api/index.ts": {

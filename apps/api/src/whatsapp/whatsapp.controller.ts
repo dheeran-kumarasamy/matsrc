@@ -133,27 +133,28 @@ export class WhatsAppController {
     // the per-mutating-action idempotency already implemented in
     // `WhatsAppSessionService.withIdempotency`, which is keyed per action, not per
     // inbound delivery).
-    const reply = messageId
-      ? await this.sessionService.withIdempotency(`webhook-message:${messageId}`, () =>
-          this.router.handleInboundMessage(phone, text)
-        )
-      : await this.router.handleInboundMessage(phone, text);
+    console.time("handleInboundMessage");
 
-    // Actually deliver the computed reply back to the sender via the configured
-    // `WHATSAPP_SEND_PROVIDER` adapter (`MetaCloudApiSendAdapter` when
-    // `WHATSAPP_ADAPTER=meta`). The JSON response below is only useful for our own
-    // debugging/logging — Meta's webhook contract doesn't deliver anything based on it —
-    // so the reply must be sent out-of-band here, not merely included in the HTTP response.
-    try {
-      await this.sendAdapter.send(phone, reply);
-    } catch (error) {
-      // Best-effort: never fail the webhook ack over a downstream send failure — Meta
-      // would otherwise retry the webhook delivery, which would double-process the
-      // inbound message via the idempotency key path above.
-      this.logger.error(`Failed to send reply to ${phone}`, error as Error);
-    }
+const reply = messageId
+  ? await this.sessionService.withIdempotency(
+      `webhook-message:${messageId}`,
+      () => this.router.handleInboundMessage(phone, text)
+    )
+  : await this.router.handleInboundMessage(phone, text);
 
-    res.status(HttpStatus.OK).json({ ok: true, reply });
+console.timeEnd("handleInboundMessage");
+
+console.time("sendReply");
+
+try {
+  await this.sendAdapter.send(phone, reply);
+} catch (error) {
+  this.logger.error(`Failed to send reply to ${phone}`, error as Error);
+} finally {
+  console.timeEnd("sendReply");
+}
+
+res.status(HttpStatus.OK).json({ ok: true, reply });
   }
 
 

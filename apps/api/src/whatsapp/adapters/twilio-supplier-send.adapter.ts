@@ -119,8 +119,13 @@ export class TwilioSupplierSendAdapter implements WhatsAppSendAdapter {
   private templateToFreeformBody(name: string, components: BotTemplateComponent[]): string {
     const values = components
       .flatMap((component) => component.parameters)
-      .map((parameter) => (parameter.type === "text" ? parameter.text : parameter.payload))
+      .map((parameter) => {
+        if (parameter.type === "text") return parameter.text;
+        if (parameter.type === "payload") return parameter.payload;
+        return parameter.document.filename ?? parameter.document.link;
+      })
       .join(" ");
+
     return `[${name}] ${values}`.trim();
   }
 

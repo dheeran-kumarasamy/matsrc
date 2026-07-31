@@ -57,10 +57,13 @@ model User {
   supplierProfile SupplierProfile?
   adminCredential AdminCredential?
   adminMenuPermissions AdminMenuPermission[]
+  sites Site[] @relation("BuilderSites")
+  tallyLedgerMapping TallyLedgerMapping?
 
   @@index([email])
   @@index([phone])
 }
+
 
 model AdminCredential {
   id           String   @id @default(cuid())
@@ -119,7 +122,14 @@ model SupplierProfile {
   purchaseOrders  PurchaseOrder[]
   aggregationPools AggregationPool[]
   orderItemCandidates OrderItemSupplierCandidate[]
+
+  // GST identifier used to determine intra-state (CGST+SGST) vs inter-state
+  // (IGST) tax split when generating Tally purchase vouchers — compared
+  // against the builder's Site.state. Nullable/additive; existing rows
+  // unaffected until a supplier fills this in.
+  gstin           String?
 }
+
 
 model Category {
   id       String    @id @default(cuid())
@@ -213,7 +223,12 @@ model Product {
   unitRef         Unit?           @relation(fields: [unitId], references: [id])
   isCode          String?
   bisStatus       String?         // CERTIFIED | PENDING | NA
+  // HSN (Harmonized System of Nomenclature) code, required for GST invoice
+  // line items / Tally export. Nullable/additive; falls back to a
+  // configurable default at report/export time when absent.
+  hsnCode         String?
   description     String?
+
   unit            String          // deprecated free-text value (MT | BAG | SQM | PCS), retained for backfill/history only
   basePrice       Decimal         @db.Decimal(12, 2)
   stock           Int             @default(0)
@@ -430,6 +445,14 @@ model Order {
   deliveryAddress     String?
   selectedSupplierId String?
 
+  // Site-wise purchase reporting (additive): optional tag linking this
+  // order/enquiry to a builder-managed construction Site/Project. Nullable
+  // so all existing orders remain valid and simply render as "Unassigned"
+  // everywhere in the UI/reports until retroactively tagged.
+  siteId             String?
+  site               Site? @relation(fields: [siteId], references: [id])
+
+
   selectedSupplier   SupplierProfile? @relation("SelectedSupplierOrders", fields: [selectedSupplierId], references: [id])
   bestPriceTotal     Decimal?      @db.Decimal(12, 2)
   tentativeDeliveryDate DateTime?
@@ -461,10 +484,12 @@ model Order {
   @@index([status])
   @@index([selectedSupplierId])
   @@index([aggregationPoolId])
+  @@index([siteId])
 }
 
 
 model OrderItem {
+
   id          String          @id @default(cuid())
   orderId     String
   order       Order           @relation(fields: [orderId], references: [id])
@@ -506,9 +531,16 @@ model OrderItem {
   candidates          OrderItemSupplierCandidate[]
   allCandidatesDeclined Boolean @default(false)
 
+  // GST tax rate applied to this line item (percentage, e.g. 18.00), used
+  // for site-wise report tax breakdown and Tally purchase voucher CGST/
+  // SGST/IGST computation. Nullable/additive; falls back to a configurable
+  // default rate at report/export time when absent (legacy line items).
+  taxRatePercent      Decimal?  @db.Decimal(5, 2)
+
   @@index([orderId])
   @@index([supplierId])
 }
+
 
 enum OrderItemCandidateStatus {
   PENDING
@@ -909,3 +941,59 @@ model AggregationParticipant {
   @@index([builderId])
   @@index([poolId, status])
 }
+
+// ─────────────────────────────────────────────
+// M11 Site-wise Purchase Reporting + Tally Integration
+// ─────────────────────────────────────────────
+
+enum SiteStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+// Builder-scoped construction site/project. Purchases (Orders) can
+// optionally be tagged to a Site so builders can generate per-site
+// purchase reports. Nullable Order.siteId means "Unassigned" — existing
+// orders are unaffected until retroactively tagged.
+model Site {
+  id          String     @id @default(cuid())
+  builderId   String
+  builder     User       @relation("BuilderSites", fields: [builderId], references: [id])
+  name        String
+  code        String?
+  addressLine String?
+  city        String?
+  state       String?
+  pincode     String?
+  gstin       String?
+  status      SiteStatus @default(ACTIVE)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  orders      Order[]
+
+  @@unique([builderId, name])
+  @@index([builderId])
+  @@index([builderId, status])
+}
+
+// Per-builder Tally ledger mapping configuration used when generating
+// Tally-compatible Purchase Voucher XML exports. supplierLedgerMap is a
+// JSON object of { [supplierId]: tallyPartyLedgerName }. All ledger name
+// fields have sensible defaults but are builder-editable via the Tally
+// settings UI.
+model TallyLedgerMapping {
+  id                String   @id @default(cuid())
+  builderId         String   @unique
+  builder           User     @relation(fields: [builderId], references: [id])
+  companyName       String
+  purchaseLedger    String   @default("Purchase Account")
+  cgstLedger        String   @default("CGST")
+  sgstLedger        String   @default("SGST")
+  igstLedger        String   @default("IGST")
+  roundOffLedger    String   @default("Round Off")
+  supplierLedgerMap Json     @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+

@@ -153,7 +153,13 @@ export type CreateOrdersOptions = {
   deliveryLat?: number | null;
   deliveryLng?: number | null;
   deliveryAddress?: string | null;
+  // Site-wise purchase reporting: optional builder-owned Site to tag every
+  // order created from this checkout to. Nullable/additive — omitting it
+  // (or passing null) leaves the order "Unassigned", the existing default
+  // behaviour for every checkout flow that doesn't pass this.
+  siteId?: string | null;
 };
+
 
 export type CreatedOrderSummary = {
   id: string;
@@ -308,6 +314,10 @@ export async function createOrdersFromCart(
     typeof options.deliveryAddress === "string" && options.deliveryAddress.trim()
       ? options.deliveryAddress.trim()
       : null;
+  // Site-wise purchase reporting: tag every order created in this checkout
+  // batch to the given Site (nullable — omitted/null leaves "Unassigned").
+  const siteId = typeof options.siteId === "string" && options.siteId ? options.siteId : null;
+
 
   for (const group of groups.values()) {
     const totalAmount = group.items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
@@ -324,6 +334,7 @@ export async function createOrdersFromCart(
         deliveryLat: deliveryLat ?? undefined,
         deliveryLng: deliveryLng ?? undefined,
         deliveryAddress: deliveryAddress ?? undefined,
+        siteId: siteId ?? undefined,
 
         items: {
           create: group.items.map((item) => ({

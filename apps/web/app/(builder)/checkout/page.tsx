@@ -50,6 +50,13 @@ type SupplierGroup = {
   total: number;
 };
 
+type Site = {
+  id: string;
+  name: string;
+  status: "ACTIVE" | "ARCHIVED";
+};
+
+
 function nextTierFor(item: CartResponse["items"][number]) {
   const tiers = item.aggregationPriceTiers ?? [];
   if (!tiers.length) return null;
@@ -78,6 +85,8 @@ export default function CheckoutPage() {
   const [optInLoadingId, setOptInLoadingId] = useState<string | null>(null);
   const [optInError, setOptInError] = useState<string | null>(null);
   const [optInSuccessId, setOptInSuccessId] = useState<string | null>(null);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [siteId, setSiteId] = useState<string>("");
 
   useEffect(() => {
     let active = true;
@@ -93,11 +102,24 @@ export default function CheckoutPage() {
       }
     }
 
+    async function loadSites() {
+      try {
+        const payload = await builderApiGet<Site[]>("/sites");
+        if (!active) return;
+        setSites(payload.filter((site) => site.status === "ACTIVE"));
+      } catch {
+        if (!active) return;
+        setSites([]);
+      }
+    }
+
     void loadCart();
+    void loadSites();
     return () => {
       active = false;
     };
   }, []);
+
 
   const groupedItems = useMemo<SupplierGroup[]>(() => {
     const groups = new Map<string, SupplierGroup>();
@@ -171,7 +193,9 @@ export default function CheckoutPage() {
       const listingIds = Array.from(new Set(remainingItems.map((item) => item.productId)));
       await builderApiPost("/orders/checkout", {
         deliveryDate: deliveryDate || undefined,
+        siteId: siteId || undefined,
       });
+
       await Promise.allSettled(listingIds.map((listingId) => recordInterestEvent(listingId, "ORDER_PLACED")));
       router.push("/orders");
     } catch {
@@ -325,7 +349,27 @@ export default function CheckoutPage() {
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />
         </div>
+        {sites.length > 0 ? (
+          <div className="mt-3">
+            <label className="mb-1 block text-xs font-medium text-slate-500">
+              Tag this order to a site (optional)
+            </label>
+            <select
+              value={siteId}
+              onChange={(event) => setSiteId(event.target.value)}
+              className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              <option value="">Unassigned</option>
+              {sites.map((site) => (
+                <option key={site.id} value={site.id}>
+                  {site.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
       </div>
+
 
       <div className="panel p-5 space-y-3">
         <div className="flex justify-between text-sm text-slate-500">

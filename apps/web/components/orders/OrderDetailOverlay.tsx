@@ -8,12 +8,15 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OrderTimeline from "@/components/orders/OrderTimeline";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import OrderRatingForm from "@/components/orders/OrderRatingForm";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
+import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
+
 
 export type OverlayOrderDetail = {
   id: string;
@@ -34,6 +37,8 @@ export type OverlayOrderDetail = {
   priceBeforeAggregation?: number | null;
   priceAfterAggregation?: number | null;
   purchaseOrder?: { id: string; poNumber: string; status: string; version: number } | null;
+  siteId?: string | null;
+  siteName?: string;
   items: Array<{
     id: string;
     productId: string;
@@ -51,6 +56,7 @@ export type OverlayOrderDetail = {
 };
 
 type Props = {
+
   order: OverlayOrderDetail;
 };
 
@@ -109,9 +115,14 @@ export default function OrderDetailOverlay({ order }: Props) {
               <p className="mt-1 text-sm text-slate-500">
                 {order.supplierName} · Delivery: {order.deliveryDate}
               </p>
+              <div className="mt-2">
+                <OrderSiteAssignment orderId={order.id} siteId={order.siteId} />
+              </div>
+
             </div>
             <div className="flex items-center gap-3">
               <OrderStatusBadge status={order.status} />
+
               {order.isAggregated ? (
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
                   Group Order

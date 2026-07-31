@@ -25,6 +25,8 @@ export async function GET(request: Request) {
         createdAt: true,
         isAggregated: true,
         aggregationPoolId: true,
+        siteId: true,
+        site: { select: { id: true, name: true } },
         items: {
 
           select: {
@@ -52,6 +54,8 @@ export async function GET(request: Request) {
         isAggregated: order.isAggregated,
         aggregationPoolId: order.aggregationPoolId,
         supplierName: order.items[0]?.product.supplier.companyName ?? "Supplier",
+        siteId: order.siteId,
+        siteName: order.site?.name ?? "Unassigned",
 
         paymentLinkAvailable:
           order.status === OrderStatus.PROCESSING &&
@@ -79,6 +83,7 @@ export async function POST(request: Request) {
       deliveryLat: typeof body.deliveryLat === "number" ? body.deliveryLat : null,
       deliveryLng: typeof body.deliveryLng === "number" ? body.deliveryLng : null,
       deliveryAddress: typeof body.deliveryAddress === "string" ? body.deliveryAddress : null,
+      siteId: typeof body.siteId === "string" && body.siteId ? body.siteId : null,
     });
 
     if (!result.ok) {

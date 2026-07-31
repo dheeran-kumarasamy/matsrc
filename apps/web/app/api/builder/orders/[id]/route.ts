@@ -33,6 +33,8 @@ export async function GET(
         aggregationPoolId: true,
         priceBeforeAggregation: true,
         priceAfterAggregation: true,
+        siteId: true,
+        site: { select: { id: true, name: true } },
         aggregationPool: {
           select: { status: true },
         },
@@ -109,6 +111,8 @@ export async function GET(
       poolLocked: order.aggregationPool?.status === "LOCKED" || order.aggregationPool?.status === "FULFILLING" || order.aggregationPool?.status === "CLOSED",
       priceBeforeAggregation: order.priceBeforeAggregation ? Number(order.priceBeforeAggregation) : null,
       priceAfterAggregation: order.priceAfterAggregation ? Number(order.priceAfterAggregation) : null,
+      siteId: order.siteId,
+      siteName: order.site?.name ?? "Unassigned",
 
       purchaseOrder: order.purchaseOrders[0]
         ? {
@@ -153,7 +157,49 @@ export async function PATCH(
     const ctx = getUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
     const body = await request.json().catch(() => ({}));
-    const { paymentMethod } = body as { paymentMethod?: string };
+    const { paymentMethod } = body as { paymentMethod?: string; siteId?: string | null };
+
+    // Site-wise purchase reporting: allow retroactively tagging/re-tagging
+    // this order to a builder-owned Site (or clearing it back to
+    // "Unassigned" via null), independent of the paymentMethod flow below.
+    // Handled first so a request can update only siteId without needing to
+    // also resend a valid paymentMethod.
+    if ("siteId" in body && paymentMethod === undefined) {
+      const order = await prisma.order.findFirst({
+        where: { id: params.id, userId: user.id },
+        select: { id: true },
+      });
+      if (!order) {
+        return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      }
+
+      let siteId: string | null = null;
+      if (body.siteId !== null && body.siteId !== undefined && body.siteId !== "") {
+        if (typeof body.siteId !== "string") {
+          return NextResponse.json({ error: "siteId must be a string or null" }, { status: 400 });
+        }
+        const site = await prisma.site.findFirst({
+          where: { id: body.siteId, builderId: user.id },
+          select: { id: true },
+        });
+        if (!site) {
+          return NextResponse.json({ error: "Site not found" }, { status: 404 });
+        }
+        siteId = site.id;
+      }
+
+      const updated = await prisma.order.update({
+        where: { id: order.id },
+        data: { siteId },
+        select: { id: true, siteId: true, site: { select: { name: true } } },
+      });
+
+      return NextResponse.json({
+        id: updated.id,
+        siteId: updated.siteId,
+        siteName: updated.site?.name ?? "Unassigned",
+      });
+    }
 
     if (paymentMethod !== "BANK_TRANSFER" && paymentMethod !== "CREDIT") {
       return NextResponse.json(

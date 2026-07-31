@@ -7,6 +7,8 @@ import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import OrderRatingForm from "@/components/orders/OrderRatingForm";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
+import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
+
 
 type OrderDetail = {
   id: string;
@@ -27,8 +29,11 @@ type OrderDetail = {
   priceBeforeAggregation?: number | null;
   priceAfterAggregation?: number | null;
   purchaseOrder?: { id: string; poNumber: string; status: string; version: number } | null;
+  siteId?: string | null;
+  siteName?: string;
 
   items: Array<{
+
     id: string;
     productId: string;
     name: string;

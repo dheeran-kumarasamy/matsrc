@@ -23,7 +23,9 @@ const links = [
   { href: "/purchase-orders", label: "Purchase Orders" },
   { href: "/cart", label: "Cart" },
   { href: "/watchlist", label: "Watchlist" },
+  { href: "/sites", label: "Sites" },
   { href: "/reports", label: "Reports" },
+
   { href: "/disputes", label: "Disputes" },
 ];
 

@@ -11,13 +11,13 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
-
   "dependencies": {
     "@matsrc/db": "workspace:*",
     "@matsrc/ui": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.19",
     "@tanstack/react-query": "^5.40.0",
     "axios": "^1.7.2",
+    "exceljs": "^4.4.0",
     "lucide-react": "^0.395.0",
     "next": "^14.2.3",
     "next-auth": "^5.0.0-beta.19",
@@ -42,4 +42,3 @@
     "vitest": "^2.1.8"
   }
 }
-

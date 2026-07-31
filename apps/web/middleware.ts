@@ -17,7 +17,9 @@ const PROTECTED_PREFIXES = [
   "/disputes",
   "/group-orders",
   "/profile",
+  "/sites",
 ];
+
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;

@@ -53,3 +53,90 @@ export type CostSavingsSummary = {
   totalPotentialSavings: number;
   rows: CostSavingsRow[];
 };
+
+// ─────────────────────────────────────────────
+// Site-wise Purchase Report (Feature A)
+// ─────────────────────────────────────────────
+
+export type SiteWiseReportFilters = {
+  siteId?: string; // "all" | "unassigned" | <site id>
+  dateFrom?: string; // ISO date (yyyy-mm-dd)
+  dateTo?: string; // ISO date (yyyy-mm-dd)
+  supplierId?: string;
+  status?: string;
+  categoryId?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type SiteWiseSpendBySupplier = {
+  supplierId: string;
+  supplierName: string;
+  spend: number;
+};
+
+export type SiteWiseSpendByCategory = {
+  categoryId: string;
+  categoryName: string;
+  spend: number;
+};
+
+export type SiteWiseSpendOverTime = {
+  month: string; // YYYY-MM
+  spend: number;
+};
+
+export type SiteWiseSpendBySite = {
+  siteId: string | null;
+  siteName: string;
+  spend: number;
+  orderCount: number;
+};
+
+export type SiteWiseSummary = {
+  totalSpend: number;
+  orderCount: number;
+  itemCount: number;
+  spendBySupplier: SiteWiseSpendBySupplier[];
+  spendByCategory: SiteWiseSpendByCategory[];
+  spendOverTime: SiteWiseSpendOverTime[];
+  spendBySite: SiteWiseSpendBySite[];
+};
+
+export type SiteWiseDetailRow = {
+  orderId: string;
+  orderDate: string;
+  orderDateLabel: string;
+  status: string;
+  supplierId: string;
+  supplierName: string;
+  siteId: string | null;
+  siteName: string;
+  productName: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  taxableValue: number;
+  taxRatePercent: number;
+  gstAmount: number;
+  total: number;
+};
+
+export type SiteWiseFilterOptions = {
+  sites: { id: string; name: string; status: "ACTIVE" | "ARCHIVED" }[];
+  suppliers: { id: string; name: string }[];
+  categories: { id: string; name: string }[];
+};
+
+export type SiteWiseReportResponse = {
+  filters: SiteWiseReportFilters;
+  summary: SiteWiseSummary;
+  options: SiteWiseFilterOptions;
+  detail: {
+    rows: SiteWiseDetailRow[];
+    page: number;
+    pageSize: number;
+    totalRows: number;
+  };
+};
+

@@ -97,6 +97,7 @@ export class WhatsAppController {
     @Res() res: Response
   ) {
     const body = req.body as MetaWebhookPayload;
+    console.time("webhook-total");
     const appSecret = process.env.WHATSAPP_APP_SECRET;
 
     // Only enforce signature verification when an app secret is configured — this keeps

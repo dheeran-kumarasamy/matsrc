@@ -23,16 +23,11 @@ export function AdminNav({
     <aside className="panel sticky top-4 h-fit p-4">
       <Link
         href="/dashboard"
-        className="flex items-center gap-3 rounded-xl bg-[linear-gradient(120deg,#0f172a,#1a4f8a)] p-4 text-white transition hover:opacity-90"
+        className="relative block h-20 w-full overflow-hidden rounded-xl bg-white p-3 transition hover:opacity-90"
       >
-        <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-white p-1">
-          <Image src="/icons/icon-512.png" alt="Buildohub" width={36} height={36} className="h-full w-full object-contain" />
-        </span>
-        <span>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Buildohub.in</p>
-          <h1 className="mt-1 text-xl font-extrabold">Admin Command</h1>
-        </span>
+        <Image src="/icons/logo-full.png" alt="Buildohub" fill className="object-contain" priority />
       </Link>
+
 
 
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">

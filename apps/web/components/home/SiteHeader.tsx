@@ -37,12 +37,12 @@ export default function SiteHeader() {
   return (
     <nav className="sticky top-0 z-50 bg-brand-500/95 text-white shadow-md backdrop-blur supports-[backdrop-filter]:bg-brand-500/90">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="grid h-9 w-9 place-items-center overflow-hidden rounded-md bg-white p-1">
-            <Image src="/icons/icon-512.png" alt="Buildohub" width={32} height={32} className="h-full w-full object-contain" />
+        <Link href="/" className="flex items-center">
+          <span className="relative h-10 w-40 overflow-hidden rounded-md bg-white p-1">
+            <Image src="/icons/logo-full.png" alt="Buildohub" fill className="object-contain" priority />
           </span>
-          <span className="text-2xl font-bold tracking-tight">Buildohub.in</span>
         </Link>
+
 
 
 

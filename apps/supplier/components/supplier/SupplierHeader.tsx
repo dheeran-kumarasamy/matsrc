@@ -29,13 +29,12 @@ export function SupplierHeader({ kycStatus }: SupplierHeaderProps) {
     <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex h-20 max-w-[1260px] items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/dashboard" className="flex items-center gap-3 rounded-lg p-1 hover:bg-slate-100" aria-label="Go to dashboard">
-          <span className="grid h-10 w-10 place-items-center overflow-hidden rounded-md border border-blue-200 bg-white p-1">
-            <Image src="/icons/icon-512.png" alt="Buildohub" width={32} height={32} className="h-full w-full object-contain" />
+          <span className="relative h-12 w-48 overflow-hidden rounded-md">
+            <Image src="/icons/logo-full.png" alt="Buildohub" fill className="object-contain" priority />
           </span>
-          <p className="text-xl leading-none text-slate-800 sm:text-2xl">
-            <span className="font-bold text-slate-900">Buildohub.in</span> Supplier Portal
-          </p>
+          <p className="text-xl leading-none text-slate-800 sm:text-2xl">Supplier Portal</p>
         </Link>
+
 
 
         <div className="relative">

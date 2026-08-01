@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import EnquiryPanel from "@/components/products/EnquiryPanel";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import WatchlistButton from "@/components/products/WatchlistButton";
+import PriceIntelligenceSection from "@/components/products/PriceIntelligenceSection";
 import { getCategoryEmoji } from "@/lib/category-images";
 
 import { getSupplierListings, parseNumericLabel, type SupplierListing } from "@/lib/listings";
@@ -128,9 +129,13 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
               ))}
             </div>
           </div>
+          {product.canonicalProductId ? (
+            <PriceIntelligenceSection canonicalProductId={product.canonicalProductId} />
+          ) : null}
         </section>
 
         <aside className="space-y-4">
+
           <SupplierSocialProof listingId={product.id} supplierId={product.supplierId} showViewTracking />
           <EnquiryPanel
             productId={product.id}

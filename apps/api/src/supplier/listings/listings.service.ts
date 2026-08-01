@@ -91,6 +91,21 @@ export class ListingsService {
       },
     });
 
+    // Price-discovery snapshot hook (additive, non-blocking): capture the
+    // listing's initial price as the first PriceSnapshot row for this
+    // Product. Never blocks/affects listing creation on failure.
+    void this.recordPriceSnapshot({
+      productId: product.id,
+      supplierId: product.supplierId,
+      canonicalProductId: product.canonicalProductId,
+      price: Number(product.basePrice),
+      unit: product.unit,
+    }).catch((error) => {
+      this.logger.warn(
+        `Failed to record price snapshot for new listing ${product.id}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+
     return {
       id: product.id,
       name: product.name,
@@ -98,6 +113,7 @@ export class ListingsService {
       unit: product.unit,
     };
   }
+
 
   async update(id: string, dto: UpdateListingDto, user: any): Promise<{ id: string; name: string; unit: string }> {
     const previous = await this.findOne(id, user);
@@ -139,12 +155,54 @@ export class ListingsService {
       });
     }
 
+    // Price-discovery snapshot hook (additive, non-blocking): capture every
+    // actual price change (repricing) as a new PriceSnapshot row.
+    if (dto.price && newPrice !== previousPrice) {
+      void this.recordPriceSnapshot({
+        productId: product.id,
+        supplierId: product.supplierId,
+        canonicalProductId: product.canonicalProductId,
+        price: newPrice,
+        unit: product.unit,
+      }).catch((error) => {
+        this.logger.warn(
+          `Failed to record price snapshot for listing ${product.id}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+    }
+
     return {
       id: product.id,
       name: product.name,
       unit: product.unit,
     };
   }
+
+  /**
+   * Inserts a single append-only PriceSnapshot row (source: LISTING). Never
+   * updates/deletes existing rows — every call creates a brand new record.
+   * Deliberately kept separate from the hot public-listings read path; only
+   * ever invoked from listing create/update, fire-and-forget.
+   */
+  private async recordPriceSnapshot(params: {
+    productId: string;
+    supplierId: string;
+    canonicalProductId: string | null;
+    price: number;
+    unit?: string | null;
+  }): Promise<void> {
+    await this.prisma.priceSnapshot.create({
+      data: {
+        productId: params.productId,
+        supplierId: params.supplierId,
+        canonicalProductId: params.canonicalProductId ?? undefined,
+        price: params.price,
+        unit: params.unit ?? undefined,
+        source: "LISTING",
+      },
+    });
+  }
+
 
   /**
    * Watchlist price-alert (UF-09) — checks all builders watching this product whose

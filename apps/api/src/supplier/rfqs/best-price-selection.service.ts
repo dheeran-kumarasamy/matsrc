@@ -1,6 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { OrderStatus } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
+
 
 export type QuoteCandidate = {
   supplierId: string;
@@ -46,7 +47,10 @@ export function selectLowestValidQuote(candidates: QuoteCandidate[]): QuoteCandi
 
 @Injectable()
 export class BestPriceSelectionService {
+  private readonly logger = new Logger(BestPriceSelectionService.name);
+
   constructor(private readonly prisma: PrismaService) {}
+
 
   async selectAndFinalizeIfEligible(enquiryId: string): Promise<{
     enquiryId: string;
@@ -156,7 +160,18 @@ export class BestPriceSelectionService {
       },
     });
 
+    // Price-discovery snapshot hook (additive, non-blocking): this is the
+    // de facto "RFQ quote accepted" event in the codebase — capture one
+    // PriceSnapshot row per winning line item at the accepted unit price.
+    // Never blocks/affects the finalization above on failure.
+    void this.recordRfqAcceptedSnapshots(enquiryId, order.items, winningLines).catch((error) => {
+      this.logger.warn(
+        `Failed to record RFQ-accepted price snapshots for enquiry ${enquiryId}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+
     return {
+
       enquiryId,
       selectedSupplierId,
       selectedSupplierName: selectedSupplierProfile?.companyName ?? null,
@@ -167,7 +182,42 @@ export class BestPriceSelectionService {
     };
   }
 
+  /**
+   * Price-discovery snapshot writer (additive, insert-only, non-blocking).
+   * Inserts one PriceSnapshot row per winning line item at the moment an
+   * RFQ enquiry's supplier quotes are finalized/accepted (source:
+   * RFQ_ACCEPTED). Deliberately kept out of the read/hot path — only ever
+   * invoked here, right after the Order.update finalization above.
+   */
+  private async recordRfqAcceptedSnapshots(
+    enquiryId: string,
+    items: Array<{ id: string; productId: string; product: { canonicalProductId: string | null } }>,
+    winningLines: Array<BestLineItemSelection>
+  ): Promise<void> {
+    const itemsById = new Map(items.map((item) => [item.id, item]));
+
+    for (const line of winningLines) {
+      const item = itemsById.get(line.lineItemId);
+      if (!item) {
+        continue;
+      }
+
+      await this.prisma.priceSnapshot.create({
+        data: {
+          productId: item.productId,
+          supplierId: line.supplierId,
+          canonicalProductId: item.product.canonicalProductId ?? undefined,
+          price: line.unitPrice,
+          currency: line.currency,
+          source: "RFQ_ACCEPTED",
+          sourceRefId: enquiryId,
+        },
+      });
+    }
+  }
+
   private resolveTentativeDeliveryDate(params: {
+
     requestedDate: Date | null;
     quoteLeadTimes: Array<number | null | undefined>;
     createdAt: Date;

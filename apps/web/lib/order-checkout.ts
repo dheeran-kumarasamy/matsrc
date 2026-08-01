@@ -412,5 +412,28 @@ export async function createOrdersFromCart(
     });
   }
 
+  // Price-discovery snapshot hook (additive, insert-only, non-blocking):
+  // capture one PriceSnapshot row per confirmed order line at the moment
+  // an order is placed (source: ORDER). Deliberately fire-and-forget so a
+  // snapshot-write failure never affects the checkout response above.
+  for (const group of groups.values()) {
+    for (const item of group.items) {
+      void prisma.priceSnapshot
+        .create({
+          data: {
+            productId: item.productId,
+            supplierId: group.supplierId,
+            canonicalProductId: item.canonicalProductId ?? undefined,
+            price: item.unitPrice,
+            source: "ORDER",
+          },
+        })
+        .catch((error) => {
+          console.error(`Failed to record price snapshot for order item (product ${item.productId}):`, error);
+        });
+    }
+  }
+
   return { ok: true, orders: createdOrders };
 }
+

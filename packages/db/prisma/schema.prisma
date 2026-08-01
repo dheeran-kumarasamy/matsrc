@@ -122,6 +122,7 @@ model SupplierProfile {
   purchaseOrders  PurchaseOrder[]
   aggregationPools AggregationPool[]
   orderItemCandidates OrderItemSupplierCandidate[]
+  priceSnapshots  PriceSnapshot[]
 
   // GST identifier used to determine intra-state (CGST+SGST) vs inter-state
   // (IGST) tax split when generating Tally purchase vouchers — compared
@@ -129,6 +130,7 @@ model SupplierProfile {
   // unaffected until a supplier fills this in.
   gstin           String?
 }
+
 
 
 model Category {
@@ -201,9 +203,11 @@ model CanonicalProduct {
   updatedAt    DateTime  @updatedAt
 
   products     Product[]
+  priceSnapshots PriceSnapshot[]
 
   @@index([categoryId])
 }
+
 
 model Product {
   id              String          @id @default(cuid())
@@ -257,6 +261,7 @@ model Product {
   mtcCertificates MtcCertificate[]
   purchaseOrderLineItems PurchaseOrderLineItem[]
   aggregationPools AggregationPool[]
+  priceSnapshots  PriceSnapshot[]
 
   @@index([supplierId])
   @@index([categoryId])
@@ -266,6 +271,7 @@ model Product {
   @@index([gradeId])
   @@index([unitId])
 }
+
 
 
 model MtcCertificate {
@@ -311,6 +317,43 @@ model PricingTier {
   @@index([productId])
   @@unique([productId, minQty, maxQty])
 }
+
+// Append-only, insert-only price time series used for cross-supplier price
+// discovery / intelligence. Rows are NEVER updated or deleted — each price
+// event (a listing being created/repriced, an RFQ quote being accepted, or
+// an order being placed) is captured as a new row. This must never be
+// written to synchronously in the hot/public listings read path — it is
+// only ever written from the write-side events below (listing create/update,
+// RFQ acceptance, order placement), fire-and-forget/non-blocking.
+enum PriceSnapshotSource {
+  LISTING
+  RFQ_ACCEPTED
+  ORDER
+}
+
+model PriceSnapshot {
+  id                 String              @id @default(cuid())
+  canonicalProductId String?
+  canonicalProduct   CanonicalProduct?   @relation(fields: [canonicalProductId], references: [id])
+  productId          String
+  product            Product             @relation(fields: [productId], references: [id])
+  supplierId         String
+  supplier           SupplierProfile     @relation(fields: [supplierId], references: [id])
+  price              Decimal             @db.Decimal(12, 2)
+  currency           String              @default("INR")
+  unit               String?
+  region             String?
+  source             PriceSnapshotSource
+  // Traceable reference to the originating event (e.g. Order.id for
+  // RFQ_ACCEPTED/ORDER sources), for audit/debugging. Nullable/optional.
+  sourceRefId        String?
+  capturedAt         DateTime            @default(now())
+
+  @@index([canonicalProductId, capturedAt])
+  @@index([productId, capturedAt])
+  @@index([supplierId])
+}
+
 
 model Watchlist {
   id             String   @id @default(cuid())

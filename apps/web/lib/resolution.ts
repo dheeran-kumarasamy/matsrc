@@ -117,6 +117,17 @@ export function resolveHeadlinePrice(candidates: ResolutionCandidate[]): Resolut
 // candidate in this ranking is promoted instead of cancelling the whole
 // enquiry — the enquiry is only cancelled once every ranked candidate has
 // declined.
+//
+// IMPORTANT: OrderItemSupplierCandidate has a UNIQUE constraint on
+// (orderItemId, supplierId) — a supplier can only appear once per order
+// item's candidate pool. A single supplier may have multiple active
+// listings within the same canonical product group (e.g. two SKUs that
+// both map to the same canonical product), so results must be deduplicated
+// by supplierId here (keeping each supplier's best-ranked/lowest-price
+// listing only) — otherwise callers that persist every ranked entry as its
+// own row (see apps/web/lib/order-checkout.ts) would attempt to insert two
+// rows with the same (orderItemId, supplierId) and violate that
+// constraint, causing checkout to fail with a 500 (Prisma error P2002).
 export function rankCandidatesForQuantity(
   candidates: ResolutionCandidate[],
   quantity: number
@@ -141,7 +152,14 @@ export function rankCandidatesForQuantity(
       return a.listingId < b.listingId ? -1 : a.listingId > b.listingId ? 1 : 0;
     });
 
-  return ranked.map(({ listingId, supplierId, unitPrice, tierMinQty, tierMaxQty }) => ({
+  const seenSuppliers = new Set<string>();
+  const dedupedBySupplier = ranked.filter((entry) => {
+    if (seenSuppliers.has(entry.supplierId)) return false;
+    seenSuppliers.add(entry.supplierId);
+    return true;
+  });
+
+  return dedupedBySupplier.map(({ listingId, supplierId, unitPrice, tierMinQty, tierMaxQty }) => ({
     listingId,
     supplierId,
     unitPrice,

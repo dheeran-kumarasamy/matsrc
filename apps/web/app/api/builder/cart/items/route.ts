@@ -13,7 +13,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const SUPPLIER_APP_URL = process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://matsrc-supplier.vercel.app";
+const SUPPLIER_APP_URL = process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://supplier.buildohub.in";
 
 type SupplierListing = {
   id: string;

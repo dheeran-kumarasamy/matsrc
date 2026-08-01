@@ -6,7 +6,7 @@
 // Centralizing this avoids drift between the "full page" and "overlay" render
 // paths, which must show identical data per spec section 5A.
 
-const SUPPLIER_APP_URL = process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://matsrc-supplier.vercel.app";
+const SUPPLIER_APP_URL = process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://supplier.buildohub.in";
 
 export type PricingTier = {
   minQty: string;

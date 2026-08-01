@@ -37,7 +37,7 @@ export async function notifySupplierOrderSubmitted(orderId: string): Promise<voi
     const baseUrl =
       process.env.SUPPLIER_PORTAL_URL ||
       process.env.NEXT_PUBLIC_SUPPLIER_APP_URL ||
-      "https://matsrc-supplier.vercel.app";
+      "https://supplier.buildohub.in";
     const deepLink = `${baseUrl.replace(/\/$/, "")}/rfqs?respond=${order.id}`;
 
     const itemNames = order.items
@@ -133,7 +133,7 @@ export async function notifySupplierPurchaseOrderGenerated(purchaseOrderId: stri
     const baseUrl =
       process.env.SUPPLIER_PORTAL_URL ||
       process.env.NEXT_PUBLIC_SUPPLIER_APP_URL ||
-      "https://matsrc-supplier.vercel.app";
+      "https://supplier.buildohub.in";
     const deepLink = `${baseUrl.replace(/\/$/, "")}/purchase-orders/${po.id}`;
 
     const title = "Purchase Order generated";

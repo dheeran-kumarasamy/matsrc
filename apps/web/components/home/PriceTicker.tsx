@@ -22,13 +22,6 @@ export default function PriceTicker() {
 
   return (
     <div className="bg-gray-900 text-white text-xs h-7 flex items-center">
-      {/* Solid, higher-stacking badge so the scrolling ticker below can never
-          visually slide over/under it (the marquee's translateX animation
-          moves its content past its own box, so the ticker needs its own
-          clipped wrapper — see the overflow-hidden flex-1 div below). */}
-      <span className="relative z-10 bg-accent-500 px-3 h-full flex items-center font-semibold shrink-0">
-        LIVE PRICES
-      </span>
       <div className="flex-1 overflow-hidden">
         <div className="flex animate-marquee gap-8 ml-4 whitespace-nowrap">
           {[...items, ...items].map((item, i) => (

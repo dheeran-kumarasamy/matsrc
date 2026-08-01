@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { builderApiGet, builderApiPost } from "@/lib/api";
 import { recordInterestEvent } from "@/lib/interest-events";
+import SiteSelector from "@/components/orders/SiteSelector";
 
 
 async function builderAggregationPost<T>(path: string, body: unknown): Promise<T> {
@@ -50,12 +51,6 @@ type SupplierGroup = {
   total: number;
 };
 
-type Site = {
-  id: string;
-  name: string;
-  status: "ACTIVE" | "ARCHIVED";
-};
-
 
 function nextTierFor(item: CartResponse["items"][number]) {
   const tiers = item.aggregationPriceTiers ?? [];
@@ -85,7 +80,6 @@ export default function CheckoutPage() {
   const [optInLoadingId, setOptInLoadingId] = useState<string | null>(null);
   const [optInError, setOptInError] = useState<string | null>(null);
   const [optInSuccessId, setOptInSuccessId] = useState<string | null>(null);
-  const [sites, setSites] = useState<Site[]>([]);
   const [siteId, setSiteId] = useState<string>("");
 
   useEffect(() => {
@@ -102,19 +96,7 @@ export default function CheckoutPage() {
       }
     }
 
-    async function loadSites() {
-      try {
-        const payload = await builderApiGet<Site[]>("/sites");
-        if (!active) return;
-        setSites(payload.filter((site) => site.status === "ACTIVE"));
-      } catch {
-        if (!active) return;
-        setSites([]);
-      }
-    }
-
     void loadCart();
-    void loadSites();
     return () => {
       active = false;
     };
@@ -349,25 +331,9 @@ export default function CheckoutPage() {
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />
         </div>
-        {sites.length > 0 ? (
-          <div className="mt-3">
-            <label className="mb-1 block text-xs font-medium text-slate-500">
-              Tag this order to a site (optional)
-            </label>
-            <select
-              value={siteId}
-              onChange={(event) => setSiteId(event.target.value)}
-              className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            >
-              <option value="">Unassigned</option>
-              {sites.map((site) => (
-                <option key={site.id} value={site.id}>
-                  {site.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
+        <div className="mt-3 max-w-xs">
+          <SiteSelector value={siteId} onChange={setSiteId} />
+        </div>
       </div>
 
 

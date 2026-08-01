@@ -65,6 +65,12 @@ export async function PATCH(
     if ("gstin" in body) {
       data.gstin = typeof body.gstin === "string" && body.gstin.trim() ? body.gstin.trim() : null;
     }
+    if ("lat" in body) {
+      data.lat = typeof body.lat === "number" && Number.isFinite(body.lat) ? body.lat : null;
+    }
+    if ("lng" in body) {
+      data.lng = typeof body.lng === "number" && Number.isFinite(body.lng) ? body.lng : null;
+    }
     if (body.status === "ACTIVE" || body.status === "ARCHIVED") {
       data.status = body.status as SiteStatus;
     }
@@ -81,10 +87,13 @@ export async function PATCH(
         state: true,
         pincode: true,
         gstin: true,
+        lat: true,
+        lng: true,
         status: true,
         createdAt: true,
       },
     });
+
 
     return NextResponse.json(updated);
   } catch (error) {

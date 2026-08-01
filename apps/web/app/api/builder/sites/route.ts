@@ -26,6 +26,8 @@ export async function GET(request: Request) {
         state: true,
         pincode: true,
         gstin: true,
+        lat: true,
+        lng: true,
         status: true,
         createdAt: true,
         _count: { select: { orders: true } },
@@ -43,11 +45,14 @@ export async function GET(request: Request) {
         state: site.state,
         pincode: site.pincode,
         gstin: site.gstin,
+        lat: site.lat,
+        lng: site.lng,
         status: site.status,
         createdAt: site.createdAt,
         orderCount: site._count.orders,
       }))
     );
+
   } catch (error) {
     console.error("Sites GET error:", error);
     return NextResponse.json({ error: "Failed to fetch sites" }, { status: 500 });
@@ -90,6 +95,8 @@ export async function POST(request: Request) {
         state: typeof body.state === "string" && body.state.trim() ? body.state.trim() : null,
         pincode: typeof body.pincode === "string" && body.pincode.trim() ? body.pincode.trim() : null,
         gstin: typeof body.gstin === "string" && body.gstin.trim() ? body.gstin.trim() : null,
+        lat: typeof body.lat === "number" && Number.isFinite(body.lat) ? body.lat : null,
+        lng: typeof body.lng === "number" && Number.isFinite(body.lng) ? body.lng : null,
       },
       select: {
         id: true,
@@ -100,10 +107,13 @@ export async function POST(request: Request) {
         state: true,
         pincode: true,
         gstin: true,
+        lat: true,
+        lng: true,
         status: true,
         createdAt: true,
       },
     });
+
 
     return NextResponse.json(site, { status: 201 });
   } catch (error) {

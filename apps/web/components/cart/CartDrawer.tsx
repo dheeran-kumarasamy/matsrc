@@ -31,6 +31,8 @@ import { useOverlayStore } from "@/lib/store/overlay-store";
 import { useCartStore } from "@/lib/store/cart-store";
 import { builderApiPost } from "@/lib/api";
 import MapLocationPicker from "./MapLocationPicker";
+import SiteSelector from "@/components/orders/SiteSelector";
+
 
 
 const STEP_LABELS = [
@@ -154,6 +156,7 @@ export default function CartDrawer() {
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [siteId, setSiteId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -226,6 +229,7 @@ export default function CartDrawer() {
         deliveryLat: deliveryLat ?? undefined,
         deliveryLng: deliveryLng ?? undefined,
         deliveryAddress: deliveryAddress.trim() || undefined,
+        siteId: siteId || undefined,
       });
 
       const reference = response.orders?.[0]?.id ?? "submitted";
@@ -389,6 +393,7 @@ export default function CartDrawer() {
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
               </div>
+              <SiteSelector value={siteId} onChange={setSiteId} />
               <p className="text-xs text-slate-400">
                 This is used to route your enquiry to nearby suppliers and estimate freight — it does not commit you to
                 a payment.

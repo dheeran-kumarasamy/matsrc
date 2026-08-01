@@ -1009,7 +1009,13 @@ model Site {
   state       String?
   pincode     String?
   gstin       String?
+  // Optional map pin captured when the site is created/edited (reuses the
+  // same MapLocationPicker component used for order delivery location).
+  // Nullable/additive — existing sites without a pin simply show address text.
+  lat         Float?
+  lng         Float?
   status      SiteStatus @default(ACTIVE)
+
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 

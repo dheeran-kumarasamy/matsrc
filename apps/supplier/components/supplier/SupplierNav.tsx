@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+
 
 const links = [
   { href: "/dashboard", label: "Dashboard" },
@@ -20,11 +22,17 @@ export function SupplierNav() {
     <aside className="panel sticky top-4 h-fit p-4">
       <Link
         href="/dashboard"
-        className="block rounded-xl bg-[linear-gradient(120deg,#1a4f8a,#2778cc)] p-4 text-white transition hover:opacity-90"
+        className="flex items-center gap-3 rounded-xl bg-[linear-gradient(120deg,#1a4f8a,#2778cc)] p-4 text-white transition hover:opacity-90"
       >
-        <p className="text-xs uppercase tracking-[0.2em] text-blue-100">Buildohub.in</p>
-        <h1 className="mt-1 text-xl font-extrabold">Supplier Hub</h1>
+        <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-white p-1">
+          <Image src="/icons/icon-512.png" alt="Buildohub" width={36} height={36} className="h-full w-full object-contain" />
+        </span>
+        <span>
+          <p className="text-xs uppercase tracking-[0.2em] text-blue-100">Buildohub.in</p>
+          <h1 className="mt-1 text-xl font-extrabold">Supplier Hub</h1>
+        </span>
       </Link>
+
 
       <nav className="mt-4 space-y-1">
         {links.map((link) => {

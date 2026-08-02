@@ -101,6 +101,23 @@ function buildApiUrl(path: string) {
   return new URL(`${API_BASE_PATH}${path}`, getServerOrigin()).toString();
 }
 
+// Reads a failed response body (if JSON) to surface the server's actual
+// error message (e.g. "This phone number is already in use by another
+// account") instead of a generic "Builder API post/patch failed: 409" —
+// routes under app/api/builder/* consistently return { message } on error
+// response bodies (see e.g. app/api/builder/update-contact/route.ts).
+async function extractErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const data = await response.clone().json();
+    if (data && typeof data.message === "string" && data.message.trim()) {
+      return data.message;
+    }
+  } catch {
+    // Response body wasn't JSON (or was empty) — fall back below.
+  }
+  return fallback;
+}
+
 export async function builderApiGet<T>(path: string): Promise<T> {
   startGlobalLoading();
   try {
@@ -115,7 +132,8 @@ export async function builderApiGet<T>(path: string): Promise<T> {
     });
 
     if (!response.ok) {
-      throw new ApiError(`Builder API request failed: ${response.status}`, response.status);
+      const message = await extractErrorMessage(response, `Builder API request failed: ${response.status}`);
+      throw new ApiError(message, response.status);
     }
 
     return response.json() as Promise<T>;
@@ -130,7 +148,7 @@ export async function builderApiDelete(path: string): Promise<void> {
   try {
     const userHeaders = await getCurrentUserHeaders();
     if (!userHeaders["X-User-Email"]) {
-      throw new Error("Not authenticated");
+      throw new ApiError("Not authenticated", 401);
     }
 
     const response = await fetch(buildApiUrl(path), {
@@ -139,7 +157,8 @@ export async function builderApiDelete(path: string): Promise<void> {
     });
 
     if (!response.ok) {
-      throw new Error(`Builder API delete failed: ${response.status}`);
+      const message = await extractErrorMessage(response, `Builder API delete failed: ${response.status}`);
+      throw new ApiError(message, response.status);
     }
   } finally {
     stopGlobalLoading();
@@ -151,7 +170,7 @@ export async function builderApiPost<TResponse>(path: string, body: unknown): Pr
   try {
     const userHeaders = await getCurrentUserHeaders();
     if (!userHeaders["X-User-Email"]) {
-      throw new Error("Not authenticated");
+      throw new ApiError("Not authenticated", 401);
     }
 
     const response = await fetch(buildApiUrl(path), {
@@ -164,7 +183,8 @@ export async function builderApiPost<TResponse>(path: string, body: unknown): Pr
     });
 
     if (!response.ok) {
-      throw new Error(`Builder API post failed: ${response.status}`);
+      const message = await extractErrorMessage(response, `Builder API post failed: ${response.status}`);
+      throw new ApiError(message, response.status);
     }
 
     return response.json() as Promise<TResponse>;
@@ -178,7 +198,7 @@ export async function builderApiPatch<TResponse>(path: string, body: unknown): P
   try {
     const userHeaders = await getCurrentUserHeaders();
     if (!userHeaders["X-User-Email"]) {
-      throw new Error("Not authenticated");
+      throw new ApiError("Not authenticated", 401);
     }
 
     const response = await fetch(buildApiUrl(path), {
@@ -191,7 +211,8 @@ export async function builderApiPatch<TResponse>(path: string, body: unknown): P
     });
 
     if (!response.ok) {
-      throw new Error(`Builder API patch failed: ${response.status}`);
+      const message = await extractErrorMessage(response, `Builder API patch failed: ${response.status}`);
+      throw new ApiError(message, response.status);
     }
 
     return response.json() as Promise<TResponse>;

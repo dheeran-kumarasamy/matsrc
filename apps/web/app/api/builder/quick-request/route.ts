@@ -114,16 +114,23 @@ export async function POST(request: Request) {
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
     const body = await request.json().catch(() => ({}));
+    const productId = typeof body.productId === "string" ? body.productId.trim() : "";
+    // `materialName` is still accepted for backward compatibility with the
+    // old free-text nearest-match flow, but the current QuickRequestForm.tsx
+    // now always submits an exact `productId` picked via Category/Brand/
+    // Product dropdowns (admin-configured master data), not free text.
     const materialName = typeof body.materialName === "string" ? body.materialName.trim() : "";
     const quantityLabel = typeof body.quantity === "string" ? body.quantity : "";
     const parsedQuantity = parseQuantityLabel(quantityLabel);
     const quantity = Number.isFinite(parsedQuantity) && parsedQuantity > 0 ? parsedQuantity : 1;
 
-    if (!materialName) {
-      return NextResponse.json({ error: "materialName is required" }, { status: 400 });
+    if (!productId && !materialName) {
+      return NextResponse.json({ error: "productId is required" }, { status: 400 });
     }
 
-    console.log(`[quick-request] request received from user=${user.id} materialName="${materialName}" quantity=${quantity}`);
+    console.log(
+      `[quick-request] request received from user=${user.id} productId="${productId}" materialName="${materialName}" quantity=${quantity}`
+    );
 
     // CRITICAL CACHING RULE: getSupplierListings() uses cache: "no-store" —
     // unchanged, do not touch. See apps/web/lib/listings.ts.
@@ -158,7 +165,43 @@ export async function POST(request: Request) {
 
     const getSupplierRating: SupplierRatingLookup = (supplierId) => ratingLookupMap.get(supplierId) ?? null;
 
-    const matchResult = matchQuickRequest(materialName, matchable, getSupplierRating);
+    let matchResult: ReturnType<typeof matchQuickRequest>;
+
+    if (productId) {
+      // Exact product picked via dropdowns — skip the free-text fuzzy
+      // matching stages entirely and treat the selected active listing as
+      // the single winning group.
+      const selectedMatchable = matchable.find((listing) => listing.id === productId && listing.active);
+
+      if (!selectedMatchable) {
+        console.log(
+          `[quick-request] selected productId not found/active for user=${user.id} productId="${productId}"`
+        );
+        return NextResponse.json(
+          {
+            matched: false,
+            message: "The selected product is no longer available — please choose another.",
+          },
+          { status: 200 }
+        );
+      }
+
+      matchResult = {
+        matched: true,
+        stage: "exact",
+        groups: [
+          {
+            canonicalKey: selectedMatchable.canonicalProductId || selectedMatchable.id,
+            stage: "exact",
+            candidates: [{ listing: selectedMatchable, score: 1 }],
+            winner: selectedMatchable,
+            tieBreakReason: "user-selected product",
+          },
+        ],
+      };
+    } else {
+      matchResult = matchQuickRequest(materialName, matchable, getSupplierRating);
+    }
 
     if (!matchResult.matched || matchResult.groups.length === 0) {
       console.log(`[quick-request] no-match fallback triggered for user=${user.id} materialName="${materialName}"`);

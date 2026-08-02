@@ -6,7 +6,7 @@
 // router.back()-based close behaviour required by the overlay architecture
 // (spec section 5A).
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import EnquiryPanel from "@/components/products/EnquiryPanel";
@@ -22,13 +22,25 @@ type Props = {
 
 export default function ProductQuickView({ product }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
 
   const maxServiceableQty = parseNumericLabel(product.maxServiceableQty);
   const basePrice = parseNumericLabel(product.price);
   const imageUrl = product.images && product.images.length > 0 ? product.images[0] : null;
 
+  // BUG FIX (dual page opening / linked closure): the @modal parallel slot
+  // does not reset itself on client-side navigations to unrelated routes
+  // (only on hard navigations), so this overlay could stay mounted on top
+  // of a different page after the user navigated away, and its
+  // router.back() close would then pop history past that page. Guard on
+  // the live pathname so this overlay self-closes as soon as the URL no
+  // longer matches this product's detail route.
+  if (pathname !== `/products/${product.id}`) {
+    return null;
+  }
 
   function handleOpenChange(open: boolean) {
+
     if (!open) {
       // Overlay close = go back to the PLP that never unmounted underneath.
       router.back();

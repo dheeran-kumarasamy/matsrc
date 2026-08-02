@@ -5,10 +5,11 @@
 // never leaves the page underneath (spec 5A single-page overlay pattern).
 // Rendered via the intercepting route app/(builder)/@modal/(.)orders/page.tsx.
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
+
 
 export type OverlayOrderItem = {
   id: string;
@@ -31,8 +32,21 @@ type Props = {
 
 export default function OrdersListOverlay({ orders, apiError }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
+
+  // BUG FIX (dual page opening / linked closure): the @modal parallel slot
+  // does not reset itself on client-side navigations to unrelated routes
+  // (only on hard navigations), so this overlay could stay mounted on top
+  // of a different page after the user navigated away, and its
+  // router.back() close would then pop history past that page. Guard on
+  // the live pathname so this overlay self-closes as soon as the URL no
+  // longer matches the orders list route.
+  if (pathname !== "/orders") {
+    return null;
+  }
 
   function handleOpenChange(open: boolean) {
+
     if (!open) {
       // Overlay close = go back to whatever page never unmounted underneath.
       router.back();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 // Fetched via this app's own internal proxy route (direct-Prisma
 // implementation, see apps/web/app/api/proxy/public/catalog/[entity]/route.ts)
@@ -54,6 +54,12 @@ function useCatalogOptions(entity: "category" | "brand" | "grade" | "unit") {
   return { options, loading };
 }
 
+// A minimal {category, brand} pair per active listing, used to derive which
+// brands are valid for a given category and vice versa (BUG FIX: bidirectional
+// category<->brand filter dependency). Passed down from the server page,
+// which already has the full listings dataset with both fields.
+type ListingFacet = { category: string; brand: string };
+
 type ProductFiltersProps = {
   selectedCategory?: string;
   selectedBrand?: string;
@@ -61,6 +67,7 @@ type ProductFiltersProps = {
   maxPrice?: string;
   q?: string;
   sort?: string;
+  listingFacets?: ListingFacet[];
 };
 
 // FR-04: Faceted filter bar
@@ -70,6 +77,15 @@ type ProductFiltersProps = {
 // Rendered as a single horizontal line above the product grid (below the
 // persistent header search bar) so every filter + sort control fits on one
 // row on desktop, wrapping gracefully on smaller screens.
+//
+// BUG FIX: Category and Brand now filter each other bidirectionally.
+// Selecting a category disables (greys out, non-clickable) any brand option
+// that has no active listing in that category, and vice versa. Clearing a
+// selection (choosing "All Categories"/"All Brands") restores full options
+// on both sides. This is computed client-side from `listingFacets` (the
+// real category/brand pairs present in the currently active listings),
+// while the actual product filtering on submit remains fully server-driven
+// and unchanged.
 export default function ProductFilters({
   selectedCategory,
   selectedBrand,
@@ -77,9 +93,75 @@ export default function ProductFilters({
   maxPrice,
   q,
   sort,
+  listingFacets = [],
 }: ProductFiltersProps) {
   const { options: categoryOptions, loading: categoriesLoading } = useCatalogOptions("category");
   const { options: brandOptions, loading: brandsLoading } = useCatalogOptions("brand");
+
+  // Controlled state so selecting one filter can react to / reset the other.
+  const [category, setCategory] = useState(selectedCategory ?? "");
+  const [brand, setBrand] = useState(selectedBrand ?? "");
+
+  // Keep local state in sync if the server re-renders with different
+  // searchParams-derived props (e.g. browser back/forward navigation).
+  useEffect(() => {
+    setCategory(selectedCategory ?? "");
+  }, [selectedCategory]);
+  useEffect(() => {
+    setBrand(selectedBrand ?? "");
+  }, [selectedBrand]);
+
+  // Derive category<->brand relationship maps from the real listing data.
+  const { brandsForCategory, categoriesForBrand } = useMemo(() => {
+    const brandsByCategory = new Map<string, Set<string>>();
+    const categoriesByBrand = new Map<string, Set<string>>();
+
+    for (const facet of listingFacets) {
+      const facetCategory = (facet.category ?? "").trim();
+      const facetBrand = (facet.brand ?? "").trim();
+      if (!facetCategory || !facetBrand) continue;
+
+      const categoryKey = facetCategory.toLowerCase();
+      const brandKey = facetBrand.toLowerCase();
+
+      if (!brandsByCategory.has(categoryKey)) brandsByCategory.set(categoryKey, new Set());
+      brandsByCategory.get(categoryKey)!.add(brandKey);
+
+      if (!categoriesByBrand.has(brandKey)) categoriesByBrand.set(brandKey, new Set());
+      categoriesByBrand.get(brandKey)!.add(categoryKey);
+    }
+
+    return { brandsForCategory: brandsByCategory, categoriesForBrand: categoriesByBrand };
+  }, [listingFacets]);
+
+  // Options enabled for the Brand select, given the currently selected category.
+  const allowedBrandKeys = category ? brandsForCategory.get(category.toLowerCase()) : undefined;
+  // Options enabled for the Category select, given the currently selected brand.
+  const allowedCategoryKeys = brand ? categoriesForBrand.get(brand.toLowerCase()) : undefined;
+
+  function handleCategoryChange(nextCategory: string) {
+    setCategory(nextCategory);
+    // If the currently selected brand is no longer valid for the new
+    // category, clear it so the user isn't stuck with a mismatched pair.
+    if (nextCategory && brand) {
+      const validBrands = brandsForCategory.get(nextCategory.toLowerCase());
+      if (validBrands && !validBrands.has(brand.toLowerCase())) {
+        setBrand("");
+      }
+    }
+  }
+
+  function handleBrandChange(nextBrand: string) {
+    setBrand(nextBrand);
+    // If the currently selected category is no longer valid for the new
+    // brand, clear it so the user isn't stuck with a mismatched pair.
+    if (nextBrand && category) {
+      const validCategories = categoriesForBrand.get(nextBrand.toLowerCase());
+      if (validCategories && !validCategories.has(category.toLowerCase())) {
+        setCategory("");
+      }
+    }
+  }
 
   return (
     <form
@@ -94,16 +176,20 @@ export default function ProductFilters({
         <label className="mb-1 block text-[11px] font-medium text-slate-500">Category</label>
         <select
           name="category"
-          defaultValue={selectedCategory ?? ""}
+          value={category}
+          onChange={(e) => handleCategoryChange(e.target.value)}
           disabled={categoriesLoading}
           className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
         >
           <option value="">All Categories</option>
-          {categoryOptions.map((c) => (
-            <option key={c.id} value={c.name}>
-              {c.name}
-            </option>
-          ))}
+          {categoryOptions.map((c) => {
+            const disabled = allowedCategoryKeys ? !allowedCategoryKeys.has(c.name.toLowerCase()) : false;
+            return (
+              <option key={c.id} value={c.name} disabled={disabled}>
+                {c.name}
+              </option>
+            );
+          })}
         </select>
       </div>
 
@@ -112,16 +198,20 @@ export default function ProductFilters({
         <label className="mb-1 block text-[11px] font-medium text-slate-500">Brand</label>
         <select
           name="brand"
-          defaultValue={selectedBrand ?? ""}
+          value={brand}
+          onChange={(e) => handleBrandChange(e.target.value)}
           disabled={brandsLoading}
           className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
         >
           <option value="">All Brands</option>
-          {brandOptions.map((b) => (
-            <option key={b.id} value={b.name}>
-              {b.name}
-            </option>
-          ))}
+          {brandOptions.map((b) => {
+            const disabled = allowedBrandKeys ? !allowedBrandKeys.has(b.name.toLowerCase()) : false;
+            return (
+              <option key={b.id} value={b.name} disabled={disabled}>
+                {b.name}
+              </option>
+            );
+          })}
         </select>
       </div>
 

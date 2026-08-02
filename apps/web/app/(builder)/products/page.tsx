@@ -39,7 +39,18 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
 
   let filtered = allListings.filter((listing) => listing.active);
 
+  // Category/Brand cross-filter dependency data (BUG fix): a lightweight
+  // {category, brand} pair list derived from the *full* active listings
+  // set (before category/brand narrowing below), passed to ProductFilters
+  // so it can compute which brands are valid for a selected category and
+  // vice versa, and disable the options that don't apply.
+  const listingFacets = filtered.map((listing) => ({
+    category: listing.category,
+    brand: listing.brand ?? "",
+  }));
+
   // Collapse cross-supplier duplicate listings for the same canonical
+
   // product into a single card, priced at the group's lowest price
   // (headlinePrice) — fixes the Display bug from the cross-supplier price
   // resolution spec. Done BEFORE search/filter/sort so those operate on the
@@ -134,7 +145,9 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
           maxPrice={maxPriceRaw}
           q={q}
           sort={sort}
+          listingFacets={listingFacets}
         />
+
       </div>
 
 

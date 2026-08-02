@@ -6,9 +6,10 @@
 // pattern). Rendered via the intercepting route
 // app/(builder)/@modal/(.)orders/[id]/page.tsx.
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OrderTimeline from "@/components/orders/OrderTimeline";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
@@ -65,8 +66,15 @@ type Props = {
 // builder sees a retryable error rather than a permanent-looking 404 page.
 export function OrderDetailErrorOverlay({ orderId }: { orderId: string }) {
   const router = useRouter();
+  const pathname = usePathname();
+
+  // BUG FIX (dual page opening / linked closure): see OrderDetailOverlay below.
+  if (pathname !== `/orders/${orderId}`) {
+    return null;
+  }
 
   function handleOpenChange(open: boolean) {
+
     if (!open) {
       router.back();
     }
@@ -95,9 +103,21 @@ export function OrderDetailErrorOverlay({ orderId }: { orderId: string }) {
 
 export default function OrderDetailOverlay({ order }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
 
+  // BUG FIX (dual page opening / linked closure): the @modal parallel slot
+  // does not reset itself on client-side navigations to unrelated routes
+  // (only on hard navigations), so this overlay could stay mounted on top
+  // of a different page after the user navigated away, and its
+  // router.back() close would then pop history past that page. Guard on
+  // the live pathname so this overlay self-closes as soon as the URL no
+  // longer matches this order's detail route.
+  if (pathname !== `/orders/${order.id}`) {
+    return null;
+  }
 
   function handleOpenChange(open: boolean) {
+
     if (!open) {
       // Overlay close = go back to whatever page never unmounted underneath.
       router.back();

@@ -248,7 +248,7 @@ function buildSingleVoucherXml(voucher: TallyVoucherInput, mapping: TallyLedgerM
       <VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>
       <VOUCHERNUMBER>${escapeXml(voucherNumber)}</VOUCHERNUMBER>
       <PARTYLEDGERNAME>${escapeXml(partyLedger)}</PARTYLEDGERNAME>
-      <NARRATION>Matsrc order ${escapeXml(voucher.orderId)}</NARRATION>
+      <NARRATION>Buildohub order ${escapeXml(voucher.orderId)}</NARRATION>
 ${inventoryEntries}
 ${ledgerEntries.join("\n")}
      </VOUCHER>

@@ -29,7 +29,7 @@ const STATUS_COPY: Record<BuilderOrderStatus, { title: string; body: (supplierNa
   },
   DELIVERED: {
     title: "Order delivered",
-    body: (supplierName) => `Your order from ${supplierName} has been delivered. Thank you for using Matsrc.`,
+    body: (supplierName) => `Your order from ${supplierName} has been delivered. Thank you for using Buildohub.`,
     templateType: "ORDER_DELIVERED",
   },
   CANCELLED: {

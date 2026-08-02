@@ -200,7 +200,7 @@ export class WhatsAppRouterService {
   private mainMenuMessage(): BotMessage {
     return {
       kind: "list",
-      header: "Matsrc Supplier Bot",
+      header: "Buildohub Supplier Bot",
       body: "How can I help you today?",
       buttonLabel: "View Options",
       rows: MAIN_MENU_ROWS.map((row) => ({ id: row.id, title: row.title, description: row.description })),
@@ -211,7 +211,7 @@ export class WhatsAppRouterService {
   private registrationRequiredMessage(): BotMessage {
     return {
       kind: "text",
-      text: `We couldn't find a Matsrc supplier account linked to this WhatsApp number.\nRegister or update your contact number here: ${this.authService.getRegistrationLink()}`,
+      text: `We couldn't find a Buildohub supplier account linked to this WhatsApp number.\nRegister or update your contact number here: ${this.authService.getRegistrationLink()}`,
     };
   }
 

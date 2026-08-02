@@ -28,7 +28,7 @@ export default function ReportsPage() {
             <div>
               <h3 className="text-sm font-bold text-blue-900">Site-wise Purchase Report</h3>
               <p className="mt-1 text-xs text-blue-700">
-                Everything purchased through Matsrc, broken down by construction site — with CSV/XLSX/PDF
+                Everything purchased through Buildohub, broken down by construction site — with CSV/XLSX/PDF
                 export and Tally XML export for your accountant.
               </p>
             </div>

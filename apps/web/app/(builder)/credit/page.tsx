@@ -235,7 +235,7 @@ export default function CreditPage() {
             <p><strong>Processing Fee:</strong> 1% of disbursed amount + GST</p>
             <p><strong>Repayment:</strong> 30, 60, or 90 days from order date</p>
             <p><strong>Penal Charges:</strong> 2% per month on overdue amount</p>
-            <p><strong>Grievance Officer:</strong> grievance@matsrc.in</p>
+            <p><strong>Grievance Officer:</strong> grievance@buildohub.in</p>
           </div>
           <label className="flex items-start gap-3 cursor-pointer">
             <input type="checkbox" className="mt-0.5 accent-blue-700" />

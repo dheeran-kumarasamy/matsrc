@@ -76,7 +76,7 @@ describe("TwilioSupplierSendAdapter", () => {
 
     await adapter.send("919876543210", {
       kind: "list",
-      header: "Matsrc Supplier Bot",
+      header: "Buildohub Supplier Bot",
       body: "How can I help you today?",
       rows: [
         { id: "PRICE_UPDATE", title: "Update Product Price", description: "Change price" },
@@ -85,7 +85,7 @@ describe("TwilioSupplierSendAdapter", () => {
     });
 
     const callArgs = createMock.mock.calls[0][0];
-    expect(callArgs.body).toContain("Matsrc Supplier Bot");
+    expect(callArgs.body).toContain("Buildohub Supplier Bot");
     expect(callArgs.body).toContain("How can I help you today?");
     // Single numbering source (adapter-injected index), no "N. N." duplication.
     expect(callArgs.body).toContain("1. Update Product Price — Change price");

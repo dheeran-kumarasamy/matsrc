@@ -96,7 +96,7 @@ export default function SiteWiseReportPage() {
           </Link>
           <h1 className="mt-1 text-2xl font-semibold text-slate-900">Site-wise Purchase Report</h1>
           <p className="text-sm text-slate-500">
-            Everything you've purchased through Matsrc, broken down by construction site.
+            Everything you've purchased through Buildohub, broken down by construction site.
           </p>
         </div>
       </div>

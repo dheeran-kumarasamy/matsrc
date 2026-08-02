@@ -107,7 +107,7 @@ export async function GET(request: Request) {
 
     if (format === "xlsx") {
       const workbook = new ExcelJS.Workbook();
-      workbook.creator = "Matsrc";
+      workbook.creator = "Buildohub";
       workbook.created = new Date();
 
       const summarySheet = workbook.addWorksheet("Summary");

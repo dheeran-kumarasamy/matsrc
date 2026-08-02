@@ -98,7 +98,7 @@ describe("MetaCloudApiSendAdapter", () => {
 
     const message: BotMessage = {
       kind: "list",
-      header: "Matsrc Supplier Bot",
+      header: "Buildohub Supplier Bot",
       body: "How can I help you today?",
       buttonLabel: "View Options",
       rows: [
@@ -110,7 +110,7 @@ describe("MetaCloudApiSendAdapter", () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.type).toBe("interactive");
     expect(body.interactive.type).toBe("list");
-    expect(body.interactive.header).toEqual({ type: "text", text: "Matsrc Supplier Bot" });
+    expect(body.interactive.header).toEqual({ type: "text", text: "Buildohub Supplier Bot" });
     expect(body.interactive.action.button).toBe("View Options");
     expect(body.interactive.action.sections[0].rows[0]).toEqual({
       id: "PRICE_UPDATE",

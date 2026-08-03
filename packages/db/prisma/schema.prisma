@@ -355,7 +355,34 @@ model PriceSnapshot {
 }
 
 
+// Server-side cache for the "live market intelligence" module (§3.6 of the
+// price-report feature) — stores the structured JSON result of an
+// Anthropic web-search-grounded market analysis, keyed by material category
+// + region. Deliberately the ONE place in the price-report feature that is
+// cached server-side with a TTL: a live web-search LLM call is expensive
+// and slow, so every page view must NOT trigger one. Refreshed on TTL
+// expiry (expiresAt) or via the rate-limited manual refresh endpoint,
+// whichever comes first. This is unrelated to (and must never be conflated
+// with) the public listings route's no-store/dynamic caching rule — that
+// route intentionally has NO caching because stale SKUs caused a production
+// incident; this route intentionally DOES cache because it fronts a
+// slow/costly external LLM+web-search call, not first-party live inventory.
+model MarketInsightCache {
+  id          String   @id @default(cuid())
+  category    String   // material category, e.g. "TMT bar", "OPC cement"
+  region      String   // free-text region key (see Region note below)
+  driversJson Json     // structured list of 3-5 market drivers
+  outlook     String   // short outlook paragraph (model-paraphrased, never a verbatim quote)
+  sources     Json     // [{ name, url }] attribution list
+  generatedAt DateTime @default(now())
+  expiresAt   DateTime
+
+  @@unique([category, region])
+  @@index([expiresAt])
+}
+
 model Watchlist {
+
   id             String   @id @default(cuid())
   userId         String
   user           User     @relation(fields: [userId], references: [id])

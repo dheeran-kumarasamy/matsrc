@@ -130,8 +130,25 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
             </div>
           </div>
           {product.canonicalProductId ? (
-            <PriceIntelligenceSection canonicalProductId={product.canonicalProductId} />
+            <>
+              <PriceIntelligenceSection canonicalProductId={product.canonicalProductId} />
+              <div className="panel flex items-center justify-between p-5">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Price Desk</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Buy/Hold/Wait signal, forecast, landed cost across suppliers, and live market intelligence.
+                  </p>
+                </div>
+                <Link
+                  href={`/products/${params.slug}/report`}
+                  className="whitespace-nowrap rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
+                >
+                  Open Price Report
+                </Link>
+              </div>
+            </>
           ) : null}
+
         </section>
 
         <aside className="space-y-4">

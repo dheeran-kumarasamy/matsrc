@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
     "@matsrc/db": "workspace:*",
     "@matsrc/ui": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.19",

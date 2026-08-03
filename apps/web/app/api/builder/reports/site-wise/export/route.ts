@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import { getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
 import { getSiteWiseReportData } from "@/lib/site-wise-report";
 import type { SiteWiseReportFilters } from "@/lib/reports-types";
 
@@ -47,7 +47,7 @@ function escapeHtml(value: string | number): string {
 // from the shared getSiteWiseReportData aggregation logic (no client totals).
 export async function GET(request: Request) {
   try {
-    const ctx = getUserCtx(request);
+    const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
     const url = new URL(request.url);

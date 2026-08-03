@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { prisma, getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
 import { buildVouchersForBuilder } from "@/lib/tally-vouchers";
 import { buildTallyImportXml, validateVouchers } from "@/lib/tally-xml";
 
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 // download, but this route re-validates regardless as the authoritative check.
 export async function GET(request: Request) {
   try {
-    const ctx = getUserCtx(request);
+    const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
     const url = new URL(request.url);

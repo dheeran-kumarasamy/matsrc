@@ -5,11 +5,16 @@ import type { ReportDefinition } from "@/lib/reports-types";
 // - Material Consumption Report: Order/OrderItem history — real, queryable.
 // - Best Supplier Pricing: CanonicalProduct cross-supplier grouping — real.
 // - Potential Cost Savings: derived from the two reports above — real.
-// - Live Market Prices / Regional Price Comparison / AI Recommendation:
-//   no live cross-supplier aggregation service or region metadata exists.
-// - Historical Price Trends: the `PricePoint` model exists in schema but is
-//   never written to anywhere in the codebase (dead/empty table) — treated
-//   as unavailable rather than shipping a report that always renders empty.
+// - Live Market Prices: live public listings feed, scoped to canonical
+//   products the builder has ordered before — real.
+// - Regional Price Comparison / Historical Price Trends: backed by the
+//   `PriceSnapshot` append-only price time series (actively written to on
+//   listing create/reprice, RFQ acceptance, and order placement) — real.
+//   Note: the legacy `PricePoint` model is still dead/unused; these reports
+//   read from `PriceSnapshot` instead.
+// - AI Recommendation: no LLM-backed buy/hold/wait wiring exists yet for
+//   this report card.
+
 export const REPORT_DEFINITIONS: ReportDefinition[] = [
   {
     id: "material-consumption",
@@ -23,22 +28,23 @@ export const REPORT_DEFINITIONS: ReportDefinition[] = [
     title: "Live Market Prices",
     description: "Current prices for materials across active suppliers, updated in real time.",
     dataSource: "Live feed",
-    available: false,
+    available: true,
   },
   {
     id: "regional-price-comparison",
     title: "Regional Price Comparison",
     description: "Compare prices for the same material across different regions and cities.",
     dataSource: "Live feed",
-    available: false,
+    available: true,
   },
   {
     id: "historical-price-trends",
     title: "Historical Price Trends",
     description: "How material prices have moved over the past weeks and months.",
     dataSource: "Historical data",
-    available: false,
+    available: true,
   },
+
   {
     id: "best-supplier-pricing",
     title: "Best Supplier Pricing",

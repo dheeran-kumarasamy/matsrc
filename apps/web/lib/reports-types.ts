@@ -55,8 +55,57 @@ export type CostSavingsSummary = {
 };
 
 // ─────────────────────────────────────────────
+// Live Market Prices / Regional Price Comparison / Historical Price Trends
+// Basic Reports (backed by the PriceSnapshot append-only price time series,
+// scoped to canonical products the builder has ordered before — same
+// canonical-product scoping pattern as Best Supplier Pricing).
+// ─────────────────────────────────────────────
+
+export type LiveMarketPriceOffer = {
+  supplierId: string;
+  supplierName: string;
+  price: number;
+};
+
+export type LiveMarketPriceRow = {
+  canonicalKey: string;
+  name: string;
+  unit: string;
+  offers: LiveMarketPriceOffer[];
+  lowestPrice: number;
+  highestPrice: number;
+};
+
+export type RegionalPriceComparisonRegion = {
+  region: string;
+  averagePrice: number;
+  sampleSize: number;
+};
+
+export type RegionalPriceComparisonRow = {
+  canonicalKey: string;
+  name: string;
+  unit: string;
+  regions: RegionalPriceComparisonRegion[];
+};
+
+export type HistoricalPriceTrendPoint = {
+  period: string; // YYYY-MM
+  averagePrice: number;
+  sampleSize: number;
+};
+
+export type HistoricalPriceTrendRow = {
+  canonicalKey: string;
+  name: string;
+  unit: string;
+  points: HistoricalPriceTrendPoint[];
+};
+
+// ─────────────────────────────────────────────
 // Site-wise Purchase Report (Feature A)
 // ─────────────────────────────────────────────
+
 
 export type SiteWiseReportFilters = {
   siteId?: string; // "all" | "unassigned" | <site id>

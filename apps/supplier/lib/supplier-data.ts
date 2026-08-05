@@ -291,7 +291,127 @@ export async function getMarketScrollerData(email: string): Promise<MarketScroll
   return items;
 }
 
+// ─────────────────────────────────────────────
+// District-Wise Price Intelligence (Phase 5) — surfaces the Apify-scraped
+// serving layer (PricingDistrictPriceDaily / PricingTrendMonthly) to
+// suppliers, scoped to materials matching their own active listing
+// categories. Matched either directly (PricingCanonicalSku.matsrcListingId
+// pointing at one of the supplier's own product ids) or, when no direct
+// match exists, by case-insensitive material-category-name match against
+// the supplier's active listing categories — so the widget is never empty
+// just because the direct-listing link hasn't been set up yet. Read-only;
+// only rows explicitly marked publicDisplayAllowed are ever surfaced (same
+// gating rule as the NestJS PublicPricingController / builder report).
+// ─────────────────────────────────────────────
+
+export type SupplierDistrictPriceTrendPoint = {
+  monthStart: string;
+  medianPerBaseUnit: number;
+  momChangePct: number | null;
+};
+
+export type SupplierDistrictPriceRow = {
+  canonicalSkuCode: string;
+  materialName: string;
+  districtCode: string;
+  districtName: string;
+  baseUnit: string;
+  latestPriceDate: string;
+  medianPerBaseUnit: number;
+  minPerBaseUnit: number | null;
+  maxPerBaseUnit: number | null;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  matsrcMedianPerBaseUnit: number | null;
+  trend: SupplierDistrictPriceTrendPoint[];
+};
+
+export async function getSupplierDistrictPricing(email: string): Promise<SupplierDistrictPriceRow[]> {
+  const { supplierProfile } = await ensureSupplierContext(email);
+
+  const myProducts = await prisma.product.findMany({
+    where: { supplierId: supplierProfile.id, isActive: true },
+    select: { id: true, category: { select: { name: true } } },
+  });
+  if (myProducts.length === 0) return [];
+
+  const myProductIds = myProducts.map((p) => p.id);
+  const myCategoryNames = Array.from(
+    new Set(myProducts.map((p) => p.category?.name).filter((n): n is string => Boolean(n)))
+  );
+
+  let canonicalSkus = await prisma.pricingCanonicalSku.findMany({
+    where: { matsrcListingId: { in: myProductIds } },
+    select: { id: true, code: true, materialCategory: { select: { name: true } } },
+  });
+
+  if (canonicalSkus.length === 0 && myCategoryNames.length > 0) {
+    canonicalSkus = await prisma.pricingCanonicalSku.findMany({
+      where: {
+        isActive: true,
+        materialCategory: { name: { in: myCategoryNames, mode: "insensitive" } },
+      },
+      select: { id: true, code: true, materialCategory: { select: { name: true } } },
+      take: 50,
+    });
+  }
+
+  if (canonicalSkus.length === 0) return [];
+
+  const canonicalSkuIds = canonicalSkus.map((s) => s.id);
+  const skuById = new Map(canonicalSkus.map((s) => [s.id, s]));
+
+  const latestDaily = await prisma.pricingDistrictPriceDaily.findMany({
+    where: { canonicalSkuId: { in: canonicalSkuIds }, publicDisplayAllowed: true },
+    orderBy: { priceDate: "desc" },
+    take: 300,
+    include: { district: { select: { id: true, code: true, name: true } } },
+  });
+
+  const latestByKey = new Map<string, (typeof latestDaily)[number]>();
+  for (const row of latestDaily) {
+    const key = `${row.canonicalSkuId}:${row.districtId}`;
+    if (!latestByKey.has(key)) latestByKey.set(key, row);
+  }
+
+  const rows: SupplierDistrictPriceRow[] = [];
+  for (const row of latestByKey.values()) {
+    const sku = skuById.get(row.canonicalSkuId);
+    if (!sku) continue;
+
+    const trendRows = await prisma.pricingTrendMonthly.findMany({
+      where: { canonicalSkuId: row.canonicalSkuId, districtId: row.districtId },
+      orderBy: { monthStart: "desc" },
+      take: 6,
+    });
+
+    rows.push({
+      canonicalSkuCode: sku.code,
+      materialName: sku.materialCategory?.name ?? sku.code,
+      districtCode: row.district.code,
+      districtName: row.district.name,
+      baseUnit: row.baseUnit,
+      latestPriceDate: row.priceDate.toISOString().slice(0, 10),
+      medianPerBaseUnit: Number(row.medianPerBaseUnit),
+      minPerBaseUnit: row.minPerBaseUnit !== null ? Number(row.minPerBaseUnit) : null,
+      maxPerBaseUnit: row.maxPerBaseUnit !== null ? Number(row.maxPerBaseUnit) : null,
+      confidence: row.confidence,
+      matsrcMedianPerBaseUnit:
+        row.matsrcMedianPerBaseUnit !== null ? Number(row.matsrcMedianPerBaseUnit) : null,
+      trend: trendRows.map((t) => ({
+        monthStart: t.monthStart.toISOString().slice(0, 10),
+        medianPerBaseUnit: Number(t.medianPerBaseUnit),
+        momChangePct: t.momChangePct !== null ? Number(t.momChangePct) : null,
+      })),
+    });
+  }
+
+  rows.sort((a, b) => a.materialName.localeCompare(b.materialName) || a.districtName.localeCompare(b.districtName));
+
+  return rows;
+}
+
 export async function getSupplierDashboardData(email: string) {
+
   const { supplierProfile } = await ensureSupplierContext(email);
 
   const [activeListings, confirmedIncomingOrders, pendingEnquiries, servedOrders, servedOrderItems] = await Promise.all([

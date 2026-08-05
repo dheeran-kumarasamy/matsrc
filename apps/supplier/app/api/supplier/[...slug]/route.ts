@@ -16,7 +16,9 @@ import {
   getSupplierAggregationPools,
   forceLockAggregationPool,
   updateListingAggregationSettings,
+  getSupplierDistrictPricing,
 } from "@/lib/supplier-data";
+
 
 
 
@@ -58,6 +60,9 @@ export async function GET(req: NextRequest) {
     } else if (path === "/aggregation/pools") {
       const pools = await getSupplierAggregationPools(email);
       return NextResponse.json(pools);
+    } else if (path === "/district-pricing") {
+      const rows = await getSupplierDistrictPricing(email);
+      return NextResponse.json(rows);
     } else {
       const poMatch = path.match(/^\/purchase-orders\/([^/]+)$/);
 

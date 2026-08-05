@@ -66,4 +66,12 @@ export const REPORT_DEFINITIONS: ReportDefinition[] = [
     dataSource: "Account data",
     available: true,
   },
+  {
+    id: "district-price-intelligence",
+    title: "District-Wise Price Intelligence",
+    description: "Latest median prices and 6-month trends for materials across Tamil Nadu districts, scoped to your project sites.",
+    dataSource: "Historical data",
+    available: true,
+  },
 ];
+

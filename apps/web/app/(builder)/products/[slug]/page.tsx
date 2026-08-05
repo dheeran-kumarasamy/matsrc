@@ -4,6 +4,8 @@ import EnquiryPanel from "@/components/products/EnquiryPanel";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import WatchlistButton from "@/components/products/WatchlistButton";
 import PriceIntelligenceSection from "@/components/products/PriceIntelligenceSection";
+import DistrictPriceIntelligencePanel from "@/components/products/district-pricing/DistrictPriceIntelligencePanel";
+
 import { getCategoryEmoji } from "@/lib/category-images";
 
 import { getSupplierListings, parseNumericLabel, type SupplierListing } from "@/lib/listings";
@@ -132,6 +134,10 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
           {product.canonicalProductId ? (
             <>
               <PriceIntelligenceSection canonicalProductId={product.canonicalProductId} />
+              <DistrictPriceIntelligencePanel
+                canonicalProductId={product.canonicalProductId}
+                basePrice={basePrice}
+              />
               <div className="panel flex items-center justify-between p-5">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Price Desk</h2>

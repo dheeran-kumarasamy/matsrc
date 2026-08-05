@@ -63,3 +63,35 @@ export async function getAnchoring(listingId: string) {
     lockedPercent: number | null;
   }>;
 }
+
+// Additive (Phase 6A) — District Price Intelligence panel analytics. Not a
+// generic analytics system; a minimal, purpose-built tracker backed by the
+// existing AuditLog model via a dedicated builder API route (no new Prisma
+// model, no new library). Fire-and-forget: tracking failures never affect UX.
+export type PriceIntelligenceEventType =
+  | "PANEL_OPENED"
+  | "DISTRICT_CHANGED"
+  | "COMPARISON_VIEWED"
+  | "CSV_DOWNLOADED"
+  | "TREND_RANGE_CHANGED"
+  | "QUOTE_REQUESTED";
+
+export async function recordPriceIntelligenceEvent(
+  canonicalProductId: string,
+  eventType: PriceIntelligenceEventType,
+  metadata?: Record<string, unknown>
+) {
+  if (!canonicalProductId || typeof window === "undefined") return;
+
+  try {
+    await fetch("/api/builder/analytics/price-intelligence-event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ canonicalProductId, eventType, metadata }),
+      keepalive: true,
+    });
+  } catch {
+    // Fire-and-forget tracking; failures should not block UX.
+  }
+}
+

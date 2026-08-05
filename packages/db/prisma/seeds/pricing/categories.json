@@ -1,0 +1,190 @@
+[
+  {
+    "code": "CEMENT",
+    "name": "Cement",
+    "baseUnit": "KG",
+    "displayUnit": "BAG",
+    "displayLabel": "per bag (50 kg)",
+    "gstRatePct": null,
+    "hsnCode": null,
+    "needsVerification": true,
+    "verificationNote": "gstRatePct/hsnCode must be sourced from the current CBIC GST rate schedule/HSN classification, not fabricated. Cement historically sits at 28% GST but sub-classifications exist; store the CBIC notification reference alongside the rate once confirmed.",
+    "floorPerBaseUnit": null,
+    "ceilingPerBaseUnit": null,
+    "children": [
+      { "code": "CEMENT_OPC_43", "name": "OPC 43" },
+      { "code": "CEMENT_OPC_53", "name": "OPC 53" },
+      { "code": "CEMENT_PPC", "name": "PPC" }
+    ]
+  },
+  {
+    "code": "TMT_STEEL",
+    "name": "TMT Steel",
+    "baseUnit": "KG",
+    "displayUnit": "KG",
+    "displayLabel": "per kg",
+    "gstRatePct": null,
+    "hsnCode": null,
+    "needsVerification": true,
+    "verificationNote": "gstRatePct/hsnCode must be sourced from the current CBIC GST rate schedule/HSN classification (TMT bars have historically been 18%, HSN 7214-series, but must be confirmed against the live notification before being trusted downstream).",
+    "floorPerBaseUnit": null,
+    "ceilingPerBaseUnit": null,
+    "children": [
+      { "code": "TMT_STEEL_FE500", "name": "Fe 500" },
+      { "code": "TMT_STEEL_FE500D", "name": "Fe 500D" },
+      { "code": "TMT_STEEL_FE550", "name": "Fe 550" }
+    ]
+  },
+  {
+    "code": "SAND",
+    "name": "Sand",
+    "baseUnit": "CFT",
+    "displayUnit": "CFT",
+    "displayLabel": "per unit (100 cft)",
+    "gstRatePct": null,
+    "hsnCode": null,
+    "needsVerification": true,
+    "verificationNote": "gstRatePct/hsnCode must be sourced from the current CBIC GST rate schedule/HSN classification before being trusted downstream.",
+    "floorPerBaseUnit": null,
+    "ceilingPerBaseUnit": null,
+    "children": [
+      { "code": "SAND_RIVER", "name": "River sand" },
+      { "code": "SAND_M", "name": "M-sand" },
+      { "code": "SAND_P", "name": "P-sand" }
+    ]
+  },
+  {
+    "code": "COARSE_AGGREGATE",
+    "name": "Coarse Aggregate",
+    "baseUnit": "CFT",
+    "displayUnit": "CFT",
+    "displayLabel": "per unit (100 cft)",
+    "gstRatePct": null,
+    "hsnCode": null,
+    "needsVerification": true,
+    "verificationNote": "gstRatePct/hsnCode must be sourced from the current CBIC GST rate schedule/HSN classification before being trusted downstream.",
+    "floorPerBaseUnit": null,
+    "ceilingPerBaseUnit": null,
+    "children": [
+      { "code": "COARSE_AGGREGATE_20MM", "name": "20 mm blue metal" },
+      { "code": "COARSE_AGGREGATE_40MM", "name": "40 mm blue metal" }
+    ]
+  },
+  {
+    "code": "BRICKS_BLOCKS",
+    "name": "Bricks & Blocks",
+    "baseUnit": "PIECE",
+    "displayUnit": "PIECE",
+    "displayLabel": "per piece",
+    "gstRatePct": null,
+    "hsnCode": null,
+    "needsVerification": true,
+    "verificationNote": "gstRatePct/hsnCode must be sourced from the current CBIC GST rate schedule/HSN classification before being trusted downstream — bricks, wire-cut, fly-ash, AAC and solid/hollow blocks may sit in different sub-classifications.",
+    "floorPerBaseUnit": null,
+    "ceilingPerBaseUnit": null,
+    "children": [
+      { "code": "BRICKS_RED", "name": "Red bricks" },
+      { "code": "BRICKS_WIRE_CUT", "name": "Wire-cut bricks" },
+      { "code": "BRICKS_FLY_ASH", "name": "Fly-ash bricks" },
+      { "code": "BLOCKS_AAC", "name": "AAC blocks" },
+      { "code": "BLOCKS_SOLID", "name": "Solid blocks" },
+      { "code": "BLOCKS_HOLLOW", "name": "Hollow blocks" }
+    ]
+  },
+  {
+    "code": "RMC",
+    "name": "Ready-Mix Concrete",
+    "baseUnit": "CUM",
+    "displayUnit": "CUM",
+    "displayLabel": "per cubic metre",
+    "gstRatePct": null,
+    "hsnCode": null,
+    "needsVerification": true,
+    "verificationNote": "gstRatePct/hsnCode must be sourced from the current CBIC GST rate schedule/HSN classification before being trusted downstream.",
+    "floorPerBaseUnit": null,
+    "ceilingPerBaseUnit": null,
+    "children": [
+      { "code": "RMC_M20", "name": "M20" },
+      { "code": "RMC_M25", "name": "M25" },
+      { "code": "RMC_M30", "name": "M30" }
+    ]
+  },
+  {
+    "code": "TILES",
+    "name": "Tiles",
+    "baseUnit": "SQFT",
+    "displayUnit": "SQFT",
+    "displayLabel": "per sq ft",
+    "gstRatePct": null,
+    "hsnCode": null,
+    "needsVerification": true,
+    "verificationNote": "gstRatePct/hsnCode must be sourced from the current CBIC GST rate schedule/HSN classification before being trusted downstream.",
+    "floorPerBaseUnit": null,
+    "ceilingPerBaseUnit": null,
+    "children": [
+      { "code": "TILES_FLOOR", "name": "Floor tiles" },
+      { "code": "TILES_WALL", "name": "Wall tiles" },
+      { "code": "TILES_VITRIFIED", "name": "Vitrified tiles" }
+    ]
+  },
+  {
+    "code": "PAINT",
+    "name": "Paint",
+    "baseUnit": "LITRE",
+    "displayUnit": "LITRE",
+    "displayLabel": "per litre",
+    "gstRatePct": null,
+    "hsnCode": null,
+    "needsVerification": true,
+    "verificationNote": "gstRatePct/hsnCode must be sourced from the current CBIC GST rate schedule/HSN classification before being trusted downstream.",
+    "floorPerBaseUnit": null,
+    "ceilingPerBaseUnit": null,
+    "children": [
+      { "code": "PAINT_PRIMER", "name": "Primer" },
+      { "code": "PAINT_EMULSION", "name": "Emulsion" },
+      { "code": "PAINT_ENAMEL", "name": "Enamel" }
+    ]
+  },
+  {
+    "code": "PLUMBING",
+    "name": "Plumbing",
+    "baseUnit": "RFT",
+    "displayUnit": "RFT",
+    "displayLabel": "per running foot",
+    "gstRatePct": null,
+    "hsnCode": null,
+    "needsVerification": true,
+    "verificationNote": "gstRatePct/hsnCode must be sourced from the current CBIC GST rate schedule/HSN classification before being trusted downstream (PVC/CPVC pipe by diameter).",
+    "floorPerBaseUnit": null,
+    "ceilingPerBaseUnit": null,
+    "children": []
+  },
+  {
+    "code": "ELECTRICAL",
+    "name": "Electrical",
+    "baseUnit": "RFT",
+    "displayUnit": "RFT",
+    "displayLabel": "per running foot",
+    "gstRatePct": null,
+    "hsnCode": null,
+    "needsVerification": true,
+    "verificationNote": "gstRatePct/hsnCode must be sourced from the current CBIC GST rate schedule/HSN classification before being trusted downstream (cable by sq mm).",
+    "floorPerBaseUnit": null,
+    "ceilingPerBaseUnit": null,
+    "children": []
+  },
+  {
+    "code": "TIMBER",
+    "name": "Timber",
+    "baseUnit": "CFT",
+    "displayUnit": "CFT",
+    "displayLabel": "per cft",
+    "gstRatePct": null,
+    "hsnCode": null,
+    "needsVerification": true,
+    "verificationNote": "gstRatePct/hsnCode must be sourced from the current CBIC GST rate schedule/HSN classification before being trusted downstream (varies by species).",
+    "floorPerBaseUnit": null,
+    "ceilingPerBaseUnit": null,
+    "children": []
+  }
+]

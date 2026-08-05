@@ -5,7 +5,9 @@ import type {
   LiveMarketPriceRow,
   RegionalPriceComparisonRow,
   HistoricalPriceTrendRow,
+  DistrictPriceIntelligenceRow,
 } from "@/lib/reports-types";
+
 
 type Props = {
   reportId: string;
@@ -34,8 +36,12 @@ export default function ReportResult({ reportId, data }: Props) {
   if (reportId === "historical-price-trends") {
     return <HistoricalPriceTrendResult rows={data as HistoricalPriceTrendRow[]} />;
   }
+  if (reportId === "district-price-intelligence") {
+    return <DistrictPriceIntelligenceResult rows={data as DistrictPriceIntelligenceRow[]} />;
+  }
   return null;
 }
+
 
 
 function MaterialConsumptionResult({ rows }: { rows: MaterialConsumptionRow[] }) {
@@ -249,4 +255,68 @@ function HistoricalPriceTrendResult({ rows }: { rows: HistoricalPriceTrendRow[] 
     </div>
   );
 }
+
+const CONFIDENCE_BADGE_CLASSES: Record<string, string> = {
+  HIGH: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  MEDIUM: "border-amber-200 bg-amber-50 text-amber-700",
+  LOW: "border-slate-200 bg-slate-50 text-slate-600",
+};
+
+function DistrictPriceIntelligenceResult({ rows }: { rows: DistrictPriceIntelligenceRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <p className="text-xs text-slate-400">
+        No district-wise price intelligence available yet. Add a project site with a city to see
+        prices relevant to your locations.
+      </p>
+    );
+  }
+
+  return (
+    <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-slate-100 p-3">
+      {rows.map((row) => (
+        <div key={`${row.canonicalSkuCode}:${row.districtCode}`}>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-slate-800">
+              {row.materialName}{" "}
+              <span className="font-normal text-slate-400">
+                ({row.districtName} · {row.baseUnit})
+              </span>
+            </p>
+            <span
+              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                CONFIDENCE_BADGE_CLASSES[row.confidence] ?? CONFIDENCE_BADGE_CLASSES.LOW
+              }`}
+            >
+              {row.confidence}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            Median ₹{row.medianPerBaseUnit.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+            {row.minPerBaseUnit !== null && row.maxPerBaseUnit !== null
+              ? ` (range ₹${row.minPerBaseUnit.toLocaleString("en-IN", { maximumFractionDigits: 2 })} – ₹${row.maxPerBaseUnit.toLocaleString("en-IN", { maximumFractionDigits: 2 })})`
+              : ""}
+            {" · as of "}
+            {new Date(row.latestPriceDate).toLocaleDateString("en-IN")}
+          </p>
+          {row.trend.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-2">
+              {row.trend.map((point) => (
+                <span
+                  key={point.monthStart}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600"
+                >
+                  {point.monthStart.slice(0, 7)} · ₹
+                  {point.medianPerBaseUnit.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  {point.momChangePct !== null ? ` (${point.momChangePct > 0 ? "+" : ""}${point.momChangePct.toFixed(1)}% MoM)` : ""}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 

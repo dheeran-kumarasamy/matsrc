@@ -1,0 +1,42 @@
+[
+  {
+    "sourceCode": "AGNI_STEELS",
+    "materialCategoryCode": "TMT_STEEL",
+    "districtCode": null,
+    "url": "https://agnisteels.com/pricing.php",
+    "apifyInput": { "note": "Single state-wide pricing page; no per-district URL parameter observed." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "TNSAND",
+    "materialCategoryCode": "SAND",
+    "districtCode": "TN-CHN",
+    "url": "https://tnsand.in/quarry-rates?district=chennai",
+    "apifyInput": { "district": "chennai", "note": "URL param unverified — placeholder pending TNSAND site structure confirmation." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "TNSAND",
+    "materialCategoryCode": "SAND",
+    "districtCode": "TN-CBE",
+    "url": "https://tnsand.in/quarry-rates?district=coimbatore",
+    "apifyInput": { "district": "coimbatore", "note": "URL param unverified — placeholder pending TNSAND site structure confirmation." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "TNSAND",
+    "materialCategoryCode": "SAND",
+    "districtCode": "TN-MAD",
+    "url": "https://tnsand.in/quarry-rates?district=madurai",
+    "apifyInput": { "district": "madurai", "note": "URL param unverified — placeholder pending TNSAND site structure confirmation." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "MATSRC_LISTINGS",
+    "materialCategoryCode": null,
+    "districtCode": null,
+    "url": "internal://matsrc-listings",
+    "apifyInput": null,
+    "isEnabled": false
+  }
+]

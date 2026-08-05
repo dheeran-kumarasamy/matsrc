@@ -29,41 +29,40 @@ enum KycStatus {
 }
 
 model User {
-  id            String      @id @default(cuid())
-  email         String?     @unique
-  phone         String?     @unique
-  name          String?
-  role          Role
-  kycStatus     KycStatus   @default(PENDING)
-  mfaEnabled    Boolean     @default(false)
-  mfaSecret     String?
+  id             String    @id @default(cuid())
+  email          String?   @unique
+  phone          String?   @unique
+  name           String?
+  role           Role
+  kycStatus      KycStatus @default(PENDING)
+  mfaEnabled     Boolean   @default(false)
+  mfaSecret      String?
   whatsappNumber String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   // Relations
-  kycDocuments  KycDocument[]
-  orders        Order[]
-  cart          CartItem[]
-  watchlist     Watchlist[]
-  disputes      Dispute[]
-  supplierRatingsGiven SupplierRating[] @relation("BuilderSupplierRatings")
-  purchaseOrders PurchaseOrder[] @relation("BuilderPurchaseOrders")
-  notifications Notification[]
+  kycDocuments              KycDocument[]
+  orders                    Order[]
+  cart                      CartItem[]
+  watchlist                 Watchlist[]
+  disputes                  Dispute[]
+  supplierRatingsGiven      SupplierRating[]         @relation("BuilderSupplierRatings")
+  purchaseOrders            PurchaseOrder[]          @relation("BuilderPurchaseOrders")
+  notifications             Notification[]
   aggregationParticipations AggregationParticipant[]
 
   notificationPreference NotificationPreference?
-  creditProfile CreditProfile?
-  supplierProfile SupplierProfile?
-  adminCredential AdminCredential?
-  adminMenuPermissions AdminMenuPermission[]
-  sites Site[] @relation("BuilderSites")
-  tallyLedgerMapping TallyLedgerMapping?
+  creditProfile          CreditProfile?
+  supplierProfile        SupplierProfile?
+  adminCredential        AdminCredential?
+  adminMenuPermissions   AdminMenuPermission[]
+  sites                  Site[]                  @relation("BuilderSites")
+  tallyLedgerMapping     TallyLedgerMapping?
 
   @@index([email])
   @@index([phone])
 }
-
 
 model AdminCredential {
   id           String   @id @default(cuid())
@@ -86,13 +85,13 @@ model AdminMenuPermission {
 }
 
 model KycDocument {
-  id         String    @id @default(cuid())
-  userId     String
-  user       User      @relation(fields: [userId], references: [id])
-  type       String    // GST_CERT | AADHAAR | TRADE_LICENCE | BIS_CERT
-  fileUrl    String
-  verified   Boolean   @default(false)
-  createdAt  DateTime  @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String // GST_CERT | AADHAAR | TRADE_LICENCE | BIS_CERT
+  fileUrl   String
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
 
   @@index([userId])
 }
@@ -102,43 +101,41 @@ model KycDocument {
 // ─────────────────────────────────────────────
 
 model SupplierProfile {
-  id              String    @id @default(cuid())
-  userId          String    @unique
-  user            User      @relation(fields: [userId], references: [id])
-  companyName     String
-  bisLicenceNo    String?
-  bisVerified     Boolean   @default(false)
-  verifiedBadge   Boolean   @default(false)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id])
+  companyName   String
+  bisLicenceNo  String?
+  bisVerified   Boolean  @default(false)
+  verifiedBadge Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  products        Product[]
-  orderItems      OrderItem[]
-  quotes          Quote[]
-  supplierQuotes  SupplierQuote[]
-  ratings         SupplierRating[]
-  selectedOrders  Order[]         @relation("SelectedSupplierOrders")
-  mtcCertificates MtcCertificate[]
-  purchaseOrders  PurchaseOrder[]
-  aggregationPools AggregationPool[]
+  products            Product[]
+  orderItems          OrderItem[]
+  quotes              Quote[]
+  supplierQuotes      SupplierQuote[]
+  ratings             SupplierRating[]
+  selectedOrders      Order[]                      @relation("SelectedSupplierOrders")
+  mtcCertificates     MtcCertificate[]
+  purchaseOrders      PurchaseOrder[]
+  aggregationPools    AggregationPool[]
   orderItemCandidates OrderItemSupplierCandidate[]
-  priceSnapshots  PriceSnapshot[]
+  priceSnapshots      PriceSnapshot[]
 
   // GST identifier used to determine intra-state (CGST+SGST) vs inter-state
   // (IGST) tax split when generating Tally purchase vouchers — compared
   // against the builder's Site.state. Nullable/additive; existing rows
   // unaffected until a supplier fills this in.
-  gstin           String?
+  gstin String?
 }
 
-
-
 model Category {
-  id       String    @id @default(cuid())
-  name     String    @unique
-  slug     String    @unique
-  isActive Boolean   @default(true)
-  products Product[]
+  id                String             @id @default(cuid())
+  name              String             @unique
+  slug              String             @unique
+  isActive          Boolean            @default(true)
+  products          Product[]
   canonicalProducts CanonicalProduct[]
 }
 
@@ -151,35 +148,35 @@ model Category {
 // ─────────────────────────────────────────────
 
 model Brand {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  slug      String    @unique
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  products  Product[]
+  id                String             @id @default(cuid())
+  name              String             @unique
+  slug              String             @unique
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  products          Product[]
   canonicalProducts CanonicalProduct[]
 }
 
 model Grade {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  slug      String    @unique
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  products  Product[]
+  id                String             @id @default(cuid())
+  name              String             @unique
+  slug              String             @unique
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  products          Product[]
   canonicalProducts CanonicalProduct[]
 }
 
 model Unit {
-  id        String    @id @default(cuid())
-  name      String    @unique // display label, e.g. "Metric Ton"
-  code      String    @unique // short code, e.g. "MT"
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  products  Product[]
+  id                String             @id @default(cuid())
+  name              String             @unique // display label, e.g. "Metric Ton"
+  code              String             @unique // short code, e.g. "MT"
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  products          Product[]
   canonicalProducts CanonicalProduct[]
 }
 
@@ -188,80 +185,79 @@ model Unit {
 // category + brand + grade + unit (all now FK-constrained master data)
 // so matching is exact, not fuzzy.
 model CanonicalProduct {
-  id           String    @id @default(cuid())
-  canonicalKey String    @unique
+  id           String   @id @default(cuid())
+  canonicalKey String   @unique
   categoryId   String
-  category     Category  @relation(fields: [categoryId], references: [id])
+  category     Category @relation(fields: [categoryId], references: [id])
   brandId      String?
-  brand        Brand?    @relation(fields: [brandId], references: [id])
+  brand        Brand?   @relation(fields: [brandId], references: [id])
   gradeId      String?
-  grade        Grade?    @relation(fields: [gradeId], references: [id])
+  grade        Grade?   @relation(fields: [gradeId], references: [id])
   unitId       String?
-  unit         Unit?     @relation(fields: [unitId], references: [id])
-  title        String    // display name for the merged discovery card
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  unit         Unit?    @relation(fields: [unitId], references: [id])
+  title        String // display name for the merged discovery card
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  products     Product[]
+  products       Product[]
   priceSnapshots PriceSnapshot[]
 
   @@index([categoryId])
 }
 
-
 model Product {
-  id              String          @id @default(cuid())
-  supplierId      String
-  supplier        SupplierProfile @relation(fields: [supplierId], references: [id])
-  categoryId      String
-  category        Category        @relation(fields: [categoryId], references: [id])
-  name            String
-  slug            String          @unique
-  brand           String?         // deprecated free-text value, retained for backfill/history only
-  grade           String?         // deprecated free-text value, retained for backfill/history only
-  brandId         String?
-  brandRef        Brand?          @relation(fields: [brandId], references: [id])
-  gradeId         String?
-  gradeRef        Grade?          @relation(fields: [gradeId], references: [id])
-  unitId          String?
-  unitRef         Unit?           @relation(fields: [unitId], references: [id])
-  isCode          String?
-  bisStatus       String?         // CERTIFIED | PENDING | NA
+  id          String          @id @default(cuid())
+  supplierId  String
+  supplier    SupplierProfile @relation(fields: [supplierId], references: [id])
+  categoryId  String
+  category    Category        @relation(fields: [categoryId], references: [id])
+  name        String
+  slug        String          @unique
+  brand       String? // deprecated free-text value, retained for backfill/history only
+  grade       String? // deprecated free-text value, retained for backfill/history only
+  brandId     String?
+  brandRef    Brand?          @relation(fields: [brandId], references: [id])
+  gradeId     String?
+  gradeRef    Grade?          @relation(fields: [gradeId], references: [id])
+  unitId      String?
+  unitRef     Unit?           @relation(fields: [unitId], references: [id])
+  isCode      String?
+  bisStatus   String? // CERTIFIED | PENDING | NA
   // HSN (Harmonized System of Nomenclature) code, required for GST invoice
   // line items / Tally export. Nullable/additive; falls back to a
   // configurable default at report/export time when absent.
-  hsnCode         String?
-  description     String?
+  hsnCode     String?
+  description String?
 
-  unit            String          // deprecated free-text value (MT | BAG | SQM | PCS), retained for backfill/history only
-  basePrice       Decimal         @db.Decimal(12, 2)
-  stock           Int             @default(0)
-  maxServiceableQty Int?          
-  images          String[]
-  isActive        Boolean         @default(true)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  unit              String // deprecated free-text value (MT | BAG | SQM | PCS), retained for backfill/history only
+  basePrice         Decimal  @db.Decimal(12, 2)
+  stock             Int      @default(0)
+  maxServiceableQty Int?
+  images            String[]
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   // Order Aggregation ("Group & Save") — supplier-configured per listing, opt-in only.
-  aggregationEnabled    Boolean  @default(false)
-  aggregationPriceTiers Json?    // [{minQty, unitPrice}] — separate from PricingTier (non-aggregated bulk pricing)
-  aggregationZoneRules  Json?    // reserved for future zone-grouping configuration
-  aggregationWindowDays Int?     @default(7)
+  aggregationEnabled    Boolean @default(false)
+  aggregationPriceTiers Json? // [{minQty, unitPrice}] — separate from PricingTier (non-aggregated bulk pricing)
+  aggregationZoneRules  Json? // reserved for future zone-grouping configuration
+  aggregationWindowDays Int?    @default(7)
 
   // Cross-supplier canonical product grouping (additive; nullable until backfilled)
   canonicalProductId String?
   canonicalProduct   CanonicalProduct? @relation(fields: [canonicalProductId], references: [id])
 
-  prices          PricePoint[]
-  pricingTiers    PricingTier[]
-  cartItems       CartItem[]
-  orderItems      OrderItem[]
-  interestEvents  ProductInterestEvent[]
-  watchlist       Watchlist[]
-  mtcCertificates MtcCertificate[]
+  prices                 PricePoint[]
+  pricingTiers           PricingTier[]
+  cartItems              CartItem[]
+  orderItems             OrderItem[]
+  interestEvents         ProductInterestEvent[]
+  watchlist              Watchlist[]
+  mtcCertificates        MtcCertificate[]
   purchaseOrderLineItems PurchaseOrderLineItem[]
-  aggregationPools AggregationPool[]
-  priceSnapshots  PriceSnapshot[]
+  aggregationPools       AggregationPool[]
+  priceSnapshots         PriceSnapshot[]
 
   @@index([supplierId])
   @@index([categoryId])
@@ -272,18 +268,16 @@ model Product {
   @@index([unitId])
 }
 
-
-
 model MtcCertificate {
-  id          String          @id @default(cuid())
-  productId   String
-  product     Product         @relation(fields: [productId], references: [id])
-  supplierId  String
-  supplier    SupplierProfile @relation(fields: [supplierId], references: [id])
-  fileUrl     String
-  batchNo     String?
-  verified    Boolean         @default(false)
-  createdAt   DateTime        @default(now())
+  id         String          @id @default(cuid())
+  productId  String
+  product    Product         @relation(fields: [productId], references: [id])
+  supplierId String
+  supplier   SupplierProfile @relation(fields: [supplierId], references: [id])
+  fileUrl    String
+  batchNo    String?
+  verified   Boolean         @default(false)
+  createdAt  DateTime        @default(now())
 
   @@index([productId])
 }
@@ -293,29 +287,29 @@ model MtcCertificate {
 // ─────────────────────────────────────────────
 
 model PricePoint {
-  id          String   @id @default(cuid())
-  productId   String
-  product     Product  @relation(fields: [productId], references: [id])
-  sourceCity  String   // EX-Raipur, EX-Vizag, etc.
-  price       Decimal  @db.Decimal(12, 2)
-  freight     Decimal  @db.Decimal(10, 2) @default(0)
-  recordedAt  DateTime @default(now())
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  sourceCity String // EX-Raipur, EX-Vizag, etc.
+  price      Decimal  @db.Decimal(12, 2)
+  freight    Decimal  @default(0) @db.Decimal(10, 2)
+  recordedAt DateTime @default(now())
 
   @@index([productId])
   @@index([recordedAt])
 }
 
 model PricingTier {
-  id          String   @id @default(cuid())
-  productId   String
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  minQty      Int
-  maxQty      Int
-  tierPrice   Decimal  @db.Decimal(12, 2)
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQty    Int
+  maxQty    Int
+  tierPrice Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
 
-  @@index([productId])
   @@unique([productId, minQty, maxQty])
+  @@index([productId])
 }
 
 // Append-only, insert-only price time series used for cross-supplier price
@@ -354,7 +348,6 @@ model PriceSnapshot {
   @@index([supplierId])
 }
 
-
 // Server-side cache for the "live market intelligence" module (§3.6 of the
 // price-report feature) — stores the structured JSON result of an
 // Anthropic web-search-grounded market analysis, keyed by material category
@@ -369,11 +362,11 @@ model PriceSnapshot {
 // slow/costly external LLM+web-search call, not first-party live inventory.
 model MarketInsightCache {
   id          String   @id @default(cuid())
-  category    String   // material category, e.g. "TMT bar", "OPC cement"
-  region      String   // free-text region key (see Region note below)
-  driversJson Json     // structured list of 3-5 market drivers
-  outlook     String   // short outlook paragraph (model-paraphrased, never a verbatim quote)
-  sources     Json     // [{ name, url }] attribution list
+  category    String // material category, e.g. "TMT bar", "OPC cement"
+  region      String // free-text region key (see Region note below)
+  driversJson Json // structured list of 3-5 market drivers
+  outlook     String // short outlook paragraph (model-paraphrased, never a verbatim quote)
+  sources     Json // [{ name, url }] attribution list
   generatedAt DateTime @default(now())
   expiresAt   DateTime
 
@@ -382,30 +375,29 @@ model MarketInsightCache {
 }
 
 model Watchlist {
-
-  id             String   @id @default(cuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id])
-  productId      String
-  product        Product  @relation(fields: [productId], references: [id])
-  targetPrice    Decimal? @db.Decimal(12, 2)
-  alertSent      Boolean  @default(false)
-  createdAt      DateTime @default(now())
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  targetPrice Decimal? @db.Decimal(12, 2)
+  alertSent   Boolean  @default(false)
+  createdAt   DateTime @default(now())
 
   @@unique([userId, productId])
   @@index([userId])
 }
 
 model Quote {
-  id          String          @id @default(cuid())
-  supplierId  String
-  supplier    SupplierProfile @relation(fields: [supplierId], references: [id])
-  rfqId       String?
-  rfq         QuickRequest?   @relation(fields: [rfqId], references: [id])
-  price       Decimal         @db.Decimal(12, 2)
-  validUntil  DateTime?
-  notes       String?
-  createdAt   DateTime        @default(now())
+  id         String          @id @default(cuid())
+  supplierId String
+  supplier   SupplierProfile @relation(fields: [supplierId], references: [id])
+  rfqId      String?
+  rfq        QuickRequest?   @relation(fields: [rfqId], references: [id])
+  price      Decimal         @db.Decimal(12, 2)
+  validUntil DateTime?
+  notes      String?
+  createdAt  DateTime        @default(now())
 
   @@index([supplierId])
 }
@@ -430,15 +422,15 @@ model SupplierQuote {
 }
 
 model QuickRequest {
-  id          String   @id @default(cuid())
-  userId      String
+  id           String   @id @default(cuid())
+  userId       String
   materialName String
-  quantity    String
-  pincode     String
-  notes       String?
-  createdAt   DateTime @default(now())
+  quantity     String
+  pincode      String
+  notes        String?
+  createdAt    DateTime @default(now())
 
-  quotes      Quote[]
+  quotes Quote[]
 }
 
 // ─────────────────────────────────────────────
@@ -457,12 +449,12 @@ model CartItem {
   // Cross-supplier resolution snapshot (populated at add-to-cart time; re-resolved
   // at checkout). Nullable/additive so existing rows and single-supplier products
   // keep working unchanged.
-  resolvedListingId   String?
-  resolvedSupplierId  String?
-  resolvedTierMinQty  Int?
-  resolvedTierMaxQty  Int?
-  resolvedUnitPrice   Decimal? @db.Decimal(12, 2)
-  resolvedAt          DateTime?
+  resolvedListingId  String?
+  resolvedSupplierId String?
+  resolvedTierMinQty Int?
+  resolvedTierMaxQty Int?
+  resolvedUnitPrice  Decimal?  @db.Decimal(12, 2)
+  resolvedAt         DateTime?
 
   @@unique([userId, productId])
   @@index([userId])
@@ -494,60 +486,58 @@ enum PaymentStatus {
 }
 
 model Order {
-  id              String        @id @default(cuid())
-  userId          String
-  user            User          @relation(fields: [userId], references: [id])
-  status          OrderStatus   @default(PLACED)
-  paymentMethod   PaymentMethod
-  paymentStatus   PaymentStatus @default(PENDING)
-  paymentRef      String?
-  utrProofUrl     String?
-  gstInvoiceUrl   String?
-  irn             String?
-  totalAmount     Decimal       @db.Decimal(12, 2)
-  deliveryDate    DateTime?
+  id                 String        @id @default(cuid())
+  userId             String
+  user               User          @relation(fields: [userId], references: [id])
+  status             OrderStatus   @default(PLACED)
+  paymentMethod      PaymentMethod
+  paymentStatus      PaymentStatus @default(PENDING)
+  paymentRef         String?
+  utrProofUrl        String?
+  gstInvoiceUrl      String?
+  irn                String?
+  totalAmount        Decimal       @db.Decimal(12, 2)
+  deliveryDate       DateTime?
   // REQ-07: map-based geolocation capture, replacing the checkout pincode
   // field. Nullable so existing rows and any flow that doesn't collect a
   // location (e.g. the separate Group & Save checkout page, which still
   // uses its own pincode-based zoneKey) are unaffected.
   deliveryLat        Float?
-  deliveryLng         Float?
-  deliveryAddress     String?
+  deliveryLng        Float?
+  deliveryAddress    String?
   selectedSupplierId String?
 
   // Site-wise purchase reporting (additive): optional tag linking this
   // order/enquiry to a builder-managed construction Site/Project. Nullable
   // so all existing orders remain valid and simply render as "Unassigned"
   // everywhere in the UI/reports until retroactively tagged.
-  siteId             String?
-  site               Site? @relation(fields: [siteId], references: [id])
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id])
 
-
-  selectedSupplier   SupplierProfile? @relation("SelectedSupplierOrders", fields: [selectedSupplierId], references: [id])
-  bestPriceTotal     Decimal?      @db.Decimal(12, 2)
-  tentativeDeliveryDate DateTime?
+  selectedSupplier          SupplierProfile? @relation("SelectedSupplierOrders", fields: [selectedSupplierId], references: [id])
+  bestPriceTotal            Decimal?         @db.Decimal(12, 2)
+  tentativeDeliveryDate     DateTime?
   quoteSelectionCompletedAt DateTime?
   // WhatsApp lifecycle notifications: tracks whether the "enquiry pending update" nudge
   // (builder_enquiry_pending_update) has already been sent for this enquiry, so the
   // scheduled sweep in WhatsAppLifecycle never sends it more than once per enquiry.
-  reminderSentAt  DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
+  reminderSentAt            DateTime?
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
 
   // Order Aggregation ("Group & Save")
   aggregationPoolId      String?
   aggregationPool        AggregationPool? @relation(fields: [aggregationPoolId], references: [id])
-  isAggregated           Boolean  @default(false)
-  priceBeforeAggregation Decimal? @db.Decimal(12, 2)
-  priceAfterAggregation  Decimal? @db.Decimal(12, 2)
+  isAggregated           Boolean          @default(false)
+  priceBeforeAggregation Decimal?         @db.Decimal(12, 2)
+  priceAfterAggregation  Decimal?         @db.Decimal(12, 2)
 
-  items           OrderItem[]
-  tracking        OrderTracking[]
-  dispute         Dispute?
-  supplierQuotes  SupplierQuote[]
-  supplierRating  SupplierRating?
-  purchaseOrders  PurchaseOrder[]
+  items                  OrderItem[]
+  tracking               OrderTracking[]
+  dispute                Dispute?
+  supplierQuotes         SupplierQuote[]
+  supplierRating         SupplierRating?
+  purchaseOrders         PurchaseOrder[]
   aggregationParticipant AggregationParticipant?
 
   @@index([userId])
@@ -557,37 +547,35 @@ model Order {
   @@index([siteId])
 }
 
-
 model OrderItem {
-
-  id          String          @id @default(cuid())
-  orderId     String
-  order       Order           @relation(fields: [orderId], references: [id])
-  productId   String
-  product     Product         @relation(fields: [productId], references: [id])
-  supplierId  String
-  supplier    SupplierProfile @relation(fields: [supplierId], references: [id])
-  quantity    Int
-  unitPrice   Decimal         @db.Decimal(12, 2)
-  deliveryDate DateTime?
+  id             String          @id @default(cuid())
+  orderId        String
+  order          Order           @relation(fields: [orderId], references: [id])
+  productId      String
+  product        Product         @relation(fields: [productId], references: [id])
+  supplierId     String
+  supplier       SupplierProfile @relation(fields: [supplierId], references: [id])
+  quantity       Int
+  unitPrice      Decimal         @db.Decimal(12, 2)
+  deliveryDate   DateTime?
   supplierQuotes SupplierQuote[]
 
   // Cross-supplier resolution audit trail (additive). Captures which canonical
   // product/tier/listing this line item resolved to and when, so disputes/admin
   // can answer "why was this assigned to Supplier X".
-  canonicalProductId  String?
-  resolvedListingId   String?
-  tierMinQty          Int?
-  tierMaxQty          Int?
-  priceAtResolution   Decimal?  @db.Decimal(12, 2)
-  resolvedAt          DateTime?
+  canonicalProductId String?
+  resolvedListingId  String?
+  tierMinQty         Int?
+  tierMaxQty         Int?
+  priceAtResolution  Decimal?  @db.Decimal(12, 2)
+  resolvedAt         DateTime?
 
   // REQ-06: the minimum price across the canonical product's cross-supplier
   // price range at the time the enquiry was submitted — this is the only
   // price figure surfaced to the supplier (the builder-facing UI continues
   // to show the full min–max range). Nullable so existing rows are
   // unaffected; falls back to unitPrice when absent (legacy orders).
-  askPrice            Decimal?  @db.Decimal(12, 2)
+  askPrice Decimal? @db.Decimal(12, 2)
 
   // Multi-supplier fan-out: the ranked pool of candidate suppliers eligible
   // to fulfil this line item (all active cross-supplier listings for the
@@ -598,19 +586,18 @@ model OrderItem {
   // (supplierId/unitPrice reassigned) instead of the whole enquiry being
   // cancelled — the item (and therefore the Order) is only considered fully
   // declined once every candidate has DECLINED.
-  candidates          OrderItemSupplierCandidate[]
-  allCandidatesDeclined Boolean @default(false)
+  candidates            OrderItemSupplierCandidate[]
+  allCandidatesDeclined Boolean                      @default(false)
 
   // GST tax rate applied to this line item (percentage, e.g. 18.00), used
   // for site-wise report tax breakdown and Tally purchase voucher CGST/
   // SGST/IGST computation. Nullable/additive; falls back to a configurable
   // default rate at report/export time when absent (legacy line items).
-  taxRatePercent      Decimal?  @db.Decimal(5, 2)
+  taxRatePercent Decimal? @db.Decimal(5, 2)
 
   @@index([orderId])
   @@index([supplierId])
 }
-
 
 enum OrderItemCandidateStatus {
   PENDING
@@ -622,40 +609,39 @@ enum OrderItemCandidateStatus {
 // item (see OrderItem.candidates doc comment above for the fan-out/decline
 // semantics this powers).
 model OrderItemSupplierCandidate {
-  id           String                    @id @default(cuid())
-  orderItemId  String
-  orderItem    OrderItem                 @relation(fields: [orderItemId], references: [id])
-  supplierId   String
-  supplier     SupplierProfile           @relation(fields: [supplierId], references: [id])
-  listingId    String?
-  unitPrice    Decimal                   @db.Decimal(12, 2)
-  rank         Int                       // 0 = lowest price / first to be asked
-  status       OrderItemCandidateStatus  @default(PENDING)
+  id            String                   @id @default(cuid())
+  orderItemId   String
+  orderItem     OrderItem                @relation(fields: [orderItemId], references: [id])
+  supplierId    String
+  supplier      SupplierProfile          @relation(fields: [supplierId], references: [id])
+  listingId     String?
+  unitPrice     Decimal                  @db.Decimal(12, 2)
+  rank          Int // 0 = lowest price / first to be asked
+  status        OrderItemCandidateStatus @default(PENDING)
   declineReason String?
-  respondedAt  DateTime?
-  createdAt    DateTime                  @default(now())
+  respondedAt   DateTime?
+  createdAt     DateTime                 @default(now())
 
+  @@unique([orderItemId, supplierId])
   @@index([orderItemId])
   @@index([supplierId])
   @@index([orderItemId, status])
-  @@unique([orderItemId, supplierId])
 }
-
 
 // ─────────────────────────────────────────────
 // M06 Order Tracking
 // ─────────────────────────────────────────────
 
 model OrderTracking {
-  id          String      @id @default(cuid())
-  orderId     String
-  order       Order       @relation(fields: [orderId], references: [id])
-  status      OrderStatus
+  id           String      @id @default(cuid())
+  orderId      String
+  order        Order       @relation(fields: [orderId], references: [id])
+  status       OrderStatus
   gpsVehicleId String?
-  latitude    Float?
-  longitude   Float?
-  note        String?
-  recordedAt  DateTime    @default(now())
+  latitude     Float?
+  longitude    Float?
+  note         String?
+  recordedAt   DateTime    @default(now())
 
   @@index([orderId])
 }
@@ -673,31 +659,30 @@ enum CreditStatus {
 }
 
 model CreditProfile {
-  id              String       @id @default(cuid())
-  userId          String       @unique
-  user            User         @relation(fields: [userId], references: [id])
-  creditLimit     Decimal?     @db.Decimal(12, 2)
-  usedLimit       Decimal      @db.Decimal(12, 2) @default(0)
-  status          CreditStatus @default(NOT_APPLIED)
-  kfsAcceptedAt   DateTime?
-  nbfcRef         String?
+  id            String       @id @default(cuid())
+  userId        String       @unique
+  user          User         @relation(fields: [userId], references: [id])
+  creditLimit   Decimal?     @db.Decimal(12, 2)
+  usedLimit     Decimal      @default(0) @db.Decimal(12, 2)
+  status        CreditStatus @default(NOT_APPLIED)
+  kfsAcceptedAt DateTime?
+  nbfcRef       String?
 
   // REQ-09: Bank Guarantee registration, moved into BUILDER onboarding
   // (previously not modeled anywhere in the schema). Kept on CreditProfile
   // since it is conceptually another credit/lending product alongside
   // EMI/BNPL/Working Capital, reusing the same status lifecycle pattern.
-  bankGuaranteeEnabled     Boolean       @default(false)
-  bankGuaranteeStatus      CreditStatus  @default(NOT_APPLIED)
-  bankGuaranteeAmount      Decimal?      @db.Decimal(12, 2)
-  bankGuaranteeDocUrl      String?
-  bankGuaranteeIssuerName  String?
-  bankGuaranteeValidTill   DateTime?
-  bankGuaranteeAcceptedAt  DateTime?
+  bankGuaranteeEnabled    Boolean      @default(false)
+  bankGuaranteeStatus     CreditStatus @default(NOT_APPLIED)
+  bankGuaranteeAmount     Decimal?     @db.Decimal(12, 2)
+  bankGuaranteeDocUrl     String?
+  bankGuaranteeIssuerName String?
+  bankGuaranteeValidTill  DateTime?
+  bankGuaranteeAcceptedAt DateTime?
 
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
-
 
 // ─────────────────────────────────────────────
 // M09 Notifications, Reviews & Admin
@@ -733,7 +718,6 @@ model NotificationPreference {
   @@index([userId])
 }
 
-
 enum NotificationTemplateType {
   ORDER_SUBMITTED
   ENQUIRY_SUBMITTED_TO_SUPPLIER
@@ -758,14 +742,13 @@ enum NotificationTemplateType {
   AGGREGATION_OPT_OUT_CONFIRMED
 }
 
-
 model NotificationTemplate {
   id        String                   @id @default(cuid())
   type      NotificationTemplateType @unique
   channel   NotificationChannel
   title     String
   body      String
-  variables String[]                 // JSON array of variable names
+  variables String[] // JSON array of variable names
   language  String                   @default("en")
   version   Int                      @default(1)
   active    Boolean                  @default(true)
@@ -777,47 +760,47 @@ model NotificationTemplate {
 }
 
 model Notification {
-  id              String              @id @default(cuid())
-  userId          String
-  user            User                @relation(fields: [userId], references: [id])
-  channel         NotificationChannel
-  audience        String?
-  title           String
-  body            String
-  read            Boolean             @default(false)
-  externalId      String?             // Provider-assigned message ID
-  idempotencyKey  String?
-  status          String              @default("pending") // pending, sent, delivered, failed
-  failureReason   String?
-  retryCount      Int                 @default(0)
-  maxRetries      Int                 @default(3)
-  templateType    NotificationTemplateType?
-  variables       String?             // JSON object of template variables
-  sentAt          DateTime            @default(now())
-  deliveredAt     DateTime?
-  failedAt        DateTime?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  id             String                    @id @default(cuid())
+  userId         String
+  user           User                      @relation(fields: [userId], references: [id])
+  channel        NotificationChannel
+  audience       String?
+  title          String
+  body           String
+  read           Boolean                   @default(false)
+  externalId     String? // Provider-assigned message ID
+  idempotencyKey String?
+  status         String                    @default("pending") // pending, sent, delivered, failed
+  failureReason  String?
+  retryCount     Int                       @default(0)
+  maxRetries     Int                       @default(3)
+  templateType   NotificationTemplateType?
+  variables      String? // JSON object of template variables
+  sentAt         DateTime                  @default(now())
+  deliveredAt    DateTime?
+  failedAt       DateTime?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
 
-  deliveryLogs    NotificationDeliveryLog[]
+  deliveryLogs NotificationDeliveryLog[]
 
+  @@unique([idempotencyKey])
   @@index([userId])
   @@index([status])
   @@index([externalId])
-  @@unique([idempotencyKey])
 }
 
 model NotificationDeliveryLog {
-  id              String      @id @default(cuid())
-  notificationId  String
-  notification    Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-  previousStatus  String?
-  newStatus       String
-  provider        String?     // whatsapp, sms, email, push
-  errorCode       String?
-  errorMessage    String?
-  metadata        String?     // JSON blob for provider-specific details
-  createdAt       DateTime    @default(now())
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  previousStatus String?
+  newStatus      String
+  provider       String? // whatsapp, sms, email, push
+  errorCode      String?
+  errorMessage   String?
+  metadata       String? // JSON blob for provider-specific details
+  createdAt      DateTime     @default(now())
 
   @@index([notificationId])
   @@index([newStatus])
@@ -831,20 +814,20 @@ enum DisputeStatus {
 }
 
 model Dispute {
-  id          String        @id @default(cuid())
-  orderId     String        @unique
-  order       Order         @relation(fields: [orderId], references: [id])
-  userId      String
-  user        User          @relation(fields: [userId], references: [id])
-  issueType   String
-  description String
+  id           String        @id @default(cuid())
+  orderId      String        @unique
+  order        Order         @relation(fields: [orderId], references: [id])
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  issueType    String
+  description  String
   evidenceUrls String[]
-  status      DisputeStatus @default(OPEN)
-  resolution  String?
-  rating      Int?          // 1-5
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  escalateAt  DateTime?
+  status       DisputeStatus @default(OPEN)
+  resolution   String?
+  rating       Int? // 1-5
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  escalateAt   DateTime?
 
   @@index([userId])
   @@index([status])
@@ -852,17 +835,17 @@ model Dispute {
 
 model SupplierRating {
   id             String          @id @default(cuid())
-  orderId         String          @unique
-  order           Order           @relation(fields: [orderId], references: [id])
-  supplierId      String
-  supplier        SupplierProfile @relation(fields: [supplierId], references: [id])
-  builderId       String
-  builder         User            @relation("BuilderSupplierRatings", fields: [builderId], references: [id])
-  deliveryRating  Int
-  qualityRating   Int
-  comment         String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  orderId        String          @unique
+  order          Order           @relation(fields: [orderId], references: [id])
+  supplierId     String
+  supplier       SupplierProfile @relation(fields: [supplierId], references: [id])
+  builderId      String
+  builder        User            @relation("BuilderSupplierRatings", fields: [builderId], references: [id])
+  deliveryRating Int
+  qualityRating  Int
+  comment        String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([supplierId])
   @@index([builderId])
@@ -876,24 +859,24 @@ enum PurchaseOrderStatus {
 }
 
 model PurchaseOrder {
-  id             String              @id @default(cuid())
-  poNumber       String              @unique
-  builderId      String
-  builder        User                @relation("BuilderPurchaseOrders", fields: [builderId], references: [id])
-  supplierId     String
-  supplier       SupplierProfile     @relation(fields: [supplierId], references: [id])
-  orderId        String
-  order          Order               @relation(fields: [orderId], references: [id])
-  status         PurchaseOrderStatus @default(DRAFT)
-  version        Int                 @default(1)
-  notes          String?
-  termsSnapshot  Json?
-  approvedAt     DateTime?
-  approvedBy     String?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  id            String              @id @default(cuid())
+  poNumber      String              @unique
+  builderId     String
+  builder       User                @relation("BuilderPurchaseOrders", fields: [builderId], references: [id])
+  supplierId    String
+  supplier      SupplierProfile     @relation(fields: [supplierId], references: [id])
+  orderId       String
+  order         Order               @relation(fields: [orderId], references: [id])
+  status        PurchaseOrderStatus @default(DRAFT)
+  version       Int                 @default(1)
+  notes         String?
+  termsSnapshot Json?
+  approvedAt    DateTime?
+  approvedBy    String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
-  lineItems      PurchaseOrderLineItem[]
+  lineItems PurchaseOrderLineItem[]
 
   @@index([builderId])
   @@index([supplierId])
@@ -909,7 +892,7 @@ model PurchaseOrderLineItem {
   product           Product       @relation(fields: [productId], references: [id])
   quantity          Int
   unitPrice         Decimal       @db.Decimal(12, 2)
-  tax               Decimal       @db.Decimal(12, 2) @default(0)
+  tax               Decimal       @default(0) @db.Decimal(12, 2)
   deliveryDate      DateTime?
   fulfilledQuantity Int           @default(0)
 
@@ -923,14 +906,13 @@ enum ProductInterestEventType {
   ORDER_PLACED
 }
 
-
 model ProductInterestEvent {
-  id         String                   @id @default(cuid())
-  listingId  String
-  listing    Product                  @relation(fields: [listingId], references: [id])
-  sessionId  String
-  eventType  ProductInterestEventType
-  createdAt  DateTime                 @default(now())
+  id        String                   @id @default(cuid())
+  listingId String
+  listing   Product                  @relation(fields: [listingId], references: [id])
+  sessionId String
+  eventType ProductInterestEventType
+  createdAt DateTime                 @default(now())
 
   @@index([listingId, eventType, createdAt])
 }
@@ -973,20 +955,20 @@ model AggregationPool {
   supplier            SupplierProfile       @relation(fields: [supplierId], references: [id])
   productId           String
   product             Product               @relation(fields: [productId], references: [id])
-  zoneKey             String                // pincode-based zone granularity (v1: exact pincode string)
+  zoneKey             String // pincode-based zone granularity (v1: exact pincode string)
   deliveryWindowStart DateTime
   deliveryWindowEnd   DateTime
   status              AggregationPoolStatus @default(OPEN)
   currentQuantity     Int                   @default(0)
-  priceTiers          Json                  // [{minQty, unitPrice}] snapshot copied from Product at pool creation
+  priceTiers          Json // [{minQty, unitPrice}] snapshot copied from Product at pool creation
   lockedUnitPrice     Decimal?              @db.Decimal(12, 2)
   windowCloseAt       DateTime
   lockedAt            DateTime?
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
 
-  participants        AggregationParticipant[]
-  orders              Order[]
+  participants AggregationParticipant[]
+  orders       Order[]
 
   @@index([supplierId])
   @@index([productId, zoneKey, status])
@@ -995,16 +977,16 @@ model AggregationPool {
 }
 
 model AggregationParticipant {
-  id         String                        @id @default(cuid())
+  id         String                       @id @default(cuid())
   poolId     String
-  pool       AggregationPool               @relation(fields: [poolId], references: [id])
+  pool       AggregationPool              @relation(fields: [poolId], references: [id])
   builderId  String
-  builder    User                          @relation(fields: [builderId], references: [id])
-  orderId    String?                       @unique
-  order      Order?                        @relation(fields: [orderId], references: [id])
+  builder    User                         @relation(fields: [builderId], references: [id])
+  orderId    String?                      @unique
+  order      Order?                       @relation(fields: [orderId], references: [id])
   quantity   Int
-  status     AggregationParticipantStatus  @default(PENDING)
-  optedInAt  DateTime                      @default(now())
+  status     AggregationParticipantStatus @default(PENDING)
+  optedInAt  DateTime                     @default(now())
   optedOutAt DateTime?
 
   @@index([poolId])
@@ -1043,10 +1025,10 @@ model Site {
   lng         Float?
   status      SiteStatus @default(ACTIVE)
 
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  orders      Order[]
+  orders Order[]
 
   @@unique([builderId, name])
   @@index([builderId])
@@ -1073,3 +1055,741 @@ model TallyLedgerMapping {
   updatedAt         DateTime @updatedAt
 }
 
+// =============================================================================
+// Matsrc — Price Intelligence Ingestion Schema (module)
+// Target: PostgreSQL + Prisma
+//
+// DROP-IN NOTES
+// 1. This is a MODULE, not a replacement schema. Appended to the existing
+//    prisma/schema.prisma (this project does not use prismaSchemaFolder).
+// 2. Every model here is namespaced with @@map("pricing_*"). Nothing collides
+//    with existing builder/supplier/admin tables.
+// 3. References to EXISTING models (Supplier, Listing, Watchlist, AdminUser)
+//    are declared as scalar id columns with no Prisma relation, so this
+//    module stays standalone/additive. Note: this project has no separate
+//    "AdminUser" model — admin users are represented via the existing User
+//    model with role = ADMIN | SUPER_ADMIN, so "LOGICAL FK -> AdminUser"
+//    below refers to User.id. Promote to real relations once co-located —
+//    search for "LOGICAL FK".
+// 4. No existing table is altered. This module is additive only; it cannot
+//    break a live workflow on deploy.
+// =============================================================================
+
+// ============================== ENUMS ========================================
+
+enum SourceTier {
+  GOVERNMENT // TN PWD SOR, TNSAND, DES BCCI
+  MANUFACTURER // mill / brand official price pages
+  AGGREGATOR // livechennai, todaypricerates, tatanexarc
+  MARKETPLACE // IndiaMART, TradeIndia, ExportersIndia, Justdial
+  INTERNAL // Matsrc supplier listings, RFQ quotes, closed orders
+
+  @@map("pricing_source_tier")
+}
+
+/// Governs whether a price may ever leave the platform boundary.
+/// Enforced at the API serialization layer, NOT just here. See spec §6.
+enum LicenseClass {
+  PUBLIC_DOMAIN // government publications — freely displayable
+  ATTRIBUTION_REQUIRED // displayable with visible source credit
+  INTERNAL_ONLY // benchmarking only; never sent to a client response
+  OWN_DATA // Matsrc-generated; fully ours
+
+  @@map("pricing_license_class")
+}
+
+enum ScrapeMethod {
+  APIFY_ACTOR // purpose-built store actor (e.g. IndiaMART scrapers)
+  APIFY_CHEERIO // generic static-HTML crawl
+  APIFY_PLAYWRIGHT // JS-rendered / interaction required
+  PDF_PARSE // SOR volumes — parsed in-house, not via Apify
+  HTTP_JSON // documented JSON endpoint
+  INTERNAL_QUERY // our own DB
+
+  @@map("pricing_scrape_method")
+}
+
+enum RunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  PARTIAL
+  FAILED
+  TIMED_OUT
+  ABORTED
+
+  @@map("pricing_run_status")
+}
+
+enum ParseStatus {
+  PENDING // landed, not yet normalized
+  PARSED // normalized into PriceObservation
+  REJECTED // unparseable (no price, junk row)
+  UNMAPPED // parsed but no CanonicalSku match — needs human mapping
+  QUARANTINED // statistical outlier or policy hold
+  SUPERSEDED // a newer fetch of the same logical row replaced it
+
+  @@map("pricing_parse_status")
+}
+
+enum PriceType {
+  GOVT_SCHEDULE // SOR basic rate — authoritative, not market
+  LIST_PRICE // published sell price
+  TRANSACTED // an actual completed order value (highest trust)
+  QUOTE // a real supplier quote against an RFQ
+  INDICATIVE // site-disclaimed "approximate / may vary"
+  RANGE // low–high band only
+  ON_REQUEST // no price published; retained for coverage stats only
+
+  @@map("pricing_price_type")
+}
+
+enum TaxTreatment {
+  EXCLUSIVE_GST // SOR is explicitly ex-GST
+  INCLUSIVE_GST
+  UNKNOWN
+
+  @@map("pricing_tax_treatment")
+}
+
+/// How a serving-layer row was produced.
+enum PriceMethod {
+  OBSERVED // >=1 real observation in this district
+  DERIVED_FREIGHT // anchor district + freight adder
+  DERIVED_INDEX // anchor district + DES BCCI material index ratio
+  DERIVED_BLENDED // both adjustments applied
+  MANUAL_OVERRIDE // admin-set
+
+  @@map("pricing_price_method")
+}
+
+enum Confidence {
+  HIGH
+  MEDIUM
+  LOW
+
+  @@map("pricing_confidence")
+}
+
+/// Canonical base units. Comparison always happens in base unit.
+enum BaseUnit {
+  KG
+  TONNE
+  CFT // cubic foot — TN standard for sand/aggregate
+  CUM
+  PIECE
+  SQFT
+  LITRE
+  RFT // running foot
+  BAG
+
+  @@map("pricing_base_unit")
+}
+
+enum MappingMatchType {
+  EXACT
+  NORMALIZED // matched after casefold/whitespace/synonym rules
+  FUZZY // trigram / embedding match, above threshold
+  MANUAL // human-assigned
+  BLOCKED // known-bad label, never map
+
+  @@map("pricing_mapping_match_type")
+}
+
+enum AnomalyReason {
+  OUTLIER_MAD // outside 3x median absolute deviation for sku+district
+  IMPLAUSIBLE_RANGE // outside hard floor/ceiling for the material
+  UNIT_AMBIGUOUS // could not resolve quoted unit with confidence
+  STALE_AS_OF // as-of date older than source freshness SLA
+  SOURCE_SCHEMA_DRIFT // expected selector/field vanished
+  DUPLICATE_SUSPECT // near-identical row from same source, different price
+
+  @@map("pricing_anomaly_reason")
+}
+
+// ========================= DIMENSION / REFERENCE =============================
+
+/// All 38 TN districts. Seeded once; `anchorDistrictId` drives derivation for
+/// districts with no direct observations (spec §5).
+model PricingDistrict {
+  id        String   @id @default(cuid())
+  code      String   @unique // "TN-CBE"
+  name      String   @unique // "Coimbatore"
+  nameTa    String? // "கோயம்புத்தூர்"
+  region    String? // "Western", "Delta", "Kongu" — for reporting buckets
+  /// Nullable: not yet verified against a defensible source for every district.
+  /// Do not fabricate — leave null and flag for verification until confirmed.
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+  isMetro   Boolean  @default(false)
+
+  /// DES Building Construction Cost Index centre this district maps to.
+  /// Only 16 centres exist statewide, so this is many-to-one and nullable.
+  desCentreCode String?
+
+  /// SOR area supplement flag — Greater Chennai / Madurai / Coimbatore
+  /// corporation limits and hill areas carry extra percentages on material
+  /// rates. Stored as a multiplier applied at derivation time.
+  sorAreaSupplementPct Decimal? @db.Decimal(5, 2)
+
+  /// Nearest district with reliable observed coverage, used as the derivation
+  /// anchor. Self-referential; null means "this district is itself an anchor".
+  anchorDistrictId String?
+  anchorDistrict   PricingDistrict?  @relation("DistrictAnchor", fields: [anchorDistrictId], references: [id])
+  derivedDistricts PricingDistrict[] @relation("DistrictAnchor")
+
+  /// Road distance to anchor in km. Freight adder is per-km, so this is not
+  /// great-circle distance — populate from a routing API, not lat/long math.
+  anchorRoadDistanceKm Int?
+
+  endpoints    PricingSourceEndpoint[]
+  observations PricingObservation[]
+  dailyPrices  PricingDistrictPriceDaily[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([desCentreCode])
+  @@map("pricing_district")
+}
+
+/// Quarterly DES material/labour cost index per centre. Used for DERIVED_INDEX
+/// and for sanity-checking scraped movement against an official series.
+model PricingCostIndex {
+  id             String   @id @default(cuid())
+  centreCode     String
+  quarterEndsOn  DateTime @db.Date
+  materialIndex  Decimal  @db.Decimal(8, 2)
+  labourIndex    Decimal? @db.Decimal(8, 2)
+  compositeIndex Decimal? @db.Decimal(8, 2)
+  sourceUrl      String?
+  createdAt      DateTime @default(now())
+
+  @@unique([centreCode, quarterEndsOn])
+  @@map("pricing_cost_index")
+}
+
+/// Two-level taxonomy. parentId null = top-level family (Cement, Steel, Sand...).
+model PricingMaterialCategory {
+  id       String                    @id @default(cuid())
+  code     String                    @unique // "CEMENT_OPC_53"
+  name     String
+  parentId String?
+  parent   PricingMaterialCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children PricingMaterialCategory[] @relation("CategoryTree")
+
+  /// Unit all prices for this family normalize to. Cement -> KG, sand -> CFT,
+  /// bricks -> PIECE. Changing this after go-live invalidates the serving layer.
+  baseUnit BaseUnit
+
+  /// Unit shown to the customer, which is often NOT the base unit.
+  /// Cement: base KG, display BAG. Sand: base CFT, display "unit" (=100 CFT).
+  displayUnit  BaseUnit
+  displayLabel String? // "per bag (50kg)", "per unit (100 cft)"
+
+  /// Hard plausibility bounds in base unit, in INR. Anything outside is
+  /// quarantined, not stored as a live price. Prevents a mis-parsed
+  /// "₹5.50 per brick" landing as "₹5.50 per 1000".
+  floorPerBaseUnit   Decimal? @db.Decimal(14, 4)
+  ceilingPerBaseUnit Decimal? @db.Decimal(14, 4)
+
+  gstRatePct Decimal? @db.Decimal(5, 2) // 18 for TMT (HSN 7214), 28 for cement
+  hsnCode    String?
+
+  skus            PricingCanonicalSku[]
+  unitConversions PricingUnitConversion[]
+  endpoints       PricingSourceEndpoint[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+  @@map("pricing_material_category")
+}
+
+model PricingBrand {
+  id            String  @id @default(cuid())
+  slug          String  @unique
+  name          String
+  /// True for primary producers whose own published price is authoritative
+  /// (e.g. TN mills publishing daily TMT rates).
+  isPrimaryMill Boolean @default(false)
+  isTnBased     Boolean @default(false)
+
+  skus PricingCanonicalSku[]
+
+  createdAt DateTime @default(now())
+
+  @@map("pricing_brand")
+}
+
+/// The thing a price attaches to. One row per (material, brand, grade, size,
+/// pack) combination we track. Keep this deliberately small — a few hundred
+/// rows, not a mirror of every marketplace listing.
+model PricingCanonicalSku {
+  id   String @id @default(cuid())
+  code String @unique // "TMT_TATA_FE500D_12MM"
+
+  materialCategoryId String
+  materialCategory   PricingMaterialCategory @relation(fields: [materialCategoryId], references: [id])
+
+  brandId String?
+  brand   PricingBrand? @relation(fields: [brandId], references: [id])
+
+  grade     String? // "Fe 500D", "OPC 53", "M-Sand"
+  sizeMm    Int? // 12 for 12mm TMT
+  sizeLabel String? // "9x4x3 in", "600x600 mm"
+  packLabel String? // "50 kg bag", "1 unit = 100 cft"
+
+  /// Deterministic fingerprint of the fields above. Postgres treats NULLs as
+  /// distinct in unique indexes, so a composite unique on nullable columns
+  /// would not actually dedupe. Compute this in application code (spec §2.3)
+  /// and let the DB enforce it here.
+  fingerprint String @unique
+
+  baseUnit BaseUnit
+  specJson Json?
+  isActive Boolean  @default(true)
+
+  /// LOGICAL FK -> existing supplier Listing table. Set when this canonical SKU
+  /// corresponds to a SKU we actually transact, which lets the UF-02 chart plot
+  /// our own price against the scraped market band.
+  matsrcListingId String?
+
+  aliases      PricingSkuAlias[]
+  observations PricingObservation[]
+  dailyPrices  PricingDistrictPriceDaily[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([materialCategoryId, isActive])
+  @@index([brandId])
+  @@map("pricing_canonical_sku")
+}
+
+/// Raw label -> CanonicalSku mapping. This table is where most of the ongoing
+/// operational effort lives; marketplace titles are unbounded free text.
+/// Unmapped labels accumulate here with canonicalSkuId = null for admin triage.
+model PricingSkuAlias {
+  id String @id @default(cuid())
+
+  sourceId String?
+  source   PricingSource? @relation(fields: [sourceId], references: [id])
+
+  rawLabel        String // exactly as scraped
+  normalizedLabel String // casefolded, punctuation-stripped, synonyms applied
+
+  canonicalSkuId String?
+  canonicalSku   PricingCanonicalSku? @relation(fields: [canonicalSkuId], references: [id])
+
+  matchType       MappingMatchType
+  matchScore      Decimal?         @db.Decimal(5, 4)
+  occurrenceCount Int              @default(1) // prioritize triage by frequency
+
+  reviewedByAdminId String? // LOGICAL FK -> User (admin)
+  reviewedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sourceId, rawLabel])
+  @@index([canonicalSkuId])
+  @@index([normalizedLabel])
+  @@index([matchType, occurrenceCount(sort: Desc)]) // triage queue
+  @@map("pricing_sku_alias")
+}
+
+/// Quoted-unit -> base-unit factors. Material-scoped because the same word
+/// means different things: a "unit" of sand is 100 cft; a "unit" of cement is
+/// a 50 kg bag. Getting this table wrong is the single most likely cause of
+/// a wrong price reaching a customer.
+model PricingUnitConversion {
+  id String @id @default(cuid())
+
+  materialCategoryId String?
+  materialCategory   PricingMaterialCategory? @relation(fields: [materialCategoryId], references: [id])
+
+  fromLabel  String // "bag", "unit", "tonne", "brass", "1000 nos"
+  toBaseUnit BaseUnit
+  factor     Decimal  @db.Decimal(16, 6) // multiply quoted qty by this
+
+  isAmbiguous Boolean @default(false) // if true, require explicit override
+  note        String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([materialCategoryId, fromLabel])
+  @@map("pricing_unit_conversion")
+}
+
+// ============================ SOURCE REGISTRY ================================
+
+/// One row per external source. Drives scheduling, cost attribution, and —
+/// critically — whether the data may be shown to a customer.
+model PricingSource {
+  id   String @id @default(cuid())
+  code String @unique // "TN_PWD_SOR", "INDIAMART", "LIVECHENNAI"
+  name String
+
+  tier         SourceTier
+  licenseClass LicenseClass
+  scrapeMethod ScrapeMethod
+
+  /// Nullable: two sources have an unverified base URL and MATSRC_* internal
+  /// sources have no external URL at all. Do not fabricate — leave null and
+  /// flag for verification until confirmed.
+  baseUrl String?
+
+  /// Compliance gates. A source with robotsAllowed=false or a null
+  /// tosReviewedAt must not be scheduled — enforce in the scheduler, not just
+  /// by convention.
+  robotsAllowed        Boolean   @default(false)
+  tosReviewedAt        DateTime?
+  tosReviewNote        String?
+  publicDisplayAllowed Boolean   @default(false)
+  attributionText      String?
+
+  defaultPriceType    PriceType
+  defaultTaxTreatment TaxTreatment @default(UNKNOWN)
+
+  /// Apify wiring. actorId is the store slug (e.g. "apify/cheerio-scraper");
+  /// taskId pins a saved input configuration so runs are reproducible.
+  apifyActorId String?
+  apifyTaskId  String?
+
+  cronExpression String? // null = manual / annual PDF sources
+  isEnabled      Boolean @default(false)
+
+  /// Expected data age. Observations older than this are flagged STALE_AS_OF
+  /// rather than silently trusted.
+  freshnessSlaHours Int?
+
+  /// Trust weight used when blending multiple sources into a median.
+  /// Government and mill-direct outrank marketplace listings.
+  trustWeight Decimal @default(1.0) @db.Decimal(4, 2)
+
+  endpoints       PricingSourceEndpoint[]
+  runs            PricingScrapeRun[]
+  rawObservations PricingRawObservation[]
+  observations    PricingObservation[]
+  aliases         PricingSkuAlias[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isEnabled, tier])
+  @@map("pricing_source")
+}
+
+/// A specific crawl target: usually source x district x category. Most
+/// aggregators use predictable URL patterns per city, so this is generated,
+/// not hand-written. Failure counters here drive auto-disable.
+model PricingSourceEndpoint {
+  id String @id @default(cuid())
+
+  sourceId String
+  source   PricingSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  districtId String?
+  district   PricingDistrict? @relation(fields: [districtId], references: [id])
+
+  materialCategoryId String?
+  materialCategory   PricingMaterialCategory? @relation(fields: [materialCategoryId], references: [id])
+
+  url        String
+  /// Per-endpoint Apify input override (keyword, city param, pagination cap).
+  apifyInput Json?
+
+  lastFetchedAt       DateTime?
+  lastStatus          RunStatus?
+  consecutiveFailures Int        @default(0)
+  isEnabled           Boolean    @default(true)
+  disabledReason      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sourceId, url])
+  @@index([isEnabled, lastFetchedAt])
+  @@index([districtId, materialCategoryId])
+  @@map("pricing_source_endpoint")
+}
+
+// ============================== RAW LAYER ====================================
+
+/// One Apify run (or one PDF parse job). Keeps cost and reliability visible —
+/// this is what the admin observability dashboard reads.
+model PricingScrapeRun {
+  id String @id @default(cuid())
+
+  sourceId String
+  source   PricingSource @relation(fields: [sourceId], references: [id])
+
+  apifyRunId     String? @unique
+  apifyActorId   String?
+  apifyDatasetId String?
+
+  status     RunStatus @default(QUEUED)
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  itemsFetched  Int @default(0)
+  itemsParsed   Int @default(0)
+  itemsRejected Int @default(0)
+  itemsUnmapped Int @default(0)
+
+  computeUnits Decimal? @db.Decimal(12, 4)
+  costUsd      Decimal? @db.Decimal(10, 4)
+
+  triggeredBy  String? // "cron", "manual:<adminId>", "backfill"
+  errorMessage String?
+  logUrl       String?
+
+  rawObservations PricingRawObservation[]
+
+  @@index([sourceId, startedAt(sort: Desc)])
+  @@index([status])
+  @@map("pricing_scrape_run")
+}
+
+/// IMMUTABLE landing zone. Never updated except parseStatus. Re-normalization
+/// must always be possible from this table alone without re-scraping —
+/// that property is what makes a parser bug cheap instead of catastrophic.
+model PricingRawObservation {
+  id String @id @default(cuid())
+
+  runId String
+  run   PricingScrapeRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  sourceId String
+  source   PricingSource @relation(fields: [sourceId], references: [id])
+
+  sourceUrl String
+  fetchedAt DateTime @default(now())
+
+  /// Full untouched item from the Apify dataset.
+  payload Json
+
+  /// Extracted-but-unparsed strings, kept separately so a parser fix can be
+  /// diffed against what the page actually said.
+  rawSkuLabel     String?
+  rawPriceText    String?
+  rawUnitText     String?
+  rawLocationText String?
+  rawAsOfText     String?
+  rawSupplierName String?
+
+  /// sha256 over (sourceId, sourceUrl, rawSkuLabel, rawPriceText,
+  /// rawUnitText, rawLocationText, rawAsOfText). Makes re-runs idempotent:
+  /// an unchanged page produces zero new rows. See spec §2.4.
+  dedupeHash String @unique
+
+  parseStatus ParseStatus @default(PENDING)
+  parseError  String?
+
+  observation PricingObservation?
+
+  @@index([sourceId, fetchedAt(sort: Desc)])
+  @@index([parseStatus, fetchedAt])
+  @@index([runId])
+  @@map("pricing_raw_observation")
+}
+
+// =========================== NORMALIZED LAYER ================================
+
+/// Append-only. One row per successfully normalized price point.
+/// Never mutate priceValue — a corrected price is a new observation with the
+/// prior one marked excluded.
+model PricingObservation {
+  id String @id @default(cuid())
+
+  rawId String                @unique
+  raw   PricingRawObservation @relation(fields: [rawId], references: [id])
+
+  sourceId String
+  source   PricingSource @relation(fields: [sourceId], references: [id])
+
+  canonicalSkuId String
+  canonicalSku   PricingCanonicalSku @relation(fields: [canonicalSkuId], references: [id])
+
+  districtId String
+  district   PricingDistrict @relation(fields: [districtId], references: [id])
+
+  /// LOGICAL FK -> existing Supplier. Populated only for INTERNAL tier
+  /// observations (our own listings, quotes, closed orders).
+  matsrcSupplierId String?
+
+  /// As quoted by the source, before normalization. Retained for display and
+  /// for debugging unit errors.
+  quotedPrice     Decimal  @db.Decimal(14, 2)
+  quotedMin       Decimal? @db.Decimal(14, 2) // populated when priceType = RANGE
+  quotedMax       Decimal? @db.Decimal(14, 2)
+  quotedUnitLabel String
+  quotedQty       Decimal  @default(1) @db.Decimal(14, 4)
+  currency        String   @default("INR")
+
+  /// The comparable number. Everything downstream reads this, never quotedPrice.
+  pricePerBaseUnit Decimal  @db.Decimal(14, 4)
+  baseUnit         BaseUnit
+
+  /// Normalized to ex-GST for cross-source comparability. Keep both so the
+  /// customer-facing figure can be rendered inclusive if we choose.
+  taxTreatment          TaxTreatment
+  pricePerBaseUnitExGst Decimal?     @db.Decimal(14, 4)
+
+  priceType  PriceType
+  asOfDate   DateTime?  @db.Date // source-declared date, when published
+  fetchedAt  DateTime
+  confidence Confidence
+
+  /// Soft exclusion. Outliers stay in the table for audit but are skipped by
+  /// the aggregation job.
+  isExcluded      Boolean @default(false)
+  exclusionReason String?
+
+  anomalies PricingAnomaly[]
+
+  createdAt DateTime @default(now())
+
+  @@index([canonicalSkuId, districtId, asOfDate(sort: Desc)])
+  @@index([canonicalSkuId, districtId, isExcluded, fetchedAt(sort: Desc)])
+  @@index([sourceId, fetchedAt(sort: Desc)])
+  @@index([matsrcSupplierId])
+  @@map("pricing_observation")
+}
+
+model PricingAnomaly {
+  id String @id @default(cuid())
+
+  observationId String?
+  observation   PricingObservation? @relation(fields: [observationId], references: [id], onDelete: Cascade)
+
+  /// Set instead of observationId for source-level problems (schema drift),
+  /// which have no single offending row.
+  sourceId String?
+
+  reason     AnomalyReason
+  detail     String?
+  detectedAt DateTime      @default(now())
+
+  resolvedByAdminId String? // LOGICAL FK -> User (admin)
+  resolvedAt        DateTime?
+  resolutionAction  String? // "accepted", "excluded", "remapped", "source_fixed"
+
+  @@index([resolvedAt, detectedAt])
+  @@index([reason])
+  @@map("pricing_anomaly")
+}
+
+// ============================ SERVING LAYER ==================================
+
+/// What the customer portal actually reads. One row per SKU x district x day.
+/// Recomputed idempotently by a scheduled job; safe to rebuild from
+/// PricingObservation at any time.
+model PricingDistrictPriceDaily {
+  id String @id @default(cuid())
+
+  canonicalSkuId String
+  canonicalSku   PricingCanonicalSku @relation(fields: [canonicalSkuId], references: [id])
+
+  districtId String
+  district   PricingDistrict @relation(fields: [districtId], references: [id])
+
+  priceDate DateTime @db.Date
+  baseUnit  BaseUnit
+
+  medianPerBaseUnit Decimal  @db.Decimal(14, 4)
+  p25PerBaseUnit    Decimal? @db.Decimal(14, 4)
+  p75PerBaseUnit    Decimal? @db.Decimal(14, 4)
+  minPerBaseUnit    Decimal? @db.Decimal(14, 4)
+  maxPerBaseUnit    Decimal? @db.Decimal(14, 4)
+
+  /// Display-unit convenience copy so the UI never does unit math client-side.
+  medianPerDisplayUnit Decimal?  @db.Decimal(14, 4)
+  displayUnit          BaseUnit?
+
+  observationCount Int
+  sourceCount      Int
+
+  method     PriceMethod
+  confidence Confidence
+
+  /// Populated when method is any DERIVED_*. Records exactly how the number
+  /// was manufactured so a disputed price can be reconstructed.
+  anchorDistrictId String?
+  derivationJson   Json?
+
+  /// Precomputed from the licenseClass of contributing sources. If any
+  /// INTERNAL_ONLY source contributed, this is false and the row is
+  /// benchmarking-only. The public API filters on this column.
+  publicDisplayAllowed    Boolean  @default(false)
+  contributingSourceCodes String[]
+
+  /// Our own median quote for the same SKU/district, for the side-by-side
+  /// comparison in the UF-02 price intelligence component.
+  matsrcMedianPerBaseUnit Decimal? @db.Decimal(14, 4)
+  matsrcQuoteCount        Int      @default(0)
+
+  computedAt DateTime @default(now())
+
+  @@unique([canonicalSkuId, districtId, priceDate])
+  @@index([districtId, priceDate(sort: Desc), publicDisplayAllowed])
+  @@index([canonicalSkuId, priceDate(sort: Desc)])
+  @@map("pricing_district_price_daily")
+}
+
+/// Monthly rollup so the 12-month trend chart is a single indexed read
+/// instead of a 365-row scan per SKU.
+model PricingTrendMonthly {
+  id String @id @default(cuid())
+
+  canonicalSkuId String
+  districtId     String
+  monthStart     DateTime @db.Date
+
+  medianPerBaseUnit Decimal  @db.Decimal(14, 4)
+  minPerBaseUnit    Decimal? @db.Decimal(14, 4)
+  maxPerBaseUnit    Decimal? @db.Decimal(14, 4)
+  momChangePct      Decimal? @db.Decimal(7, 3)
+  yoyChangePct      Decimal? @db.Decimal(7, 3)
+
+  dayCount   Int
+  confidence Confidence
+  computedAt DateTime   @default(now())
+
+  @@unique([canonicalSkuId, districtId, monthStart])
+  @@index([districtId, monthStart(sort: Desc)])
+  @@map("pricing_trend_monthly")
+}
+
+// ===================== WATCHLIST / ALERT INTEGRATION =========================
+
+/// Bridges UF-09 target prices to the serving layer. Deliberately does NOT
+/// redefine the existing Watchlist model — it references it by id so this
+/// module stays additive.
+model PricingAlertEvaluation {
+  id String @id @default(cuid())
+
+  /// LOGICAL FK -> existing builder Watchlist row.
+  watchlistId String
+
+  canonicalSkuId String
+  districtId     String
+
+  targetPricePerBaseUnit  Decimal  @db.Decimal(14, 4)
+  currentPricePerBaseUnit Decimal  @db.Decimal(14, 4)
+  baseUnit                BaseUnit
+
+  didTrigger  Boolean
+  evaluatedAt DateTime @default(now())
+
+  /// LOGICAL FK -> notifications module. Null when didTrigger is false, or
+  /// when suppressed by cooldown.
+  notificationId   String?
+  suppressedReason String? // "cooldown", "low_confidence", "derived_price"
+
+  @@index([watchlistId, evaluatedAt(sort: Desc)])
+  @@index([didTrigger, evaluatedAt(sort: Desc)])
+  @@map("pricing_alert_evaluation")
+}

@@ -1,0 +1,69 @@
+[
+  { "materialCategoryCode": "CEMENT", "fromLabel": "bag", "toBaseUnit": "KG", "factor": 50, "isAmbiguous": false, "note": "Indian standard bag" },
+  { "materialCategoryCode": "CEMENT", "fromLabel": "50kg bag", "toBaseUnit": "KG", "factor": 50, "isAmbiguous": false, "note": "Indian standard bag" },
+  { "materialCategoryCode": "CEMENT", "fromLabel": "50 kg bag", "toBaseUnit": "KG", "factor": 50, "isAmbiguous": false, "note": "Indian standard bag" },
+  { "materialCategoryCode": "CEMENT", "fromLabel": "kg", "toBaseUnit": "KG", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "CEMENT", "fromLabel": "tonne", "toBaseUnit": "KG", "factor": 1000, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "CEMENT", "fromLabel": "mt", "toBaseUnit": "KG", "factor": 1000, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "CEMENT", "fromLabel": "ton", "toBaseUnit": "KG", "factor": 1000, "isAmbiguous": false, "note": null },
+
+  { "materialCategoryCode": "TMT_STEEL", "fromLabel": "kg", "toBaseUnit": "KG", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "TMT_STEEL", "fromLabel": "tonne", "toBaseUnit": "KG", "factor": 1000, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "TMT_STEEL", "fromLabel": "mt", "toBaseUnit": "KG", "factor": 1000, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "TMT_STEEL", "fromLabel": "ton", "toBaseUnit": "KG", "factor": 1000, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "TMT_STEEL", "fromLabel": "quintal", "toBaseUnit": "KG", "factor": 100, "isAmbiguous": false, "note": null },
+
+  { "materialCategoryCode": "SAND", "fromLabel": "cft", "toBaseUnit": "CFT", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "SAND", "fromLabel": "cu ft", "toBaseUnit": "CFT", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "SAND", "fromLabel": "cubic feet", "toBaseUnit": "CFT", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "SAND", "fromLabel": "unit", "toBaseUnit": "CFT", "factor": 100, "isAmbiguous": false, "note": "TN trade convention — confirm against local usage" },
+  { "materialCategoryCode": "SAND", "fromLabel": "brass", "toBaseUnit": "CFT", "factor": 100, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "SAND", "fromLabel": "cum", "toBaseUnit": "CFT", "factor": 35.3147, "isAmbiguous": false, "note": "exact: 35.3146667" },
+  { "materialCategoryCode": "SAND", "fromLabel": "m3", "toBaseUnit": "CFT", "factor": 35.3147, "isAmbiguous": false, "note": "exact: 35.3146667" },
+  { "materialCategoryCode": "SAND", "fromLabel": "cubic metre", "toBaseUnit": "CFT", "factor": 35.3147, "isAmbiguous": false, "note": "exact: 35.3146667" },
+
+  { "materialCategoryCode": "COARSE_AGGREGATE", "fromLabel": "cft", "toBaseUnit": "CFT", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "COARSE_AGGREGATE", "fromLabel": "unit", "toBaseUnit": "CFT", "factor": 100, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "COARSE_AGGREGATE", "fromLabel": "cum", "toBaseUnit": "CFT", "factor": 35.3147, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "COARSE_AGGREGATE", "fromLabel": "m3", "toBaseUnit": "CFT", "factor": 35.3147, "isAmbiguous": false, "note": null },
+
+  { "materialCategoryCode": "BRICKS_BLOCKS", "fromLabel": "piece", "toBaseUnit": "PIECE", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "BRICKS_BLOCKS", "fromLabel": "nos", "toBaseUnit": "PIECE", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "BRICKS_BLOCKS", "fromLabel": "no", "toBaseUnit": "PIECE", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "BRICKS_BLOCKS", "fromLabel": "pcs", "toBaseUnit": "PIECE", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "BRICKS_BLOCKS", "fromLabel": "1000 nos", "toBaseUnit": "PIECE", "factor": 1000, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "BRICKS_BLOCKS", "fromLabel": "per thousand", "toBaseUnit": "PIECE", "factor": 1000, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "BRICKS_BLOCKS", "fromLabel": "1000", "toBaseUnit": "PIECE", "factor": 1000, "isAmbiguous": false, "note": null },
+
+  { "materialCategoryCode": "RMC", "fromLabel": "cum", "toBaseUnit": "CUM", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "RMC", "fromLabel": "m3", "toBaseUnit": "CUM", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "RMC", "fromLabel": "cft", "toBaseUnit": "CUM", "factor": 0.0283168, "isAmbiguous": false, "note": null },
+
+  { "materialCategoryCode": "TILES", "fromLabel": "sqft", "toBaseUnit": "SQFT", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "TILES", "fromLabel": "sq ft", "toBaseUnit": "SQFT", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "TILES", "fromLabel": "sqm", "toBaseUnit": "SQFT", "factor": 10.7639, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "TILES", "fromLabel": "sq m", "toBaseUnit": "SQFT", "factor": 10.7639, "isAmbiguous": false, "note": null },
+
+  { "materialCategoryCode": "PAINT", "fromLabel": "litre", "toBaseUnit": "LITRE", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "PAINT", "fromLabel": "ltr", "toBaseUnit": "LITRE", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "PAINT", "fromLabel": "l", "toBaseUnit": "LITRE", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "PAINT", "fromLabel": "20 l bucket", "toBaseUnit": "LITRE", "factor": 20, "isAmbiguous": false, "note": "verify bucket size per brand" },
+  { "materialCategoryCode": "PAINT", "fromLabel": "20l", "toBaseUnit": "LITRE", "factor": 20, "isAmbiguous": false, "note": "verify bucket size per brand" },
+  { "materialCategoryCode": "PAINT", "fromLabel": "bucket", "toBaseUnit": "LITRE", "factor": 20, "isAmbiguous": false, "note": "verify bucket size per brand" },
+
+  { "materialCategoryCode": "PLUMBING", "fromLabel": "rft", "toBaseUnit": "RFT", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "PLUMBING", "fromLabel": "running foot", "toBaseUnit": "RFT", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "PLUMBING", "fromLabel": "ft", "toBaseUnit": "RFT", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "PLUMBING", "fromLabel": "metre", "toBaseUnit": "RFT", "factor": 3.28084, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "PLUMBING", "fromLabel": "m", "toBaseUnit": "RFT", "factor": 3.28084, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "PLUMBING", "fromLabel": "mtr", "toBaseUnit": "RFT", "factor": 3.28084, "isAmbiguous": false, "note": null },
+
+  { "materialCategoryCode": "ELECTRICAL", "fromLabel": "rft", "toBaseUnit": "RFT", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "ELECTRICAL", "fromLabel": "ft", "toBaseUnit": "RFT", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "ELECTRICAL", "fromLabel": "metre", "toBaseUnit": "RFT", "factor": 3.28084, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "ELECTRICAL", "fromLabel": "m", "toBaseUnit": "RFT", "factor": 3.28084, "isAmbiguous": false, "note": null },
+
+  { "materialCategoryCode": "TIMBER", "fromLabel": "cft", "toBaseUnit": "CFT", "factor": 1, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "TIMBER", "fromLabel": "cum", "toBaseUnit": "CFT", "factor": 35.3147, "isAmbiguous": false, "note": null },
+  { "materialCategoryCode": "TIMBER", "fromLabel": "m3", "toBaseUnit": "CFT", "factor": 35.3147, "isAmbiguous": false, "note": null }
+]

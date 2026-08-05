@@ -189,3 +189,39 @@ export type SiteWiseReportResponse = {
   };
 };
 
+// ─────────────────────────────────────────────
+// District-Wise Price Intelligence Report (Phase 5)
+// Backed by the Price Intelligence serving layer
+// (PricingDistrictPriceDaily / PricingTrendMonthly), read directly via
+// Prisma — separate data source from the legacy PriceSnapshot-backed
+// reports above. Scoped to districts matching the builder's registered
+// site cities where possible, falling back to all districts with public
+// data otherwise.
+// ─────────────────────────────────────────────
+
+export type DistrictPriceTrendPoint = {
+  monthStart: string; // YYYY-MM-DD
+  medianPerBaseUnit: number;
+  momChangePct: number | null;
+  yoyChangePct: number | null;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+};
+
+export type DistrictPriceIntelligenceRow = {
+  canonicalSkuCode: string;
+  materialName: string;
+  districtCode: string;
+  districtName: string;
+  baseUnit: string;
+  latestPriceDate: string; // YYYY-MM-DD
+  medianPerBaseUnit: number;
+  minPerBaseUnit: number | null;
+  maxPerBaseUnit: number | null;
+  medianPerDisplayUnit: number | null;
+  displayUnit: string | null;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  method: string;
+  trend: DistrictPriceTrendPoint[];
+};
+
+

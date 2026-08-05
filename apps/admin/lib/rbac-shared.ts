@@ -9,7 +9,9 @@ export const MENU_CONFIG = [
   { key: "disputes", href: "/disputes", label: "Disputes" },
   { key: "aggregation", href: "/aggregation", label: "Aggregation Pools" },
   { key: "catalog", href: "/catalog", label: "Catalog Master Data" },
+  { key: "pricing", href: "/pricing", label: "Price Intelligence" },
   { key: "audit", href: "/audit", label: "Audit Logs" },
+
   { key: "access", href: "/access", label: "Access Control" },
 ] as const;
 

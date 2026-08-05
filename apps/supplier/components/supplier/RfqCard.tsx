@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RfqQuoteAssistPanel, type RfqMarketGuidanceView } from "./RfqQuoteAssistPanel";
 
 type Rfq = {
   id: string;
@@ -12,7 +13,7 @@ type Rfq = {
   } | null;
 };
 
-export function RfqCard({ rfq }: { rfq: Rfq }) {
+export function RfqCard({ rfq, marketGuidance }: { rfq: Rfq; marketGuidance?: RfqMarketGuidanceView }) {
   return (
     <article className="panel p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">RFQ #{rfq.id}</p>
@@ -24,6 +25,7 @@ export function RfqCard({ rfq }: { rfq: Rfq }) {
       <Link href={`/rfqs?respond=${rfq.id}`} className="mt-4 inline-flex rounded-lg bg-orange-500 px-3 py-2 text-sm font-bold text-white">
         Respond with Quote
       </Link>
+      {marketGuidance ? <RfqQuoteAssistPanel rfqId={rfq.id} guidance={marketGuidance} /> : null}
     </article>
   );
 }

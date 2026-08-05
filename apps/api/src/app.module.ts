@@ -33,6 +33,8 @@ import { SupplierAggregationModule } from "./supplier/aggregation/aggregation.mo
 import { AdminAggregationModule } from "./admin/aggregation/aggregation.module";
 import { SupplierReportsModule } from "./supplier/reports/reports.module";
 import { WhatsAppModule } from "./whatsapp/whatsapp.module";
+import { PricingModule } from "./pricing/pricing.module";
+import { AdminPricingModule } from "./admin/pricing/admin-pricing.module";
 
 
 @Module({
@@ -72,6 +74,8 @@ import { WhatsAppModule } from "./whatsapp/whatsapp.module";
     CatalogModule,
 
     WhatsAppModule,
+    PricingModule,
+    AdminPricingModule,
   ],
 
   providers: [RoleGuard],

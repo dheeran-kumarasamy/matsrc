@@ -30,19 +30,26 @@ export async function GET(request: Request) {
       },
     });
 
-    const canonicalByKey = new Map<string, { title: string; unit: string }>();
+    // NOTE: listings from the public feed carry `canonicalProductId` set to
+    // the CanonicalProduct's cuid `id` (see
+    // apps/supplier/lib/supplier-data.ts `getPublicSupplierListings()`), not
+    // the composite `canonicalKey` string. Match against `product.id` here
+    // (previously incorrectly matched against `canonicalKey`, which meant
+    // this report's `matches` filter always returned zero rows).
+    const canonicalById = new Map<string, { canonicalKey: string; title: string; unit: string }>();
     for (const item of orderedProducts) {
       const canonicalProduct = item.product.canonicalProduct;
-      if (!canonicalProduct) continue;
-      if (!canonicalByKey.has(canonicalProduct.canonicalKey)) {
-        canonicalByKey.set(canonicalProduct.canonicalKey, {
+      if (!canonicalProduct || !item.product.canonicalProductId) continue;
+      if (!canonicalById.has(item.product.canonicalProductId)) {
+        canonicalById.set(item.product.canonicalProductId, {
+          canonicalKey: canonicalProduct.canonicalKey,
           title: canonicalProduct.title,
           unit: item.product.unit,
         });
       }
     }
 
-    if (canonicalByKey.size === 0) {
+    if (canonicalById.size === 0) {
       return NextResponse.json([]);
     }
 
@@ -59,9 +66,9 @@ export async function GET(request: Request) {
 
     const rows: LiveMarketPriceRow[] = [];
 
-    for (const [canonicalKey, meta] of canonicalByKey.entries()) {
+    for (const [canonicalProductId, meta] of canonicalById.entries()) {
       const matches = listings.filter(
-        (listing) => listing.canonicalProductId === canonicalKey && listing.active
+        (listing) => listing.canonicalProductId === canonicalProductId && listing.active
       );
       if (matches.length === 0) continue;
 
@@ -76,7 +83,7 @@ export async function GET(request: Request) {
       const prices = offers.map((o) => o.price);
 
       rows.push({
-        canonicalKey,
+        canonicalKey: meta.canonicalKey,
         name: meta.title,
         unit: meta.unit,
         offers,

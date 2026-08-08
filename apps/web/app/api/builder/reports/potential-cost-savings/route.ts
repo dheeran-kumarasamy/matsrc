@@ -41,23 +41,33 @@ export async function GET(request: Request) {
 
     const listings = await getSupplierListings();
 
-    // Pre-compute the current cheapest active price per canonical key.
-    const cheapestByCanonicalKey = new Map<string, number>();
+    // Pre-compute the current cheapest active price per canonical product id.
+    //
+    // NOTE: listings from the public feed carry `canonicalProductId` set to
+    // the CanonicalProduct's cuid `id` (see
+    // apps/supplier/lib/supplier-data.ts `getPublicSupplierListings()`), not
+    // the composite `canonicalKey` string. Look up by `product.canonicalProductId`
+    // here (previously incorrectly looked up by `canonicalKey`, which meant
+    // this report's lookup always returned `undefined` and every row was
+    // skipped).
+    const cheapestByCanonicalId = new Map<string, number>();
     for (const listing of listings) {
       if (!listing.active || !listing.canonicalProductId) continue;
       const price = parseListingPrice(listing.price);
-      const existing = cheapestByCanonicalKey.get(listing.canonicalProductId);
+      const existing = cheapestByCanonicalId.get(listing.canonicalProductId);
       if (existing === undefined || price < existing) {
-        cheapestByCanonicalKey.set(listing.canonicalProductId, price);
+        cheapestByCanonicalId.set(listing.canonicalProductId, price);
       }
     }
 
     const byProduct = new Map<string, CostSavingsRow>();
 
     for (const item of relevant) {
-      const canonicalKey = item.product.canonicalProduct!.canonicalKey;
-      const currentBestUnitPrice = cheapestByCanonicalKey.get(canonicalKey);
+      const canonicalProductId = item.product.canonicalProductId;
+      if (!canonicalProductId) continue;
+      const currentBestUnitPrice = cheapestByCanonicalId.get(canonicalProductId);
       if (currentBestUnitPrice === undefined) continue;
+
 
       const paidUnitPrice = Number(item.unitPrice);
       const existing = byProduct.get(item.productId);

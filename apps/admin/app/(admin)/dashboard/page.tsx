@@ -42,9 +42,13 @@ export default async function AdminDashboardPage() {
 
   const events = auditRaw.map((event) => ({
     id: event.id,
+    actorId: event.actorId,
     actor: event.actorId,
     action: event.action.toLowerCase().replace(/_/g, " "),
+    entityType: event.entityType,
+    entityId: event.entityId,
     target: `${event.entityType} ${event.entityId}`,
+    createdAt: event.createdAt,
     time: new Date(event.createdAt).toLocaleString("en-IN"),
   }));
 

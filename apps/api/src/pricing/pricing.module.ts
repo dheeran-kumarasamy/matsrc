@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
 import { PricingConfigService } from "./pricing-config.service";
-import { APIFY_ACTOR_CLIENT, StubApifyActorClient } from "./apify-actor-client";
+import { APIFY_ACTOR_CLIENT, LiveApifyActorClient, StubApifyActorClient } from "./apify-actor-client";
 import { PricingIngestionService } from "./pricing-ingestion.service";
 import { PricingNormalizationService } from "./pricing-normalization.service";
 import { PricingAnomalyDetectionService } from "./pricing-anomaly-detection.service";
@@ -34,7 +34,13 @@ import { PublicPricingController } from "./public-pricing.controller";
   providers: [
     PricingConfigService,
     StubApifyActorClient,
-    { provide: APIFY_ACTOR_CLIENT, useExisting: StubApifyActorClient },
+    LiveApifyActorClient,
+    {
+      provide: APIFY_ACTOR_CLIENT,
+      useFactory: (config: PricingConfigService, stub: StubApifyActorClient, live: LiveApifyActorClient) =>
+        config.isApifyLiveEnabled() ? live : stub,
+      inject: [PricingConfigService, StubApifyActorClient, LiveApifyActorClient],
+    },
     PricingIngestionService,
     PricingNormalizationService,
     PricingAnomalyDetectionService,

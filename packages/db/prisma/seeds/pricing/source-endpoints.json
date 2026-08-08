@@ -38,5 +38,188 @@
     "url": "internal://matsrc-listings",
     "apifyInput": null,
     "isEnabled": false
+  },
+  {
+    "sourceCode": "JSW_STEEL",
+    "materialCategoryCode": "TMT_STEEL",
+    "districtCode": null,
+    "url": "https://www.jswsteel.in",
+    "apifyInput": { "note": "No public pricing page found. Homepage crawl (curl, 2026-07-08) surfaced only investor-relations/CSR/sustainability links — no price/dealer/rate page discovered. Left as homepage placeholder pending further manual research; do not enable." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "TATA_STEEL",
+    "materialCategoryCode": "TMT_STEEL",
+    "districtCode": null,
+    "url": "https://tatatiscon.co.in/recommended-consumer-prices/",
+    "apifyInput": {
+      "note": "Verified 2026-07-08 via curl (HTTP 200). Tata Tiscon is Tata Steel's TMT rebar retail sub-brand; its 'recommended-consumer-prices' page is the closest official published-rate page found for Tata Steel. robots.txt (tatatiscon.co.in) allows crawling (Disallow: /cgi-bin/ only).",
+      "additionalUrls": ["https://tatatiscon.co.in/dealer-locator/"]
+    },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "SAIL",
+    "materialCategoryCode": "TMT_STEEL",
+    "districtCode": null,
+    "url": "https://sail.co.in/sites/default/files/2025-09/BROCHURE%20_PRICED_SEP_2025.pdf",
+    "apifyInput": {
+      "note": "Verified 2026-07-08 via curl (HTTP 200) — official SAIL priced product brochure PDF (Sep 2025). This is a PDF, not an HTML listing page; requires PDF_PARSE scrapeMethod rather than the generic Apify Cheerio/price-scraper actor. sail.co.in robots.txt only disallows /admin/, /search/ style paths — general content is permitted.",
+      "urlFieldName": "url"
+    },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "JINDAL_PANTHER",
+    "materialCategoryCode": "TMT_STEEL",
+    "districtCode": null,
+    "url": "https://www.jindalpanther.com/recommended-consumer-price",
+    "apifyInput": { "note": "Verified 2026-07-08: page exists (linked from homepage as /recommended-consumer-price) but the entire domain is behind an AppTrana WAF that returns HTTP 406 'Access Denied' for non-browser User-Agents (curl, and by extension the Apify actor, is blocked). Not scrapable without a full headless-browser fingerprint; left disabled." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "VIZAG_STEEL",
+    "materialCategoryCode": "TMT_STEEL",
+    "districtCode": null,
+    "url": "https://www.vizagsteel.com",
+    "apifyInput": { "note": "No public pricing page confirmed. Homepage links to a legacy ASP 'Price Diary' page (myindexhindi.asp?tm=2&url=code/price_mod/PricediaryLatest1.aspx) but the site failed to resolve over curl (connection error) during verification on 2026-07-08 — cannot confirm it is live/public. Left as homepage placeholder; do not enable without re-verification." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "ULTRATECH_CEMENT",
+    "materialCategoryCode": "CEMENT",
+    "districtCode": null,
+    "url": "https://www.ultratechcement.com/for-homebuilders/homebuilding-explained/home-planning-tools/stores-locator",
+    "apifyInput": { "note": "Verified 2026-07-08 via curl (HTTP 200) — official dealer/store locator page, not a price list. robots.txt only restricts nothing beyond a sitemap declaration (fully permissive)." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "RAMCO_CEMENTS",
+    "materialCategoryCode": "CEMENT",
+    "districtCode": null,
+    "url": "https://www.ramcocements.in/locator",
+    "apifyInput": { "note": "Verified 2026-07-08 via curl (HTTP 200) — official dealer locator page, not a price list. robots.txt is fully permissive (Allow: /)." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "ACC_CEMENT",
+    "materialCategoryCode": "CEMENT",
+    "districtCode": null,
+    "url": "https://www.acclimited.com",
+    "apifyInput": { "note": "No public pricing/dealer page found. Homepage (acclimited.com — corrected from placeholder acc.com, which does not resolve to the Indian ACC Ltd. site) crawl on 2026-07-08 did not surface any price/dealer/locator links. robots.txt is permissive. Left as homepage placeholder; do not enable." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "AMBUJA_CEMENT",
+    "materialCategoryCode": "CEMENT",
+    "districtCode": null,
+    "url": "https://www.ambujacement.com",
+    "apifyInput": { "note": "No public pricing/dealer page found. Homepage crawl on 2026-07-08 did not surface any price/dealer/locator links. robots.txt is permissive. Left as homepage placeholder; do not enable." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "DALMIA_CEMENT",
+    "materialCategoryCode": "CEMENT",
+    "districtCode": null,
+    "url": "https://www.dalmiacement.com/dealership/",
+    "apifyInput": { "note": "Verified 2026-07-08 via curl (HTTP 301 redirect, resolves) — official dealership/dealer-locator page, not a price list. robots.txt is permissive (Disallow: /cgi-bin/ only)." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "SHREE_CEMENT",
+    "materialCategoryCode": "CEMENT",
+    "districtCode": null,
+    "url": "https://dealers.shreecement.com/",
+    "apifyInput": { "note": "Verified 2026-07-08 via curl (HTTP 200) — official dealer locator sub-domain, not a price list." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "BIRLA_A1",
+    "materialCategoryCode": "CEMENT",
+    "districtCode": null,
+    "url": "https://www.birlaa1.com",
+    "apifyInput": { "note": "No public pricing/dealer page found. Homepage crawl on 2026-07-08 did not surface any price/dealer/locator links. Left as homepage placeholder; do not enable." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "RDC_CONCRETE",
+    "materialCategoryCode": "RMC",
+    "districtCode": null,
+    "url": "https://www.rdcconcrete.com",
+    "apifyInput": { "note": "No public pricing found — domain failed to resolve over curl (connection error) during verification on 2026-07-08. Left as homepage placeholder; do not enable without re-verification." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "PRISM_JOHNSON",
+    "materialCategoryCode": "RMC",
+    "districtCode": null,
+    "url": "https://www.prismjohnson.in",
+    "apifyInput": { "note": "No public pricing/dealer page found. Homepage crawl on 2026-07-08 did not surface any price/dealer/locator links. Left as homepage placeholder; do not enable." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "GEM_PORTAL",
+    "materialCategoryCode": null,
+    "districtCode": null,
+    "url": "https://gem.gov.in",
+    "apifyInput": { "note": "No specific verified product/pricing search-result page found. Homepage returns 200 and robots.txt (gem.gov.in) is permissive (Disallow: /cgi-bin/, /resources/ only), but GeM's actual category/bid search pages are JS-rendered (Playwright required) and a specific category URL was not confirmed live during this research pass. Left as homepage placeholder; do not enable." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "MSTC_ECOMMERCE",
+    "materialCategoryCode": null,
+    "districtCode": null,
+    "url": "https://www.mstcecommerce.com",
+    "apifyInput": { "note": "No public pricing/auction listing page confirmed. Homepage returns 200, but robots.txt request returned an 'Unauthorised Page Access' HTML error page instead of a real robots.txt, and no auction/price category URL was confirmed live. Left as homepage placeholder; do not enable." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "OFBUSINESS",
+    "materialCategoryCode": null,
+    "districtCode": null,
+    "url": "https://www.ofbusiness.com",
+    "apifyInput": { "note": "No public pricing page currently live. robots.txt explicitly names /prices/, /news/, /category/ as AI-crawler-allowed paths (suggesting a price page exists/existed), but curl to /prices/ returned HTTP 410 Gone on 2026-07-08 — the page has been removed or relocated. Left as homepage placeholder; do not enable without re-verification." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "INFRA_MARKET",
+    "materialCategoryCode": null,
+    "districtCode": null,
+    "url": "https://infra.market",
+    "apifyInput": { "note": "robots.txt is crawl-permissive and publishes real category-page sitemaps (e.g. sitemap_construction-chemical.xml resolving to live category pages like /construction-chemical/waterproofing-chemical/), confirming public category/listing pages exist. However no exact cement/steel/RMC category URL matching our PricingMaterialCategory taxonomy was confirmed live during this pass — left as homepage placeholder pending a follow-up sitemap-driven URL match; do not enable." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "MCX_INDIA",
+    "materialCategoryCode": null,
+    "districtCode": null,
+    "url": "https://www.mcxindia.com",
+    "apifyInput": { "note": "Blocked: both the homepage's market-data path and /robots.txt returned HTTP 403 'Access Denied' (Akamai edge WAF) to a plain curl request on 2026-07-08. Not scrapable without a full headless-browser fingerprint. Left disabled." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "NCDEX",
+    "materialCategoryCode": null,
+    "districtCode": null,
+    "url": "https://www.ncdex.com/marketdata/livequote.aspx",
+    "apifyInput": { "note": "Verified 2026-07-08 via curl (HTTP 200) — official live commodity quote page. robots.txt is fully permissive (Disallow: <empty>)." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "PORTER_LOGISTICS",
+    "materialCategoryCode": null,
+    "districtCode": null,
+    "url": "https://porter.in",
+    "apifyInput": { "note": "robots.txt explicitly disallows crawling the entire site (Disallow: /) — scraping is not permitted by this site's own robots directive. Freight/logistics reference only, not a material price source. Left disabled; do not enable." },
+    "isEnabled": false
+  },
+  {
+    "sourceCode": "BLACKBUCK_LOGISTICS",
+    "materialCategoryCode": null,
+    "districtCode": null,
+    "url": "https://www.blackbuck.com",
+    "apifyInput": { "note": "robots.txt is permissive (Disallow: <empty>), but this is a freight/logistics reference, not a material price source, and no public rate page was sought/found. Left disabled; do not enable." },
+    "isEnabled": false
   }
 ]
+

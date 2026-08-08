@@ -1,4 +1,5 @@
 import { AdminNav } from "@/components/admin/AdminNav";
+import { GlobalSearch } from "@/components/admin/GlobalSearch";
 import { MENU_CONFIG, requireAdminAccess } from "@/lib/rbac";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -16,12 +17,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         role={access.role}
       />
       <main className="space-y-4">
-        <header className="panel flex items-center justify-between p-4">
+        <header className="panel flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Risk, Compliance, Operations</p>
             <h2 className="text-2xl font-extrabold text-slate-950">Admin Portal</h2>
           </div>
-          <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">7 items need action</span>
+          <div className="flex items-center gap-3">
+            <GlobalSearch />
+            <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">7 items need action</span>
+          </div>
         </header>
         {children}
       </main>

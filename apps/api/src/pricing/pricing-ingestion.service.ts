@@ -80,14 +80,28 @@ export class PricingIngestionService {
       },
     });
 
+    const apifyInput = (endpoint.apifyInput as Record<string, unknown> | null) ?? null;
+
+    // Support multiple URLs per endpoint: PricingSourceEndpoint.url stays the
+    // primary/canonical URL (unique constraint, used for dedupe/logging),
+    // while apifyInput.additionalUrls (string[]) lets one endpoint hand
+    // several pricing pages to a single actor call. urlFieldName (also read
+    // out of apifyInput by buildApifyActorInput) controls whether these are
+    // sent as `urls`, `startUrls`, or a single `url`.
+    const additionalUrls = Array.isArray(apifyInput?.additionalUrls)
+      ? (apifyInput!.additionalUrls as unknown[]).filter((u): u is string => typeof u === "string")
+      : [];
+    const urls = [endpoint.url, ...additionalUrls];
+
     let result;
     try {
       result = await this.actorClient.runActor({
         actorId: endpoint.source.apifyActorId ?? endpoint.source.scrapeMethod,
-        url: endpoint.url,
-        input: (endpoint.apifyInput as Record<string, unknown> | null) ?? undefined,
+        url: urls.length > 1 ? urls : endpoint.url,
+        input: apifyInput ?? undefined,
       });
     } catch (error) {
+
       await this.prisma.pricingScrapeRun.update({
         where: { id: run.id },
         data: {
@@ -103,7 +117,8 @@ export class PricingIngestionService {
     let duplicate = 0;
 
     for (const item of result.items) {
-      const fields = this.extractRawFields(item);
+      const fields = this.extractRawFields(item, endpoint.source.code);
+
       const dedupeHash = computeRawObservationDedupeHash({
         sourceId: endpoint.sourceId,
         sourceUrl: endpoint.url,
@@ -164,8 +179,20 @@ export class PricingIngestionService {
     return { runId: run.id, itemsFetched: result.items.length, itemsLanded: landed, itemsDuplicate: duplicate };
   }
 
-  /** Best-effort extraction of the handful of known raw-* fields off an arbitrary dataset item. */
-  private extractRawFields(item: Record<string, unknown>): RawItemFields {
+  /**
+   * Best-effort extraction of the handful of known raw-* fields off an
+   * arbitrary dataset item. Falls back to the generic property-name-guess
+   * pipeline for any source without a dedicated parser below — dedicated
+   * parsers only need to override the property names/shape that differ
+   * from the generic fallback for that particular site's dataset items.
+   */
+  private extractRawFields(item: Record<string, unknown>, sourceCode: string): RawItemFields {
+    const parser = SOURCE_RAW_FIELD_PARSERS[sourceCode] ?? this.extractGenericRawFields;
+    return parser(item);
+  }
+
+  /** Generic fallback: guesses common property names used by most Apify actors. */
+  private extractGenericRawFields = (item: Record<string, unknown>): RawItemFields => {
     const asString = (value: unknown): string | null =>
       value === null || value === undefined ? null : String(value);
 
@@ -177,5 +204,92 @@ export class PricingIngestionService {
       rawAsOfText: asString(item.rawAsOfText ?? item.asOf ?? item.date),
       rawSupplierName: asString(item.rawSupplierName ?? item.supplier),
     };
-  }
+  };
 }
+
+const asString = (value: unknown): string | null => (value === null || value === undefined ? null : String(value));
+
+/**
+ * Per-source raw-field extractors, keyed by PricingSource.code. Each entry
+ * only needs to describe how that particular source's Apify dataset item
+ * shape maps onto the generic raw-* fields PricingNormalizationService
+ * already knows how to consume — no new normalization logic is required
+ * here, only field-name/shape mapping specific to that source's page
+ * structure.
+ *
+ * NOTE: until each source is actually re-scraped against a verified
+ * pricing/catalog URL (see sources.json "needsVerification" entries), the
+ * exact dataset item shape returned by the shared Apify actor for that
+ * source is unconfirmed — these mappings are best-effort based on the
+ * generic actor's common output conventions (title/name, price, unit,
+ * location, date, supplier) plus each source's known page semantics, and
+ * should be revisited once real (non-homepage) scrape output is available.
+ */
+const SOURCE_RAW_FIELD_PARSERS: Record<string, (item: Record<string, unknown>) => RawItemFields> = {
+  // Agni Steels: single state-wide TMT price table — rows keyed by grade/size.
+  AGNI_STEELS: (item) => ({
+    rawSkuLabel: asString(item.rawSkuLabel ?? item.grade ?? item.size ?? item.title ?? item.name),
+    rawPriceText: asString(item.rawPriceText ?? item.price ?? item.rate),
+    rawUnitText: asString(item.rawUnitText ?? item.unit ?? "per MT"),
+    rawLocationText: asString(item.rawLocationText ?? item.location ?? "Tamil Nadu"),
+    rawAsOfText: asString(item.rawAsOfText ?? item.asOf ?? item.date ?? item.updatedOn),
+    rawSupplierName: asString(item.rawSupplierName ?? "Agni Steels"),
+  }),
+
+  // TNSAND: district quarry-rate cards — one row per sand grade per quarry.
+  TNSAND: (item) => ({
+    rawSkuLabel: asString(item.rawSkuLabel ?? item.sandType ?? item.material ?? item.title),
+    rawPriceText: asString(item.rawPriceText ?? item.rate ?? item.price),
+    rawUnitText: asString(item.rawUnitText ?? item.unit ?? "per unit"),
+    rawLocationText: asString(item.rawLocationText ?? item.district ?? item.quarry ?? item.location),
+    rawAsOfText: asString(item.rawAsOfText ?? item.effectiveDate ?? item.date),
+    rawSupplierName: asString(item.rawSupplierName ?? item.quarryName ?? "TN Sand Booking Portal"),
+  }),
+
+  // IndiaMART: per-listing marketplace cards — supplier + product listing pairs.
+  INDIAMART: (item) => ({
+    rawSkuLabel: asString(item.rawSkuLabel ?? item.productName ?? item.title ?? item.name),
+    rawPriceText: asString(item.rawPriceText ?? item.price ?? item.priceRange),
+    rawUnitText: asString(item.rawUnitText ?? item.unit ?? item.priceUnit),
+    rawLocationText: asString(item.rawLocationText ?? item.city ?? item.location ?? item.sellerLocation),
+    rawAsOfText: asString(item.rawAsOfText ?? item.postedOn ?? item.date),
+    rawSupplierName: asString(item.rawSupplierName ?? item.sellerName ?? item.companyName ?? item.supplier),
+  }),
+
+  // Tata Tiscon (TATA_STEEL): "recommended-consumer-prices" page publishes a
+  // table of TMT rebar grade/size rows with a recommended retail price per
+  // unit. Verified 2026-07-08 (see source-endpoints.json note) — page is a
+  // real price table, unlike most of the other newly-verified sources which
+  // turned out to be dealer-locator pages. Field names below are still
+  // best-effort against the generic Apify Cheerio/price-scraper actor's
+  // typical table-row output (title/name + price/rate columns) since no
+  // live dataset has been captured yet; revisit once a real run lands.
+  TATA_STEEL: (item) => ({
+    rawSkuLabel: asString(item.rawSkuLabel ?? item.grade ?? item.size ?? item.product ?? item.title ?? item.name),
+    rawPriceText: asString(item.rawPriceText ?? item.price ?? item.rate ?? item.recommendedPrice),
+    rawUnitText: asString(item.rawUnitText ?? item.unit ?? "per kg"),
+    rawLocationText: asString(item.rawLocationText ?? item.location ?? item.city),
+    rawAsOfText: asString(item.rawAsOfText ?? item.asOf ?? item.date ?? item.updatedOn),
+    rawSupplierName: asString(item.rawSupplierName ?? "Tata Tiscon (Tata Steel)"),
+  }),
+};
+
+/**
+ * IMPORTANT SCOPE NOTE (2026-07-08 verification pass):
+ * Most of the other 21 newly-verified source-endpoints entries resolved to
+ * dealer/store-locator pages (UltraTech, Ramco, Dalmia, Shree, Tata Tiscon's
+ * secondary dealer-locator URL) rather than published price tables — these
+ * pages structurally do not contain SKU/price rows, so no per-source parser
+ * is added for them here; running the generic Apify price-scraper actor
+ * against a locator page will most likely yield 0 usable price items even
+ * once enabled. SAIL's only verified page is a PDF brochure
+ * (BROCHURE _PRICED_SEP_2025.pdf) which the current Apify Cheerio/price-
+ * scraper actor architecture cannot parse at all — ingesting it would
+ * require either (a) a dedicated PDF_PARSE pipeline (already reflected in
+ * sources.json's scrapeMethod for SAIL, but not yet implemented in
+ * PricingIngestionService, which currently only calls the Apify actor
+ * client) or (b) routing PDF sources through a separate ingestion path.
+ * This is flagged rather than silently attempted.
+ */
+
+

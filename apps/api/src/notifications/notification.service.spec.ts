@@ -53,3 +53,70 @@ describe("NotificationService.notifySupplierOrderSubmitted", () => {
     expect(payload.status).toBe("queued");
   });
 });
+
+describe("NotificationService.notifyWatchlistPriceAlert — idempotency", () => {
+  function makePrisma(opts: { existingNotification?: { id: string } | null } = {}) {
+    return {
+      user: {
+        findUnique: vi.fn().mockResolvedValue({ id: "builder-1", whatsappNumber: "919876543210", phone: null }),
+      },
+      notification: {
+        findFirst: vi.fn().mockResolvedValue(opts.existingNotification ?? null),
+        create: vi.fn().mockResolvedValue({ id: "notif-new" }),
+      },
+    };
+  }
+
+  const baseParams = {
+    userId: "builder-1",
+    watchlistId: "w1",
+    productName: "Cement OPC",
+    currentPrice: 90,
+    targetPrice: 100,
+    districtName: "Chennai",
+    confidence: "HIGH",
+    method: "OBSERVED",
+    methodLabel: "Verified market price",
+    idempotencyKey: "watchlist-alert:w1:sku-1:d1:2026-01-10",
+  };
+
+  it("returns the existing notification id without creating a duplicate when idempotencyKey already exists", async () => {
+    const prisma = makePrisma({ existingNotification: { id: "notif-existing" } });
+    const queue = { enqueue: vi.fn() };
+    const provider = { sendWhatsAppMessage: vi.fn() };
+    const service = new NotificationService(prisma as any, queue as any, provider as any);
+
+    const result = await service.notifyWatchlistPriceAlert(baseParams);
+
+    expect(result).toBe("notif-existing");
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+    expect(queue.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("creates and enqueues a new notification when no existing idempotencyKey match is found", async () => {
+    const prisma = makePrisma({ existingNotification: null });
+    const queue = { enqueue: vi.fn().mockResolvedValue(true) };
+    const provider = { sendWhatsAppMessage: vi.fn() };
+    const service = new NotificationService(prisma as any, queue as any, provider as any);
+
+    const result = await service.notifyWatchlistPriceAlert(baseParams);
+
+    expect(result).toBe("notif-new");
+    expect(prisma.notification.create).toHaveBeenCalledTimes(1);
+    expect(queue.enqueue).toHaveBeenCalledWith("watchlist-price-alert", { notificationId: "notif-new" });
+  });
+
+  it("returns null without creating a notification when the target user no longer exists", async () => {
+    const prisma = makePrisma();
+    prisma.user.findUnique = vi.fn().mockResolvedValue(null);
+    const queue = { enqueue: vi.fn() };
+    const provider = { sendWhatsAppMessage: vi.fn() };
+    const service = new NotificationService(prisma as any, queue as any, provider as any);
+
+    const result = await service.notifyWatchlistPriceAlert(baseParams);
+
+    expect(result).toBeNull();
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+  });
+});
+

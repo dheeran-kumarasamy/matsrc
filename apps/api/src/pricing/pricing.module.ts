@@ -9,6 +9,9 @@ import { PricingDailyRollupService } from "./pricing-daily-rollup.service";
 import { PricingMonthlyRollupService } from "./pricing-monthly-rollup.service";
 import { PricingSchedulerService } from "./pricing-scheduler.service";
 import { PublicPricingController } from "./public-pricing.controller";
+import { NotificationsModule } from "src/notifications/notifications.module";
+import { WatchlistBridgeService } from "./alerting/watchlist-bridge.service";
+import { PricingAlertEvaluationService } from "./alerting/pricing-alert-evaluation.service";
 
 /**
  * Price Intelligence ingestion module (Phase 2 of the district-wise price
@@ -27,9 +30,16 @@ import { PublicPricingController } from "./public-pricing.controller";
  * normalization pipeline itself, not the admin/API surface on top of it.
  * Follows the same shape as AggregationModule (services only, exported for
  * a future controller module to consume).
+ *
+ * Phase 6D adds the Watchlist Price Alert engine (WatchlistBridgeService +
+ * PricingAlertEvaluationService). NotificationsModule is imported so the
+ * alert engine can reuse the existing NotificationService rather than
+ * building new notification infrastructure. The alert engine is invoked
+ * directly by PricingSchedulerService immediately after a successful daily
+ * rollup — it is never scheduled independently.
  */
 @Module({
-  imports: [ScheduleModule.forRoot()],
+  imports: [ScheduleModule.forRoot(), NotificationsModule],
   controllers: [PublicPricingController],
   providers: [
     PricingConfigService,
@@ -47,6 +57,9 @@ import { PublicPricingController } from "./public-pricing.controller";
     PricingDailyRollupService,
     PricingMonthlyRollupService,
     PricingSchedulerService,
+    // Phase 6D: Watchlist Price Alert engine.
+    WatchlistBridgeService,
+    PricingAlertEvaluationService,
   ],
   exports: [
     PricingConfigService,
@@ -55,6 +68,7 @@ import { PublicPricingController } from "./public-pricing.controller";
     PricingAnomalyDetectionService,
     PricingDailyRollupService,
     PricingMonthlyRollupService,
+    PricingAlertEvaluationService,
   ],
 })
 export class PricingModule {}

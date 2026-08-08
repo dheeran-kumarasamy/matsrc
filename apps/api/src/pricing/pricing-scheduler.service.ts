@@ -4,6 +4,7 @@ import { PricingConfigService } from "./pricing-config.service";
 import { PricingAnomalyDetectionService } from "./pricing-anomaly-detection.service";
 import { PricingDailyRollupService } from "./pricing-daily-rollup.service";
 import { PricingMonthlyRollupService } from "./pricing-monthly-rollup.service";
+import { PricingAlertEvaluationService } from "./alerting/pricing-alert-evaluation.service";
 
 /**
  * Phase 4: automatic scheduling for the serving-layer jobs built in Phase 3.
@@ -18,6 +19,12 @@ import { PricingMonthlyRollupService } from "./pricing-monthly-rollup.service";
  * Daily cron (02:00 UTC): anomaly detection for "today" immediately
  * followed by the daily rollup for "today" — detection must run first so
  * newly-flagged observations are excluded before the rollup aggregates.
+ * Phase 6D: immediately after a successful daily rollup, the Watchlist
+ * Price Alert evaluation engine runs for "today" — see
+ * PricingAlertEvaluationService for the full eligibility/suppression/
+ * cooldown/idempotency rules. This MUST stay chained directly after the
+ * rollup call (never on its own separate cron) so alerts are only ever
+ * evaluated against freshly-published, successfully-rolled-up prices.
  *
  * Monthly-trend cron (03:00 UTC, every day): re-rolls up PricingTrendMonthly
  * for the current month. Running this daily (not just on the 1st) keeps
@@ -33,7 +40,8 @@ export class PricingSchedulerService {
     private readonly config: PricingConfigService,
     private readonly anomalyDetection: PricingAnomalyDetectionService,
     private readonly dailyRollup: PricingDailyRollupService,
-    private readonly monthlyRollup: PricingMonthlyRollupService
+    private readonly monthlyRollup: PricingMonthlyRollupService,
+    private readonly alertEvaluation: PricingAlertEvaluationService
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_2AM, { name: "pricing-daily-rollup" })
@@ -52,6 +60,23 @@ export class PricingSchedulerService {
 
       const rollup = await this.dailyRollup.rollupForDate(today);
       this.logger.log(`runDailyJobs: daily rollup observedRows=${rollup.observedRows} derivedRows=${rollup.derivedRows}`);
+
+      // Phase 6D: Watchlist Price Alert evaluation MUST run strictly after a
+      // successful daily rollup, never on its own schedule. Wrapped in its
+      // own try/catch so an alert-engine failure never marks the daily
+      // rollup job itself as failed (the rollup has already succeeded by
+      // this point and must not be retried/corrupted because of alerting).
+      try {
+        const alerts = await this.alertEvaluation.evaluateForDate(today);
+        this.logger.log(
+          `runDailyJobs: alert evaluation scanned=${alerts.scanned} triggered=${alerts.triggered} suppressed=${alerts.suppressed}`
+        );
+      } catch (alertError) {
+        this.logger.error(
+          "runDailyJobs: alert evaluation failed",
+          alertError instanceof Error ? alertError.stack : String(alertError)
+        );
+      }
     } catch (error) {
       this.logger.error("runDailyJobs: failed", error instanceof Error ? error.stack : String(error));
     }

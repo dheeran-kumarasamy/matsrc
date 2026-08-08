@@ -61,8 +61,64 @@ export class NotificationService {
   }
 
   // ───────────────────────────────────────────────────────────
+  // Phase 6D: Watchlist Price Alert notification
+  // ───────────────────────────────────────────────────────────
+
+  async notifyWatchlistPriceAlert(params: {
+    userId: string;
+    watchlistId: string;
+    productName: string;
+    currentPrice: number;
+    targetPrice: number;
+    districtName: string;
+    confidence: string;
+    method: string;
+    methodLabel: string;
+    deepLink?: string;
+    idempotencyKey: string;
+  }): Promise<string | null> {
+    const user = await this.prisma.user.findUnique({ where: { id: params.userId } });
+    if (!user) {
+      return null;
+    }
+
+    const deepLink = params.deepLink ?? this.getBuilderWatchlistDeepLink();
+
+    const envelope: NotificationEnvelope = {
+      userId: user.id,
+      audience: "builder",
+      channel: NotificationChannel.WHATSAPP,
+      templateType: NotificationTemplateType.WATCHLIST_ALERT,
+      variables: {
+        // orderId/orderNumber remain required fields on NotificationTemplateContext
+        // for backward compatibility with existing template-interpolation code
+        // paths; Phase 6D passes the watchlistId as a stable placeholder value.
+        orderId: params.watchlistId,
+        orderNumber: params.watchlistId.slice(0, 8),
+        watchlistId: params.watchlistId,
+        productName: params.productName,
+        currentUnitPrice: params.currentPrice,
+        targetPrice: params.targetPrice,
+        districtName: params.districtName,
+        confidence: params.confidence,
+        method: params.method,
+        methodLabel: params.methodLabel,
+        deepLink,
+      },
+      content: {
+        title: "Price alert — target reached",
+        body: `${params.productName} has reached your target price of INR ${params.targetPrice} (current: INR ${params.currentPrice}) in ${params.districtName}. View it here: ${deepLink}`,
+      },
+      idempotencyKey: params.idempotencyKey,
+    };
+
+    return this.enqueueEnvelopeAndReturnId(envelope, "watchlist-price-alert");
+  }
+
+  // ───────────────────────────────────────────────────────────
   // Order Aggregation ("Group & Save") notifications
   // ───────────────────────────────────────────────────────────
+
 
   async notifyAggregationOptIn(params: {
     builderId: string;
@@ -394,7 +450,53 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Same behaviour as enqueueEnvelope, but returns the created/existing
+   * Notification's id. Kept as a separate method (rather than changing
+   * enqueueEnvelope's signature) to avoid touching any existing call site.
+   */
+  private async enqueueEnvelopeAndReturnId(envelope: NotificationEnvelope, jobName: string): Promise<string | null> {
+    if (envelope.idempotencyKey) {
+      const existing = await this.prisma.notification.findFirst({
+        where: { idempotencyKey: envelope.idempotencyKey } as any,
+        select: { id: true },
+      });
+
+      if (existing) {
+        return existing.id;
+      }
+    }
+
+    const notification = await this.prisma.notification.create({
+      data: {
+        userId: envelope.userId,
+        audience: envelope.audience,
+        channel: envelope.channel,
+        title: envelope.content.title,
+        body: envelope.content.body,
+        status: "queued",
+        idempotencyKey: envelope.idempotencyKey ?? null,
+        templateType: envelope.templateType,
+        variables: JSON.stringify(envelope.variables),
+        retryCount: 0,
+      },
+    });
+
+    const queued = await this.queueService.enqueue(jobName, { notificationId: notification.id });
+    if (!queued) {
+      await this.processNotification(notification.id, 1, 1);
+    }
+
+    return notification.id;
+  }
+
+  private getBuilderWatchlistDeepLink(): string {
+    const baseUrl = process.env.BUILDER_PORTAL_URL || process.env.NEXT_PUBLIC_APP_URL || "https://web-sable-nine-97.vercel.app";
+    return `${baseUrl.replace(/\/$/, "")}/watchlist`;
+  }
+
   private async buildOrderSubmittedEnvelope(orderId: string): Promise<NotificationEnvelope | null> {
+
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {

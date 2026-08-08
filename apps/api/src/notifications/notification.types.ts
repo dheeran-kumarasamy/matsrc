@@ -15,6 +15,13 @@ export type NotificationContent = {
 };
 
 export type NotificationTemplateContext = {
+  // NOTE: orderId/orderNumber are historically required fields on this
+  // shared context type. Phase 6D (Watchlist Price Alerts) does not have an
+  // order — callers of notifyWatchlistPriceAlert pass a stable placeholder
+  // (the watchlistId) so existing template-interpolation code paths that
+  // reference {{orderId}}/{{orderNumber}} continue to work unchanged for
+  // every other notification type without needing a schema/type-breaking
+  // change here.
   orderId: string;
   orderNumber: string;
   enquiryId?: string;
@@ -38,6 +45,14 @@ export type NotificationTemplateContext = {
   savingsEstimate?: number;
   windowCloseAt?: string;
   hoursRemaining?: number;
+  // Phase 6D: Watchlist Price Alert template variables (UF-09 bridge to
+  // Price Intelligence). All optional/additive.
+  watchlistId?: string;
+  targetPrice?: number;
+  districtName?: string;
+  confidence?: string;
+  method?: string;
+  methodLabel?: string;
 };
 
 export type NotificationEnvelope = {

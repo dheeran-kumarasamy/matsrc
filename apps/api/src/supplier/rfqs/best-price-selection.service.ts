@@ -196,6 +196,17 @@ export class BestPriceSelectionService {
   ): Promise<void> {
     const itemsById = new Map(items.map((item) => [item.id, item]));
 
+    // Batch-fetch each winning supplier's region so it can be tagged onto the
+    // resulting PriceSnapshot rows (used by the Regional Price Comparison
+    // report). Nullable/additive — suppliers without a region simply won't
+    // contribute to regional grouping.
+    const distinctSupplierIds = Array.from(new Set(winningLines.map((line) => line.supplierId)));
+    const supplierProfiles = await this.prisma.supplierProfile.findMany({
+      where: { id: { in: distinctSupplierIds } },
+      select: { id: true, region: true },
+    });
+    const regionBySupplierId = new Map(supplierProfiles.map((profile) => [profile.id, profile.region]));
+
     for (const line of winningLines) {
       const item = itemsById.get(line.lineItemId);
       if (!item) {
@@ -209,6 +220,7 @@ export class BestPriceSelectionService {
           canonicalProductId: item.product.canonicalProductId ?? undefined,
           price: line.unitPrice,
           currency: line.currency,
+          region: regionBySupplierId.get(line.supplierId) ?? undefined,
           source: "RFQ_ACCEPTED",
           sourceRefId: enquiryId,
         },

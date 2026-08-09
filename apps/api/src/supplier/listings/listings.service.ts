@@ -100,11 +100,13 @@ export class ListingsService {
       canonicalProductId: product.canonicalProductId,
       price: Number(product.basePrice),
       unit: product.unit,
+      region: supplierProfile.region,
     }).catch((error) => {
       this.logger.warn(
         `Failed to record price snapshot for new listing ${product.id}: ${error instanceof Error ? error.message : String(error)}`
       );
     });
+
 
     return {
       id: product.id,
@@ -158,13 +160,20 @@ export class ListingsService {
     // Price-discovery snapshot hook (additive, non-blocking): capture every
     // actual price change (repricing) as a new PriceSnapshot row.
     if (dto.price && newPrice !== previousPrice) {
+      const supplierProfile = await this.prisma.supplierProfile.findUnique({
+        where: { id: product.supplierId },
+        select: { region: true },
+      });
+
       void this.recordPriceSnapshot({
         productId: product.id,
         supplierId: product.supplierId,
         canonicalProductId: product.canonicalProductId,
         price: newPrice,
         unit: product.unit,
+        region: supplierProfile?.region,
       }).catch((error) => {
+
         this.logger.warn(
           `Failed to record price snapshot for listing ${product.id}: ${error instanceof Error ? error.message : String(error)}`
         );
@@ -190,6 +199,7 @@ export class ListingsService {
     canonicalProductId: string | null;
     price: number;
     unit?: string | null;
+    region?: string | null;
   }): Promise<void> {
     await this.prisma.priceSnapshot.create({
       data: {
@@ -198,10 +208,12 @@ export class ListingsService {
         canonicalProductId: params.canonicalProductId ?? undefined,
         price: params.price,
         unit: params.unit ?? undefined,
+        region: params.region ?? undefined,
         source: "LISTING",
       },
     });
   }
+
 
 
   /**

@@ -128,7 +128,15 @@ model SupplierProfile {
   // against the builder's Site.state. Nullable/additive; existing rows
   // unaffected until a supplier fills this in.
   gstin String?
+
+  // Supplier's operating region/state, used to tag PriceSnapshot rows
+  // (PriceSnapshot.region) so the Regional Price Comparison report can
+  // group/average prices by region. Nullable/additive — existing suppliers
+  // without this filled in simply won't contribute to regional grouping
+  // until they set it (e.g. via onboarding/profile settings).
+  region String?
 }
+
 
 model Category {
   id                String             @id @default(cuid())

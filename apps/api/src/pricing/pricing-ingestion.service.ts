@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
 import { PricingConfigService } from "./pricing-config.service";
 import { APIFY_ACTOR_CLIENT, ApifyActorClient } from "./apify-actor-client";
+import { NATIVE_EXTRACTOR_CLIENT, hasNativeParserForUrl } from "./native-http-extractor-client";
 
 // packages/db/lib/*.js are plain, framework-free Node modules (no test
 // framework / no ts build step for packages/db — see the file headers).
@@ -38,7 +39,8 @@ export class PricingIngestionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pricingConfig: PricingConfigService,
-    @Inject(APIFY_ACTOR_CLIENT) private readonly actorClient: ApifyActorClient
+    @Inject(APIFY_ACTOR_CLIENT) private readonly actorClient: ApifyActorClient,
+    @Inject(NATIVE_EXTRACTOR_CLIENT) private readonly nativeExtractorClient: ApifyActorClient
   ) {}
 
   /**
@@ -93,9 +95,18 @@ export class PricingIngestionService {
       : [];
     const urls = [endpoint.url, ...additionalUrls];
 
+    // Phase 6E-3 Batch D-3: dispatch to the native HTTP extractor for the
+    // handful of sources proven (Batch B/C/D/D-2) to have real, extractable
+    // prices that the generic Apify actor cannot parse — everything else
+    // keeps using the existing ApifyActorClient exactly as before. This is
+    // a per-URL check, not a scrapeMethod/DB/seed change, so every other
+    // source's behavior is completely unaffected.
+    const primaryUrl = endpoint.url;
+    const client = hasNativeParserForUrl(primaryUrl) ? this.nativeExtractorClient : this.actorClient;
+
     let result;
     try {
-      result = await this.actorClient.runActor({
+      result = await client.runActor({
         actorId: endpoint.source.apifyActorId ?? endpoint.source.scrapeMethod,
         url: urls.length > 1 ? urls : endpoint.url,
         input: apifyInput ?? undefined,

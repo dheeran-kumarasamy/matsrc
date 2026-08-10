@@ -45,8 +45,8 @@ function makeFakePrisma(opts: { endpoint?: any; existingDedupeHashes?: Set<strin
   } as any;
 }
 
-function buildService(prisma: any, config: any, actorClient: any) {
-  return new PricingIngestionService(prisma, config, actorClient);
+function buildService(prisma: any, config: any, actorClient: any, nativeExtractorClient: any = { runActor: vi.fn() }) {
+  return new PricingIngestionService(prisma, config, actorClient, nativeExtractorClient);
 }
 
 const enabledConfig = { isEnabled: () => true, isApifyLiveEnabled: () => false } as any;

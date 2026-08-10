@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
 import { PricingConfigService } from "./pricing-config.service";
 import { APIFY_ACTOR_CLIENT, LiveApifyActorClient, StubApifyActorClient } from "./apify-actor-client";
+import { NATIVE_EXTRACTOR_CLIENT, NativeHttpExtractorClient } from "./native-http-extractor-client";
 import { PricingIngestionService } from "./pricing-ingestion.service";
 import { PricingNormalizationService } from "./pricing-normalization.service";
 import { PricingAnomalyDetectionService } from "./pricing-anomaly-detection.service";
@@ -50,6 +51,15 @@ import { PricingAlertEvaluationService } from "./alerting/pricing-alert-evaluati
       useFactory: (config: PricingConfigService, stub: StubApifyActorClient, live: LiveApifyActorClient) =>
         config.isApifyLiveEnabled() ? live : stub,
       inject: [PricingConfigService, StubApifyActorClient, LiveApifyActorClient],
+    },
+    // Phase 6E-3 Batch D-3: native (non-Apify) extraction client, used only
+    // for the small set of sources proven to need it (see
+    // native-http-extractor-client.ts). Always bound directly (no stub
+    // switch) since it makes no Apify calls and has no cost/credentials
+    // implication either way.
+    {
+      provide: NATIVE_EXTRACTOR_CLIENT,
+      useClass: NativeHttpExtractorClient,
     },
     PricingIngestionService,
     PricingNormalizationService,

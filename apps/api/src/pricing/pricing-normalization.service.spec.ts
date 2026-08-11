@@ -29,6 +29,13 @@ function makeFakePrisma(overrides: Record<string, any> = {}) {
     pricingObservation: {
       create: vi.fn(async () => ({})),
     },
+    // Phase 6F: resolveGeographyFields() looks up a DISTRICT context's
+    // stateId here. Defaults to resolving DISTRICT_ID -> a fake TN state so
+    // pre-existing (pre-Phase-6F) tests that pass a bare districtId string
+    // keep working unchanged.
+    pricingDistrict: {
+      findUnique: vi.fn(async () => ({ stateId: "state-tn" })),
+    },
     $transaction: vi.fn(async (ops: any[]) => Promise.all(ops)),
   };
   return { ...base, ...overrides } as any;

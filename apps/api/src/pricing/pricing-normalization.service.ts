@@ -2,7 +2,30 @@ import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
 
 /**
+ * Phase 6F — explicit geographic context a caller must supply for a
+ * normalizeBatch() run. Deliberately NOT inferred inside this service from
+ * rawLocationText, source company address, or any other heuristic (see
+ * docs/pricing/geographic-pricing-hierarchy.md "What is prohibited") — the
+ * caller (ingestion/admin-ops layer) must already know, from source-declared
+ * applicability, which of these three shapes is correct for the batch it is
+ * normalizing:
+ *
+ *   { geographyLevel: "DISTRICT", districtId: "<id>" }
+ *   { geographyLevel: "STATE", stateId: "<id>" }
+ *   { geographyLevel: "NATIONAL" }
+ *
+ * There is deliberately no "UNRESOLVED" member here — if geography cannot
+ * be determined for a batch, the caller must not call normalizeBatch() for
+ * that batch at all; the raw rows are simply left PENDING (mirrors the
+ * existing pre-Phase-6F contract where normalizeBatch() already required an
+ * explicit districtId with no fallback).
+ */
+export type NormalizationGeographyContext =
+  | { geographyLevel: "DISTRICT"; districtId: string }
+  | { geographyLevel: "STATE"; stateId: string }
+  | { geographyLevel: "NATIONAL" };
 
+/**
  * Turns PENDING PricingRawObservation rows into PricingObservation rows.
  *
  * Pipeline per raw row:
@@ -19,8 +42,9 @@ import { PrismaService } from "src/prisma/prisma.service";
  *      text; if none found or the row isAmbiguous, mark QUARANTINED rather
  *      than guessing (never fabricate a conversion factor).
  *   4. Parse rawPriceText into a numeric price; unparseable => REJECTED.
- *   5. Compute pricePerBaseUnit, write the PricingObservation, mark
- *      parseStatus=PARSED.
+ *   5. Compute pricePerBaseUnit, write the PricingObservation (stamped with
+ *      the caller-supplied geography — see NormalizationGeographyContext),
+ *      mark parseStatus=PARSED.
  *
  * This never mutates PricingRawObservation.payload — only parseStatus (and,
  * once we resolve an observation, the one-to-one `observation` relation).
@@ -32,15 +56,20 @@ export class PricingNormalizationService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Processes up to `limit` PENDING raw observations for the given
-   * districtId (required — a raw observation's rawLocationText must
-   * resolve to a known PricingDistrict for this first cut; unresolvable
-   * locations are left PENDING rather than guessed).
+   * Processes up to `limit` PENDING raw observations, stamping every
+   * resulting PricingObservation with the explicit `geography` the caller
+   * provides (Phase 6F — see NormalizationGeographyContext). Kept
+   * backward-compatible with the pre-Phase-6F call shape: passing a bare
+   * districtId string is equivalent to `{ geographyLevel: "DISTRICT",
+   * districtId }`.
    */
   async normalizeBatch(
-    districtId: string,
+    geography: NormalizationGeographyContext | string,
     limit = 100
   ): Promise<{ processed: number; parsed: number; unmapped: number; quarantined: number; rejected: number }> {
+    const context: NormalizationGeographyContext =
+      typeof geography === "string" ? { geographyLevel: "DISTRICT", districtId: geography } : geography;
+
     const pending = await this.prisma.pricingRawObservation.findMany({
       where: { parseStatus: "PENDING" },
       take: limit,
@@ -53,7 +82,7 @@ export class PricingNormalizationService {
     let rejected = 0;
 
     for (const raw of pending) {
-      const outcome = await this.normalizeOne(raw, districtId);
+      const outcome = await this.normalizeOne(raw, context);
       if (outcome === "PARSED") parsed++;
       else if (outcome === "UNMAPPED") unmapped++;
       else if (outcome === "QUARANTINED") quarantined++;
@@ -61,7 +90,7 @@ export class PricingNormalizationService {
     }
 
     this.logger.log(
-      `normalizeBatch: processed=${pending.length} parsed=${parsed} unmapped=${unmapped} quarantined=${quarantined} rejected=${rejected}`
+      `normalizeBatch: geographyLevel=${context.geographyLevel} processed=${pending.length} parsed=${parsed} unmapped=${unmapped} quarantined=${quarantined} rejected=${rejected}`
     );
 
     return { processed: pending.length, parsed, unmapped, quarantined, rejected };
@@ -69,7 +98,7 @@ export class PricingNormalizationService {
 
   private async normalizeOne(
     raw: { id: string; sourceId: string; rawSkuLabel: string | null; rawPriceText: string | null; rawUnitText: string | null; rawAsOfText: string | null },
-    districtId: string
+    geography: NormalizationGeographyContext
   ): Promise<"PARSED" | "UNMAPPED" | "QUARANTINED" | "REJECTED"> {
     if (!raw.rawSkuLabel || !raw.rawPriceText) {
       await this.markStatus(raw.id, "REJECTED", "Missing rawSkuLabel or rawPriceText");
@@ -147,13 +176,23 @@ export class PricingNormalizationService {
 
     const asOfDate = this.parseAsOfDate(raw.rawAsOfText);
 
+    const geographyFields = await this.resolveGeographyFields(geography);
+    if (!geographyFields) {
+      // DISTRICT geography whose districtId no longer resolves to a
+      // PricingDistrict row — never fabricate a stateId, quarantine instead.
+      await this.markStatus(raw.id, "QUARANTINED", `geography.districtId="${(geography as any).districtId}" does not resolve to a known PricingDistrict`);
+      return "QUARANTINED";
+    }
+
     await this.prisma.$transaction([
       this.prisma.pricingObservation.create({
         data: {
           rawId: raw.id,
           sourceId: raw.sourceId,
           canonicalSkuId: canonicalSku.id,
-          districtId,
+          geographyLevel: geographyFields.geographyLevel,
+          stateId: geographyFields.stateId,
+          districtId: geographyFields.districtId,
           quotedPrice: price,
           quotedUnitLabel: unitLabel || "unknown",
           pricePerBaseUnit,
@@ -172,6 +211,33 @@ export class PricingNormalizationService {
     ]);
 
     return "PARSED";
+  }
+
+  /**
+   * Resolves the caller-supplied NormalizationGeographyContext into the
+   * concrete (geographyLevel, stateId, districtId) triple that satisfies the
+   * PricingObservation CHECK constraint. For DISTRICT, looks up the
+   * district's stateId (a district's state is a structural fact of the
+   * dimension table, not a guess). Returns null only when a DISTRICT
+   * context's districtId does not resolve to a real PricingDistrict row —
+   * callers must quarantine that raw row rather than ever fabricate a
+   * stateId.
+   */
+  private async resolveGeographyFields(
+    geography: NormalizationGeographyContext
+  ): Promise<{ geographyLevel: "DISTRICT" | "STATE" | "NATIONAL"; stateId: string | null; districtId: string | null } | null> {
+    if (geography.geographyLevel === "NATIONAL") {
+      return { geographyLevel: "NATIONAL", stateId: null, districtId: null };
+    }
+    if (geography.geographyLevel === "STATE") {
+      return { geographyLevel: "STATE", stateId: geography.stateId, districtId: null };
+    }
+    const district = await this.prisma.pricingDistrict.findUnique({
+      where: { id: geography.districtId },
+      select: { stateId: true },
+    });
+    if (!district) return null;
+    return { geographyLevel: "DISTRICT", stateId: district.stateId, districtId: geography.districtId };
   }
 
   private async markStatus(rawId: string, status: "UNMAPPED" | "QUARANTINED" | "REJECTED", note: string) {

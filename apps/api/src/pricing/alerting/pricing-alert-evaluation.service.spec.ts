@@ -31,7 +31,9 @@ function makeWatchlistRow(overrides: Record<string, any> = {}) {
 function makePriceRow(overrides: Record<string, any> = {}) {
   return {
     canonicalSkuId: overrides.canonicalSkuId ?? "sku-1",
-    districtId: overrides.districtId ?? "d1",
+    geographyLevel: overrides.geographyLevel ?? "DISTRICT",
+    stateId: overrides.stateId ?? "state-tn",
+    districtId: overrides.geographyLevel === "STATE" ? null : overrides.districtId ?? "d1",
     medianPerBaseUnit: overrides.medianPerBaseUnit ?? 90,
     baseUnit: overrides.baseUnit ?? "BAG",
     publicDisplayAllowed: overrides.publicDisplayAllowed ?? true,
@@ -44,6 +46,7 @@ function makePriceRow(overrides: Record<string, any> = {}) {
 function makeFakePrisma(opts: {
   watchlistRows?: any[];
   priceRows?: any[];
+  stateRows?: any[];
   districtRows?: any[];
   recentTriggeredEvaluations?: any[];
   alreadyEvaluatedToday?: any[];
@@ -52,11 +55,17 @@ function makeFakePrisma(opts: {
     watchlist: {
       findMany: vi.fn(async () => opts.watchlistRows ?? []),
     },
+    // Phase 6F: distinguishes DISTRICT vs STATE geographyLevel queries so
+    // fixtures can exercise the STATE-fallback path realistically (the
+    // service issues two separate findMany calls, one per geographyLevel).
     pricingDistrictPriceDaily: {
-      findMany: vi.fn(async () => opts.priceRows ?? []),
+      findMany: vi.fn(async ({ where }: any) => {
+        if (where.geographyLevel === "STATE") return opts.stateRows ?? [];
+        return opts.priceRows ?? [];
+      }),
     },
     pricingDistrict: {
-      findMany: vi.fn(async () => opts.districtRows ?? [{ id: "d1", name: "Chennai" }]),
+      findMany: vi.fn(async () => opts.districtRows ?? [{ id: "d1", name: "Chennai", stateId: "state-tn" }]),
     },
     pricingAlertEvaluation: {
       findMany: vi.fn(async ({ where }: any) => {
@@ -194,5 +203,48 @@ describe("PricingAlertEvaluationService.evaluateForDate — rule + eligibility s
 
     expect(summary.triggered).toBe(0);
     expect(notifications.notifyWatchlistPriceAlert).not.toHaveBeenCalled();
+  });
+});
+
+describe("PricingAlertEvaluationService.evaluateForDate — Phase 6F STATE fallback", () => {
+  it("falls back to a STATE-level price and persists geographyLevel=STATE with districtId=null when no DISTRICT row exists (never claims a district-specific price)", async () => {
+    const watchlistRows = [makeWatchlistRow({ targetPrice: 100 })];
+    // No DISTRICT-level row (priceRows empty); a STATE-level row exists for
+    // the district's state, mirroring an AGNI-style Tamil-Nadu-wide price.
+    const stateRows = [makePriceRow({ geographyLevel: "STATE", stateId: "state-tn", medianPerBaseUnit: 90 })];
+    const prisma = makeFakePrisma({ watchlistRows, priceRows: [], stateRows });
+    const bridge = makeBridge({ skuId: "sku-1", districtId: "d1" });
+    const notifications = { notifyWatchlistPriceAlert: vi.fn(async () => "notif-1") };
+    const service = buildService(prisma, bridge, notifications);
+
+    const summary = await service.evaluateForDate(priceDate);
+
+    expect(summary.triggered).toBe(1);
+    expect(prisma.pricingAlertEvaluation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ geographyLevel: "STATE", stateId: "state-tn", districtId: null, didTrigger: true }),
+      })
+    );
+    // Notification copy discloses the state-reference nature of the price.
+    expect(notifications.notifyWatchlistPriceAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ districtName: expect.stringContaining("state reference") })
+    );
+  });
+
+  it("prefers a DISTRICT row over a STATE row when both exist (regression: district beats state)", async () => {
+    const watchlistRows = [makeWatchlistRow({ targetPrice: 100 })];
+    const priceRows = [makePriceRow({ geographyLevel: "DISTRICT", districtId: "d1", medianPerBaseUnit: 74200, publicDisplayAllowed: true, confidence: "HIGH" })];
+    const stateRows = [makePriceRow({ geographyLevel: "STATE", stateId: "state-tn", medianPerBaseUnit: 72730 })];
+    const prisma = makeFakePrisma({ watchlistRows, priceRows, stateRows });
+    const bridge = makeBridge({ skuId: "sku-1", districtId: "d1" });
+    const notifications = { notifyWatchlistPriceAlert: vi.fn(async () => "notif-1") };
+    const service = buildService(prisma, bridge, notifications);
+
+    const summary = await service.evaluateForDate(priceDate);
+
+    expect(summary.suppressedByReason[ALERT_SUPPRESSION_REASONS.RULE_NOT_TRIGGERED]).toBe(1);
+    expect(prisma.pricingAlertEvaluation.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ geographyLevel: "DISTRICT", districtId: "d1" }) })
+    );
   });
 });

@@ -12,7 +12,12 @@ function makeObservation(overrides: Record<string, any> = {}) {
   return {
     id: overrides.id ?? "obs-1",
     canonicalSkuId: overrides.canonicalSkuId ?? "sku-1",
-    districtId: overrides.districtId ?? "d1",
+    // Phase 6F: geographyLevel/stateId/districtId replace the old
+    // districtId-only shape. Defaults to DISTRICT/state-tn/d1 so existing
+    // (pre-Phase-6F) test fixtures keep working unchanged.
+    geographyLevel: overrides.geographyLevel ?? "DISTRICT",
+    stateId: "stateId" in overrides ? overrides.stateId : "state-tn",
+    districtId: overrides.geographyLevel === "STATE" || overrides.geographyLevel === "NATIONAL" ? null : overrides.districtId ?? "d1",
     pricePerBaseUnit: overrides.pricePerBaseUnit ?? 100,
     baseUnit: overrides.baseUnit ?? "KG",
     source: {
@@ -28,6 +33,7 @@ function makeObservation(overrides: Record<string, any> = {}) {
 function makeDistrict(overrides: Record<string, any> = {}) {
   return {
     id: overrides.id ?? "d1",
+    stateId: overrides.stateId ?? "state-tn",
     anchorDistrictId: overrides.anchorDistrictId ?? null,
     anchorRoadDistanceKm: overrides.anchorRoadDistanceKm ?? null,
     desCentreCode: overrides.desCentreCode ?? null,
@@ -98,7 +104,7 @@ describe("PricingDailyRollupService.rollupForDate — OBSERVED pass", () => {
 
     expect(prisma.pricingDistrictPriceDaily.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { canonicalSkuId_districtId_priceDate: expect.objectContaining({ canonicalSkuId: "sku-1", districtId: "d1" }) },
+        where: { canonicalSkuId_geoKey_priceDate: expect.objectContaining({ canonicalSkuId: "sku-1", geoKey: "d1" }) },
         update: expect.objectContaining({ anchorDistrictId: null }),
       })
     );
@@ -158,5 +164,46 @@ describe("PricingDailyRollupService.rollupForDate — DERIVED_* pass", () => {
     const result = await service.rollupForDate(new Date("2026-01-10"));
 
     expect(result.derivedRows).toBe(0);
+  });
+});
+
+describe("PricingDailyRollupService.rollupForDate — Phase 6F geography isolation", () => {
+  it("produces two SEPARATE rows (never merged) for a DISTRICT observation and a STATE observation of the same canonicalSku on the same day", async () => {
+    const observations = [
+      makeObservation({ id: "o1", geographyLevel: "DISTRICT", stateId: "state-tn", districtId: "d1", pricePerBaseUnit: 74200 }),
+      makeObservation({ id: "o2", geographyLevel: "STATE", stateId: "state-tn", districtId: null, pricePerBaseUnit: 72730 }),
+    ];
+    const prisma = makeFakePrisma({ observations });
+    const service = buildService(prisma);
+    const result = await service.rollupForDate(new Date("2026-01-10"));
+
+    expect(result.observedRows).toBe(2);
+    expect(prisma.pricingDistrictPriceDaily.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { canonicalSkuId_geoKey_priceDate: expect.objectContaining({ geoKey: "d1" }) },
+        create: expect.objectContaining({ geographyLevel: "DISTRICT", stateId: "state-tn", districtId: "d1", medianPerBaseUnit: 74200 }),
+      })
+    );
+    expect(prisma.pricingDistrictPriceDaily.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { canonicalSkuId_geoKey_priceDate: expect.objectContaining({ geoKey: "state-tn" }) },
+        create: expect.objectContaining({ geographyLevel: "STATE", stateId: "state-tn", districtId: null, medianPerBaseUnit: 72730 }),
+      })
+    );
+  });
+
+  it("produces an OBSERVED NATIONAL row from NATIONAL-geography observations, with geoKey='NATIONAL' and stateId/districtId both null", async () => {
+    const observations = [makeObservation({ id: "o1", geographyLevel: "NATIONAL", stateId: null, districtId: null, pricePerBaseUnit: 75000 })];
+    const prisma = makeFakePrisma({ observations });
+    const service = buildService(prisma);
+    const result = await service.rollupForDate(new Date("2026-01-10"));
+
+    expect(result.observedRows).toBe(1);
+    expect(prisma.pricingDistrictPriceDaily.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { canonicalSkuId_geoKey_priceDate: expect.objectContaining({ geoKey: "NATIONAL" }) },
+        create: expect.objectContaining({ geographyLevel: "NATIONAL", stateId: null, districtId: null }),
+      })
+    );
   });
 });

@@ -51,6 +51,23 @@ export type DistrictPricePanelCurrent = {
   matsrcMedianPerBaseUnit: number | null;
   freshnessLabel: string;
   isStale: boolean;
+  /// Phase 6F — Geographic Pricing Hierarchy. DISTRICT unless a STATE
+  /// fallback was used because no district-specific price is available for
+  /// the selected district (see docs/pricing/geographic-pricing-hierarchy.md).
+  /// NATIONAL is not currently surfaced by this Builder panel (district
+  /// selection has no meaningful "national" concept here) but the type
+  /// includes it for forward-compatibility.
+  geographyLevel: "DISTRICT" | "STATE" | "NATIONAL";
+  /// Name of the state the STATE-level reference price belongs to. Null for
+  /// a DISTRICT-level price (the selected district's state is already
+  /// implied) and for NATIONAL.
+  geographyStateName: string | null;
+  /// True only when this price came from a STATE (or, in future, NATIONAL)
+  /// fallback rather than a direct district-specific observation. Distinct
+  /// from `isDistrictFallback` on the panel response, which is about
+  /// *which district* was selected — this is about *which geographic level*
+  /// backed the price for whichever district ended up selected.
+  isGeographyFallback: boolean;
 };
 
 export type DistrictPricePanelNearbyRow = {

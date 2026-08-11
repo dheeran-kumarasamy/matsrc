@@ -9,8 +9,21 @@ import { scaledMedianAbsoluteDeviation } from "./pricing-stats.util";
  * PricingAnomaly audit row, so a disputed exclusion can always be reviewed
  * and reversed by an admin.
  *
- * Three checks, run per (canonicalSkuId, districtId) group over
- * non-excluded, PARSED-origin observations:
+ * Phase 6G core-platform audit fix: the MAD-outlier grouping key now
+ * includes `geographyLevel` + `stateId` alongside `districtId` (not
+ * `districtId` alone). Since Phase 6F made `districtId` nullable — a STATE
+ * observation and a NATIONAL observation both carry `districtId=null` — a
+ * districtId-only group key would silently merge a state-wide series with a
+ * national series (or two different states' STATE series) into one MAD
+ * calculation, corrupting the anomaly boundary for both. This mirrors the
+ * exact grouping key already used by PricingDailyRollupService and
+ * PricingMonthlyRollupService (see docs/pricing/geographic-pricing-hierarchy.md
+ * "Rollups") — anomaly detection must observe the same geographic isolation
+ * rule as the rest of the pipeline (spec §15/§21: never mix DISTRICT/STATE/
+ * NATIONAL series).
+ *
+ * Three checks, run per (canonicalSkuId, geographyLevel, stateId,
+ * districtId) group over non-excluded, PARSED-origin observations:
  *   1. OUTLIER_MAD  — pricePerBaseUnit further than 3x the scaled MAD from
  *      the group median (skipped for groups with < 4 observations — MAD is
  *      meaningless on tiny samples).
@@ -42,11 +55,13 @@ export class PricingAnomalyDetectionService {
 
     let flagged = 0;
 
-    // Group by (canonicalSkuId, districtId) for the MAD check.
+    // Group by (canonicalSkuId, geographyLevel, stateId, districtId) for the
+    // MAD check — see class doc comment for why districtId alone is unsafe
+    // now that it is nullable for STATE/NATIONAL observations.
     type Observation = (typeof observations)[number];
     const groups = new Map<string, Observation[]>();
     for (const obs of observations) {
-      const key = `${obs.canonicalSkuId}::${obs.districtId}`;
+      const key = `${obs.canonicalSkuId}::${obs.geographyLevel}::${obs.stateId ?? ""}::${obs.districtId ?? ""}`;
       const bucket = groups.get(key) ?? [];
       bucket.push(obs);
       groups.set(key, bucket);

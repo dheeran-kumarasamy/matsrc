@@ -140,22 +140,56 @@ export class PricingAlertEvaluationService {
     const uniqueSkuIds = Array.from(new Set(Array.from(skuDistrictPairs).map((p) => p.split("::")[0])));
     const uniqueDistrictIds = Array.from(new Set(Array.from(skuDistrictPairs).map((p) => p.split("::")[1])));
 
-    const priceRows = uniqueSkuIds.length && uniqueDistrictIds.length
-      ? await this.prisma.pricingDistrictPriceDaily.findMany({
-          where: {
-            canonicalSkuId: { in: uniqueSkuIds },
-            districtId: { in: uniqueDistrictIds },
-            priceDate,
-          },
-        })
-      : [];
-    const priceRowByPair = new Map(priceRows.map((r) => [`${r.canonicalSkuId}::${r.districtId}`, r]));
-
-    // Batch: districts (for name in notification copy).
+    // Batch: districts (for name in notification copy AND for their
+    // stateId, needed by the Phase 6F STATE-fallback lookup below).
     const districtRows = uniqueDistrictIds.length
-      ? await this.prisma.pricingDistrict.findMany({ where: { id: { in: uniqueDistrictIds } }, select: { id: true, name: true } })
+      ? await this.prisma.pricingDistrict.findMany({ where: { id: { in: uniqueDistrictIds } }, select: { id: true, name: true, stateId: true } })
       : [];
     const districtNameById = new Map(districtRows.map((d) => [d.id, d.name]));
+    const stateIdByDistrictId = new Map(districtRows.map((d) => [d.id, d.stateId]));
+    const uniqueStateIds = Array.from(new Set(districtRows.map((d) => d.stateId)));
+
+    // Phase 6F: fetch DISTRICT-level rows and STATE-level rows separately
+    // (still exactly 2 batched queries, not per-watchlist), then let
+    // priceRowByPair prefer the DISTRICT row and fall back to the STATE row
+    // per (skuId, districtId) pair — this mirrors
+    // PricingResolutionService's DISTRICT > STATE precedence without a
+    // third NATIONAL query here (watchlists are always district-scoped via
+    // a builder Site, so NATIONAL fallback is out of scope for this engine
+    // for now; STATE is the meaningful fallback for a source like AGNI).
+    const [districtLevelRows, stateLevelRows] = await Promise.all([
+      uniqueSkuIds.length && uniqueDistrictIds.length
+        ? this.prisma.pricingDistrictPriceDaily.findMany({
+            where: { canonicalSkuId: { in: uniqueSkuIds }, geographyLevel: "DISTRICT", districtId: { in: uniqueDistrictIds }, priceDate },
+          })
+        : Promise.resolve([]),
+      uniqueSkuIds.length && uniqueStateIds.length
+        ? this.prisma.pricingDistrictPriceDaily.findMany({
+            where: { canonicalSkuId: { in: uniqueSkuIds }, geographyLevel: "STATE", stateId: { in: uniqueStateIds }, priceDate },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const districtRowByPair = new Map(districtLevelRows.map((r) => [`${r.canonicalSkuId}::${r.districtId}`, r]));
+    const stateRowBySkuState = new Map(stateLevelRows.map((r) => [`${r.canonicalSkuId}::${r.stateId}`, r]));
+
+    // priceRowByPair value is tagged with fallbackUsed/geographyLevel so the
+    // evaluation loop below can persist which geography actually backed the
+    // alert (spec §26 — never hide that a "district" alert is really a
+    // state reference).
+    const priceRowByPair = new Map<string, { row: (typeof districtLevelRows)[number]; fallbackUsed: boolean }>();
+    for (const [skuId, districtId] of Array.from(skuDistrictPairs).map((p) => p.split("::"))) {
+      const districtRow = districtRowByPair.get(`${skuId}::${districtId}`);
+      if (districtRow) {
+        priceRowByPair.set(`${skuId}::${districtId}`, { row: districtRow, fallbackUsed: false });
+        continue;
+      }
+      const stateId = stateIdByDistrictId.get(districtId);
+      const stateRow = stateId ? stateRowBySkuState.get(`${skuId}::${stateId}`) : undefined;
+      if (stateRow) {
+        priceRowByPair.set(`${skuId}::${districtId}`, { row: stateRow, fallbackUsed: true });
+      }
+    }
 
     // Batch: last triggered evaluation per watchlist, for cooldown check.
     const watchlistIds = watchlistRows.map((w) => w.id);
@@ -211,12 +245,13 @@ export class PricingAlertEvaluationService {
         continue;
       }
 
-      const priceRow = priceRowByPair.get(`${skuId}::${districtId}`);
-      if (!priceRow) {
+      const priceEntry = priceRowByPair.get(`${skuId}::${districtId}`);
+      if (!priceEntry) {
         creates.push(this.recordSuppressed(w, priceDate, ALERT_SUPPRESSION_REASONS.NO_PRICE));
         this.tally(summary, ALERT_SUPPRESSION_REASONS.NO_PRICE);
         continue;
       }
+      const { row: priceRow, fallbackUsed } = priceEntry;
 
       const eligibility = checkAlertEligibility({
         publicDisplayAllowed: priceRow.publicDisplayAllowed,
@@ -229,11 +264,20 @@ export class PricingAlertEvaluationService {
       const currentPrice = Number(priceRow.medianPerBaseUnit);
       const targetPrice = Number(w.targetPrice);
 
+      // Phase 6F: the geography actually backing this alert — DISTRICT
+      // unless a STATE fallback was used (spec §26). districtId is only
+      // persisted when the resolved row is itself DISTRICT-level; a STATE
+      // fallback row must never be persisted with districtId populated
+      // (same invariant as the DB CHECK constraint).
+      const resolvedGeography = fallbackUsed
+        ? { geographyLevel: "STATE" as const, stateId: priceRow.stateId, districtId: null as string | null }
+        : { geographyLevel: "DISTRICT" as const, stateId: priceRow.stateId, districtId };
+
       if (!eligibility.eligible) {
         creates.push(
           this.recordEvaluation(w, priceDate, {
             canonicalSkuId: skuId,
-            districtId,
+            ...resolvedGeography,
             targetPrice,
             currentPrice,
             baseUnit: priceRow.baseUnit,
@@ -249,7 +293,7 @@ export class PricingAlertEvaluationService {
         creates.push(
           this.recordEvaluation(w, priceDate, {
             canonicalSkuId: skuId,
-            districtId,
+            ...resolvedGeography,
             targetPrice,
             currentPrice,
             baseUnit: priceRow.baseUnit,
@@ -266,7 +310,7 @@ export class PricingAlertEvaluationService {
         creates.push(
           this.recordEvaluation(w, priceDate, {
             canonicalSkuId: skuId,
-            districtId,
+            ...resolvedGeography,
             targetPrice,
             currentPrice,
             baseUnit: priceRow.baseUnit,
@@ -279,15 +323,22 @@ export class PricingAlertEvaluationService {
       }
 
       // All checks passed — send the notification, then persist the
-      // triggered evaluation with the returned notificationId.
+      // triggered evaluation with the returned notificationId. Notification
+      // copy always names the geography-appropriate label: the requested
+      // district's name for a DISTRICT resolution, or "Tamil Nadu state
+      // reference" style copy for a STATE fallback (spec §26/§27) — never
+      // the requested district's name when the underlying price is
+      // state-level.
       creates.push(
         this.triggerAndRecord(w, priceDate, {
           canonicalSkuId: skuId,
-          districtId,
+          ...resolvedGeography,
           targetPrice,
           currentPrice,
           baseUnit: priceRow.baseUnit,
-          districtName: districtNameById.get(districtId) ?? "your district",
+          districtName: fallbackUsed
+            ? `${districtNameById.get(districtId) ?? "your district"} (state reference)`
+            : districtNameById.get(districtId) ?? "your district",
           confidence: priceRow.confidence,
           method: priceRow.method,
         })
@@ -327,7 +378,9 @@ export class PricingAlertEvaluationService {
     priceDate: Date,
     data: {
       canonicalSkuId: string;
-      districtId: string;
+      geographyLevel: "DISTRICT" | "STATE";
+      stateId: string | null;
+      districtId: string | null;
       targetPrice: number;
       currentPrice: number;
       baseUnit: string;
@@ -339,6 +392,8 @@ export class PricingAlertEvaluationService {
       data: {
         watchlistId: w.id,
         canonicalSkuId: data.canonicalSkuId,
+        geographyLevel: data.geographyLevel,
+        stateId: data.stateId,
         districtId: data.districtId,
         targetPricePerBaseUnit: data.targetPrice,
         currentPricePerBaseUnit: data.currentPrice,
@@ -354,7 +409,9 @@ export class PricingAlertEvaluationService {
     priceDate: Date,
     data: {
       canonicalSkuId: string;
-      districtId: string;
+      geographyLevel: "DISTRICT" | "STATE";
+      stateId: string | null;
+      districtId: string | null;
       targetPrice: number;
       currentPrice: number;
       baseUnit: string;
@@ -363,9 +420,9 @@ export class PricingAlertEvaluationService {
       method: string;
     }
   ) {
-    const idempotencyKey = `watchlist-alert:${w.id}:${data.canonicalSkuId}:${data.districtId}:${priceDate
-      .toISOString()
-      .slice(0, 10)}`;
+    const idempotencyKey = `watchlist-alert:${w.id}:${data.canonicalSkuId}:${data.geographyLevel}:${
+      data.districtId ?? data.stateId ?? "national"
+    }:${priceDate.toISOString().slice(0, 10)}`;
 
     let notificationId: string | null = null;
     try {
@@ -394,6 +451,8 @@ export class PricingAlertEvaluationService {
       data: {
         watchlistId: w.id,
         canonicalSkuId: data.canonicalSkuId,
+        geographyLevel: data.geographyLevel,
+        stateId: data.stateId,
         districtId: data.districtId,
         targetPricePerBaseUnit: data.targetPrice,
         currentPricePerBaseUnit: data.currentPrice,

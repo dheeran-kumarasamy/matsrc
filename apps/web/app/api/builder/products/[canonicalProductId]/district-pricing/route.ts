@@ -115,12 +115,18 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
       new Set(sites.map((s) => s.city).filter((c): c is string => Boolean(c && c.trim())))
     );
 
+    // Phase 6F: this "available districts" list is specifically about
+    // DISTRICT-level coverage (the selector/comparison UI is district-scoped)
+    // — a STATE/NATIONAL row (districtId=null) must never appear here as if
+    // it were a district.
     const districtsWithData = await prisma.pricingDistrictPriceDaily.findMany({
-      where: { canonicalSkuId: sku.id, publicDisplayAllowed: true },
+      where: { canonicalSkuId: sku.id, geographyLevel: "DISTRICT", publicDisplayAllowed: true },
       distinct: ["districtId"],
       select: { districtId: true },
     });
-    const availableDistrictIds = districtsWithData.map((d) => d.districtId);
+    const availableDistrictIds = districtsWithData
+      .map((d) => d.districtId)
+      .filter((id): id is string => id !== null);
 
     if (availableDistrictIds.length === 0) {
       return NextResponse.json({ ...emptyBase, emptyReason: "NO_DISTRICT_DATA" });
@@ -154,10 +160,37 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
     }
 
     // ── Step 3: current daily snapshot for the selected district ────────
-    const currentRow = await prisma.pricingDistrictPriceDaily.findFirst({
-      where: { canonicalSkuId: sku.id, districtId: selectedDistrict.id, publicDisplayAllowed: true },
+    // Phase 6F — Geographic Pricing Hierarchy: try a direct DISTRICT price
+    // first; if none exists, fall back to a STATE-level reference price for
+    // the selected district's state (never fabricated, never silently
+    // presented as a district price — see docs/pricing/
+    // geographic-pricing-hierarchy.md). NATIONAL fallback is intentionally
+    // not wired into this Builder panel yet (out of scope for this batch;
+    // the underlying PricingResolutionService already supports it).
+    let currentRow = await prisma.pricingDistrictPriceDaily.findFirst({
+      where: { canonicalSkuId: sku.id, geographyLevel: "DISTRICT", districtId: selectedDistrict.id, publicDisplayAllowed: true },
       orderBy: { priceDate: "desc" },
     });
+    let isGeographyFallback = false;
+    let geographyStateName: string | null = null;
+
+    if (!currentRow) {
+      const districtWithState = await prisma.pricingDistrict.findUnique({
+        where: { id: selectedDistrict.id },
+        select: { stateId: true, state: { select: { name: true } } },
+      });
+      if (districtWithState) {
+        const stateRow = await prisma.pricingDistrictPriceDaily.findFirst({
+          where: { canonicalSkuId: sku.id, geographyLevel: "STATE", stateId: districtWithState.stateId, publicDisplayAllowed: true },
+          orderBy: { priceDate: "desc" },
+        });
+        if (stateRow) {
+          currentRow = stateRow;
+          isGeographyFallback = true;
+          geographyStateName = districtWithState.state.name;
+        }
+      }
+    }
 
     if (!currentRow) {
       return NextResponse.json({
@@ -188,6 +221,11 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
       sourceCount: currentRow.sourceCount,
       method: currentRow.method,
       methodLabel: toMethodLabel(currentRow.method),
+      // Phase 6F — Geographic Pricing Hierarchy: never presented as a
+      // district price when it isn't one (spec §18/§20).
+      geographyLevel: currentRow.geographyLevel,
+      geographyStateName,
+      isGeographyFallback,
       confidence: currentRow.confidence,
       anchorDistrictName: anchorDistrict?.name ?? null,
       matsrcMedianPerBaseUnit:
@@ -198,7 +236,7 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
 
     // ── Step 4: 12-month trend ───────────────────────────────────────────
     const trendRows = await prisma.pricingTrendMonthly.findMany({
-      where: { canonicalSkuId: sku.id, districtId: selectedDistrict.id },
+      where: { canonicalSkuId: sku.id, geographyLevel: "DISTRICT", districtId: selectedDistrict.id },
       orderBy: { monthStart: "desc" },
       take: 12,
     });
@@ -217,19 +255,19 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
     const otherDistrictIds = availableDistrictIds.filter((id) => id !== selectedDistrict!.id);
     const nearbyRowsRaw = otherDistrictIds.length
       ? await prisma.pricingDistrictPriceDaily.findMany({
-          where: { canonicalSkuId: sku.id, districtId: { in: otherDistrictIds }, publicDisplayAllowed: true },
+          where: { canonicalSkuId: sku.id, geographyLevel: "DISTRICT", districtId: { in: otherDistrictIds }, publicDisplayAllowed: true },
           orderBy: { priceDate: "desc" },
           take: 300,
         })
       : [];
     const latestByDistrict = new Map<string, (typeof nearbyRowsRaw)[number]>();
     for (const row of nearbyRowsRaw) {
-      if (!latestByDistrict.has(row.districtId)) latestByDistrict.set(row.districtId, row);
+      if (row.districtId && !latestByDistrict.has(row.districtId)) latestByDistrict.set(row.districtId, row);
     }
     const districtNameById = new Map(allAvailableDistricts.map((d) => [d.id, d]));
     const nearbyDistricts = Array.from(latestByDistrict.values())
       .map((row) => {
-        const district = districtNameById.get(row.districtId);
+        const district = row.districtId ? districtNameById.get(row.districtId) : undefined;
         if (!district) return null;
         return {
           districtCode: district.code,

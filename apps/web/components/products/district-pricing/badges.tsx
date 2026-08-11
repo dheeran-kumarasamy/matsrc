@@ -47,6 +47,46 @@ export function FreshnessIndicator({ label, isStale }: { label: string; isStale:
   );
 }
 
+// Phase 6F — Geographic Pricing Hierarchy badge. Explicitly discloses
+// whether the displayed price is district-specific or a broader
+// state/national reference — never lets a state reference be mistaken for
+// a district price (spec §18/§20/§43 product-language rules).
+export function GeographyLevelBadge({
+  geographyLevel,
+  stateName,
+  districtName,
+}: {
+  geographyLevel: "DISTRICT" | "STATE" | "NATIONAL";
+  stateName?: string | null;
+  districtName?: string | null;
+}) {
+  if (geographyLevel === "DISTRICT") {
+    return (
+      <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-medium text-sky-700">
+        {districtName ? `${districtName} district price` : "District price"}
+      </span>
+    );
+  }
+  if (geographyLevel === "STATE") {
+    return (
+      <span
+        className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700"
+        title="District-specific pricing is unavailable; this is a state-wide reference price."
+      >
+        {stateName ? `${stateName} state reference` : "State reference"}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600"
+      title="District- and state-specific pricing is unavailable; this is a national reference price."
+    >
+      National reference
+    </span>
+  );
+}
+
 export function MarketPositionBadge({
   marketPosition,
 }: {

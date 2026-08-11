@@ -22,6 +22,15 @@ export type WatchlistPriceIntelligence = {
   isStale: boolean | null;
   gapToTarget: number | null;
   gapToTargetPct: number | null;
+  /// Phase 6F — Geographic Pricing Hierarchy. DISTRICT unless a STATE
+  /// fallback was used (see docs/pricing/geographic-pricing-hierarchy.md).
+  geographyLevel: "DISTRICT" | "STATE" | null;
+  /// Name of the state a STATE-level reference price belongs to. Null for a
+  /// DISTRICT-level price.
+  geographyStateName: string | null;
+  /// True only when this price came from a STATE fallback rather than a
+  /// direct district-specific observation.
+  isGeographyFallback: boolean;
 };
 
 const EMPTY: WatchlistPriceIntelligence = {
@@ -38,6 +47,9 @@ const EMPTY: WatchlistPriceIntelligence = {
   isStale: null,
   gapToTarget: null,
   gapToTargetPct: null,
+  geographyLevel: null,
+  geographyStateName: null,
+  isGeographyFallback: false,
 };
 
 // Step 1: resolve Product -> PricingCanonicalSku.
@@ -82,7 +94,7 @@ async function resolveCanonicalSkuId(productId: string): Promise<string | null> 
 // Step 2: resolve builder -> district, using the single most-recently-created
 // ACTIVE Site with a non-null city (approved heuristic — mirrors
 // watchlist-bridge.service.ts on the NestJS side).
-async function resolveDistrictId(builderId: string): Promise<{ id: string; name: string } | null> {
+async function resolveDistrictId(builderId: string): Promise<{ id: string; name: string; stateId: string } | null> {
   const site = await prisma.site.findFirst({
     where: { builderId, status: "ACTIVE", city: { not: null } },
     orderBy: { createdAt: "desc" },
@@ -92,7 +104,7 @@ async function resolveDistrictId(builderId: string): Promise<{ id: string; name:
 
   const district = await prisma.pricingDistrict.findFirst({
     where: { name: { equals: site.city, mode: "insensitive" } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, stateId: true },
   });
   return district ?? null;
 }
@@ -113,10 +125,28 @@ export async function getWatchlistPriceIntelligence(
   const district = await resolveDistrictId(builderId);
   if (!district) return { ...EMPTY, emptyReason: "NO_DISTRICT" };
 
-  const currentRow = await prisma.pricingDistrictPriceDaily.findFirst({
-    where: { canonicalSkuId: skuId, districtId: district.id, publicDisplayAllowed: true },
+  // Phase 6F — Geographic Pricing Hierarchy: DISTRICT price first, STATE
+  // fallback second. Never presented as a district price when it isn't one.
+  let currentRow = await prisma.pricingDistrictPriceDaily.findFirst({
+    where: { canonicalSkuId: skuId, geographyLevel: "DISTRICT", districtId: district.id, publicDisplayAllowed: true },
     orderBy: { priceDate: "desc" },
   });
+  let isGeographyFallback = false;
+  let geographyStateName: string | null = null;
+
+  if (!currentRow) {
+    const stateRow = await prisma.pricingDistrictPriceDaily.findFirst({
+      where: { canonicalSkuId: skuId, geographyLevel: "STATE", stateId: district.stateId, publicDisplayAllowed: true },
+      orderBy: { priceDate: "desc" },
+    });
+    if (stateRow) {
+      currentRow = stateRow;
+      isGeographyFallback = true;
+      const state = await prisma.pricingState.findUnique({ where: { id: district.stateId }, select: { name: true } });
+      geographyStateName = state?.name ?? null;
+    }
+  }
+
   if (!currentRow) {
     return { ...EMPTY, emptyReason: "NO_DISTRICT_DATA", districtName: district.name };
   }
@@ -145,5 +175,8 @@ export async function getWatchlistPriceIntelligence(
     isStale: freshness.isStale,
     gapToTarget,
     gapToTargetPct,
+    geographyLevel: currentRow.geographyLevel as "DISTRICT" | "STATE",
+    geographyStateName,
+    isGeographyFallback,
   };
 }

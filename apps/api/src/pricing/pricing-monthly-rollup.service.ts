@@ -8,6 +8,14 @@ import { median, sortNumeric } from "./pricing-stats.util";
  * the daily table is already the deduped/derived source of truth, so this
  * is a pure re-aggregation and is idempotent/safe to re-run).
  *
+ * Phase 6F — Geographic Pricing Hierarchy: grouping is scoped to
+ * (canonicalSkuId, geographyLevel, stateId, districtId) via geoKey, exactly
+ * mirroring the daily rollup. A DISTRICT trend and a STATE trend for the
+ * same SKU are always separate PricingTrendMonthly rows — MoM/YoY
+ * comparisons only ever look up the previous row within the SAME geography
+ * (same geoKey), so "Erode district January" is never compared against
+ * "Tamil Nadu state December" (spec §15/§40).
+ *
  * momChangePct / yoyChangePct are computed against the immediately
  * preceding month and the same month a year prior, respectively — left null
  * when that comparison month has no row (e.g. the first month of coverage).
@@ -36,7 +44,7 @@ export class PricingMonthlyRollupService {
     type DailyRow = (typeof dailyRows)[number];
     const byKey = new Map<string, DailyRow[]>();
     for (const row of dailyRows) {
-      const key = `${row.canonicalSkuId}::${row.districtId}`;
+      const key = `${row.canonicalSkuId}::${row.geoKey}`;
       const bucket = byKey.get(key) ?? [];
       bucket.push(row);
       byKey.set(key, bucket);
@@ -47,8 +55,14 @@ export class PricingMonthlyRollupService {
 
     let written = 0;
 
-    for (const [key, bucket] of byKey.entries()) {
-      const [canonicalSkuId, districtId] = key.split("::");
+    for (const bucket of byKey.values()) {
+      const first = bucket[0];
+      const canonicalSkuId = first.canonicalSkuId;
+      const geoKey = first.geoKey;
+      const geographyLevel = first.geographyLevel;
+      const stateId = first.stateId;
+      const districtId = first.districtId;
+
       const values = sortNumeric(bucket.map((r) => Number(r.medianPerBaseUnit)));
       const med = median(values);
       if (med === null) continue;
@@ -63,10 +77,10 @@ export class PricingMonthlyRollupService {
 
       const [prevMonthRow, yearAgoRow] = await Promise.all([
         this.prisma.pricingTrendMonthly.findUnique({
-          where: { canonicalSkuId_districtId_monthStart: { canonicalSkuId, districtId, monthStart: prevMonthStart } },
+          where: { canonicalSkuId_geoKey_monthStart: { canonicalSkuId, geoKey, monthStart: prevMonthStart } },
         }),
         this.prisma.pricingTrendMonthly.findUnique({
-          where: { canonicalSkuId_districtId_monthStart: { canonicalSkuId, districtId, monthStart: yearAgoStart } },
+          where: { canonicalSkuId_geoKey_monthStart: { canonicalSkuId, geoKey, monthStart: yearAgoStart } },
         }),
       ]);
 
@@ -78,10 +92,13 @@ export class PricingMonthlyRollupService {
         : null;
 
       await this.prisma.pricingTrendMonthly.upsert({
-        where: { canonicalSkuId_districtId_monthStart: { canonicalSkuId, districtId, monthStart: start } },
+        where: { canonicalSkuId_geoKey_monthStart: { canonicalSkuId, geoKey, monthStart: start } },
         create: {
           canonicalSkuId,
+          geographyLevel,
+          stateId,
           districtId,
+          geoKey,
           monthStart: start,
           medianPerBaseUnit: med,
           minPerBaseUnit: values[0],
@@ -92,6 +109,9 @@ export class PricingMonthlyRollupService {
           confidence,
         },
         update: {
+          geographyLevel,
+          stateId,
+          districtId,
           medianPerBaseUnit: med,
           minPerBaseUnit: values[0],
           maxPerBaseUnit: values[values.length - 1],

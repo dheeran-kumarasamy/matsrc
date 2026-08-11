@@ -137,7 +137,6 @@ model SupplierProfile {
   region String?
 }
 
-
 model Category {
   id                String             @id @default(cuid())
   name              String             @unique
@@ -1215,7 +1214,47 @@ enum AnomalyReason {
   @@map("pricing_anomaly_reason")
 }
 
+/// Phase 6F — Geographic Pricing Hierarchy. Explicit geographic precision of
+/// a price observation/serving row, independent of `Confidence`. Resolution
+/// precedence is always DISTRICT > STATE > NATIONAL (see
+/// docs/pricing/geographic-pricing-hierarchy.md). NEVER inferred from a
+/// source's company address, page title, or IP — only from source-declared
+/// applicability, kept explicit end-to-end from ingestion through serving.
+enum PricingGeographyLevel {
+  DISTRICT
+  STATE
+  NATIONAL
+
+  @@map("pricing_geography_level")
+}
+
 // ========================= DIMENSION / REFERENCE =============================
+
+/// State-level geography dimension, introduced in Phase 6F so a source's
+/// price can be retained at its true geographic precision (e.g. a
+/// Tamil-Nadu-wide manufacturer price list) instead of being force-fit onto
+/// a single district. Deliberately small — one row per state actually in
+/// scope, never speculatively pre-populated (see spec §33/§43: JINDAL's
+/// Delhi-market data must NOT cause a Delhi PricingState/district to be
+/// fabricated here without a separate, explicit geographic-expansion
+/// approval).
+model PricingState {
+  id   String @id @default(cuid())
+  code String @unique // "TN"
+  name String @unique // "Tamil Nadu"
+
+  districts        PricingDistrict[]
+  sourceEndpoints  PricingSourceEndpoint[]
+  observations     PricingObservation[]
+  dailyPrices      PricingDistrictPriceDaily[]
+  trends           PricingTrendMonthly[]
+  alertEvaluations PricingAlertEvaluation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("pricing_state")
+}
 
 /// All 38 TN districts. Seeded once; `anchorDistrictId` drives derivation for
 /// districts with no direct observations (spec §5).
@@ -1230,6 +1269,13 @@ model PricingDistrict {
   latitude  Decimal? @db.Decimal(9, 6)
   longitude Decimal? @db.Decimal(9, 6)
   isMetro   Boolean  @default(false)
+
+  /// Every district belongs to exactly one state. Backfilled to Tamil Nadu
+  /// for all pre-Phase-6F rows (safe/deterministic — this table has always
+  /// been TN-only, per the model comment above), never guessed for any
+  /// future state's districts.
+  stateId String
+  state   PricingState @relation(fields: [stateId], references: [id])
 
   /// DES Building Construction Cost Index centre this district maps to.
   /// Only 16 centres exist statewide, so this is many-to-one and nullable.
@@ -1253,11 +1299,13 @@ model PricingDistrict {
   endpoints    PricingSourceEndpoint[]
   observations PricingObservation[]
   dailyPrices  PricingDistrictPriceDaily[]
+  trends       PricingTrendMonthly[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([desCentreCode])
+  @@index([stateId])
   @@map("pricing_district")
 }
 
@@ -1502,6 +1550,18 @@ model PricingSourceEndpoint {
   districtId String?
   district   PricingDistrict? @relation(fields: [districtId], references: [id])
 
+  /// Phase 6F: source-declared geographic applicability of the price(s) this
+  /// endpoint publishes — e.g. a manufacturer page that quotes one
+  /// Tamil-Nadu-wide rate (geographyLevel=STATE, stateId=TN, districtId=null)
+  /// rather than a per-district page. Nullable/UNRESOLVED-safe: this is
+  /// deliberately independent of districtId above (which many existing
+  /// per-city aggregator endpoints already carry) and of the endpoint
+  /// owner's registered company address — never inferred from either. See
+  /// docs/pricing/geographic-pricing-hierarchy.md §"Source geography".
+  geographyLevel PricingGeographyLevel?
+  stateId        String?
+  state          PricingState?          @relation(fields: [stateId], references: [id])
+
   materialCategoryId String?
   materialCategory   PricingMaterialCategory? @relation(fields: [materialCategoryId], references: [id])
 
@@ -1521,6 +1581,7 @@ model PricingSourceEndpoint {
   @@unique([sourceId, url])
   @@index([isEnabled, lastFetchedAt])
   @@index([districtId, materialCategoryId])
+  @@index([stateId, geographyLevel])
   @@map("pricing_source_endpoint")
 }
 
@@ -1588,6 +1649,17 @@ model PricingRawObservation {
   rawAsOfText     String?
   rawSupplierName String?
 
+  /// Phase 6F: explicit source-declared geographic precision for this raw
+  /// row, when (and only when) the source itself states it — e.g. an
+  /// AGNI-style page that says "Tamil Nadu" would land
+  /// rawLocationText="Tamil Nadu", rawGeographyLevel=STATE. Left null when
+  /// the source gives no explicit geographic-level signal; normalization
+  /// must never fabricate this from rawLocationText's free text (a city
+  /// mention here is evidence, not proof, of district applicability — see
+  /// spec §12). Does not participate in dedupeHash (additive metadata, not
+  /// content that would change what page/row was actually fetched).
+  rawGeographyLevel PricingGeographyLevel?
+
   /// sha256 over (sourceId, sourceUrl, rawSkuLabel, rawPriceText,
   /// rawUnitText, rawLocationText, rawAsOfText). Makes re-runs idempotent:
   /// an unchanged page produces zero new rows. See spec §2.4.
@@ -1621,8 +1693,27 @@ model PricingObservation {
   canonicalSkuId String
   canonicalSku   PricingCanonicalSku @relation(fields: [canonicalSkuId], references: [id])
 
-  districtId String
-  district   PricingDistrict @relation(fields: [districtId], references: [id])
+  /// Phase 6F — Geographic Pricing Hierarchy. Explicit geographic precision
+  /// of this observation, set at normalization time from source-declared
+  /// applicability (never inferred/guessed — see
+  /// docs/pricing/geographic-pricing-hierarchy.md). A DB-level CHECK
+  /// constraint (added in the Phase 6F migration) enforces:
+  ///   DISTRICT  -> stateId NOT NULL, districtId NOT NULL
+  ///   STATE     -> stateId NOT NULL, districtId NULL
+  ///   NATIONAL  -> stateId NULL,     districtId NULL
+  /// Every pre-Phase-6F row (all of which had a mandatory districtId) is
+  /// backfilled to geographyLevel=DISTRICT with stateId set to that
+  /// district's state — a safe, deterministic migration since this table
+  /// has always been 100% district-level so far (verified: 0 existing rows
+  /// at migration time). Non-nullable: normalization must always make an
+  /// explicit geography decision, never leave this ambiguous.
+  geographyLevel PricingGeographyLevel
+
+  stateId String?
+  state   PricingState? @relation(fields: [stateId], references: [id])
+
+  districtId String?
+  district   PricingDistrict? @relation(fields: [districtId], references: [id])
 
   /// LOGICAL FK -> existing Supplier. Populated only for INTERNAL tier
   /// observations (our own listings, quotes, closed orders).
@@ -1662,6 +1753,7 @@ model PricingObservation {
 
   @@index([canonicalSkuId, districtId, asOfDate(sort: Desc)])
   @@index([canonicalSkuId, districtId, isExcluded, fetchedAt(sort: Desc)])
+  @@index([canonicalSkuId, geographyLevel, stateId, districtId, isExcluded, fetchedAt(sort: Desc)])
   @@index([sourceId, fetchedAt(sort: Desc)])
   @@index([matsrcSupplierId])
   @@map("pricing_observation")
@@ -1701,8 +1793,20 @@ model PricingDistrictPriceDaily {
   canonicalSkuId String
   canonicalSku   PricingCanonicalSku @relation(fields: [canonicalSkuId], references: [id])
 
-  districtId String
-  district   PricingDistrict @relation(fields: [districtId], references: [id])
+  /// Phase 6F — Geographic Pricing Hierarchy. See the identical comment on
+  /// PricingObservation.geographyLevel; the same CHECK-constraint shape and
+  /// backfill rule (DISTRICT for every pre-Phase-6F row, 0 existing rows at
+  /// migration time) applies here. A DISTRICT and a STATE aggregate for the
+  /// same canonicalSkuId/day are two distinct rows — the daily rollup job
+  /// must never merge a state price into 38 per-district rows (see spec
+  /// §14/§47).
+  geographyLevel PricingGeographyLevel
+
+  stateId String?
+  state   PricingState? @relation(fields: [stateId], references: [id])
+
+  districtId String?
+  district   PricingDistrict? @relation(fields: [districtId], references: [id])
 
   priceDate DateTime @db.Date
   baseUnit  BaseUnit
@@ -1739,11 +1843,22 @@ model PricingDistrictPriceDaily {
   matsrcMedianPerBaseUnit Decimal? @db.Decimal(14, 4)
   matsrcQuoteCount        Int      @default(0)
 
+  /// Phase 6F: deterministic, always-non-null geography key computed by the
+  /// rollup service as `districtId` (DISTRICT), else `stateId` (STATE), else
+  /// the literal "NATIONAL" (NATIONAL). Exists solely so the uniqueness
+  /// constraint below can dedupe correctly — Postgres treats NULLs as
+  /// distinct in unique indexes, so a raw `[canonicalSkuId, districtId,
+  /// stateId, priceDate]` unique would silently allow duplicate STATE/
+  /// NATIONAL rows for the same SKU/day. Never read for business logic;
+  /// districtId/stateId/geographyLevel remain the source of truth.
+  geoKey String
+
   computedAt DateTime @default(now())
 
-  @@unique([canonicalSkuId, districtId, priceDate])
+  @@unique([canonicalSkuId, geoKey, priceDate])
   @@index([districtId, priceDate(sort: Desc), publicDisplayAllowed])
   @@index([canonicalSkuId, priceDate(sort: Desc)])
+  @@index([canonicalSkuId, geographyLevel, stateId, districtId, priceDate(sort: Desc)])
   @@map("pricing_district_price_daily")
 }
 
@@ -1753,8 +1868,24 @@ model PricingTrendMonthly {
   id String @id @default(cuid())
 
   canonicalSkuId String
-  districtId     String
-  monthStart     DateTime @db.Date
+
+  /// Phase 6F — same shape/backfill rule as PricingObservation.geographyLevel.
+  /// A monthly STATE trend and a monthly DISTRICT trend for the same SKU are
+  /// two separate series and must never be blended into one MoM/YoY
+  /// comparison (see spec §15/§40).
+  geographyLevel PricingGeographyLevel
+
+  stateId String?
+  state   PricingState? @relation(fields: [stateId], references: [id])
+
+  districtId String?
+  district   PricingDistrict? @relation(fields: [districtId], references: [id])
+
+  /// Deterministic dedupe key — see PricingDistrictPriceDaily.geoKey for why
+  /// this is needed alongside the nullable stateId/districtId columns.
+  geoKey String
+
+  monthStart DateTime @db.Date
 
   medianPerBaseUnit Decimal  @db.Decimal(14, 4)
   minPerBaseUnit    Decimal? @db.Decimal(14, 4)
@@ -1766,8 +1897,9 @@ model PricingTrendMonthly {
   confidence Confidence
   computedAt DateTime   @default(now())
 
-  @@unique([canonicalSkuId, districtId, monthStart])
+  @@unique([canonicalSkuId, geoKey, monthStart])
   @@index([districtId, monthStart(sort: Desc)])
+  @@index([canonicalSkuId, geographyLevel, stateId, districtId, monthStart(sort: Desc)])
   @@map("pricing_trend_monthly")
 }
 
@@ -1783,7 +1915,18 @@ model PricingAlertEvaluation {
   watchlistId String
 
   canonicalSkuId String
-  districtId     String
+
+  /// Phase 6F: the geographic precision of the price actually used for this
+  /// evaluation. A watchlist resolved via a district fallback to a state
+  /// reference price must record geographyLevel=STATE here, not DISTRICT —
+  /// the alert/notification layer must always be able to disclose which
+  /// geography backed the number that triggered it (see spec §26).
+  geographyLevel PricingGeographyLevel?
+
+  stateId String?
+  state   PricingState? @relation(fields: [stateId], references: [id])
+
+  districtId String?
 
   targetPricePerBaseUnit  Decimal  @db.Decimal(14, 4)
   currentPricePerBaseUnit Decimal  @db.Decimal(14, 4)

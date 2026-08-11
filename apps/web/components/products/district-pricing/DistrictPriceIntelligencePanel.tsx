@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { builderApiGet, ApiError } from "@/lib/api";
 import { recordPriceIntelligenceEvent } from "@/lib/interest-events";
 import type { DistrictPricingPanelResponse } from "@/lib/district-pricing-types";
-import { ConfidenceBadge, FreshnessIndicator, MarketPositionBadge, MethodBadge } from "./badges";
+import { ConfidenceBadge, FreshnessIndicator, GeographyLevelBadge, MarketPositionBadge, MethodBadge } from "./badges";
 import DistrictSelector, { districtSelectorStorageKey } from "./DistrictSelector";
 import MarketTrendChart from "./MarketTrendChart";
 import NearbyDistrictComparisonTable from "./NearbyDistrictComparisonTable";
@@ -158,11 +158,22 @@ export default function DistrictPriceIntelligencePanel({
               {/* Current price summary */}
               <div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <GeographyLevelBadge
+                    geographyLevel={data.current.geographyLevel}
+                    stateName={data.current.geographyStateName}
+                    districtName={data.selectedDistrict?.name}
+                  />
                   <MethodBadge label={data.current.methodLabel} />
                   <ConfidenceBadge confidence={data.current.confidence} />
                   <FreshnessIndicator label={data.current.freshnessLabel} isStale={data.current.isStale} />
                   <MarketPositionBadge marketPosition={data.marketPosition} />
                 </div>
+                {data.current.isGeographyFallback ? (
+                  <p className="mt-2 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
+                    State-level reference used because district-specific pricing is unavailable for{" "}
+                    {data.selectedDistrict?.name ?? "this district"}.
+                  </p>
+                ) : null}
                 <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
                   <div>
                     <p className="text-xs text-slate-400">Current market price</p>

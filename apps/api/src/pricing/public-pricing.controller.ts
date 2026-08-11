@@ -1,5 +1,6 @@
 import { Controller, Get, Header, NotFoundException, Query } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
+import { PricingResolutionService } from "./pricing-resolution.service";
 
 // NOTE: Same convention as PublicInsightsController — public pricing routes
 // must always be served dynamically (no-store). Do not remove these headers.
@@ -23,7 +24,62 @@ const NO_STORE_CACHE_CONTROL = "no-store, no-cache, must-revalidate, proxy-reval
  */
 @Controller("public/pricing")
 export class PublicPricingController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly resolution: PricingResolutionService) {}
+
+  /**
+   * Phase 6F — Geographic Pricing Hierarchy resolution endpoint. Returns the
+   * best available price for a canonicalSkuCode + districtCode, applying
+   * DISTRICT > STATE > NATIONAL precedence via PricingResolutionService.
+   * Response shape follows spec §19 — additive fields only
+   * (geographyLevel/state/district/requestedDistrict/fallbackUsed/
+   * fallbackReason), no breaking change to the existing district-daily /
+   * trend-monthly response shapes above.
+   */
+  @Get("resolve")
+  @Header("Cache-Control", NO_STORE_CACHE_CONTROL)
+  async resolve(@Query("canonicalSkuCode") canonicalSkuCode: string, @Query("districtCode") districtCode: string) {
+    if (!canonicalSkuCode || !districtCode) {
+      throw new NotFoundException("canonicalSkuCode and districtCode are required");
+    }
+
+    const [sku, district] = await Promise.all([
+      this.prisma.pricingCanonicalSku.findUnique({ where: { code: canonicalSkuCode }, select: { id: true } }),
+      this.prisma.pricingDistrict.findUnique({ where: { code: districtCode }, select: { id: true } }),
+    ]);
+    if (!sku || !district) {
+      throw new NotFoundException("Unknown canonicalSkuCode or districtCode");
+    }
+
+    const result = await this.resolution.resolveBestAvailablePrice(sku.id, district.id);
+    if (result.status === "NO_DATA") {
+      return {
+        price: null,
+        unit: null,
+        requestedDistrict: result.requestedDistrict,
+        geographyLevel: null,
+        state: null,
+        district: null,
+        fallbackUsed: false,
+        fallbackReason: null,
+      };
+    }
+
+    return {
+      price: result.price,
+      currency: result.currency,
+      unit: result.unit,
+      requestedDistrict: result.requestedDistrict,
+      geographyLevel: result.geographyLevel,
+      state: result.state,
+      district: result.district,
+      fallbackUsed: result.fallbackUsed,
+      fallbackReason: result.fallbackReason,
+      confidence: result.confidence,
+      method: result.method,
+      asOf: result.asOf,
+      isStale: result.isStale,
+    };
+  }
 
   @Get("district-daily")
   @Header("Cache-Control", NO_STORE_CACHE_CONTROL)
@@ -72,6 +128,13 @@ export class PublicPricingController {
         confidence: true,
         observationCount: true,
         sourceCount: true,
+        // Phase 6F: additive geographic metadata (spec §19/§30) — this
+        // endpoint is always queried with an explicit districtCode, so
+        // every row returned here is DISTRICT-level by construction, but the
+        // fields are surfaced explicitly rather than left implicit so
+        // callers never have to assume.
+        geographyLevel: true,
+        stateId: true,
       },
     });
 

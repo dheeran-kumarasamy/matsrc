@@ -8,7 +8,12 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "db:identity": "node scripts/db-identity.js",
+    "db:verify-safety": "node scripts/verify-db-safety.js",
+    "db:safe:migrate-deploy": "node scripts/prisma-safe.js migrate-deploy",
+    "db:safe:migrate-diff": "node scripts/prisma-safe.js migrate-diff",
+    "db:safe:db-execute": "node scripts/prisma-safe.js db-execute"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",

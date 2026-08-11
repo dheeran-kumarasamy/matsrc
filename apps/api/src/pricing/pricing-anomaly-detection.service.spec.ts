@@ -11,7 +11,15 @@ function makeObservation(overrides: Record<string, any> = {}) {
   return {
     id: overrides.id ?? "obs-1",
     canonicalSkuId: overrides.canonicalSkuId ?? "sku-1",
-    districtId: overrides.districtId ?? "district-1",
+    // Phase 6G: geographyLevel/stateId default to DISTRICT/state-tn so
+    // existing fixtures keep working unchanged; districtId is null for a
+    // STATE/NATIONAL override, matching the real nullable-districtId shape.
+    geographyLevel: overrides.geographyLevel ?? "DISTRICT",
+    stateId: "stateId" in overrides ? overrides.stateId : "state-tn",
+    districtId:
+      overrides.geographyLevel === "STATE" || overrides.geographyLevel === "NATIONAL"
+        ? null
+        : overrides.districtId ?? "district-1",
     pricePerBaseUnit: overrides.pricePerBaseUnit ?? 100,
     isExcluded: overrides.isExcluded ?? false,
     asOfDate: overrides.asOfDate ?? null,
@@ -193,5 +201,54 @@ describe("PricingAnomalyDetectionService.detectForDate — cross-check interacti
     expect(anomalyCreateCallsForO4.length).toBe(2);
     const reasons = anomalyCreateCallsForO4.map((call: any[]) => call[0].data.reason);
     expect(reasons).toEqual(expect.arrayContaining(["OUTLIER_MAD", "IMPLAUSIBLE_RANGE"]));
+  });
+});
+
+describe("PricingAnomalyDetectionService.detectForDate — Phase 6G geographic isolation", () => {
+  it("never mixes a STATE series with a NATIONAL series into one MAD group merely because both have districtId=null", async () => {
+    // 3 STATE observations (tight cluster) + 3 NATIONAL observations (a
+    // different, tight cluster far away). Neither series is individually an
+    // outlier within itself, but if merged into one districtId=null MAD
+    // group, the NATIONAL cluster would appear as a wild outlier relative
+    // to the STATE cluster's median (and vice versa).
+    const observations = [
+      makeObservation({ id: "s1", geographyLevel: "STATE", stateId: "state-tn", pricePerBaseUnit: 100 }),
+      makeObservation({ id: "s2", geographyLevel: "STATE", stateId: "state-tn", pricePerBaseUnit: 102 }),
+      makeObservation({ id: "s3", geographyLevel: "STATE", stateId: "state-tn", pricePerBaseUnit: 98 }),
+      makeObservation({ id: "n1", geographyLevel: "NATIONAL", stateId: null, pricePerBaseUnit: 100000 }),
+      makeObservation({ id: "n2", geographyLevel: "NATIONAL", stateId: null, pricePerBaseUnit: 100200 }),
+      makeObservation({ id: "n3", geographyLevel: "NATIONAL", stateId: null, pricePerBaseUnit: 99800 }),
+    ];
+    const prisma = makeFakePrisma(observations);
+    const service = buildService(prisma);
+    const result = await service.detectForDate(new Date("2026-01-10"));
+
+    // Each group has only 3 members (< 4), so MAD is skipped for both — the
+    // point of this test is that they were correctly treated as TWO
+    // separate 3-member groups (both skipped), not one merged 6-member
+    // group (which would trigger MAD and wrongly flag every row as an
+    // outlier of the other series).
+    expect(result.flagged).toBe(0);
+    expect(prisma.pricingAnomaly.create).not.toHaveBeenCalled();
+  });
+
+  it("correctly isolates a DISTRICT series from a STATE series in the same state for the MAD check", async () => {
+    const observations = [
+      makeObservation({ id: "d1", geographyLevel: "DISTRICT", stateId: "state-tn", districtId: "erode-id", pricePerBaseUnit: 74200 }),
+      makeObservation({ id: "d2", geographyLevel: "DISTRICT", stateId: "state-tn", districtId: "erode-id", pricePerBaseUnit: 74300 }),
+      makeObservation({ id: "d3", geographyLevel: "DISTRICT", stateId: "state-tn", districtId: "erode-id", pricePerBaseUnit: 74100 }),
+      makeObservation({ id: "d4", geographyLevel: "DISTRICT", stateId: "state-tn", districtId: "erode-id", pricePerBaseUnit: 74250 }),
+      makeObservation({ id: "st1", geographyLevel: "STATE", stateId: "state-tn", pricePerBaseUnit: 500000 }), // would look like an extreme outlier if merged with the district group
+    ];
+    const prisma = makeFakePrisma(observations);
+    const service = buildService(prisma);
+    const result = await service.detectForDate(new Date("2026-01-10"));
+
+    // The STATE observation must never be flagged as an outlier of the
+    // DISTRICT group (only 1 STATE observation exists, below the <4 MAD
+    // threshold on its own, so it must never be pulled into the 4-member
+    // DISTRICT group's calculation).
+    expect(result.flagged).toBe(0);
+    expect(prisma.pricingAnomaly.create).not.toHaveBeenCalled();
   });
 });

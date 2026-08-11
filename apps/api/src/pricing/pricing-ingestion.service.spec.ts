@@ -132,6 +132,62 @@ describe("PricingIngestionService.ingestEndpoint", () => {
     expect(prisma.pricingRawObservation.create).not.toHaveBeenCalled();
   });
 
+  it("Phase 6G: marks the scrape run PARTIAL (not SUCCEEDED) when the actor fetched items but every one was a duplicate (fetched > 0, landed = 0) — a zero-net-new-price run must never be reported as a successful ingestion", async () => {
+    const endpoint = makeEndpoint();
+    const prisma = makeFakePrisma({ endpoint });
+    // Every checked dedupeHash already exists -> landed stays 0 even though
+    // 2 items were fetched from the actor.
+    (prisma.pricingRawObservation.findUnique as any).mockImplementation(async () => ({ id: "existing-raw" }));
+    const actorClient = {
+      runActor: vi.fn(async () => ({
+        status: "SUCCEEDED",
+        items: [
+          { title: "Cement OPC", price: "350", unit: "bag", location: "Chennai", date: "2026-01-10" },
+          { title: "TMT Bar", price: "60", unit: "kg", location: "Madurai", date: "2026-01-10" },
+        ],
+        apifyRunId: "apify-run-1",
+        apifyDatasetId: "dataset-1",
+        errorMessage: null,
+      })),
+    };
+    const service = buildService(prisma, enabledConfig, actorClient);
+
+    const result = await service.ingestEndpoint("endpoint-1");
+
+    expect(result.itemsFetched).toBe(2);
+    expect(result.itemsLanded).toBe(0);
+    expect(prisma.pricingScrapeRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "PARTIAL" }) })
+    );
+  });
+
+  it("Phase 6G: an actor run that genuinely fetches ZERO items (e.g. a page structurally lacking price rows) is still reported SUCCEEDED at the scrape-run level (the actor call itself worked), never silently upgraded to imply prices were extracted", async () => {
+    const endpoint = makeEndpoint();
+    const prisma = makeFakePrisma({ endpoint });
+    const actorClient = {
+      runActor: vi.fn(async () => ({
+        status: "SUCCEEDED",
+        items: [],
+        apifyRunId: "apify-run-1",
+        apifyDatasetId: "dataset-1",
+        errorMessage: null,
+      })),
+    };
+    const service = buildService(prisma, enabledConfig, actorClient);
+
+    const result = await service.ingestEndpoint("endpoint-1");
+
+    // The Apify/HTTP call itself succeeded (HTTP 200 + actor SUCCEEDED), but
+    // this must never be conflated with "price data extracted" — itemsFetched
+    // and itemsLanded both being 0 is the caller's (admin dashboard/health
+    // check's) signal to distinguish "ran fine, no data" from "prices found".
+    expect(result.itemsFetched).toBe(0);
+    expect(result.itemsLanded).toBe(0);
+    expect(prisma.pricingScrapeRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "SUCCEEDED", itemsFetched: 0 }) })
+    );
+  });
+
   it("marks the endpoint's consecutiveFailures reset to 0 on a successful run", async () => {
     const endpoint = makeEndpoint({ consecutiveFailures: 3 });
     const prisma = makeFakePrisma({ endpoint });

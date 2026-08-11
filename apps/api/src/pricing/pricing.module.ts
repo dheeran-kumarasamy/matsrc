@@ -8,6 +8,7 @@ import { PricingNormalizationService } from "./pricing-normalization.service";
 import { PricingAnomalyDetectionService } from "./pricing-anomaly-detection.service";
 import { PricingDailyRollupService } from "./pricing-daily-rollup.service";
 import { PricingMonthlyRollupService } from "./pricing-monthly-rollup.service";
+import { PricingResolutionService } from "./pricing-resolution.service";
 import { PricingSchedulerService } from "./pricing-scheduler.service";
 import { PublicPricingController } from "./public-pricing.controller";
 import { NotificationsModule } from "src/notifications/notifications.module";
@@ -66,6 +67,8 @@ import { PricingAlertEvaluationService } from "./alerting/pricing-alert-evaluati
     PricingAnomalyDetectionService,
     PricingDailyRollupService,
     PricingMonthlyRollupService,
+    // Phase 6F: Geographic Pricing Hierarchy resolution service.
+    PricingResolutionService,
     PricingSchedulerService,
     // Phase 6D: Watchlist Price Alert engine.
     WatchlistBridgeService,
@@ -78,6 +81,7 @@ import { PricingAlertEvaluationService } from "./alerting/pricing-alert-evaluati
     PricingAnomalyDetectionService,
     PricingDailyRollupService,
     PricingMonthlyRollupService,
+    PricingResolutionService,
     PricingAlertEvaluationService,
   ],
 })

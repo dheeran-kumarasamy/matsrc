@@ -35,15 +35,20 @@ export async function GET(request: Request) {
     if (districts.length === 0) {
       // Fallback: no site-city match — show all districts that currently
       // have at least one publicly-displayable daily price row.
+      // Phase 6F: this report is district-scoped by design (title:
+      // "District-Wise Price Intelligence") — only DISTRICT-level rows
+      // participate; a STATE/NATIONAL reference row (districtId=null) is
+      // out of scope here rather than silently mapped onto a district.
       const districtIds = await prisma.pricingDistrictPriceDaily.findMany({
-        where: { publicDisplayAllowed: true },
+        where: { geographyLevel: "DISTRICT", publicDisplayAllowed: true },
         distinct: ["districtId"],
         select: { districtId: true },
         take: 10,
       });
-      districts = districtIds.length
+      const nonNullDistrictIds = districtIds.map((d) => d.districtId).filter((id): id is string => id !== null);
+      districts = nonNullDistrictIds.length
         ? await prisma.pricingDistrict.findMany({
-            where: { id: { in: districtIds.map((d) => d.districtId) } },
+            where: { id: { in: nonNullDistrictIds } },
           })
         : [];
     }
@@ -58,7 +63,7 @@ export async function GET(request: Request) {
     // Latest publicly-displayable daily price per (canonicalSku, district),
     // capped to a reasonable number of SKUs to keep the report readable.
     const latestDaily = await prisma.pricingDistrictPriceDaily.findMany({
-      where: { districtId: { in: districtIds }, publicDisplayAllowed: true },
+      where: { geographyLevel: "DISTRICT", districtId: { in: districtIds }, publicDisplayAllowed: true },
       orderBy: { priceDate: "desc" },
       take: 500,
       include: {
@@ -79,11 +84,12 @@ export async function GET(request: Request) {
 
     const rows: DistrictPriceIntelligenceRow[] = [];
     for (const row of latestByKey.values()) {
+      if (!row.districtId) continue; // DISTRICT-scoped report; a STATE/NATIONAL row here would be a bug upstream
       const district = districtById.get(row.districtId);
       if (!district) continue;
 
       const trendRows = await prisma.pricingTrendMonthly.findMany({
-        where: { canonicalSkuId: row.canonicalSkuId, districtId: row.districtId },
+        where: { canonicalSkuId: row.canonicalSkuId, geographyLevel: "DISTRICT", districtId: row.districtId },
         orderBy: { monthStart: "desc" },
         take: 6,
       });

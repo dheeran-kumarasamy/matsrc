@@ -142,8 +142,12 @@ export async function getListingCompetitiveness(email: string): Promise<ListingC
 
     const canonicalSkuIds = candidateSkus.map((s) => s.id);
 
+    // Phase 6F: this district-competitiveness view is district-scoped by
+    // design — only DISTRICT-level rows participate; a STATE/NATIONAL
+    // reference row (districtId=null) is out of scope here rather than
+    // silently mapped onto a district.
     const latestDaily = await prisma.pricingDistrictPriceDaily.findMany({
-      where: { canonicalSkuId: { in: canonicalSkuIds }, publicDisplayAllowed: true },
+      where: { canonicalSkuId: { in: canonicalSkuIds }, geographyLevel: "DISTRICT", publicDisplayAllowed: true },
       orderBy: { priceDate: "desc" },
       take: 100,
       include: { district: { select: { code: true, name: true } } },
@@ -151,6 +155,7 @@ export async function getListingCompetitiveness(email: string): Promise<ListingC
 
     const seenDistricts = new Set<string>();
     for (const row of latestDaily) {
+      if (!row.districtId || !row.district) continue;
       if (seenDistricts.has(row.districtId)) continue;
       seenDistricts.add(row.districtId);
 
@@ -162,7 +167,7 @@ export async function getListingCompetitiveness(email: string): Promise<ListingC
       const { bucket, diffPct } = computeMarketPositionBucket(sellingPrice, median, p25, p75);
 
       const trendRows = await prisma.pricingTrendMonthly.findMany({
-        where: { canonicalSkuId: row.canonicalSkuId, districtId: row.districtId },
+        where: { canonicalSkuId: row.canonicalSkuId, geographyLevel: "DISTRICT", districtId: row.districtId },
         orderBy: { monthStart: "desc" },
         take: 6,
       });
@@ -262,8 +267,10 @@ export async function getCategoryTrendReport(email: string): Promise<CategoryTre
 
   if (allSkuIds.size === 0) return [];
 
+  // Phase 6F: category-trend view is district-scoped by design; only
+  // DISTRICT-level trend rows participate here.
   const trendRows = await prisma.pricingTrendMonthly.findMany({
-    where: { canonicalSkuId: { in: Array.from(allSkuIds) } },
+    where: { canonicalSkuId: { in: Array.from(allSkuIds) }, geographyLevel: "DISTRICT" },
     orderBy: { monthStart: "desc" },
     take: 1200,
   });
@@ -273,6 +280,7 @@ export async function getCategoryTrendReport(email: string): Promise<CategoryTre
 
   const grouped = new Map<string, typeof trendRows>();
   for (const row of trendRows) {
+    if (!row.districtId) continue;
     const categoryName = categoryNameBySkuId.get(row.canonicalSkuId) ?? "Unknown";
     const key = `${categoryName}:${row.districtId}`;
     const existing: typeof trendRows = grouped.get(key) ?? [];
@@ -284,7 +292,8 @@ export async function getCategoryTrendReport(email: string): Promise<CategoryTre
   const results: CategoryTrendRow[] = [];
   for (const [key, rowsForKey] of grouped.entries()) {
     const [categoryName] = key.split(":");
-    const district = districtById.get(rowsForKey[0].districtId);
+    const firstDistrictId = rowsForKey[0].districtId;
+    const district = firstDistrictId ? districtById.get(firstDistrictId) : undefined;
     if (!district) continue;
 
     const sorted = rowsForKey
@@ -377,8 +386,9 @@ export async function getDistrictOpportunityReport(email: string): Promise<Distr
     const skuIds = skus.map((s) => s.id);
     if (skuIds.length === 0) continue;
 
+    // Phase 6F: district-opportunity report is district-scoped by design.
     const latestDaily = await prisma.pricingDistrictPriceDaily.findMany({
-      where: { canonicalSkuId: { in: skuIds }, publicDisplayAllowed: true },
+      where: { canonicalSkuId: { in: skuIds }, geographyLevel: "DISTRICT", publicDisplayAllowed: true },
       orderBy: { priceDate: "desc" },
       take: 100,
       include: { district: { select: { code: true, name: true } } },
@@ -386,13 +396,14 @@ export async function getDistrictOpportunityReport(email: string): Promise<Distr
 
     const seenDistricts = new Set<string>();
     for (const row of latestDaily) {
+      if (!row.districtId || !row.district) continue;
       // Skip districts already covered by the supplier's own directly-linked SKU.
       if (myDirectSkuIds.has(row.canonicalSkuId)) continue;
       if (seenDistricts.has(row.districtId)) continue;
       seenDistricts.add(row.districtId);
 
       const trendRows = await prisma.pricingTrendMonthly.findMany({
-        where: { canonicalSkuId: row.canonicalSkuId, districtId: row.districtId },
+        where: { canonicalSkuId: row.canonicalSkuId, geographyLevel: "DISTRICT", districtId: row.districtId },
         orderBy: { monthStart: "desc" },
         take: 6,
       });

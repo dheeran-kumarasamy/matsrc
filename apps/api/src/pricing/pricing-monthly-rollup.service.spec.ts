@@ -11,7 +11,13 @@ import { PricingMonthlyRollupService } from "./pricing-monthly-rollup.service";
 function makeDailyRow(overrides: Record<string, any> = {}) {
   return {
     canonicalSkuId: overrides.canonicalSkuId ?? "sku-1",
-    districtId: overrides.districtId ?? "d1",
+    // Phase 6F: geographyLevel/stateId/districtId/geoKey replace the old
+    // districtId-only shape. Defaults to DISTRICT/state-tn/d1/"d1" so
+    // existing (pre-Phase-6F) test fixtures keep working unchanged.
+    geographyLevel: overrides.geographyLevel ?? "DISTRICT",
+    stateId: "stateId" in overrides ? overrides.stateId : "state-tn",
+    districtId: overrides.geographyLevel === "STATE" || overrides.geographyLevel === "NATIONAL" ? null : overrides.districtId ?? "d1",
+    geoKey: overrides.geoKey ?? overrides.districtId ?? "d1",
     priceDate: overrides.priceDate ?? new Date("2026-01-10"),
     medianPerBaseUnit: overrides.medianPerBaseUnit ?? 100,
     confidence: overrides.confidence ?? "HIGH",
@@ -25,7 +31,7 @@ function makeFakePrisma(opts: { dailyRows?: any[]; prevMonthRow?: any; yearAgoRo
     },
     pricingTrendMonthly: {
       findUnique: vi.fn(async ({ where }: any) => {
-        const monthStart: Date = where.canonicalSkuId_districtId_monthStart.monthStart;
+        const monthStart: Date = where.canonicalSkuId_geoKey_monthStart.monthStart;
         const prevMonthStart = opts.prevMonthRow?.monthStart;
         const yearAgoStart = opts.yearAgoRow?.monthStart;
         if (prevMonthStart && monthStart.getTime() === new Date(prevMonthStart).getTime()) {
@@ -60,9 +66,9 @@ describe("PricingMonthlyRollupService.rollupForMonth", () => {
     expect(prisma.pricingTrendMonthly.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          canonicalSkuId_districtId_monthStart: expect.objectContaining({
+          canonicalSkuId_geoKey_monthStart: expect.objectContaining({
             canonicalSkuId: "sku-1",
-            districtId: "d1",
+            geoKey: "d1",
           }),
         },
         create: expect.objectContaining({ medianPerBaseUnit: 100, minPerBaseUnit: 90, maxPerBaseUnit: 110, dayCount: 3 }),
@@ -127,5 +133,31 @@ describe("PricingMonthlyRollupService.rollupForMonth", () => {
 
     expect(result.rows).toBe(3);
     expect(prisma.pricingTrendMonthly.upsert).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("PricingMonthlyRollupService.rollupForMonth — Phase 6F geography isolation", () => {
+  it("produces two SEPARATE monthly trend rows for a DISTRICT geoKey and a STATE geoKey of the same canonicalSku, never blended into one series", async () => {
+    const dailyRows = [
+      makeDailyRow({ geographyLevel: "DISTRICT", stateId: "state-tn", districtId: "d1", geoKey: "d1", medianPerBaseUnit: 74200 }),
+      makeDailyRow({ geographyLevel: "STATE", stateId: "state-tn", districtId: null, geoKey: "state-tn", medianPerBaseUnit: 72730 }),
+    ];
+    const prisma = makeFakePrisma({ dailyRows });
+    const service = buildService(prisma);
+    const result = await service.rollupForMonth(new Date("2026-01-01"));
+
+    expect(result.rows).toBe(2);
+    expect(prisma.pricingTrendMonthly.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { canonicalSkuId_geoKey_monthStart: expect.objectContaining({ geoKey: "d1" }) },
+        create: expect.objectContaining({ geographyLevel: "DISTRICT", stateId: "state-tn", districtId: "d1", medianPerBaseUnit: 74200 }),
+      })
+    );
+    expect(prisma.pricingTrendMonthly.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { canonicalSkuId_geoKey_monthStart: expect.objectContaining({ geoKey: "state-tn" }) },
+        create: expect.objectContaining({ geographyLevel: "STATE", stateId: "state-tn", districtId: null, medianPerBaseUnit: 72730 }),
+      })
+    );
   });
 });

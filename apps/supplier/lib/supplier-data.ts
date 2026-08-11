@@ -360,8 +360,13 @@ export async function getSupplierDistrictPricing(email: string): Promise<Supplie
   const canonicalSkuIds = canonicalSkus.map((s) => s.id);
   const skuById = new Map(canonicalSkus.map((s) => [s.id, s]));
 
+  // Phase 6F: this Supplier District Pricing view is explicitly
+  // district-scoped (spec §28 — supplier UI must never present a
+  // state-level reference as this supplier's district market price unless
+  // the supplier itself provides district applicability). Only DISTRICT-
+  // level rows participate here.
   const latestDaily = await prisma.pricingDistrictPriceDaily.findMany({
-    where: { canonicalSkuId: { in: canonicalSkuIds }, publicDisplayAllowed: true },
+    where: { canonicalSkuId: { in: canonicalSkuIds }, geographyLevel: "DISTRICT", publicDisplayAllowed: true },
     orderBy: { priceDate: "desc" },
     take: 300,
     include: { district: { select: { id: true, code: true, name: true } } },
@@ -369,17 +374,19 @@ export async function getSupplierDistrictPricing(email: string): Promise<Supplie
 
   const latestByKey = new Map<string, (typeof latestDaily)[number]>();
   for (const row of latestDaily) {
+    if (!row.districtId) continue;
     const key = `${row.canonicalSkuId}:${row.districtId}`;
     if (!latestByKey.has(key)) latestByKey.set(key, row);
   }
 
   const rows: SupplierDistrictPriceRow[] = [];
   for (const row of latestByKey.values()) {
+    if (!row.districtId || !row.district) continue;
     const sku = skuById.get(row.canonicalSkuId);
     if (!sku) continue;
 
     const trendRows = await prisma.pricingTrendMonthly.findMany({
-      where: { canonicalSkuId: row.canonicalSkuId, districtId: row.districtId },
+      where: { canonicalSkuId: row.canonicalSkuId, geographyLevel: "DISTRICT", districtId: row.districtId },
       orderBy: { monthStart: "desc" },
       take: 6,
     });

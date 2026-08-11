@@ -7,19 +7,39 @@ import { PricingConfigService } from "./pricing-config.service";
 
 /**
  * Rebuilds PricingDistrictPriceDaily for a single priceDate. Idempotent by
- * design (upserts on the [canonicalSkuId, districtId, priceDate] unique
- * key) — safe to re-run for the same date as many times as needed, e.g.
+ * design (upserts on the [canonicalSkuId, geoKey, priceDate] unique key —
+ * Phase 6F replaced the old districtId-only key with geoKey, see schema
+ * comment) — safe to re-run for the same date as many times as needed, e.g.
  * after new observations land or an anomaly gets excluded/reinstated.
  *
- * Two passes per (canonicalSku, materialCategory.displayUnit) needed:
+ * Phase 6F — Geographic Pricing Hierarchy: observations now carry an
+ * explicit geographyLevel (DISTRICT/STATE/NATIONAL). Grouping/aggregation
+ * happens strictly within one geography — a DISTRICT observation and a
+ * STATE observation for the same canonicalSku/day are NEVER merged into one
+ * row, even if they happen to share a state (see spec §14). Concretely, the
+ * group key is (canonicalSkuId, geographyLevel, stateId, districtId) —
+ * three separate rows can exist for the same SKU/day: one DISTRICT row per
+ * district, one STATE row, one NATIONAL row.
+ *
+ * Two passes per (canonicalSku, materialCategory.displayUnit) needed, and
+ * BOTH are scoped to DISTRICT-level observations only — STATE/NATIONAL
+ * observations never participate in anchor-based derivation, since
+ * "deriving Tamil Nadu's state price from Erode's district price" (or vice
+ * versa) would violate the same false-precision rule this phase exists to
+ * prevent:
  *   Pass 1 (OBSERVED): every district with >=1 non-excluded observation on
  *     priceDate gets a row computed directly from its own observations.
- *   Pass 2 (DERIVED_*): every other district that has an anchorDistrictId
+ *     Every STATE/NATIONAL group with >=1 non-excluded observation also
+ *     gets an OBSERVED row here, from its own observations only.
+ *   Pass 2 (DERIVED_*): every other DISTRICT that has an anchorDistrictId
  *     with an OBSERVED (or already-derived, so derivation can chain once)
  *     row for the same SKU/date gets a row derived via
  *     pricing-derivation.util, using PricingCostIndex + anchorRoadDistanceKm
  *     when available. Districts with no anchor coverage and no derivation
  *     inputs are simply left with no row for that SKU/date — never guessed.
+ *     STATE/NATIONAL rows are never derived — there is no "anchor state"
+ *     concept, and fabricating one would be exactly the "state price
+ *     invented from company address"-style guess this phase prohibits.
  *
  * publicDisplayAllowed on the output row is true only if every contributing
  * source's licenseClass allows public display (source.publicDisplayAllowed).
@@ -42,37 +62,62 @@ export class PricingDailyRollupService {
     });
 
     type Observation = (typeof observations)[number];
-    const bySkuDistrict = new Map<string, Observation[]>();
+    // Phase 6F: group key includes geographyLevel + stateId + districtId, so
+    // a DISTRICT and a STATE group for the same SKU/day are always distinct
+    // buckets — never merged (spec §14).
+    const geoGroupKey = (o: { geographyLevel: string; stateId: string | null; districtId: string | null }) =>
+      `${o.geographyLevel}::${o.stateId ?? ""}::${o.districtId ?? ""}`;
+    const geoKeyFor = (o: { geographyLevel: string; stateId: string | null; districtId: string | null }) =>
+      o.geographyLevel === "DISTRICT" ? o.districtId! : o.geographyLevel === "STATE" ? o.stateId! : "NATIONAL";
+
+    const bySkuGeo = new Map<string, Observation[]>();
     for (const obs of observations) {
-      const key = `${obs.canonicalSkuId}::${obs.districtId}`;
-      const bucket = bySkuDistrict.get(key) ?? [];
+      const key = `${obs.canonicalSkuId}::${geoGroupKey(obs)}`;
+      const bucket = bySkuGeo.get(key) ?? [];
       bucket.push(obs);
-      bySkuDistrict.set(key, bucket);
+      bySkuGeo.set(key, bucket);
     }
 
     let observedRows = 0;
 
-    // Pass 1: OBSERVED rows, keyed by (canonicalSkuId, districtId) -> computed row.
+    // Pass 1: OBSERVED rows, keyed by (canonicalSkuId, geographyLevel, stateId, districtId) -> computed row.
     const observedByKey = new Map<
       string,
-      { medianPerBaseUnit: number; canonicalSkuId: string; districtId: string; baseUnit: string; displayUnit: string }
+      {
+        medianPerBaseUnit: number;
+        canonicalSkuId: string;
+        geographyLevel: "DISTRICT" | "STATE" | "NATIONAL";
+        stateId: string | null;
+        districtId: string | null;
+        baseUnit: string;
+        displayUnit: string;
+      }
     >();
 
-    for (const [key, bucket] of bySkuDistrict.entries()) {
-      const [canonicalSkuId, districtId] = key.split("::");
+    for (const bucket of bySkuGeo.values()) {
+      const first = bucket[0];
+      const canonicalSkuId = first.canonicalSkuId;
+      const geographyLevel = first.geographyLevel as "DISTRICT" | "STATE" | "NATIONAL";
+      const stateId = first.stateId;
+      const districtId = first.districtId;
+      const geoKey = geoKeyFor(first);
+
       const values = sortNumeric(bucket.map((o) => Number(o.pricePerBaseUnit)));
       const med = median(values);
       if (med === null) continue;
 
-      const category = bucket[0].canonicalSku.materialCategory;
+      const category = first.canonicalSku.materialCategory;
       const contributingSourceCodes = Array.from(new Set(bucket.map((o) => o.source.code)));
       const publicDisplayAllowed = bucket.every((o) => o.source.publicDisplayAllowed);
 
       await this.prisma.pricingDistrictPriceDaily.upsert({
-        where: { canonicalSkuId_districtId_priceDate: { canonicalSkuId, districtId, priceDate: startOfDay } },
+        where: { canonicalSkuId_geoKey_priceDate: { canonicalSkuId, geoKey, priceDate: startOfDay } },
         create: {
           canonicalSkuId,
+          geographyLevel,
+          stateId,
           districtId,
+          geoKey,
           priceDate: startOfDay,
           baseUnit: bucket[0].baseUnit,
           medianPerBaseUnit: med,
@@ -89,6 +134,9 @@ export class PricingDailyRollupService {
           contributingSourceCodes,
         },
         update: {
+          geographyLevel,
+          stateId,
+          districtId,
           baseUnit: bucket[0].baseUnit,
           medianPerBaseUnit: med,
           p25PerBaseUnit: percentile(values, 0.25),
@@ -107,9 +155,11 @@ export class PricingDailyRollupService {
         },
       });
 
-      observedByKey.set(key, {
+      observedByKey.set(`${canonicalSkuId}::${geoGroupKey(first)}`, {
         medianPerBaseUnit: med,
         canonicalSkuId,
+        geographyLevel,
+        stateId,
         districtId,
         baseUnit: bucket[0].baseUnit,
         displayUnit: category.displayUnit,
@@ -143,13 +193,17 @@ export class PricingDailyRollupService {
         return result;
       };
 
+      // Pass 2 is DISTRICT-only (spec §14/§15): derivation never applies to
+      // STATE/NATIONAL groups — there is no "anchor state" concept, so the
+      // key format below always encodes geographyLevel=DISTRICT explicitly.
       for (const canonicalSkuId of canonicalSkuIds) {
         for (const district of districts) {
-          const key = `${canonicalSkuId}::${district.id}`;
+          const key = `${canonicalSkuId}::DISTRICT::${district.stateId}::${district.id}`;
           if (observedByKey.has(key)) continue; // already has a direct observation
           if (!district.anchorDistrictId) continue; // this district is itself an anchor; no fallback available
 
-          const anchorKey = `${canonicalSkuId}::${district.anchorDistrictId}`;
+          const anchor = districtById.get(district.anchorDistrictId);
+          const anchorKey = `${canonicalSkuId}::DISTRICT::${anchor?.stateId ?? ""}::${district.anchorDistrictId}`;
           const anchorRow = observedByKey.get(anchorKey);
           if (!anchorRow) continue; // anchor has no OBSERVED row for this SKU/date either — leave unserved, not guessed
 
@@ -172,11 +226,14 @@ export class PricingDailyRollupService {
 
           await this.prisma.pricingDistrictPriceDaily.upsert({
             where: {
-              canonicalSkuId_districtId_priceDate: { canonicalSkuId, districtId: district.id, priceDate: startOfDay },
+              canonicalSkuId_geoKey_priceDate: { canonicalSkuId, geoKey: district.id, priceDate: startOfDay },
             },
             create: {
               canonicalSkuId,
+              geographyLevel: "DISTRICT",
+              stateId: district.stateId,
               districtId: district.id,
+              geoKey: district.id,
               priceDate: startOfDay,
               baseUnit: anchorRow.baseUnit as any,
               medianPerBaseUnit: derivation.value,
@@ -191,6 +248,9 @@ export class PricingDailyRollupService {
               contributingSourceCodes: [],
             },
             update: {
+              geographyLevel: "DISTRICT",
+              stateId: district.stateId,
+              districtId: district.id,
               baseUnit: anchorRow.baseUnit as any,
               medianPerBaseUnit: derivation.value,
               displayUnit: anchorRow.displayUnit as any,

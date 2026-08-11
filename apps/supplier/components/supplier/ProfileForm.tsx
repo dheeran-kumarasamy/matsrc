@@ -12,6 +12,7 @@ type ProfileFormProps = {
     phone: string;
     whatsappNumber: string;
     bisLicenceNo: string;
+    region: string;
   };
 };
 
@@ -67,6 +68,18 @@ export function ProfileForm({ initial }: ProfileFormProps) {
         <label className="space-y-1 text-sm text-slate-700">
           <span>BIS Licence Number</span>
           <input value={form.bisLicenceNo} onChange={(e) => updateField("bisLicenceNo", e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </label>
+        <label className="space-y-1 text-sm text-slate-700 md:col-span-2">
+          <span>Operating Region / State</span>
+          <input
+            value={form.region}
+            onChange={(e) => updateField("region", e.target.value)}
+            placeholder="e.g. Tamil Nadu"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+          />
+          <span className="block text-[11px] text-slate-400">
+            Used to power the Regional Price Comparison report. Enter your primary operating state or region.
+          </span>
         </label>
         <div className="md:col-span-2">
           <button type="submit" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">

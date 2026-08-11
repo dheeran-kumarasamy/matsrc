@@ -36,6 +36,7 @@ export async function saveBusinessInfo(data: {
   phone: string;
   whatsappNumber: string;
   bisLicenceNo: string;
+  region?: string;
 }) {
   const session = await auth();
   if (!session?.user?.email) redirect("/sign-in");
@@ -49,6 +50,7 @@ export async function saveBusinessInfo(data: {
       phone: data.phone.trim(),
       whatsappNumber: data.whatsappNumber.trim(),
       bisLicenceNo: data.bisLicenceNo.trim(),
+      region: data.region?.trim() ?? "",
     },
     email
   );

@@ -24,9 +24,9 @@ type SupplierContext = {
     phone: string | null;
     whatsappNumber: string | null;
     kycStatus: "PENDING" | "APPROVED" | "REJECTED";
-    supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null } | null;
+    supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null; region: string | null } | null;
   };
-  supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null };
+  supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null; region: string | null };
 };
 
 export type KycDocType = "GST_CERT" | "TRADE_LICENCE" | "BIS_CERT" | "AADHAAR";
@@ -163,7 +163,7 @@ export async function ensureSupplierContext(email: string): Promise<SupplierCont
     phone: string | null;
     whatsappNumber: string | null;
     kycStatus: "PENDING" | "APPROVED" | "REJECTED";
-    supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null } | null;
+    supplierProfile: { id: string; companyName: string; bisLicenceNo: string | null; region: string | null } | null;
   }>(() =>
     prisma.user.findUniqueOrThrow({
       where: { email },
@@ -174,7 +174,9 @@ export async function ensureSupplierContext(email: string): Promise<SupplierCont
         phone: true,
         whatsappNumber: true,
         kycStatus: true,
-        supplierProfile: true,
+        supplierProfile: {
+          select: { id: true, companyName: true, bisLicenceNo: true, region: true },
+        },
       },
     }),
   );
@@ -1424,6 +1426,7 @@ export async function getSupplierProfileData(email: string) {
       phone: user.phone ?? "",
       whatsappNumber: user.whatsappNumber ?? "",
       bisLicenceNo: supplierProfile.bisLicenceNo ?? "",
+      region: supplierProfile.region ?? "",
     },
     kycItems: docs.map((doc: any) => ({
       doc: humanizeToken(doc.type),
@@ -1440,6 +1443,7 @@ export async function updateSupplierProfile(
     phone: string;
     whatsappNumber: string;
     bisLicenceNo: string;
+    region: string;
   },
   callerEmail: string
 ) {
@@ -1471,6 +1475,7 @@ export async function updateSupplierProfile(
     data: {
       companyName: input.companyName.trim() || supplierProfile.companyName,
       bisLicenceNo: input.bisLicenceNo.trim() || null,
+      region: input.region.trim() || null,
     },
   });
 

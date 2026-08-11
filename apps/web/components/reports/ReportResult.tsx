@@ -178,10 +178,10 @@ function LiveMarketPriceResult({ rows }: { rows: LiveMarketPriceRow[] }) {
           <div className="mt-1 flex flex-wrap gap-2">
             {row.offers.map((offer) => (
               <span
-                key={offer.supplierId}
+                key={offer.supplierId ?? offer.label}
                 className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600"
               >
-                {offer.supplierName} · ₹{offer.price.toLocaleString("en-IN")}
+                {offer.supplierName ?? offer.label} · ₹{offer.price.toLocaleString("en-IN")}
               </span>
             ))}
           </div>

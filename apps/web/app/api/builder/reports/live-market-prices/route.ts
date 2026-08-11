@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
 import { getSupplierListings, parseListingPrice } from "@/lib/listings";
 import type { LiveMarketPriceRow, LiveMarketPriceOffer } from "@/lib/reports-types";
+import { shouldShowSupplierNames } from "@/lib/report-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,13 @@ export const dynamic = "force-dynamic";
 // pattern as Best Supplier Pricing) — real, queryable data, no new model
 // required. Supplier display names are resolved via a direct Prisma lookup
 // since the public listings feed does not carry a supplier display name.
+//
+// By default (LIVE_MARKET_PRICES_SHOW_SUPPLIER_NAMES unset/false — see
+// @/lib/report-flags) supplier identities are NOT sent to the client: only
+// the lowest and highest rate for each material are returned, labelled
+// generically ("Lowest"/"Highest") instead of by supplier name. Set
+// LIVE_MARKET_PRICES_SHOW_SUPPLIER_NAMES="true" to restore the full
+// per-supplier breakdown.
 export async function GET(request: Request) {
   try {
     const ctx = getUserCtx(request);
@@ -64,6 +72,11 @@ export async function GET(request: Request) {
       : [];
     const supplierNameById = new Map(suppliers.map((s) => [s.id, s.companyName]));
 
+    // Configurable via LIVE_MARKET_PRICES_SHOW_SUPPLIER_NAMES — off by
+    // default, which anonymizes the report down to just the lowest/highest
+    // rate for each material (no supplier identities on the wire).
+    const showSupplierNames = shouldShowSupplierNames();
+
     const rows: LiveMarketPriceRow[] = [];
 
     for (const [canonicalProductId, meta] of canonicalById.entries()) {
@@ -72,7 +85,7 @@ export async function GET(request: Request) {
       );
       if (matches.length === 0) continue;
 
-      const offers: LiveMarketPriceOffer[] = matches
+      const allOffers = matches
         .map((listing) => ({
           supplierId: listing.supplierId,
           supplierName: supplierNameById.get(listing.supplierId) ?? listing.supplierId,
@@ -80,15 +93,27 @@ export async function GET(request: Request) {
         }))
         .sort((a, b) => a.price - b.price);
 
-      const prices = offers.map((o) => o.price);
+      const prices = allOffers.map((o) => o.price);
+      const lowestPrice = Math.min(...prices);
+      const highestPrice = Math.max(...prices);
+
+      const offers: LiveMarketPriceOffer[] = showSupplierNames
+        ? allOffers
+        : lowestPrice === highestPrice
+        ? [{ label: "Only offer", price: lowestPrice }]
+        : [
+            { label: "Lowest", price: lowestPrice },
+            { label: "Highest", price: highestPrice },
+          ];
 
       rows.push({
         canonicalKey: meta.canonicalKey,
         name: meta.title,
         unit: meta.unit,
         offers,
-        lowestPrice: Math.min(...prices),
-        highestPrice: Math.max(...prices),
+        lowestPrice,
+        highestPrice,
+        showSupplierNames,
       });
     }
 

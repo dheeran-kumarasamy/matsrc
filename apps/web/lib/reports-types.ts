@@ -62,8 +62,13 @@ export type CostSavingsSummary = {
 // ─────────────────────────────────────────────
 
 export type LiveMarketPriceOffer = {
-  supplierId: string;
-  supplierName: string;
+  // supplierId/supplierName are omitted by the API when the
+  // LIVE_MARKET_PRICES_SHOW_SUPPLIER_NAMES flag is off (the default) — in
+  // that mode `label` ("Lowest" / "Highest") is used instead so the report
+  // still communicates the price spread without naming suppliers.
+  supplierId?: string;
+  supplierName?: string;
+  label?: string;
   price: number;
 };
 
@@ -74,6 +79,10 @@ export type LiveMarketPriceRow = {
   offers: LiveMarketPriceOffer[];
   lowestPrice: number;
   highestPrice: number;
+  // Server-resolved value of the LIVE_MARKET_PRICES_SHOW_SUPPLIER_NAMES
+  // flag, forwarded so the client can render consistently without needing
+  // its own copy of the env var.
+  showSupplierNames: boolean;
 };
 
 export type RegionalPriceComparisonRegion = {

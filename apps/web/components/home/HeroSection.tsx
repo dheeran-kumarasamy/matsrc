@@ -9,12 +9,28 @@ export default function HeroSection() {
       className="relative flex min-h-screen items-end overflow-hidden"
       style={{ background: "var(--posh-bg)" }}
     >
+      {/* Hero background photograph — the same asset used by the Lovable
+          design (src/assets/hero.jpg → copied to public/images/hero.jpg).
+          Served from Next.js /public so the URL is root-absolute and works
+          identically in dev and in the Vercel production build.
+          Plain <img> (not next/image) matching Lovable: it is a decorative
+          full-bleed background at fixed opacity, so we avoid the optimizer
+          layout wrapper that would fight `absolute inset-0`. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/images/hero.jpg"
+        alt="Steel frame of a building under construction at golden hour"
+        width={1920}
+        height={1200}
+        className="absolute inset-0 h-full w-full scale-105 object-cover opacity-55"
+      />
+
       {/* Warm gradient overlay */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(to top, var(--posh-bg) 10%, transparent 55%), var(--posh-gradient-warm)",
+            "linear-gradient(to top, var(--posh-bg) 8%, transparent 55%), var(--posh-gradient-warm)",
         }}
       />
 

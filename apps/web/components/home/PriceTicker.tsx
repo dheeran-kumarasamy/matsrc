@@ -19,49 +19,53 @@ const ITEMS: PriceItem[] = [
 ];
 
 export default function PriceTicker() {
-  // Duplicate array for seamless infinite loop
-  const doubled = [...ITEMS, ...ITEMS];
-
   return (
-    <div
-      className="h-8 overflow-hidden flex items-center border-b"
+    // Layout matches the Lovable design exactly: a STATIC (not fixed/sticky)
+    // full-bleed band that sits directly BELOW the hero section and ABOVE the
+    // rest of the page content — not a strip pinned above the header.
+    // Lovable markup: <section className="border-y border-border/60 py-5">
+    // with a `w-max` marquee track inside, so the band spans the full viewport
+    // width while the items scroll continuously. Identical on desktop and
+    // mobile (no breakpoint-specific behaviour in Lovable), and `overflow-hidden`
+    // guarantees the off-screen half of the duplicated track never introduces
+    // horizontal page scrolling.
+    <section
+      className="overflow-hidden border-y py-5"
       style={{
         background: "var(--posh-bg)",
         borderColor: "var(--posh-border)",
-        color: "var(--posh-fg-muted)",
+        color: "var(--posh-fg)",
       }}
+      aria-label="Live material prices"
     >
-      {/* Left label */}
-      <span
-        className="shrink-0 border-r px-4 text-[10px] uppercase tracking-[0.25em] font-medium"
-        style={{ borderColor: "var(--posh-border)", color: "var(--posh-primary)" }}
-      >
-        Live Prices
-      </span>
-
-      {/* Scrolling track */}
-      <div className="flex-1 overflow-hidden">
-        <div className="flex animate-marquee-posh whitespace-nowrap gap-0">
-          {doubled.map((item, i) => (
-            <span key={i} className="inline-flex items-center gap-2 px-6 text-xs border-r" style={{ borderColor: "var(--posh-border)" }}>
-              <span style={{ color: "var(--posh-fg-muted)" }}>{item.name}</span>
-              <span className="font-medium" style={{ color: "var(--posh-fg)" }}>
-                ₹{item.price.toLocaleString("en-IN")}
-              </span>
-              {item.change !== 0 && (
-                <span
-                  className="flex items-center gap-0.5 text-[10px]"
-                  style={{ color: item.change < 0 ? "#f87171" : "#4ade80" }}
-                >
-                  {item.change < 0 ? <TrendingDown size={9} /> : <TrendingUp size={9} />}
-                  {Math.abs(item.change)}%
+      <div className="flex w-max animate-marquee-posh">
+        {[0, 1].map((dup) => (
+          <div key={dup} className="flex shrink-0" aria-hidden={dup === 1}>
+            {ITEMS.map((item) => (
+              <span
+                key={`${dup}-${item.name}`}
+                className="flex items-baseline gap-3 whitespace-nowrap px-8 text-sm"
+              >
+                <span style={{ color: "var(--posh-fg-muted)" }}>{item.name}</span>
+                <span style={{ color: "var(--posh-fg)" }}>
+                  ₹{item.price.toLocaleString("en-IN")}
                 </span>
-              )}
-            </span>
-          ))}
-        </div>
+                {item.change !== 0 && (
+                  <span
+                    className="flex items-center gap-0.5 text-xs"
+                    style={{ color: "var(--posh-primary)" }}
+                  >
+                    {item.change < 0 ? <TrendingDown size={11} /> : <TrendingUp size={11} />}
+                    {item.change > 0 ? "+" : "-"}
+                    {Math.abs(item.change)}%
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+        ))}
       </div>
-    </div>
+    </section>
   );
 }
 

@@ -66,7 +66,25 @@ export default function HomeEditorialSections() {
       {/* ── Editorial split — stats ── */}
       <section className="mx-auto max-w-7xl px-6 py-28 md:px-10 md:py-40">
         <div className="grid items-center gap-12 md:grid-cols-2 md:gap-20">
-          {/* Left: copy + stats */}
+          {/* Left: editorial material photograph — the same asset used by
+              the Lovable design (src/assets/materials.jpg → copied to
+              public/images/materials.jpg). Native 1200x1504 (3:4 portrait);
+              object-cover + a fixed responsive height preserves the crop
+              without overflow at any breakpoint. Matches Lovable's ordering:
+              image first (left), copy + stats second (right). */}
+          <div className="overflow-hidden rounded-3xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/materials.jpg"
+              alt="Stacked cement bags and steel rebar"
+              width={1200}
+              height={1504}
+              loading="lazy"
+              className="h-[26rem] w-full object-cover transition-transform duration-[1200ms] hover:scale-105 sm:h-[32rem] md:h-[40rem]"
+            />
+          </div>
+
+          {/* Right: copy + stats */}
           <div>
             <h2
               className="posh-heading"
@@ -91,13 +109,6 @@ export default function HomeEditorialSections() {
             </dl>
           </div>
 
-          {/* Right: decorative material visual */}
-          <div
-            className="flex h-80 items-center justify-center overflow-hidden rounded-3xl md:h-[28rem]"
-            style={{ background: "var(--posh-bg-card)", border: "1px solid var(--posh-border)" }}
-          >
-            <span className="text-[80px]" role="img" aria-label="Construction materials">🏗️</span>
-          </div>
         </div>
       </section>
 
@@ -138,7 +149,7 @@ export default function HomeEditorialSections() {
         style={{ color: "var(--posh-fg-muted)", borderTop: "1px solid var(--posh-border)" }}
       >
         <span className="posh-heading text-lg" style={{ color: "var(--posh-fg)" }}>Buildohub</span>
-        <span>© {new Date().getFullYear()} Buildohub · Bengaluru, India</span>
+        <span>© {new Date().getFullYear()} Buildohub · Coimbatore, India</span>
       </footer>
     </>
   );

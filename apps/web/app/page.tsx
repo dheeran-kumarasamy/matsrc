@@ -11,14 +11,17 @@ export default function HomePage() {
       className="overflow-x-hidden"
       style={{ background: "var(--posh-bg)", color: "var(--posh-fg)" }}
     >
-      {/* FR-24: Live price ticker for top 10 materials */}
-      <PriceTicker />
-
       {/* Fixed frosted nav — overlays the hero */}
       <SiteHeader />
 
-      {/* Full-screen editorial hero */}
+      {/* Full-screen editorial hero (with the Lovable hero.jpg backdrop) */}
       <HeroSection />
+
+      {/* FR-24: Live price ticker for top 10 materials.
+          Positioned per the Lovable design: a static, full-bleed band
+          directly BELOW the hero and ABOVE the rest of the page content
+          (previously it sat above the header, which did not match). */}
+      <PriceTicker />
 
       {/* Categories from real API data */}
       <CategoryGrid />

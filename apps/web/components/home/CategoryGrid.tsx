@@ -84,29 +84,53 @@ export default function CategoryGrid() {
   }
 
   return (
-    <section className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6 md:text-3xl">Shop by Category</h2>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-        {loading
-          ? Array.from({ length: 8 }).map((_, index) => (
-              <div
-                key={index}
-                className="flex min-h-[44px] animate-pulse flex-col items-center justify-center rounded-xl border border-gray-100 bg-gray-50 p-4"
-              >
-                <div className="mb-2 h-8 w-8 rounded-full bg-gray-200" />
-                <div className="h-3 w-16 rounded bg-gray-200" />
-              </div>
-            ))
-          : categories.map(({ id, name }) => (
-              <Link
-                key={id}
-                href={`/products?category=${encodeURIComponent(name)}`}
-                className="flex min-h-[44px] flex-col items-center justify-center bg-white border border-gray-100 rounded-xl p-4 text-center hover:shadow-md hover:border-brand-500 transition-all"
-              >
-                <div className="text-3xl mb-2">{iconForCategory(name)}</div>
-                <div className="text-sm font-medium text-gray-600 leading-tight">{name}</div>
-              </Link>
-            ))}
+    <section
+      className="py-16 md:py-20"
+      style={{ background: "var(--posh-bg)" }}
+    >
+      <div className="mx-auto max-w-7xl px-6 md:px-10">
+        <h2
+          className="posh-heading mb-10 text-2xl md:text-3xl"
+          style={{ color: "var(--posh-fg)" }}
+        >
+          Shop by Category
+        </h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          {loading
+            ? Array.from({ length: 8 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="flex min-h-[80px] animate-pulse flex-col items-center justify-center rounded-2xl p-5"
+                  style={{ background: "var(--posh-bg-card)" }}
+                >
+                  <div className="mb-2 h-8 w-8 rounded-full" style={{ background: "var(--posh-border)" }} />
+                  <div className="h-3 w-16 rounded" style={{ background: "var(--posh-border)" }} />
+                </div>
+              ))
+            : categories.map(({ id, name }) => (
+                <Link
+                  key={id}
+                  href={`/products?category=${encodeURIComponent(name)}`}
+                  className="flex min-h-[80px] flex-col items-center justify-center rounded-2xl border p-5 text-center transition-all duration-200"
+                  style={{
+                    background: "var(--posh-bg-card)",
+                    borderColor: "var(--posh-border)",
+                    color: "var(--posh-fg-muted)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.borderColor = "var(--posh-primary)";
+                    (e.currentTarget as HTMLElement).style.color = "var(--posh-fg)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.borderColor = "var(--posh-border)";
+                    (e.currentTarget as HTMLElement).style.color = "var(--posh-fg-muted)";
+                  }}
+                >
+                  <div className="text-3xl mb-2">{iconForCategory(name)}</div>
+                  <div className="text-sm font-medium leading-tight">{name}</div>
+                </Link>
+              ))}
+        </div>
       </div>
     </section>
   );

@@ -50,8 +50,10 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
             key={link.href}
             href={link.href}
             onClick={onNavigate}
-            className={`flex min-h-[44px] items-center rounded-lg px-3 text-sm font-semibold transition ${
-              active ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-100"
+            className={`flex min-h-[44px] items-center rounded-xl px-4 text-sm transition-all duration-150 ${
+              active
+                ? "bg-blue-50 font-semibold text-blue-700 shadow-sm"
+                : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
             }`}
           >
             {link.label}

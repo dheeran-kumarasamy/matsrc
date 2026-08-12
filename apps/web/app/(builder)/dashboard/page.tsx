@@ -34,7 +34,7 @@ export default async function DashboardPage() {
   const recentOrders = orders.slice(0, 5);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* KPI cards */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <BuilderKpiCard label="Active Orders" value={String(orders.length)} hint="Orders in progress" href="/orders" />
@@ -45,46 +45,51 @@ export default async function DashboardPage() {
       <section className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         {/* Recent orders panel */}
         <div className="panel overflow-hidden">
-          <div className="border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-            <h3 className="text-lg font-bold text-slate-900">Recent Orders</h3>
-            <Link href="/orders" className="text-xs text-blue-700 hover:underline">View all →</Link>
+          <div className="border-b border-slate-100 px-5 py-4 flex items-center justify-between">
+            <h3
+              className="text-lg tracking-tight"
+              style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+            >
+              Recent Orders
+            </h3>
+            <Link href="/orders" className="text-xs text-blue-600 hover:underline font-medium">View all →</Link>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-slate-500">
+              <thead className="bg-slate-50/80 text-left">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Order</th>
-                  <th className="px-4 py-3 font-semibold">Material</th>
-                  <th className="px-4 py-3 font-semibold">Total</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Order</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Material</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Total</th>
+                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {recentOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-slate-400 text-sm">
+                    <td colSpan={4} className="px-5 py-12 text-center text-slate-400 text-sm">
                       No orders yet.{" "}
-                      <Link href="/products" className="text-blue-700 hover:underline">
+                      <Link href="/products" className="text-blue-600 hover:underline">
                         Browse materials →
                       </Link>
                     </td>
                   </tr>
                 ) : (
                   recentOrders.map((order) => (
-                    <tr key={order.id} className="border-t border-slate-100 hover:bg-slate-50">
-                      <td className="px-4 py-3">
-                        <Link href={`/orders/${order.id}`} className="font-mono text-xs text-blue-700 hover:underline">
+                    <tr key={order.id} className="border-t border-slate-50 hover:bg-slate-50/60 transition-colors">
+                      <td className="px-5 py-3.5">
+                        <Link href={`/orders/${order.id}`} className="font-mono text-xs text-blue-600 hover:underline">
                           #{order.id.slice(0, 8)}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-slate-700">
+                      <td className="px-5 py-3.5 text-slate-700 text-sm">
                         {order.items?.[0]?.name ?? "—"}
                         {(order.items?.length ?? 0) > 1 ? ` +${order.items.length - 1}` : ""}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-slate-800">
+                      <td className="px-5 py-3.5 font-medium text-slate-800">
                         {order.totalLabel ?? `₹${order.total?.toLocaleString("en-IN")}`}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-3.5">
                         <OrderStatusBadge status={order.status} />
                       </td>
                     </tr>
@@ -96,34 +101,38 @@ export default async function DashboardPage() {
         </div>
 
         {/* Quick actions panel */}
-        <div className="panel p-4">
-          <h3 className="text-lg font-bold text-slate-900">Quick Actions</h3>
-          <div className="mt-3 space-y-2">
+        <div className="panel p-5">
+          <h3
+            className="text-lg tracking-tight text-slate-900 mb-4"
+            style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+          >
+            Quick Actions
+          </h3>
+          <div className="space-y-2.5">
             <Link
               href="/products"
-              className="block rounded-lg bg-blue-700 px-3 py-2 text-center text-sm font-bold text-white hover:bg-blue-800 transition-colors"
+              className="block rounded-xl bg-blue-700 px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-blue-800 transition-colors"
             >
               Browse Materials
             </Link>
             <Link
               href="/cart"
-              className="block rounded-lg border border-slate-300 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              className="block rounded-xl border border-slate-200 px-4 py-2.5 text-center text-sm text-slate-600 hover:bg-slate-50 transition-colors"
             >
               View Cart
             </Link>
             <Link
               href="/reports"
-              className="block rounded-lg border border-slate-300 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              className="block rounded-xl border border-slate-200 px-4 py-2.5 text-center text-sm text-slate-600 hover:bg-slate-50 transition-colors"
             >
               View Reports
             </Link>
             <Link
               href="/disputes"
-              className="block rounded-lg border border-slate-300 px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              className="block rounded-xl border border-slate-200 px-4 py-2.5 text-center text-sm text-slate-600 hover:bg-slate-50 transition-colors"
             >
               Raise Dispute
             </Link>
-
           </div>
         </div>
       </section>

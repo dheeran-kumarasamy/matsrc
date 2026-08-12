@@ -1,33 +1,122 @@
+/* ─── Google Fonts — Instrument Serif + Work Sans ─── */
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Work+Sans:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
+    /* Legacy brand tokens kept for builder portal compatibility */
     --brand-500: #1a4f8a;
     --accent-500: #e87722;
     --ink-900: #0f172a;
     --sky-50: #eef6ff;
+
+    /* ── Lovable Design System (warm editorial palette) ── */
+    --posh-bg:          #1c1810;   /* deep warm near-black */
+    --posh-bg-card:     #241f16;   /* card surface (slightly lighter) */
+    --posh-fg:          #f0e8d8;   /* warm cream foreground */
+    --posh-fg-muted:    #a89880;   /* muted warm text */
+    --posh-primary:     #c4915a;   /* warm amber / gold primary */
+    --posh-primary-fg:  #1c1810;   /* text on primary */
+    --posh-border:      rgba(240,232,216,0.10);  /* subtle warm border */
+    --posh-cream:       #f4edda;   /* cream section bg */
+    --posh-cream-fg:    #1c1810;   /* text on cream */
+    --posh-radius:      1.5rem;    /* 24px — large friendly radius */
+
+    /* Warm gradient (hero overlay) */
+    --posh-gradient-warm: radial-gradient(
+      110% 90% at 70% 0%,
+      rgba(120, 75, 30, 0.55) 0%,
+      rgba(28, 24, 16, 0) 60%
+    );
   }
 
   body {
-    @apply min-h-screen bg-slate-50 text-slate-900 antialiased;
-    background-image: radial-gradient(circle at 1px 1px, rgba(26, 79, 138, 0.08) 1px, transparent 0);
-    background-size: 22px 22px;
+    @apply min-h-screen antialiased;
+    font-family: 'Work Sans', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 300;
+    letter-spacing: 0.01em;
+    -webkit-font-smoothing: antialiased;
   }
 }
 
 @layer components {
+  /* ── Builder portal panels (light surface) ── */
   .panel {
     @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
+  }
+
+  /* ── Posh editorial section wrapper ── */
+  .posh-section {
+    @apply mx-auto max-w-7xl px-6 md:px-10;
+  }
+
+  /* ── Posh display heading ── */
+  .posh-heading {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.015em;
+    line-height: 0.95;
+  }
+
+  /* ── Posh pill button (nav CTA) ── */
+  .posh-btn-pill {
+    @apply rounded-full border px-5 py-2 text-sm backdrop-blur-md transition-colors;
+    border-color: var(--posh-border);
+    background: rgba(240,232,216,0.08);
+    color: var(--posh-fg);
+  }
+  .posh-btn-pill:hover {
+    background: var(--posh-primary);
+    color: var(--posh-primary-fg);
+    border-color: var(--posh-primary);
+  }
+
+  /* ── Posh frosted nav ── */
+  .posh-nav {
+    background: rgba(28, 24, 16, 0.55);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--posh-border);
   }
 }
 
 @layer utilities {
   .price-up {
-    @apply text-green-600;
+    @apply text-green-500;
   }
   .price-down {
-    @apply text-red-500;
+    @apply text-red-400;
+  }
+
+  /* Marquee animation (price ticker) */
+  .animate-marquee-posh {
+    animation: marquee-posh 48s linear infinite;
+  }
+
+  /* Hero rise animation */
+  .animate-rise {
+    animation: rise 1s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .animate-rise-delay-1 {
+    animation: rise 1s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+  }
+
+  .animate-rise-delay-2 {
+    animation: rise 1s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
   }
 }
+
+@keyframes marquee-posh {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translate3d(0, 24px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+

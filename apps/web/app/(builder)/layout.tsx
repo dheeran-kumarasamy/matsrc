@@ -35,7 +35,7 @@ export default function BuilderLayout({
             wired here yet, so the input just deep-links into the existing
             products-page search form via its `q` query param on submit. */}
 
-        <header className="panel sticky top-4 z-30 flex items-center gap-3 p-4">
+        <header className="panel sticky top-4 z-30 flex items-center gap-3 px-4 py-3">
 
           <BuilderNavMobileTrigger />
           <form action="/products" method="GET" className="flex-1">
@@ -43,7 +43,7 @@ export default function BuilderLayout({
               type="search"
               name="q"
               placeholder="Search TMT bars, cement, bricks..."
-              className="w-full border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm transition-colors focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-300"
             />
           </form>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -55,14 +55,9 @@ export default function BuilderLayout({
                 badge + read/unread markers inside the dropdown. */}
             <NotificationBell />
             {/* "Reports" entry point: opens the Reports catalogue overlay
-
-                (Material Consumption, Best Supplier Pricing, etc). Raising a
-                dispute/issue report lives only in the Dashboard's Quick
-                Actions panel now, to avoid confusion between the two
-                different "report" concepts. */}
+                (Material Consumption, Best Supplier Pricing, etc). */}
             <HeaderIconLink href="/reports" label="Reports" icon={FileBarChart} ariaLabel="View reports" />
             <UserSessionBadge />
-
           </div>
 
         </header>

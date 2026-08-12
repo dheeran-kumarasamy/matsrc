@@ -1,14 +1,13 @@
 "use client";
 
-// Responsive marketing site header. Desktop shows the full inline nav;
-// below `md` the inline links are replaced by a burger button that opens a
-// Sheet drawer with the same links stacked vertically. Sticky + translucent
-// so it stays usable while scrolling without overlapping content.
+// Responsive marketing site header — Posh editorial design.
+// Fixed frosted-glass navbar: wordmark (left) + nav links + pill CTA (right).
+// Below `md`: burger button opens a Sheet drawer with the same links.
+// Preserves all existing auth/session logic unchanged.
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
-import { Menu } from "lucide-react";
+import { Menu, X } from "lucide-react";
 
 import { useSession } from "next-auth/react";
 import {
@@ -25,104 +24,124 @@ export default function SiteHeader() {
   const [open, setOpen] = useState(false);
   // BUG-07 fix: this header previously always rendered the guest
   // "Login / Register" CTA regardless of session state, even for an
-  // already-authenticated builder (and even on first paint, since the
-  // session wasn't server-hydrated — see app/layout.tsx). Now it checks
-  // `useSession()` and shows a "Go to Dashboard" entry point instead when
-  // authenticated, a neutral skeleton while the session is resolving, and
-  // the guest CTA only once we're certain there's no active session.
+  // already-authenticated builder. Now it checks `useSession()` and shows
+  // "Go to Dashboard" when authenticated, a skeleton while loading, and the
+  // guest CTA only when confirmed unauthenticated.
   const { status } = useSession();
   const isAuthenticated = status === "authenticated";
   const isLoading = status === "loading";
 
   return (
-    <nav className="sticky top-0 z-50 bg-brand-500/95 text-white shadow-md backdrop-blur supports-[backdrop-filter]:bg-brand-500/90">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center">
-          <span className="relative h-10 w-40 overflow-hidden rounded-md bg-white p-1">
-            <Image src="/icons/logo-full.png" alt="Buildohub" fill className="object-contain" priority />
-          </span>
+    <header className="posh-nav fixed inset-x-0 top-0 z-50">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 md:px-10">
+
+        {/* Wordmark */}
+        <Link
+          href="/"
+          className="posh-heading text-2xl tracking-tight"
+          style={{ color: "var(--posh-fg)" }}
+        >
+          Buildohub
         </Link>
 
-
-
-
-        {/* Desktop nav — full inline links, hidden below md */}
-        <div className="hidden items-center gap-4 md:flex">
+        {/* Desktop nav */}
+        <nav className="hidden items-center gap-6 md:flex">
           {NAV_LINKS.map((link) => (
-            <Link key={link.href} href={link.href} className="text-sm hover:text-accent-500 transition-colors">
+            <Link
+              key={link.href}
+              href={link.href}
+              className="text-sm transition-colors"
+              style={{ color: "var(--posh-fg-muted)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--posh-fg)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--posh-fg-muted)")}
+            >
               {link.label}
             </Link>
           ))}
+
           {isLoading ? (
-            <div className="h-9 w-32 animate-pulse rounded-md bg-white/20" />
+            <div
+              className="h-9 w-32 animate-pulse rounded-full"
+              style={{ background: "var(--posh-border)" }}
+            />
           ) : isAuthenticated ? (
-            <Link
-              href="/dashboard"
-              className="rounded-md bg-accent-500 px-4 py-2 text-sm font-medium transition-colors hover:bg-accent-600"
-            >
+            <Link href="/dashboard" className="posh-btn-pill font-medium">
               Go to Dashboard
             </Link>
           ) : (
-            <Link
-              href="/auth/login"
-              className="rounded-md bg-accent-500 px-4 py-2 text-sm font-medium transition-colors hover:bg-accent-600"
-            >
-              Login / Register
+            <Link href="/auth/login" className="posh-btn-pill font-medium">
+              Sign in
             </Link>
           )}
-        </div>
+        </nav>
 
-        {/* Mobile burger — hidden at md and up */}
+        {/* Mobile burger */}
         <button
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Open menu"
-          className="flex h-11 w-11 items-center justify-center rounded-lg text-white transition hover:bg-white/10 md:hidden"
+          className="flex h-11 w-11 items-center justify-center rounded-full transition md:hidden"
+          style={{ color: "var(--posh-fg)", background: "var(--posh-border)" }}
         >
-          <Menu size={24} />
+          <Menu size={20} />
         </button>
       </div>
 
+      {/* Mobile drawer */}
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent className="flex flex-col p-0">
-          <SheetHeader>
-            <SheetTitle>Menu</SheetTitle>
+        <SheetContent
+          className="flex flex-col border-0 p-0"
+          style={{ background: "var(--posh-bg-card)", color: "var(--posh-fg)" }}
+        >
+          <SheetHeader className="border-b px-6 py-5" style={{ borderColor: "var(--posh-border)" }}>
+            <SheetTitle
+              className="posh-heading text-xl text-left"
+              style={{ color: "var(--posh-fg)" }}
+            >
+              Buildohub
+            </SheetTitle>
           </SheetHeader>
-          <div className="flex-1 space-y-1 p-3">
+          <div className="flex-1 space-y-2 p-6">
             {NAV_LINKS.map((link) => (
               <SheetClose asChild key={link.href}>
                 <Link
                   href={link.href}
-                  className="flex min-h-[44px] items-center rounded-lg px-3 text-base font-medium text-slate-700 transition hover:bg-slate-100"
+                  className="flex min-h-[48px] items-center rounded-2xl px-4 text-base transition"
+                  style={{ color: "var(--posh-fg-muted)" }}
                 >
                   {link.label}
                 </Link>
               </SheetClose>
             ))}
-            {isLoading ? (
-              <div className="mt-2 h-11 animate-pulse rounded-lg bg-slate-100" />
-            ) : isAuthenticated ? (
-              <SheetClose asChild>
-                <Link
-                  href="/dashboard"
-                  className="mt-2 flex min-h-[44px] items-center justify-center rounded-lg bg-accent-500 px-3 text-base font-semibold text-white transition hover:bg-accent-600"
-                >
-                  Go to Dashboard
-                </Link>
-              </SheetClose>
-            ) : (
-              <SheetClose asChild>
-                <Link
-                  href="/auth/login"
-                  className="mt-2 flex min-h-[44px] items-center justify-center rounded-lg bg-accent-500 px-3 text-base font-semibold text-white transition hover:bg-accent-600"
-                >
-                  Login / Register
-                </Link>
-              </SheetClose>
-            )}
+            <div className="pt-4">
+              {isLoading ? (
+                <div className="h-12 animate-pulse rounded-full" style={{ background: "var(--posh-border)" }} />
+              ) : isAuthenticated ? (
+                <SheetClose asChild>
+                  <Link
+                    href="/dashboard"
+                    className="flex min-h-[48px] items-center justify-center rounded-full text-base font-medium transition"
+                    style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}
+                  >
+                    Go to Dashboard
+                  </Link>
+                </SheetClose>
+              ) : (
+                <SheetClose asChild>
+                  <Link
+                    href="/auth/login"
+                    className="flex min-h-[48px] items-center justify-center rounded-full text-base font-medium transition"
+                    style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}
+                  >
+                    Sign in
+                  </Link>
+                </SheetClose>
+              )}
+            </div>
           </div>
         </SheetContent>
       </Sheet>
-    </nav>
+    </header>
   );
 }
+

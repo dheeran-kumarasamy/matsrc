@@ -55,14 +55,20 @@ export default function LoginPage() {
 
   return (
     <>
-      <h2 className="text-xl font-semibold text-gray-800 mb-6">Welcome back</h2>
+      <h2
+        className="posh-heading text-2xl mb-6"
+        style={{ color: "var(--posh-fg)" }}
+      >
+        Welcome back
+      </h2>
 
       {/* Social login — FR-01 */}
       <div className="flex flex-col gap-3 mb-6">
         <button
           type="button"
           onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-          className="flex items-center justify-center gap-3 border border-gray-200 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
+          className="flex items-center justify-center gap-3 rounded-xl border py-2.5 text-sm font-medium transition-colors hover:opacity-80"
+          style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)", background: "transparent" }}
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -76,24 +82,35 @@ export default function LoginPage() {
 
       <div className="relative mb-6">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-gray-200" />
+          <div className="w-full border-t" style={{ borderColor: "var(--posh-border)" }} />
         </div>
-        <div className="relative flex justify-center text-xs text-gray-400 bg-white px-2">or</div>
+        <div
+          className="relative flex justify-center text-xs px-2"
+          style={{ color: "var(--posh-fg-muted)", background: "var(--posh-bg-card)" }}
+        >
+          or
+        </div>
       </div>
 
       {/* Channel toggle */}
-      <div className="flex rounded-lg border border-gray-200 mb-4 overflow-hidden">
+      <div className="flex rounded-xl border mb-4 overflow-hidden" style={{ borderColor: "var(--posh-border)" }}>
         <button
           type="button"
           onClick={() => setChannel("phone")}
-          className={`flex-1 py-2 text-sm font-medium transition-colors ${channel === "phone" ? "bg-brand-500 text-white" : "text-gray-500 hover:bg-gray-50"}`}
+          className="flex-1 py-2.5 text-sm font-medium transition-colors"
+          style={channel === "phone"
+            ? { background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }
+            : { color: "var(--posh-fg-muted)", background: "transparent" }}
         >
           Phone
         </button>
         <button
           type="button"
           onClick={() => setChannel("email")}
-          className={`flex-1 py-2 text-sm font-medium transition-colors ${channel === "email" ? "bg-brand-500 text-white" : "text-gray-500 hover:bg-gray-50"}`}
+          className="flex-1 py-2.5 text-sm font-medium transition-colors"
+          style={channel === "email"
+            ? { background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }
+            : { color: "var(--posh-fg-muted)", background: "transparent" }}
         >
           Email
         </button>
@@ -107,21 +124,29 @@ export default function LoginPage() {
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             required
-            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full rounded-xl border px-4 py-3 text-base focus:outline-none focus:ring-2"
+            style={{
+              borderColor: "var(--posh-border)",
+              background: "transparent",
+              color: "var(--posh-fg)",
+              focusRingColor: "var(--posh-primary)",
+            } as React.CSSProperties}
           />
-          {error && <p className="text-red-500 text-xs">{error}</p>}
+          {error && <p className="text-red-400 text-xs">{error}</p>}
           <button
             type="submit"
             disabled={loading}
-            className="w-full min-h-[44px] bg-brand-500 hover:bg-brand-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+            className="w-full min-h-[44px] rounded-xl py-2.5 text-sm font-medium transition-opacity disabled:opacity-50 hover:opacity-85"
+            style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}
           >
             {loading ? "Sending..." : "Send OTP"}
           </button>
         </form>
       ) : (
         <form onSubmit={handleVerifyOtp} className="space-y-4">
-          <p className="text-sm text-gray-500">
-            Enter the 6-digit OTP sent to <strong>{identifier}</strong>
+          <p className="text-sm" style={{ color: "var(--posh-fg-muted)" }}>
+            Enter the 6-digit OTP sent to{" "}
+            <strong style={{ color: "var(--posh-fg)" }}>{identifier}</strong>
           </p>
           <input
             type="text"
@@ -131,25 +156,36 @@ export default function LoginPage() {
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
             required
-            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full rounded-xl border px-4 py-3 text-base text-center tracking-widest focus:outline-none focus:ring-2"
+            style={{ borderColor: "var(--posh-border)", background: "transparent", color: "var(--posh-fg)" }}
           />
-          {error && <p className="text-red-500 text-xs">{error}</p>}
+          {error && <p className="text-red-400 text-xs">{error}</p>}
           <button
             type="submit"
             disabled={loading || otp.length < 6}
-            className="w-full bg-brand-500 hover:bg-brand-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+            className="w-full rounded-xl py-2.5 text-sm font-medium transition-opacity disabled:opacity-50 hover:opacity-85"
+            style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}
           >
             {loading ? "Verifying..." : "Verify OTP"}
           </button>
-          <button type="button" onClick={() => setStep("identifier")} className="w-full text-xs text-gray-400 hover:text-gray-600">
+          <button
+            type="button"
+            onClick={() => setStep("identifier")}
+            className="w-full text-xs transition-opacity hover:opacity-70"
+            style={{ color: "var(--posh-fg-muted)" }}
+          >
             Change {channel}
           </button>
         </form>
       )}
 
-      <p className="text-center text-xs text-gray-400 mt-6">
+      <p className="text-center text-xs mt-6" style={{ color: "var(--posh-fg-muted)" }}>
         New to Buildohub.in?{" "}
-        <Link href="/auth/register" className="text-brand-500 font-medium hover:underline">
+        <Link
+          href="/auth/register"
+          className="font-medium hover:underline"
+          style={{ color: "var(--posh-primary)" }}
+        >
           Create account
         </Link>
       </p>

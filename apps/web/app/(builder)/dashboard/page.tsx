@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BuilderKpiCard } from "@/components/builder/BuilderKpiCard";
+import { ArrowUpRight } from "lucide-react";
 import { builderApiGet } from "@/lib/api";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
 
@@ -11,7 +11,67 @@ type Order = {
   items: Array<{ name: string }>;
 };
 
-// UF-02 entry: builder dashboard summary
+type Kpi    = { label: string; value: string; hint: string; href: string };
+type Action = { href: string; label: string };
+
+// ── Posh shell: deep warm dark container with radial gradient overlay ─────────
+function PoshShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative overflow-hidden rounded-3xl" style={{ background: "var(--posh-bg)" }}>
+      <div className="pointer-events-none absolute inset-0 rounded-3xl" style={{ background: "var(--posh-gradient-warm)" }} />
+      <div className="relative space-y-8 p-6 md:p-8">{children}</div>
+    </div>
+  );
+}
+
+// ── Page header: editorial label + serif title + AI Sourcing CTA ──────────────
+function DashHeader() {
+  return (
+    <div className="flex items-end justify-between gap-4">
+      <div>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.3em]" style={{ color: "var(--posh-primary)" }}>
+          Procurement Desk
+        </p>
+        <h1 className="posh-heading text-[clamp(2rem,5vw,3.25rem)] leading-none" style={{ color: "var(--posh-fg)" }}>
+          Builder Dashboard
+        </h1>
+      </div>
+      <Link
+        href="/sourcing"
+        className="hidden shrink-0 items-center gap-2 rounded-full border px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-70 sm:flex"
+        style={{ borderColor: "var(--posh-border)", color: "var(--posh-primary)", background: "rgba(196,145,90,0.08)" }}
+      >
+        AI Sourcing <ArrowUpRight size={13} />
+      </Link>
+    </div>
+  );
+}
+
+// ── KPI grid: 3 dark cards with serif large number ───────────────────────────
+function KpiGrid({ kpis }: { kpis: Kpi[] }) {
+  return (
+    <section className="grid gap-4 sm:grid-cols-3">
+      {kpis.map((kpi) => (
+        <Link key={kpi.label} href={kpi.href} className="block">
+          <article
+            className="rounded-2xl border p-6 transition-opacity hover:opacity-80"
+            style={{ background: "var(--posh-bg-card)", borderColor: "var(--posh-border)" }}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em]" style={{ color: "var(--posh-fg-muted)" }}>
+              {kpi.label}
+            </p>
+            <p className="posh-heading mt-4 text-5xl" style={{ color: "var(--posh-primary)" }}>
+              {kpi.value}
+            </p>
+            <p className="mt-2 text-sm" style={{ color: "var(--posh-fg-muted)" }}>{kpi.hint}</p>
+          </article>
+        </Link>
+      ))}
+    </section>
+  );
+}
+
+// UF-02 entry: builder dashboard summary — posh-web-flair editorial dark theme
 export default async function DashboardPage() {
   let cartCount = 0;
   let orders: Order[] = [];
@@ -33,65 +93,82 @@ export default async function DashboardPage() {
 
   const recentOrders = orders.slice(0, 5);
 
-  return (
-    <div className="space-y-5">
-      {/* KPI cards */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <BuilderKpiCard label="Active Orders" value={String(orders.length)} hint="Orders in progress" href="/orders" />
-        <BuilderKpiCard label="Cart Items" value={String(cartCount)} hint="Items ready to checkout" href="/cart" />
-        <BuilderKpiCard label="Price Alerts" value={String(watchlistCount)} hint="Watchlist materials" href="/watchlist" />
-      </section>
+  const kpis: Kpi[] = [
+    { label: "Active Orders", value: String(orders.length),   hint: "Orders in progress",     href: "/orders" },
+    { label: "Cart Items",    value: String(cartCount),       hint: "Items ready to checkout", href: "/cart" },
+    { label: "Price Alerts",  value: String(watchlistCount),  hint: "Watchlist materials",     href: "/watchlist" },
+  ];
 
-      <section className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+  const secondaryActions: Action[] = [
+    { href: "/cart",     label: "View Cart" },
+    { href: "/reports",  label: "View Reports" },
+    { href: "/disputes", label: "Raise Dispute" },
+  ];
+
+  return (
+    <PoshShell>
+      <DashHeader />
+      <KpiGrid kpis={kpis} />
+
+      {/* ── Bottom grid: Recent Orders + Quick Actions ── */}
+      <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+
         {/* Recent orders panel */}
-        <div className="panel overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-4 flex items-center justify-between">
-            <h3
-              className="text-lg tracking-tight"
-              style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-            >
-              Recent Orders
-            </h3>
-            <Link href="/orders" className="text-xs text-blue-600 hover:underline font-medium">View all →</Link>
+        <div className="overflow-hidden rounded-2xl border"
+          style={{ background: "var(--posh-bg-card)", borderColor: "var(--posh-border)" }}>
+          <div className="flex items-center justify-between border-b px-6 py-4"
+            style={{ borderColor: "var(--posh-border)" }}>
+            <h2 className="posh-heading text-xl" style={{ color: "var(--posh-fg)" }}>Recent Orders</h2>
+            <Link href="/orders" className="text-xs font-medium transition-opacity hover:opacity-70"
+              style={{ color: "var(--posh-primary)" }}>
+              View all →
+            </Link>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-slate-50/80 text-left">
+              <thead>
                 <tr>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Order</th>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Material</th>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Total</th>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Status</th>
+                  {["Order", "Material", "Total", "Status"].map((h) => (
+                    <th key={h}
+                      className="border-b px-6 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.2em]"
+                      style={{ color: "var(--posh-fg-muted)", borderColor: "var(--posh-border)" }}>
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {recentOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-5 py-12 text-center text-slate-400 text-sm">
+                    <td colSpan={4} className="px-6 py-12 text-center text-sm"
+                      style={{ color: "var(--posh-fg-muted)" }}>
                       No orders yet.{" "}
-                      <Link href="/products" className="text-blue-600 hover:underline">
+                      <Link href="/products"
+                        className="underline underline-offset-2 transition-opacity hover:opacity-70"
+                        style={{ color: "var(--posh-primary)" }}>
                         Browse materials →
                       </Link>
                     </td>
                   </tr>
                 ) : (
                   recentOrders.map((order) => (
-                    <tr key={order.id} className="border-t border-slate-50 hover:bg-slate-50/60 transition-colors">
-                      <td className="px-5 py-3.5">
-                        <Link href={`/orders/${order.id}`} className="font-mono text-xs text-blue-600 hover:underline">
+                    <tr key={order.id} className="border-b transition-colors hover:bg-white/5"
+                      style={{ borderColor: "var(--posh-border)" }}>
+                      <td className="px-6 py-4">
+                        <Link href={`/orders/${order.id}`}
+                          className="font-mono text-xs transition-opacity hover:opacity-70"
+                          style={{ color: "var(--posh-primary)" }}>
                           #{order.id.slice(0, 8)}
                         </Link>
                       </td>
-                      <td className="px-5 py-3.5 text-slate-700 text-sm">
+                      <td className="px-6 py-4" style={{ color: "var(--posh-fg)" }}>
                         {order.items?.[0]?.name ?? "—"}
                         {(order.items?.length ?? 0) > 1 ? ` +${order.items.length - 1}` : ""}
                       </td>
-                      <td className="px-5 py-3.5 font-medium text-slate-800">
+                      <td className="px-6 py-4 font-medium" style={{ color: "var(--posh-fg)" }}>
                         {order.totalLabel ?? `₹${order.total?.toLocaleString("en-IN")}`}
                       </td>
-                      <td className="px-5 py-3.5">
-                        <OrderStatusBadge status={order.status} />
-                      </td>
+                      <td className="px-6 py-4"><OrderStatusBadge status={order.status} /></td>
                     </tr>
                   ))
                 )}
@@ -100,42 +177,41 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Quick actions panel */}
-        <div className="panel p-5">
-          <h3
-            className="text-lg tracking-tight text-slate-900 mb-4"
-            style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
-          >
-            Quick Actions
-          </h3>
-          <div className="space-y-2.5">
-            <Link
-              href="/products"
-              className="block rounded-xl bg-blue-700 px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-blue-800 transition-colors"
-            >
+        {/* Quick Actions panel */}
+        <div className="rounded-2xl border p-6"
+          style={{ background: "var(--posh-bg-card)", borderColor: "var(--posh-border)" }}>
+          <h2 className="posh-heading mb-5 text-xl" style={{ color: "var(--posh-fg)" }}>Quick Actions</h2>
+          <div className="space-y-3">
+            <Link href="/products"
+              className="block rounded-2xl px-5 py-3 text-center text-sm font-medium transition-opacity hover:opacity-80"
+              style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
               Browse Materials
             </Link>
-            <Link
-              href="/cart"
-              className="block rounded-xl border border-slate-200 px-4 py-2.5 text-center text-sm text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              View Cart
-            </Link>
-            <Link
-              href="/reports"
-              className="block rounded-xl border border-slate-200 px-4 py-2.5 text-center text-sm text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              View Reports
-            </Link>
-            <Link
-              href="/disputes"
-              className="block rounded-xl border border-slate-200 px-4 py-2.5 text-center text-sm text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              Raise Dispute
+            {secondaryActions.map(({ href, label }) => (
+              <Link key={href} href={href}
+                className="block rounded-2xl border px-5 py-3 text-center text-sm font-medium transition-colors hover:bg-white/5"
+                style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg-muted)" }}>
+                {label}
+              </Link>
+            ))}
+          </div>
+
+          {/* AI Sourcing — mobile only (sm+ sees it in the page header) */}
+          <div className="mt-6 border-t pt-5 sm:hidden" style={{ borderColor: "var(--posh-border)" }}>
+            <Link href="/sourcing"
+              className="flex items-center justify-center gap-2 rounded-2xl border px-5 py-3 text-sm font-medium transition-opacity hover:opacity-70"
+              style={{ borderColor: "var(--posh-border)", color: "var(--posh-primary)", background: "rgba(196,145,90,0.08)" }}>
+              AI Sourcing <ArrowUpRight size={13} />
             </Link>
           </div>
+
+          <p className="mt-6 border-t pt-4 text-[11px] leading-relaxed"
+            style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg-muted)" }}>
+            All prices reflect live supplier quotes. Last refreshed on page load.
+          </p>
         </div>
+
       </section>
-    </div>
+    </PoshShell>
   );
 }

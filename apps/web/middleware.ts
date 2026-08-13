@@ -18,6 +18,11 @@ const PROTECTED_PREFIXES = [
   "/group-orders",
   "/profile",
   "/sites",
+  // AI Sourcing Assistant — session/conversation state is per-customer, so the
+  // page requires a signed-in builder just like every other portal route. The
+  // /api/builder/sourcing/* endpoints are already covered by the
+  // /api/builder prefix check below.
+  "/sourcing",
 ];
 
 

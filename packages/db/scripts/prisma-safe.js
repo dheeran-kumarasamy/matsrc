@@ -1,49 +1,40 @@
 #!/usr/bin/env node
 // packages/db/scripts/prisma-safe.js
 //
-// Phase 6F-1 — Database Migration & Production Safety Hardening.
+// Phase 6F-2 — Database Migration Safety Hardening.
 //
 // Safe wrapper around the Prisma CLI. Runs databaseSafetyPreflight() BEFORE
-// invoking `prisma` at all — if the preflight blocks the operation, no
-// database command is executed, full stop.
+// invoking `prisma` at all — if the preflight blocks, no database command
+// is executed, full stop.
 //
-// This wrapper does not replace `prisma` for every possible invocation; it
-// covers the specific operations this repo's own scripts/docs recommend
-// (see docs/database/database-safety.md "Safe Prisma commands"). Anything
-// else should go through `pnpm exec prisma <command>` directly, per
-// AGENTS.md's existing convention — this wrapper is additive, not a
-// mandatory chokepoint enforced at the tooling level (Prisma itself has no
-// hook for that), so it only helps for the operations that opt into it.
+// Phase 6F-2 changes over Phase 6F-1:
+//   - migrate-diff automatically injects --shadow-database-url from
+//     SHADOW_DATABASE_URL after preflight passes. The wrapper OWNS this
+//     parameter; passing --shadow-database-url manually is blocked.
+//   - Safety summary table printed before every execution (spec §21).
+//   - Audit log written to stderr for CI/CD capture (spec §24).
 //
-// Usage (from packages/db, or via `pnpm --filter @matsrc/db exec node
-// scripts/prisma-safe.js <op> [...prisma args]`):
+// Usage (via pnpm --filter @matsrc/db <script>):
 //
-//   node scripts/prisma-safe.js generate
-//   node scripts/prisma-safe.js validate
-//   node scripts/prisma-safe.js migrate-deploy
-//   node scripts/prisma-safe.js db-execute --file path/to/migration.sql --url "$DIRECT_URL"
-//   node scripts/prisma-safe.js migrate-diff --from-migrations ./prisma/migrations \
-//     --to-schema-datamodel ./prisma/schema.prisma --shadow-database-url "$SHADOW_DATABASE_URL" --script
+//   pnpm --filter @matsrc/db db:safe:migrate-diff \
+//     -- --from-migrations ./prisma/migrations \
+//     --to-schema-datamodel ./prisma/schema.prisma --script
 //
-// POTENTIALLY_DESTRUCTIVE operations (migrate-dev, migrate-reset, db-push,
-// migrate-diff, db-seed) are blocked outright when the environment is
-// classified production, per databaseSafetyPreflight(). There is no
-// same-process bypass flag — see ALLOW_PRODUCTION_DB_OPERATION in
-// docs/database/database-safety.md for the only sanctioned override, which
-// requires an explicit environment variable, not a CLI flag.
+//   pnpm --filter @matsrc/db db:safe:migrate-deploy
+//   pnpm --filter @matsrc/db db:safe:db-execute -- --file migration.sql --url "$DIRECT_URL"
+//
+// DO NOT pass --shadow-database-url manually — the wrapper injects it from
+// SHADOW_DATABASE_URL after all safety checks pass.
+
+"use strict";
 
 const { spawnSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const { databaseSafetyPreflight } = require("../lib/db-safety-preflight");
+const { isProductionDatabase, getNeonEndpointId } = require("../lib/db-safety");
 
-// Prisma CLI auto-loads packages/db/.env when invoked directly, but THIS
-// script's own preflight check needs to read DATABASE_URL/DIRECT_URL/
-// SHADOW_DATABASE_URL from that same file BEFORE spawning `prisma` — so it
-// loads it itself here. Minimal inline parser (no new dependency; this
-// package does not otherwise depend on dotenv) — deliberately does not
-// overwrite a variable already set in the real environment, matching
-// dotenv's own default precedence.
+// Load .env before running preflight (same logic as Phase 6F-1).
 function loadEnvFile(envPath) {
   if (!fs.existsSync(envPath)) return;
   const contents = fs.readFileSync(envPath, "utf8");
@@ -61,12 +52,13 @@ function loadEnvFile(envPath) {
   }
 }
 
+// Load env files in priority order (each call only sets vars NOT already set).
+// Precedence: real shell env > .env.local > .env
+// .env.local (gitignored) allows per-session DATABASE_URL/SHADOW_DATABASE_URL
+// overrides for migrate-diff sessions without modifying .env.
+loadEnvFile(path.join(__dirname, "..", ".env.local"));
 loadEnvFile(path.join(__dirname, "..", ".env"));
 
-// Maps this wrapper's operation names to the actual `prisma <...>` argv.
-// Kept explicit (no argv passthrough beyond what's appended after the
-// operation name) so this file can be read top-to-bottom as the full list
-// of what this wrapper is capable of invoking.
 const PRISMA_ARGS = {
   generate: ["generate"],
   validate: ["validate"],
@@ -80,42 +72,105 @@ const PRISMA_ARGS = {
   "db-execute": ["db", "execute"],
 };
 
+/**
+ * Prints the safety summary required by spec §21. No passwords/secrets.
+ * All output goes to STDERR so that stdout is clean SQL-only when --script is used.
+ */
+function printSafetySummary(result) {
+  const c = result.context;
+  const shadowEndpoint = c.shadowTarget
+    ? (getNeonEndpointId(process.env.SHADOW_DATABASE_URL) || "<non-neon>")
+    : "<not set>";
+  const log = (s) => process.stderr.write(s + "\n");
+  log("\nDatabase Safety Preflight");
+  log("-------------------------");
+  log(`Environment:         ${c.environment}`);
+  log(`Operation:           ${c.operation} (${c.operationClass})`);
+  log(`Database target:     ${c.databaseTarget}`);
+  if (c.directTarget) log(`Direct target:       ${c.directTarget}`);
+  log(`Production target:   ${c.databaseIsProduction ? "YES ⚠" : "NO"}`);
+  if (c.shadowTarget != null) {
+    log(`Shadow target:       ${c.shadowTarget}`);
+    log(`Shadow endpoint:     ${shadowEndpoint}`);
+    log(`Shadow = production: ${c.shadowIsProduction ? "YES ⚠" : "NO"}`);
+    log(`Shadow = DIRECT_URL: ${c.shadowEqualsDirect ? "YES ⚠" : "NO"}`);
+  }
+  log(`Migration action:    ${result.safe ? "SAFE ✓" : "BLOCKED ✗"}`);
+  log("");
+}
+
+/** Writes a non-secret audit line to stderr for CI/CD capture (spec §24). */
+function writeAuditLine(operation, result) {
+  const ts = new Date().toISOString();
+  const ci = process.env.CI ? "CI=true" : "CI=false";
+  const outcome = result.safe ? "ALLOWED" : "BLOCKED";
+  process.stderr.write(
+    `[AUDIT] ${ts} | ${ci} | env=${result.context.environment} | op=${operation} | shadow=${result.context.shadowTarget || "N/A"} | outcome=${outcome}\n`
+  );
+}
+
 function main() {
-  const [operation, ...rest] = process.argv.slice(2);
+  const [operation, ...rawRest] = process.argv.slice(2);
+  // Strip a leading `--` separator that pnpm injects when the caller uses
+  // `pnpm --filter @matsrc/db db:safe:migrate-diff -- --from-migrations ...`
+  // pnpm passes `--` as the first element of the extra args to mark the end
+  // of pnpm options; Prisma does not understand it and errors.
+  const rest = rawRest[0] === "--" ? rawRest.slice(1) : rawRest;
 
   if (!operation || !PRISMA_ARGS[operation]) {
-    console.error(
-      `Usage: node scripts/prisma-safe.js <${Object.keys(PRISMA_ARGS).join("|")}> [...prisma args]`
-    );
+    console.error(`Usage: node scripts/prisma-safe.js <${Object.keys(PRISMA_ARGS).join("|")}> [...prisma args]`);
     process.exitCode = 1;
     return;
+  }
+
+  // Block manual --shadow-database-url injection for migrate-diff (spec §12).
+  if (operation === "migrate-diff") {
+    const hasShadowArg = rest.some(
+      (a) => a === "--shadow-database-url" || a.startsWith("--shadow-database-url=")
+    );
+    if (hasShadowArg) {
+      console.error(
+        "\nBLOCKED: Do not pass --shadow-database-url manually.\n\n" +
+          "The wrapper injects it from SHADOW_DATABASE_URL after all safety checks pass.\n" +
+          "Set SHADOW_DATABASE_URL in your .env and re-run without --shadow-database-url.\n\n" +
+          "Historical note: manually passing DIRECT_URL here caused the Phase 6F data-loss incident.\n" +
+          "See docs/database/phase-6f-1-safety-hardening-report.md"
+      );
+      process.exitCode = 1;
+      return;
+    }
   }
 
   const result = databaseSafetyPreflight({ operation });
 
-  console.log("Database safety preflight:");
-  console.log(`  environment:     ${result.context.environment}`);
-  console.log(`  operation:       ${result.context.operation} (${result.context.operationClass})`);
-  console.log(`  database target: ${result.context.databaseTarget}`);
-  if (result.context.directTarget) console.log(`  direct target:   ${result.context.directTarget}`);
-  if (result.context.shadowTarget) console.log(`  shadow target:   ${result.context.shadowTarget}`);
+  printSafetySummary(result);
+  writeAuditLine(operation, result);
 
   if (!result.safe) {
-    console.error("\n" + result.reason);
+    console.error(result.reason);
     process.exitCode = 1;
     return;
   }
 
-  if (result.warning) console.warn("\nWARNING: " + result.warning);
-  if (result.notice) console.log("\nNOTICE: " + result.notice);
+  // All wrapper messages go to stderr so stdout is clean SQL when --script is used.
+  if (result.warning) process.stderr.write("WARNING: " + result.warning + "\n");
+  if (result.notice) process.stderr.write("NOTICE: " + result.notice + "\n");
 
-  console.log(`\nRunning: prisma ${[...PRISMA_ARGS[operation], ...rest].join(" ")}\n`);
+  // For migrate-diff, inject --shadow-database-url from SHADOW_DATABASE_URL.
+  // Preflight already verified it is safe.
+  let finalArgs;
+  if (operation === "migrate-diff") {
+    const shadowUrl = process.env.SHADOW_DATABASE_URL;
+    finalArgs = [...PRISMA_ARGS[operation], ...rest, "--shadow-database-url", shadowUrl];
+  } else {
+    finalArgs = [...PRISMA_ARGS[operation], ...rest];
+  }
 
-  // Uses `pnpm exec prisma`, never `npx prisma` — this repo's AGENTS.md and
-  // .clinerules explicitly prohibit `npx prisma`; `pnpm exec` resolves the
-  // workspace-pinned Prisma version instead of potentially fetching a
-  // different one ad hoc.
-  const child = spawnSync("pnpm", ["exec", "prisma", ...PRISMA_ARGS[operation], ...rest], {
+  // Log to stderr so stdout = SQL only (for --script capture).
+  process.stderr.write(`Running: prisma ${finalArgs.join(" ")}\n\n`);
+
+  // Uses `pnpm exec prisma` — never `npx prisma` (AGENTS.md / .clinerules).
+  const child = spawnSync("pnpm", ["exec", "prisma", ...finalArgs], {
     stdio: "inherit",
     env: process.env,
     cwd: __dirname + "/..",
@@ -125,3 +180,4 @@ function main() {
 }
 
 main();
+

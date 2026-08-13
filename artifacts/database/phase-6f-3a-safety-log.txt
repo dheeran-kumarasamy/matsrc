@@ -1,0 +1,17 @@
+
+Database Safety Preflight
+-------------------------
+Environment:         development
+Operation:           migrate-diff (POTENTIALLY_DESTRUCTIVE)
+Database target:     postgresql://neondb_owner@ep-sparkling-term-aojx078x.c-2.ap-southeast-1.aws.neon.tech:5432/neondb
+Direct target:       postgresql://neondb_owner@ep-sparkling-term-aojx078x.c-2.ap-southeast-1.aws.neon.tech:5432/neondb
+Production target:   NO
+Shadow target:       postgresql://neondb_owner@ep-plain-voice-aoacghjc.c-2.ap-southeast-1.aws.neon.tech:5432/neondb
+Shadow endpoint:     ep-plain-voice-aoacghjc
+Shadow = production: NO
+Shadow = DIRECT_URL: NO
+Migration action:    SAFE ✓
+
+[AUDIT] 2026-08-13T05:34:19.046Z | CI=false | env=development | op=migrate-diff | shadow=postgresql://neondb_owner@ep-plain-voice-aoacghjc.c-2.ap-southeast-1.aws.neon.tech:5432/neondb | outcome=ALLOWED
+Running: prisma migrate diff --from-url postgresql://neondb_owner:npg_Z1bqkJQs5OAh@ep-sparkling-term-aojx078x.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require --to-schema-datamodel ./prisma/schema.prisma --script --shadow-database-url postgresql://neondb_owner:npg_Z1bqkJQs5OAh@ep-plain-voice-aoacghjc.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+

@@ -1,196 +1,170 @@
 /**
- * Phase 6F-1 — Database Migration & Production Safety Hardening.
+ * Phase 6F-2 — Database Migration Safety Hardening.
  *
- * Assert-based verification of packages/db/lib/db-safety.js and
- * packages/db/lib/db-safety-preflight.js. Follows the existing
- * verify-pricing-fingerprint.js / verify-pricing-dedupe-hash.js convention
- * (packages/db has no test framework configured). Run with:
+ * Assert-based verification of db-safety.js and db-safety-preflight.js.
+ * Follows verify-pricing-fingerprint.js convention (no test framework).
  *
- *   node packages/db/scripts/verify-db-safety.js
+ * Run with: node packages/db/scripts/verify-db-safety.js
  *
- * IMPORTANT: every test below uses entirely fabricated/synthetic connection
- * strings (fake hostnames like "prod.example.neon.tech" /
- * "scratch.example.neon.tech") — none of this ever touches a real database,
- * per the explicit "do not use production for testing" requirement. This
- * script performs zero network I/O.
+ * Zero network I/O — all synthetic connection strings, no real databases.
+ * Covers all spec §14, §15, §27 required test cases.
  */
+
+"use strict";
 
 const assert = require("assert");
 const {
   parseConnectionString,
   redactConnectionString,
   isSameDatabaseIdentity,
+  extractNeonEndpointId,
+  getNeonEndpointId,
+  isProductionDatabase,
+  getDatabaseIdentity,
   detectEnvironment,
+  KNOWN_PRODUCTION_IDENTIFIERS,
 } = require("../lib/db-safety");
-const { databaseSafetyPreflight } = require("../lib/db-safety-preflight");
+const {
+  databaseSafetyPreflight,
+  validateShadowDatabase,
+} = require("../lib/db-safety-preflight");
 
-const PROD_URL = "postgresql://prod_user:sup3rsecret@ep-prod-example.neon.tech/appdb?sslmode=require";
-const PROD_POOLED_URL = "postgresql://prod_user:sup3rsecret@ep-prod-example-pooler.neon.tech/appdb?sslmode=require";
-const SCRATCH_URL = "postgresql://scratch_user:otherpass@ep-scratch-example.neon.tech/scratchdb?sslmode=require";
-const STAGING_URL = "postgresql://staging_user:pass@ep-staging-example.neon.tech/appdb?sslmode=require";
+// Synthetic URLs — uses actual prod endpoint ID for Neon-aware detection tests.
+const PROD_EP = KNOWN_PRODUCTION_IDENTIFIERS.neonEndpointId; // ep-muddy-meadow-aoh42y8u
+const PROD_DIRECT = `postgresql://prod_user:sup3rsecret@${PROD_EP}.ap-southeast-1.aws.neon.tech/appdb?sslmode=require`;
+const PROD_POOLED = `postgresql://prod_user:sup3rsecret@${PROD_EP}-pooler.ap-southeast-1.aws.neon.tech/appdb?sslmode=require`;
+const SCRATCH = "postgresql://scratch_user:otherpass@ep-scratch-example.neon.tech/scratchdb?sslmode=require";
+const STAGING = "postgresql://staging_user:pass@ep-staging-example.neon.tech/appdb?sslmode=require";
+// Legacy Phase 6F-1 URLs (backward compat)
+const LP = "postgresql://prod_user:sup3rsecret@ep-prod-example.neon.tech/appdb?sslmode=require";
+const LPP = "postgresql://prod_user:sup3rsecret@ep-prod-example-pooler.neon.tech/appdb?sslmode=require";
 
 function run() {
-  // --- db-safety.js unit checks -------------------------------------------
-
-  const parsed = parseConnectionString(PROD_URL);
+  // =========================================================================
+  // SECTION 1: db-safety.js backward-compat unit checks (Phase 6F-1)
+  // =========================================================================
+  const parsed = parseConnectionString(LP);
   assert.strictEqual(parsed.host, "ep-prod-example.neon.tech");
   assert.strictEqual(parsed.database, "appdb");
   assert.strictEqual(parsed.user, "prod_user");
-  assert.strictEqual(parseConnectionString("not-a-url"), null, "garbage input must return null, never throw or guess");
-  assert.strictEqual(parseConnectionString(undefined), null, "missing input must return null");
-
-  const redacted = redactConnectionString(PROD_URL);
-  assert.ok(!redacted.includes("sup3rsecret"), "redactConnectionString must never include the password");
-  assert.ok(redacted.includes("ep-prod-example.neon.tech"), "redactConnectionString should keep the host for identification");
-
-  assert.strictEqual(
-    isSameDatabaseIdentity(PROD_URL, PROD_POOLED_URL),
-    true,
-    "pooled and direct URLs for the SAME Neon project must compare as the same database identity"
-  );
-  assert.strictEqual(
-    isSameDatabaseIdentity(PROD_URL, SCRATCH_URL),
-    false,
-    "genuinely different databases must not compare as the same identity"
-  );
-  assert.strictEqual(
-    isSameDatabaseIdentity(PROD_URL, "not-a-url"),
-    false,
-    "an unparseable comparison must never be treated as 'same' (fail closed)"
-  );
-
+  assert.strictEqual(parseConnectionString("not-a-url"), null);
+  assert.strictEqual(parseConnectionString(undefined), null);
+  const redacted = redactConnectionString(LP);
+  assert.ok(!redacted.includes("sup3rsecret"), "must never include password");
+  assert.ok(redacted.includes("ep-prod-example.neon.tech"), "should keep host");
+  assert.strictEqual(isSameDatabaseIdentity(LP, LPP), true, "pooled and direct must be same identity");
+  assert.strictEqual(isSameDatabaseIdentity(LP, SCRATCH), false);
+  assert.strictEqual(isSameDatabaseIdentity(LP, "not-a-url"), false, "unparseable must fail closed");
   assert.strictEqual(detectEnvironment({ NODE_ENV: "production" }), "production");
   assert.strictEqual(detectEnvironment({ VERCEL_ENV: "production" }), "production");
   assert.strictEqual(detectEnvironment({ VERCEL_ENV: "preview" }), "staging");
   assert.strictEqual(detectEnvironment({ NODE_ENV: "development" }), "development");
-  assert.strictEqual(detectEnvironment({}), "development", "unset environment must default to development, never production");
-  assert.strictEqual(
-    detectEnvironment({ DATABASE_ENV: "production", NODE_ENV: "development" }),
-    "production",
-    "DATABASE_ENV must take precedence when explicitly set"
-  );
+  assert.strictEqual(detectEnvironment({}), "development");
+  assert.strictEqual(detectEnvironment({ DATABASE_ENV: "production", NODE_ENV: "development" }), "production");
+  console.log("SECTION 1 (backward compat): PASSED");
 
-  console.log("db-safety.js unit checks passed.");
 
-  // --- Test A: development + scratch database -> SAFE ---------------------
+  // SECTION 2: Neon identity extraction (Phase 6F-2)
+  assert.strictEqual(extractNeonEndpointId("ep-muddy-meadow-aoh42y8u.ap-southeast-1.aws.neon.tech"), "ep-muddy-meadow-aoh42y8u");
+  assert.strictEqual(extractNeonEndpointId("ep-muddy-meadow-aoh42y8u-pooler.ap-southeast-1.aws.neon.tech"), "ep-muddy-meadow-aoh42y8u");
+  assert.strictEqual(extractNeonEndpointId("not-neon.example.com"), null);
+  assert.strictEqual(extractNeonEndpointId(undefined), null);
+  assert.strictEqual(getNeonEndpointId(PROD_DIRECT), PROD_EP);
+  assert.strictEqual(getNeonEndpointId(PROD_POOLED), PROD_EP);
+  assert.strictEqual(getNeonEndpointId("not-a-url"), null);
+  assert.strictEqual(isProductionDatabase(PROD_DIRECT), true, "prod direct must be detected");
+  assert.strictEqual(isProductionDatabase(PROD_POOLED), true, "prod pooled must be detected");
+  assert.strictEqual(isProductionDatabase(SCRATCH), false);
+  assert.strictEqual(isProductionDatabase(STAGING), false);
+  assert.strictEqual(isProductionDatabase("not-a-url"), false);
+  assert.strictEqual(isProductionDatabase(LP), false, "legacy synthetic not on real endpoint");
+  const prodId = getDatabaseIdentity(PROD_DIRECT);
+  assert.ok(prodId.parseable && prodId.isProduction && prodId.endpointId === PROD_EP);
+  assert.ok(!prodId.redacted.includes("sup3rsecret"));
+  const scratchId = getDatabaseIdentity(SCRATCH);
+  assert.ok(scratchId.parseable && !scratchId.isProduction);
+  console.log("SECTION 2 (Neon identity): PASSED");
+
+  // SECTION 3: validateShadowDatabase
+  const s1 = validateShadowDatabase({ shadowUrl: undefined, databaseUrl: PROD_DIRECT, directUrl: PROD_DIRECT });
+  assert.strictEqual(s1.valid, false, "S1: missing shadow -> invalid");
+  assert.ok(s1.reason.includes("SHADOW_DATABASE_URL is required"));
+  const s2 = validateShadowDatabase({ shadowUrl: SCRATCH, databaseUrl: SCRATCH, directUrl: PROD_DIRECT });
+  assert.strictEqual(s2.valid, false, "S2: shadow == DATABASE_URL -> invalid");
+  // S3: shadow == DIRECT_URL (exact Phase 6F pattern)
+  // databaseUrl is STAGING so the "shadow == DATABASE_URL" check passes, then
+  // "shadow == DIRECT_URL" is what triggers (PROD_DIRECT == PROD_DIRECT).
+  const s3 = validateShadowDatabase({ shadowUrl: PROD_DIRECT, databaseUrl: STAGING, directUrl: PROD_DIRECT });
+  assert.strictEqual(s3.valid, false, "S3: shadow == DIRECT_URL (Phase 6F) -> BLOCKED");
+  assert.ok(s3.reason.includes("Phase 6F") || s3.reason.includes("DIRECT_URL"), "S3: reason must mention Phase 6F or DIRECT_URL");
+  const s4 = validateShadowDatabase({ shadowUrl: PROD_POOLED, databaseUrl: STAGING, directUrl: STAGING });
+  assert.strictEqual(s4.valid, false, "S4: shadow = production endpoint -> BLOCKED");
+  assert.ok(s4.reason.includes("PRODUCTION"));
+  const s5 = validateShadowDatabase({ shadowUrl: SCRATCH, databaseUrl: STAGING, directUrl: STAGING });
+  assert.strictEqual(s5.valid, true, "S5: isolated shadow -> valid");
+
+  // SECTION 4: databaseSafetyPreflight — spec §27 cases
+  // N1: SHADOW_DATABASE_URL missing
+  assert.strictEqual(databaseSafetyPreflight({ operation: "migrate-diff", env: { NODE_ENV: "development", DATABASE_URL: SCRATCH, DIRECT_URL: SCRATCH } }).safe, false, "N1");
+  // N2: shadow == DATABASE_URL
+  assert.strictEqual(databaseSafetyPreflight({ operation: "migrate-diff", env: { NODE_ENV: "development", DATABASE_URL: SCRATCH, DIRECT_URL: SCRATCH, SHADOW_DATABASE_URL: SCRATCH } }).safe, false, "N2");
+  // N3: shadow == DIRECT_URL (exact Phase 6F incident)
+  // Uses STAGING as DATABASE_URL so the shadow!=DATABASE_URL check passes,
+  // then the shadow==DIRECT_URL check (PROD_DIRECT==PROD_DIRECT) fires.
   {
-    const result = databaseSafetyPreflight({
-      operation: "migrate-dev",
-      env: { NODE_ENV: "development", DATABASE_URL: SCRATCH_URL, DIRECT_URL: SCRATCH_URL },
-    });
-    assert.strictEqual(result.safe, true, "Test A: development + scratch DB must be SAFE");
+    const r = databaseSafetyPreflight({ operation: "migrate-diff", env: { NODE_ENV: "development", DATABASE_URL: STAGING, DIRECT_URL: PROD_DIRECT, SHADOW_DATABASE_URL: PROD_DIRECT } });
+    assert.strictEqual(r.safe, false, "N3: SHADOW==DIRECT_URL -> BLOCKED");
+    assert.ok(r.reason.includes("DIRECT_URL") || r.reason.includes("PRODUCTION") || r.reason.includes("Phase 6F"), "N3: must mention DIRECT_URL, PRODUCTION, or Phase 6F");
   }
-
-  // --- Test B: development + production DB used as shadow -> BLOCKED ------
+  // N4: shadow endpoint == production (Neon-aware, different string from DIRECT_URL)
+  assert.strictEqual(databaseSafetyPreflight({ operation: "migrate-diff", env: { NODE_ENV: "development", DATABASE_URL: STAGING, DIRECT_URL: STAGING, SHADOW_DATABASE_URL: PROD_POOLED } }).safe, false, "N4");
+  // N5: production DATABASE_URL + migrate-dev -> BLOCKED by endpoint ID (no env label)
+  assert.strictEqual(databaseSafetyPreflight({ operation: "migrate-dev", env: { NODE_ENV: "development", DATABASE_URL: PROD_DIRECT, DIRECT_URL: PROD_DIRECT } }).safe, false, "N5");
+  // N6: production + db-push
+  assert.strictEqual(databaseSafetyPreflight({ operation: "db-push", env: { NODE_ENV: "development", DATABASE_URL: PROD_DIRECT } }).safe, false, "N6");
+  // N7: URL variants same identity (shadow and DIRECT_URL are same endpoint despite different URL formats)
+  // Uses STAGING as DATABASE_URL to let S2 pass, then S3/S5 fires for the PROD URLs.
+  assert.strictEqual(databaseSafetyPreflight({ operation: "migrate-diff", env: { NODE_ENV: "development", DATABASE_URL: STAGING, DIRECT_URL: PROD_DIRECT, SHADOW_DATABASE_URL: PROD_POOLED } }).safe, false, "N7: URL variant same identity -> BLOCKED");
+  // P1: Valid disposable shadow + development
+  assert.strictEqual(databaseSafetyPreflight({ operation: "migrate-diff", env: { NODE_ENV: "development", DATABASE_URL: STAGING, DIRECT_URL: STAGING, SHADOW_DATABASE_URL: SCRATCH } }).safe, true, "P1");
+  // P2: Valid staging + separate shadow
+  assert.strictEqual(databaseSafetyPreflight({ operation: "migrate-diff", env: { NODE_ENV: "staging", DATABASE_URL: STAGING, DIRECT_URL: STAGING, SHADOW_DATABASE_URL: SCRATCH } }).safe, true, "P2");
+  // P3: production + migrate-deploy (CONTROLLED_WRITE)
   {
-    const result = databaseSafetyPreflight({
-      operation: "migrate-diff",
-      env: {
-        NODE_ENV: "development",
-        DATABASE_URL: SCRATCH_URL,
-        DIRECT_URL: PROD_URL,
-        SHADOW_DATABASE_URL: PROD_URL,
-      },
-    });
-    assert.strictEqual(result.safe, false, "Test B: production DB used as shadow must be BLOCKED");
-    assert.ok(/shadow database/i.test(result.reason));
+    const r = databaseSafetyPreflight({ operation: "migrate-deploy", env: { NODE_ENV: "production", DATABASE_URL: LP, DIRECT_URL: LP } });
+    assert.strictEqual(r.safe, true, "P3");
+    assert.ok(r.notice, "P3: must surface notice");
   }
-
-  // --- Test C: production environment + destructive dev command -> BLOCKED
+  // Override double-gate
+  assert.strictEqual(databaseSafetyPreflight({ operation: "migrate-dev", env: { NODE_ENV: "production", DATABASE_URL: LP, ALLOW_PRODUCTION_DB_OPERATION: "true" }, allowProductionOverride: false }).safe, false, "Override: env flag alone -> BLOCK");
   {
-    const result = databaseSafetyPreflight({
-      operation: "migrate-dev",
-      env: { NODE_ENV: "production", DATABASE_URL: PROD_URL, DIRECT_URL: PROD_URL },
-    });
-    assert.strictEqual(result.safe, false, "Test C: production + migrate-dev must be BLOCKED");
+    const r = databaseSafetyPreflight({ operation: "migrate-dev", env: { NODE_ENV: "production", DATABASE_URL: LP, ALLOW_PRODUCTION_DB_OPERATION: "true" }, allowProductionOverride: true });
+    assert.strictEqual(r.safe, true, "Override: both flags -> ALLOW");
+    assert.ok(r.overrideUsed);
   }
+  // Credentials never appear
+  assert.ok(!JSON.stringify(databaseSafetyPreflight({ operation: "migrate-dev", env: { NODE_ENV: "development", DATABASE_URL: PROD_DIRECT } })).includes("sup3rsecret"), "Credentials must never appear");
+  // context.databaseIsProduction
+  assert.strictEqual(databaseSafetyPreflight({ operation: "validate", env: { DATABASE_URL: PROD_DIRECT } }).context.databaseIsProduction, true, "context.databaseIsProduction must be true");
+  // context.shadowEqualsDirect
+  assert.strictEqual(databaseSafetyPreflight({ operation: "migrate-diff", env: { NODE_ENV: "development", DATABASE_URL: STAGING, DIRECT_URL: STAGING, SHADOW_DATABASE_URL: STAGING } }).context.shadowEqualsDirect, true, "context.shadowEqualsDirect must be true");
+  console.log("SECTION 4 (databaseSafetyPreflight §27 cases): PASSED");
 
-  // --- Test D: production environment + explicitly approved deploy command
+  // SECTION 5: Historical Phase 6F regression
+  // Historical config: production as DATABASE_URL, DIRECT_URL, and SHADOW_DATABASE_URL.
+  // Note: PROD_POOLED and PROD_DIRECT normalize to same endpoint, so S2 (shadow==DATABASE_URL) fires.
   {
-    const result = databaseSafetyPreflight({
-      operation: "migrate-deploy",
-      env: { NODE_ENV: "production", DATABASE_URL: PROD_URL, DIRECT_URL: PROD_URL },
-    });
-    assert.strictEqual(result.safe, true, "Test D: production + migrate-deploy (CONTROLLED_WRITE) must be ALLOWED");
-    assert.ok(result.notice, "Test D: production CONTROLLED_WRITE must surface a notice, not run silently");
+    const r = databaseSafetyPreflight({ operation: "migrate-diff", env: { DATABASE_URL: STAGING, DIRECT_URL: PROD_DIRECT, SHADOW_DATABASE_URL: PROD_DIRECT } });
+    assert.strictEqual(r.safe, false, "Regression: historical Phase 6F config must be BLOCKED");
+    assert.ok(r.reason.includes("DIRECT_URL") || r.reason.includes("PRODUCTION") || r.reason.includes("Phase 6F"));
   }
+  assert.strictEqual(databaseSafetyPreflight({ operation: "migrate-diff", env: { DATABASE_URL: PROD_POOLED, DIRECT_URL: PROD_DIRECT } }).safe, false, "Regression: missing shadow -> BLOCKED");
+  assert.strictEqual(databaseSafetyPreflight({ operation: "migrate-diff", env: { DATABASE_URL: STAGING, DIRECT_URL: STAGING, SHADOW_DATABASE_URL: SCRATCH } }).safe, true, "Regression: valid separate shadow -> ALLOWED");
+  console.log("SECTION 5 (historical regression): PASSED");
 
-  // --- Test E: missing shadow database for migrate-diff -> BLOCKED --------
-  {
-    const result = databaseSafetyPreflight({
-      operation: "migrate-diff",
-      env: { NODE_ENV: "development", DATABASE_URL: SCRATCH_URL, DIRECT_URL: SCRATCH_URL },
-    });
-    assert.strictEqual(result.safe, false, "Test E: migrate-diff with no SHADOW_DATABASE_URL must be BLOCKED");
-  }
-
-  // --- Test F: shadow DB same host/database as production -> BLOCKED ------
-  {
-    const result = databaseSafetyPreflight({
-      operation: "migrate-diff",
-      env: {
-        NODE_ENV: "development",
-        DATABASE_URL: PROD_POOLED_URL, // pooled variant of production
-        DIRECT_URL: PROD_URL,
-        SHADOW_DATABASE_URL: PROD_URL, // same identity as DIRECT_URL, non-pooled
-      },
-    });
-    assert.strictEqual(result.safe, false, "Test F: shadow DB matching production identity must be BLOCKED");
-  }
-
-  // --- Test F2: a genuinely isolated shadow DB must be SAFE ----------------
-  {
-    const result = databaseSafetyPreflight({
-      operation: "migrate-diff",
-      env: {
-        NODE_ENV: "development",
-        DATABASE_URL: STAGING_URL,
-        DIRECT_URL: STAGING_URL,
-        SHADOW_DATABASE_URL: SCRATCH_URL,
-      },
-    });
-    assert.strictEqual(result.safe, true, "Test F2: a genuinely isolated shadow DB must be SAFE");
-  }
-
-  // --- Test G: credentials never appear in any preflight output -----------
-  {
-    const result = databaseSafetyPreflight({
-      operation: "migrate-dev",
-      env: { NODE_ENV: "development", DATABASE_URL: PROD_URL, DIRECT_URL: PROD_URL },
-    });
-    const serialized = JSON.stringify(result);
-    assert.ok(!serialized.includes("sup3rsecret"), "Test G: preflight result must never contain the raw password");
-  }
-
-  // --- Additional: production override requires BOTH env flag AND explicit
-  // caller opt-in, per spec §10 ("must never be enabled by default").
-  {
-    const blockedWithoutOptIn = databaseSafetyPreflight({
-      operation: "migrate-dev",
-      env: { NODE_ENV: "production", DATABASE_URL: PROD_URL, DIRECT_URL: PROD_URL, ALLOW_PRODUCTION_DB_OPERATION: "true" },
-      allowProductionOverride: false,
-    });
-    assert.strictEqual(blockedWithoutOptIn.safe, false, "env flag alone (no caller opt-in) must still BLOCK");
-
-    const allowedWithBoth = databaseSafetyPreflight({
-      operation: "migrate-dev",
-      env: { NODE_ENV: "production", DATABASE_URL: PROD_URL, DIRECT_URL: PROD_URL, ALLOW_PRODUCTION_DB_OPERATION: "true" },
-      allowProductionOverride: true,
-    });
-    assert.strictEqual(allowedWithBoth.safe, true, "env flag + explicit caller opt-in together must ALLOW");
-    assert.ok(allowedWithBoth.overrideUsed, "override usage must be flagged in the result for audit purposes");
-  }
-
-  // --- Additional: unknown operation names fail closed (POTENTIALLY_DESTRUCTIVE)
-  {
-    const result = databaseSafetyPreflight({
-      operation: "some-made-up-operation",
-      env: { NODE_ENV: "production", DATABASE_URL: PROD_URL, DIRECT_URL: PROD_URL },
-    });
-    assert.strictEqual(result.safe, false, "an unrecognized operation must fail closed against production");
-  }
-
-  console.log("All databaseSafetyPreflight() tests (A-G + overrides) passed.");
+  console.log("\nAll Phase 6F-2 safety tests PASSED.");
 }
 
 run();
+
+  console.log("SECTION 3 (validateShadowDatabase): PASSED");

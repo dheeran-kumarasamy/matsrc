@@ -1,10 +1,38 @@
 # Database Safety — Authoritative Policy
 
-Phase 6F-1. This document is the authoritative reference for how database
-operations (Prisma CLI commands, seed/backfill scripts, migrations) must be
-run in this repository, following the Phase 6F production data-loss
-incident (see `docs/database/phase-6f-1-safety-hardening-report.md` for the
-full account).
+Phase 6F-2 (updated from 6F-1). This document is the authoritative reference
+for how database operations must be run in this repository, following the two
+Phase 6F production data-loss incidents. See
+`docs/database/phase-6f-1-safety-hardening-report.md` for the incident
+account and `docs/database/migration-runbook.md` for the step-by-step
+migration procedure.
+
+## Phase 6F-2 changes over Phase 6F-1
+
+1. **Production identity detection is now Neon-endpoint-ID based** — the
+   known production endpoint `ep-muddy-meadow-aoh42y8u` is hard-coded in
+   `packages/db/lib/db-safety.js`. A connection URL to this endpoint is
+   blocked even if `NODE_ENV`/`VERCEL_ENV` say "development".
+
+2. **`db:migrate` and `db:push` now go through the safety wrapper** — they
+   previously called Prisma directly. Any attempt to run them against the
+   production endpoint is now blocked by `databaseSafetyPreflight()`.
+
+3. **The wrapper owns `--shadow-database-url`** — `db:safe:migrate-diff`
+   injects `SHADOW_DATABASE_URL` automatically. Passing `--shadow-database-url`
+   manually is blocked. This prevents the exact Phase 6F bypass.
+
+4. **`db:safety:preflight` command** — full pre-migration report showing
+   endpoint IDs, production detection, shadow safety, and live metadata.
+
+5. **`db:check-unsafe-patterns` CI check** — scans scripts for unsafe
+   migration patterns (fallbacks, manual shadow URL injection, etc.).
+
+6. **`validateShadowDatabase()` exported** — reusable shadow validation
+   function used by the preflight and safety tests.
+
+7. **`assertSafeMigrationEnvironment()` exported** — throw-or-continue
+   entrypoint for programmatic callers.
 
 ## Environment model
 

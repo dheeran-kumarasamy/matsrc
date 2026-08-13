@@ -1,29 +1,49 @@
 // packages/db/lib/db-safety.js
 //
-// Phase 6F-1 — Database Migration & Production Safety Hardening.
+// Phase 6F-2 — Database Migration Safety Hardening (extends Phase 6F-1).
 //
-// Pure, dependency-free safety logic used by packages/db/scripts/prisma-safe.js
-// (the wrapper that must be used instead of invoking `prisma` directly for any
-// operation that can write to or destroy data) and by
-// packages/db/scripts/db-identity.js (the read-only diagnostic).
+// Pure, dependency-free safety logic used by:
+//   packages/db/lib/db-safety-preflight.js   — the mandatory safety gate
+//   packages/db/scripts/prisma-safe.js        — the wrapper
+//   packages/db/scripts/db-identity.js        — read-only diagnostic
 //
 // This module never opens a database connection itself — it only parses
-// connection strings and environment variables. Kept as a single
-// require()-able CommonJS module (matching the existing packages/db/scripts/*
-// convention — no test framework is configured in this package, see
-// verify-pricing-fingerprint.js for the established pattern), so it can be
-// exercised by a plain assert-based script (verify-db-safety.js) without
-// needing any real database.
+// connection strings and environment variables.
 //
-// BACKGROUND (why this file exists): during Phase 6F, a
-// `prisma migrate diff --shadow-database-url` invocation was mistakenly run
-// against the production DIRECT_URL instead of an isolated scratch database,
-// wiping most application data (recovered via Neon Instant Restore — see
-// docs/database/phase-6f-1-safety-hardening-report.md). This module's
-// central job is to make that specific mistake — and its close relatives —
-// structurally difficult to repeat.
+// Phase 6F-2 additions over Phase 6F-1:
+//   - Neon endpoint-ID extraction from connection string hostnames
+//   - Hard-coded known-production identifiers (endpoint, project, branch)
+//   - isProductionDatabase() — multi-signal production detection
+//   - getDatabaseIdentity() — unified identity descriptor for display/audit
+
+"use strict";
 
 const { URL } = require("url");
+
+// ---------------------------------------------------------------------------
+// Known production identifiers (non-secret — per spec §6 these are infra
+// identifiers, not credentials; hard-coding them makes production detection
+// independent of environment variables a developer can accidentally mismatch).
+//
+// Production Neon infrastructure:
+//   Project:  bitter-forest-24244420
+//   Branch:   br-long-star-ao464t6w  (primary / default production)
+//   Endpoint: ep-muddy-meadow-aoh42y8u
+//
+// IMPORTANT: the PITR evidence branch br-wandering-sea-aokghz6w must NOT be
+// deleted and must NOT be used as a shadow database.
+// ---------------------------------------------------------------------------
+const KNOWN_PRODUCTION_IDENTIFIERS = {
+  neonEndpointId: "ep-muddy-meadow-aoh42y8u",
+  neonProjectId: "bitter-forest-24244420",
+  neonBranchId: "br-long-star-ao464t6w",
+};
+
+const KNOWN_PITR_BRANCH_ID = "br-wandering-sea-aokghz6w";
+
+// ---------------------------------------------------------------------------
+// URL parsing
+// ---------------------------------------------------------------------------
 
 /**
  * Parses a Postgres/Neon connection string into its safe identity fields.
@@ -86,6 +106,121 @@ function isSameDatabaseIdentity(urlA, urlB) {
   return a.host === b.host && a.port === b.port && a.database === b.database && a.user === b.user;
 }
 
+// ---------------------------------------------------------------------------
+// Neon identity extraction  (spec §11)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts the Neon endpoint ID from a Neon hostname.
+ * Neon hostnames follow the pattern:
+ *   ep-<slug>.<region>.aws.neon.tech
+ *   ep-<slug>-pooler.<region>.aws.neon.tech  (pooled variant)
+ *
+ * Returns the endpoint ID string (e.g. "ep-muddy-meadow-aoh42y8u") or null.
+ */
+function extractNeonEndpointId(hostname) {
+  if (!hostname || typeof hostname !== "string") return null;
+  if (!hostname.endsWith(".neon.tech")) return null;
+  const withoutPooler = hostname.replace(/-pooler(?=\.)/, "");
+  const match = withoutPooler.match(/^(ep-[^.]+)\./);
+  return match ? match[1] : null;
+}
+
+/**
+ * Returns the Neon endpoint ID from a raw connection string URL, or null.
+ */
+function getNeonEndpointId(rawUrl) {
+  const identity = parseConnectionString(rawUrl);
+  if (!identity) return null;
+  return extractNeonEndpointId(identity.rawHost);
+}
+
+// ---------------------------------------------------------------------------
+// Production database detection  (spec §6, §11)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true if the given connection URL resolves to the production database
+ * by ANY of the following signals:
+ *
+ *   1. The Neon endpoint ID embedded in the hostname matches the hard-coded
+ *      known production endpoint.
+ *   2. The Neon endpoint ID matches env PRODUCTION_NEON_ENDPOINT_ID override.
+ *   3. The raw hostname starts with the known production endpoint ID prefix
+ *      (catches pooled and non-pooled variants).
+ *   4. env PRODUCTION_NEON_ENDPOINT_ID matches hostname prefix.
+ *
+ * Returns false when the URL cannot be parsed — callers must NOT treat
+ * false as "definitely not production" in that case; treat it as
+ * "cannot verify safety" instead.
+ *
+ * @param {string} rawUrl
+ * @param {object} [env]
+ */
+function isProductionDatabase(rawUrl, env) {
+  const identity = parseConnectionString(rawUrl);
+  if (!identity) return false;
+
+  const endpointId = extractNeonEndpointId(identity.rawHost);
+  const resolvedEnv = env || {};
+
+  // Signal 1: hard-coded known production endpoint ID
+  if (endpointId && endpointId === KNOWN_PRODUCTION_IDENTIFIERS.neonEndpointId) {
+    return true;
+  }
+
+  // Signal 2: env-declared production endpoint ID override
+  const declaredEndpoint = resolvedEnv.PRODUCTION_NEON_ENDPOINT_ID;
+  if (declaredEndpoint && endpointId && endpointId === declaredEndpoint) {
+    return true;
+  }
+
+  // Signal 3: hostname prefix match (catches minor hostname variations)
+  if (
+    identity.rawHost &&
+    (identity.rawHost.startsWith(`${KNOWN_PRODUCTION_IDENTIFIERS.neonEndpointId}.`) ||
+      identity.rawHost.startsWith(`${KNOWN_PRODUCTION_IDENTIFIERS.neonEndpointId}-pooler.`))
+  ) {
+    return true;
+  }
+
+  // Signal 4: env-declared endpoint against hostname prefix
+  if (declaredEndpoint && identity.rawHost && identity.rawHost.startsWith(declaredEndpoint)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Returns a structured identity descriptor for display/audit (no passwords).
+ *
+ * @param {string} rawUrl
+ * @param {object} [env]
+ * @returns {{ redacted: string, endpointId: string|null, isProduction: boolean, parseable: boolean }}
+ */
+function getDatabaseIdentity(rawUrl, env) {
+  const identity = parseConnectionString(rawUrl);
+  if (!identity) {
+    return {
+      redacted: "<unset-or-unparseable>",
+      endpointId: null,
+      isProduction: false,
+      parseable: false,
+    };
+  }
+  return {
+    redacted: redactConnectionString(rawUrl),
+    endpointId: extractNeonEndpointId(identity.rawHost),
+    isProduction: isProductionDatabase(rawUrl, env),
+    parseable: true,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Environment detection
+// ---------------------------------------------------------------------------
+
 /**
  * Environment detection. Precedence (most to least specific), matching the
  * project's existing signals (NODE_ENV is already used throughout
@@ -124,5 +259,11 @@ module.exports = {
   parseConnectionString,
   redactConnectionString,
   isSameDatabaseIdentity,
+  extractNeonEndpointId,
+  getNeonEndpointId,
+  isProductionDatabase,
+  getDatabaseIdentity,
   detectEnvironment,
+  KNOWN_PRODUCTION_IDENTIFIERS,
+  KNOWN_PITR_BRANCH_ID,
 };

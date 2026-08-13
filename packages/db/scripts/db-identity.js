@@ -36,6 +36,8 @@ function loadEnvFile(envPath) {
   }
 }
 
+// .env.local (gitignored) takes priority over .env for per-session overrides.
+loadEnvFile(path.join(__dirname, "..", ".env.local"));
 loadEnvFile(path.join(__dirname, "..", ".env"));
 
 async function main() {

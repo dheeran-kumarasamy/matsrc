@@ -59,6 +59,7 @@ model User {
   adminMenuPermissions   AdminMenuPermission[]
   sites                  Site[]                  @relation("BuilderSites")
   tallyLedgerMapping     TallyLedgerMapping?
+  sourcingSessions       SourcingSession[]       @relation("UserSourcingSessions")
 
   @@index([email])
   @@index([phone])
@@ -122,6 +123,8 @@ model SupplierProfile {
   aggregationPools    AggregationPool[]
   orderItemCandidates OrderItemSupplierCandidate[]
   priceSnapshots      PriceSnapshot[]
+
+  sourcingRecommendations SourcingRecommendation[] @relation("SupplierSourcingRecommendations")
 
   // GST identifier used to determine intra-state (CGST+SGST) vs inter-state
   // (IGST) tax split when generating Tally purchase vouchers — compared
@@ -265,6 +268,8 @@ model Product {
   purchaseOrderLineItems PurchaseOrderLineItem[]
   aggregationPools       AggregationPool[]
   priceSnapshots         PriceSnapshot[]
+
+  sourcingRecommendations SourcingRecommendation[] @relation("ProductSourcingRecommendations")
 
   @@index([supplierId])
   @@index([categoryId])
@@ -1035,7 +1040,8 @@ model Site {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  orders Order[]
+  orders           Order[]
+  sourcingSessions SourcingSession[] @relation("SiteSourcingSessions")
 
   @@unique([builderId, name])
   @@index([builderId])
@@ -1944,3 +1950,209 @@ model PricingAlertEvaluation {
   @@index([didTrigger, evaluatedAt(sort: Desc)])
   @@map("pricing_alert_evaluation")
 }
+
+// ─────────────────────────────────────────────
+// M12 AI Sourcing Assistant
+//
+// Customer-facing positioning: "Tell us what material you need. Our AI
+// Sourcing Assistant will help you find the best sourcing option."
+//
+// These three models are ADDITIVE ONLY — the assistant deliberately reuses
+// the existing catalogue/supplier/pricing/enquiry entities rather than
+// duplicating them:
+//   - products/specs      -> Product + CanonicalProduct (+ Brand/Grade/Unit)
+//   - suppliers           -> SupplierProfile + SupplierRating
+//   - prices              -> Product.basePrice/PricingTier, PricePoint
+//                            (freight), PriceSnapshot, and the Pricing*
+//                            (AGNI) intelligence module
+//   - enquiry/RFQ + quotes-> Order / OrderItem /
+//                            OrderItemSupplierCandidate / SupplierQuote
+// No sourcing_quotes table is introduced: SupplierQuote already models a
+// supplier's quoted unitPrice + leadTimeDays against an enquiry line item,
+// and Phase 2 quote normalization will EXTEND that model instead of
+// creating a parallel one.
+// ─────────────────────────────────────────────
+
+enum SourcingSessionStatus {
+  /// Requirement incomplete — assistant is asking the minimum necessary
+  /// clarification questions.
+  COLLECTING
+  /// Requirement complete; product/supplier/price tools are running.
+  SEARCHING
+  /// Ranked recommendations produced and shown to the customer.
+  RECOMMENDED
+  /// Customer explicitly approved a recommendation (human-approval
+  /// boundary crossed) and the enquiry was created through the existing
+  /// Order pipeline.
+  CONFIRMED
+  ABANDONED
+}
+
+/// Approval state for a consequential (money/supplier/order-affecting)
+/// action. Phase 1 rule: the AI recommends, the customer approves, only
+/// then does the system act — so anything consequential is created with
+/// PENDING and can never be executed while it stays PENDING.
+enum SourcingApprovalStatus {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Persistent sourcing-session state so a customer can leave and resume a
+/// sourcing request. Conversation/requirement/candidate payloads are stored
+/// as Json (rather than fanned out into many child tables) because they are
+/// snapshots of tool output whose shape is owned by
+/// apps/web/lib/sourcing/types.ts — the same convention already used by
+/// Product.aggregationPriceTiers, PurchaseOrder.termsSnapshot and
+/// MarketInsightCache.driversJson.
+///
+/// Deliberately stores NO sensitive information: no payment details, no
+/// credentials, no KYC data. Delivery location is kept only as the free-text
+/// place name the customer typed (needed for sourcing) — precise
+/// lat/lng/address remain solely on Order, captured at checkout.
+model SourcingSession {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("UserSourcingSessions", fields: [userId], references: [id])
+
+  /// Optional project/customer context — reuses the existing builder-scoped
+  /// Site model so a sourcing request can be tagged to a construction site,
+  /// exactly like Order.siteId. Nullable: sessions are valid untagged.
+  siteId String?
+  site   Site?   @relation("SiteSourcingSessions", fields: [siteId], references: [id])
+
+  status SourcingSessionStatus @default(COLLECTING)
+
+  /// Structured sourcing requirement extracted from natural language
+  /// (material, specification, quantity, unit, location, requiredDate,
+  /// brand, deliveryRequired, constraints). Validated against
+  /// apps/web/lib/sourcing/requirement-schema.ts before being written.
+  requirementJson Json?
+
+  /// Ordered conversation turns [{ role, content, at }] — the assistant's
+  /// own transcript. Never contains tool credentials or raw provider
+  /// responses.
+  conversationJson Json?
+
+  /// Snapshots of the last tool results, so a resumed session can re-render
+  /// its cards without re-running the searches (and without re-calling the
+  /// LLM).
+  candidateProductsJson  Json?
+  candidateSuppliersJson Json?
+
+  /// Set when the customer approves a recommendation. Links to the Order
+  /// (enquiry) created through the EXISTING checkout/enquiry pipeline — the
+  /// assistant never forks a parallel order path.
+  confirmedRecommendationId String?
+  confirmedOrderId          String?
+  confirmedAt               DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  recommendations SourcingRecommendation[]
+  toolInvocations SourcingToolInvocation[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, updatedAt(sort: Desc)])
+  @@index([siteId])
+}
+
+/// One row per ranked supplier option produced by the DETERMINISTIC
+/// ranking service (apps/web/lib/sourcing/ranking.ts). The LLM never
+/// invents any value here — it only explains these stored numbers in
+/// natural language.
+///
+/// Every cost field is nullable because the platform genuinely may not have
+/// the data (e.g. no freight rate for a route). A null must be surfaced as
+/// "no verified data" — never silently coerced to 0 — which is why
+/// dataGapsJson records exactly which inputs were missing.
+model SourcingRecommendation {
+  id        String          @id @default(cuid())
+  sessionId String
+  session   SourcingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  /// The supplier + specific listing (Product) this option refers to.
+  supplierId String
+  supplier   SupplierProfile @relation("SupplierSourcingRecommendations", fields: [supplierId], references: [id])
+  productId  String?
+  product    Product?        @relation("ProductSourcingRecommendations", fields: [productId], references: [id])
+
+  rank Int
+  /// 0-100 transparent score from ranking.ts.
+  score Decimal @db.Decimal(5, 2)
+
+  quantity Int
+  unit     String?
+
+  /// Deterministic landed-cost breakdown components (§7). Nulls mean
+  /// "not available", not "zero".
+  unitMaterialPrice   Decimal? @db.Decimal(12, 2)
+  materialCost        Decimal? @db.Decimal(14, 2)
+  freightCost         Decimal? @db.Decimal(14, 2)
+  deliveryCharges     Decimal? @db.Decimal(14, 2)
+  handlingCharges     Decimal? @db.Decimal(14, 2)
+  taxAmount           Decimal? @db.Decimal(14, 2)
+  estimatedLandedCost Decimal? @db.Decimal(14, 2)
+  /// estimatedLandedCost / quantity — the per-unit delivered figure shown
+  /// in the comparison table.
+  unitLandedCost      Decimal? @db.Decimal(14, 4)
+
+  deliveryDays Int?
+  /// 0-100, derived from the existing SupplierRating rows only.
+  reliabilityScore   Decimal? @db.Decimal(5, 2)
+  specificationMatch Boolean  @default(false)
+
+  /// Human-readable scoring reasons, e.g. ["Lowest estimated landed cost",
+  /// "Delivery available within 1 day"].
+  reasonsJson Json
+  /// Inputs that were unavailable, so the UI/assistant can disclose them
+  /// instead of guessing, e.g. ["freight", "deliveryDays"].
+  dataGapsJson Json?
+
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, rank])
+  @@index([sessionId])
+  @@index([supplierId])
+}
+
+/// Audit trail (§21) for every AI tool invocation and every consequential
+/// action. Records who, which session, which tool, the validated input, a
+/// SUMMARY of the result, latency, outcome and approval status.
+///
+/// Never stores secrets, API keys or raw provider payloads — inputJson is
+/// the post-validation tool input and resultSummaryJson is a compact
+/// counts/ids summary, not the full result set.
+model SourcingToolInvocation {
+  id        String          @id @default(cuid())
+  sessionId String
+  session   SourcingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  /// Denormalized so per-user audit queries are a single index hit.
+  userId String
+
+  /// Tool name, e.g. "parse_requirement", "search_products",
+  /// "find_suppliers", "get_current_prices", "calculate_landed_cost",
+  /// "rank_suppliers", "get_sourcing_status", "confirm_recommendation".
+  tool String
+
+  inputJson         Json?
+  resultSummaryJson Json?
+
+  /// "OK" | "EMPTY" | "VALIDATION_ERROR" | "PROVIDER_ERROR" | "ERROR"
+  status    String
+  latencyMs Int?
+
+  approvalStatus SourcingApprovalStatus @default(NOT_REQUIRED)
+
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([tool])
+}
+
+

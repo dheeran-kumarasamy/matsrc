@@ -5,15 +5,17 @@
   "main": "./index.ts",
   "scripts": {
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push",
+    "db:migrate": "node scripts/prisma-safe.js migrate-dev",
+    "db:push": "node scripts/prisma-safe.js db-push",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
     "db:identity": "node scripts/db-identity.js",
     "db:verify-safety": "node scripts/verify-db-safety.js",
+    "db:safety:preflight": "node scripts/db-safety-preflight-cmd.js",
     "db:safe:migrate-deploy": "node scripts/prisma-safe.js migrate-deploy",
     "db:safe:migrate-diff": "node scripts/prisma-safe.js migrate-diff",
-    "db:safe:db-execute": "node scripts/prisma-safe.js db-execute"
+    "db:safe:db-execute": "node scripts/prisma-safe.js db-execute",
+    "db:check-unsafe-patterns": "node scripts/check-unsafe-patterns.js"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",

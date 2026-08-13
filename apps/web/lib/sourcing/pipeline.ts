@@ -15,8 +15,10 @@
 // invent a step, or call a tool out of order (§20 unauthorized tool invocation).
 
 import { explainRecommendation, parseRequirement } from "./agent";
+import { buildDecision } from "./decision-engine";
 import { calculateLandedCost } from "./landed-cost";
 import { resolveFreight } from "./price-lookup";
+import { computePriceHistory } from "./price-history";
 import { searchProducts } from "./product-search";
 import { canRecommend, rankSuppliers, recommendationHeadline } from "./ranking";
 import { isRequirementComplete, nextClarificationQuestion } from "./requirement-extractor";
@@ -26,6 +28,11 @@ import {
   loadSourcingListings,
   loadSupplierLeadTimes,
 } from "./sourcing-data";
+import {
+  loadPriceHistoryRows,
+  resolveCanonicalSkuId,
+  resolveDistrictId,
+} from "./sourcing-intelligence-data";
 import { findSuppliers, partitionByLocation } from "./supplier-search";
 import type {
   ProductSearchOutcome,
@@ -33,6 +40,7 @@ import type {
   SourcingRequirement,
   SourcingSupplierCandidate,
 } from "./types";
+import type { SourcingDecision } from "./decision-engine";
 
 /** What the UI needs to render one assistant turn. */
 export type SourcingTurnResult = {
@@ -49,6 +57,8 @@ export type SourcingTurnResult = {
   headline: string | null;
   /** True when a consequential action is available and needs approval (§14). */
   awaitingApproval: boolean;
+  /** Phase 8 — full sourcing intelligence decision. Null for non-RECOMMENDED stages. */
+  decision: SourcingDecision | null;
   diagnostics: {
     requirementSource: "ai" | "deterministic";
     aiFailed: boolean;
@@ -61,6 +71,8 @@ export type RunTurnInput = {
   message: string;
   existing: SourcingRequirement;
   now?: Date;
+  /** True when the customer's delivery deadline is within 7 days. */
+  urgentDelivery?: boolean;
 };
 
 /**
@@ -100,6 +112,7 @@ export async function runSourcingTurn(input: RunTurnInput): Promise<SourcingTurn
       options: [],
       headline: null,
       awaitingApproval: false,
+      decision: null,
       diagnostics: { ...baseDiagnostics, latencyMs: Date.now() - started },
     };
   }
@@ -119,6 +132,7 @@ export async function runSourcingTurn(input: RunTurnInput): Promise<SourcingTurn
       options: [],
       headline: null,
       awaitingApproval: false,
+      decision: null,
       diagnostics: { ...baseDiagnostics, latencyMs: Date.now() - started },
     };
   }
@@ -136,9 +150,6 @@ export async function runSourcingTurn(input: RunTurnInput): Promise<SourcingTurn
     listings: rowsWithLeadTimes,
   });
 
-  // Prefer suppliers in the requested region, but never hide the others — this
-  // platform has no serviceability model, so out-of-region is not proof of
-  // "cannot deliver" (see supplier-search.partitionByLocation).
   const { local, other } = partitionByLocation(allCandidates, requirement.location);
   const candidates = local.length > 0 ? local : other;
 
@@ -155,6 +166,7 @@ export async function runSourcingTurn(input: RunTurnInput): Promise<SourcingTurn
       options: [],
       headline: null,
       awaitingApproval: false,
+      decision: null,
       diagnostics: { ...baseDiagnostics, latencyMs: Date.now() - started },
     };
   }
@@ -167,15 +179,12 @@ export async function runSourcingTurn(input: RunTurnInput): Promise<SourcingTurn
   const ranking = candidates.map((candidate) => {
     const observations = freightByProduct.get(candidate.productId) ?? [];
     const { freight } = resolveFreight(observations, requirement.location);
-
     return {
       candidate,
       landedCost: calculateLandedCost({
         quantity: requirement.quantity ?? 0,
         unitMaterialPrice: candidate.basePrice,
         freightCost: freight,
-        // No supplier-stated delivery/handling charges are modelled in this
-        // schema; null keeps them out of the total and flags the gap.
         deliveryCharges: null,
         handlingCharges: null,
       }),
@@ -186,11 +195,41 @@ export async function runSourcingTurn(input: RunTurnInput): Promise<SourcingTurn
   const options = rankSuppliers(ranking);
   const headline = recommendationHeadline(options);
 
-  // ── 7. explain (AI optional; the facts are already fixed) ──
+  // ── 7. Phase 8: Price intelligence from PricingDistrictPriceDaily ──────
+  let priceHistory = null;
+  try {
+    const topMatch = productSearch.matches[0];
+    const canonicalProductId = topMatch?.canonicalProductId ?? null;
+    if (canonicalProductId) {
+      const skuId = await resolveCanonicalSkuId(canonicalProductId);
+      const districtId = requirement.location ? await resolveDistrictId(requirement.location) : null;
+      if (skuId) {
+        const rows30 = await loadPriceHistoryRows(skuId, districtId, 30);
+        priceHistory = computePriceHistory(rows30, 30);
+      }
+    }
+  } catch (err) {
+    // Price intelligence failure must not fail the sourcing turn.
+    console.warn("[sourcing] price intelligence failed:", err instanceof Error ? err.message : err);
+  }
+
+  // ── 8. Build decision (all deterministic intelligence combined) ──────────
+  const decision = buildDecision({
+    requirement,
+    rankedOptions: options,
+    priceHistory,
+    urgentDelivery: input.urgentDelivery ?? false,
+  });
+
+  // ── 9. explain (AI optional; the facts are already fixed) ──
   const explanation = await explainRecommendation(
     headline ?? "Available options based on current data",
     requirement,
     options
+  );
+
+  console.log(
+    `[sourcing] intelligence sessionId=? trend=${decision.trend.direction} confidence=${decision.confidence.level} timing=${decision.timing.recommendation} risks=${decision.risks.length}`
   );
 
   return {
@@ -202,8 +241,8 @@ export async function runSourcingTurn(input: RunTurnInput): Promise<SourcingTurn
     suppliers: candidates,
     options,
     headline,
-    // Approval is only meaningful when there is something concrete to approve.
     awaitingApproval: canRecommend(options),
+    decision,
     diagnostics: {
       ...baseDiagnostics,
       explanationSource: explanation.source,

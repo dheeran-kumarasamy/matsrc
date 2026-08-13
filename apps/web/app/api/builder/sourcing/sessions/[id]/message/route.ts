@@ -119,6 +119,30 @@ export async function POST(request: Request, { params }: { params: { id: string 
       options: result.options,
       headline: result.headline,
       awaitingApproval: result.awaitingApproval,
+      // Phase 8 — sourcing intelligence decision (null for non-RECOMMENDED stages)
+      decision: result.decision
+        ? {
+            priceIntelligence: result.decision.priceIntelligence,
+            trend: {
+              direction: result.decision.trend.direction,
+              slopePctPerDay: result.decision.trend.slopePctPerDay,
+              periodChangePct: result.decision.trend.periodChangePct,
+              confidence: result.decision.trend.confidence,
+              observationCount: result.decision.trend.observationCount,
+              dataGaps: result.decision.trend.dataGaps,
+            },
+            forecast: {
+              hasEnoughData: result.decision.forecast.hasEnoughData,
+              trendSlopePercent: result.decision.forecast.trendSlopePercent,
+              method: result.decision.forecast.method,
+              points: result.decision.forecast.points,
+            },
+            confidence: result.decision.confidence,
+            timing: result.decision.timing,
+            risks: result.decision.risks,
+            dataGaps: result.decision.dataGaps,
+          }
+        : null,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {

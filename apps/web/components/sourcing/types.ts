@@ -96,6 +96,50 @@ export type StoredRecommendationView = {
   dataGaps: string[];
 };
 
+/** Phase 8 — price intelligence decision returned by the message API. */
+export type SourcingDecisionView = {
+  priceIntelligence: {
+    currentPrice: number | null;
+    currentDate: string | null;
+    averagePrice: number | null;
+    vsAveragePct: number | null;
+    freshness: "FRESH" | "RECENT" | "STALE" | "UNKNOWN";
+    dataGaps: string[];
+    /** History points for chart. Added client-side from the API response. */
+    historyPoints?: Array<{ date: string; price: number; confidence: string }>;
+  };
+  trend: {
+    direction: "RISING" | "FALLING" | "STABLE" | "VOLATILE" | "INSUFFICIENT_DATA";
+    slopePctPerDay: number | null;
+    periodChangePct: number | null;
+    confidence: string;
+    observationCount: number;
+    dataGaps: string[];
+  };
+  forecast: {
+    hasEnoughData: boolean;
+    trendSlopePercent: number;
+    method: string;
+    points: Array<{ date: string; price: number; lower: number; upper: number }>;
+  };
+  confidence: {
+    level: "HIGH" | "MEDIUM" | "LOW" | "INSUFFICIENT_DATA";
+    score: number;
+    factors: string[];
+  };
+  timing: {
+    recommendation: "BUY_NOW" | "WAIT" | "MONITOR" | "INSUFFICIENT_DATA";
+    reasons: string[];
+    confidence: "HIGH" | "MEDIUM" | "LOW" | "INSUFFICIENT_DATA";
+  };
+  risks: Array<{
+    code: string;
+    message: string;
+    severity: "INFO" | "WARNING" | "CRITICAL";
+  }>;
+  dataGaps: string[];
+};
+
 export type TurnResponse = {
   stage: SourcingStage;
   status: string;
@@ -108,6 +152,8 @@ export type TurnResponse = {
   options: OptionView[];
   headline: string | null;
   awaitingApproval: boolean;
+  /** Phase 8 — null for non-RECOMMENDED stages. */
+  decision: SourcingDecisionView | null;
 };
 
 export type SessionResponse = {

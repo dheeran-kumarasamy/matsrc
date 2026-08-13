@@ -6,15 +6,19 @@ import { Send, Sparkles } from "lucide-react";
 import { ApiError, builderApiGet, builderApiPost } from "@/lib/api";
 
 import ApprovalBar from "./ApprovalBar";
+import PriceHistoryChart from "./PriceHistoryChart";
+import PriceIntelligenceCard from "./PriceIntelligenceCard";
 import ProductMatchCard from "./ProductMatchCard";
 import RecommendationCard from "./RecommendationCard";
 import RequirementCard from "./RequirementCard";
+import RiskPanel from "./RiskPanel";
 import SourcingProgressRail from "./SourcingProgressRail";
 import SupplierComparisonTable from "./SupplierComparisonTable";
 import type {
   ProductMatchView,
   RequirementView,
   SessionResponse,
+  SourcingDecisionView,
   SourcingStage,
   StoredRecommendationView,
   TurnResponse,
@@ -75,6 +79,8 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
     initialSession?.confirmedAt ? "This sourcing request has already been confirmed." : null
   );
   const [showAllOptions, setShowAllOptions] = useState(false);
+  // Phase 8 — sourcing intelligence decision
+  const [decision, setDecision] = useState<SourcingDecisionView | null>(null);
 
   /** Reloads the persisted session so the UI has the stored recommendation ids. */
   const refreshSession = useCallback(async (id: string) => {
@@ -110,6 +116,7 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
       setAlternatives(result.productAlternatives);
       setSupplierCount(result.suppliers.length);
       setHeadline(result.headline);
+      setDecision(result.decision ?? null);
       setInput("");
       setShowAllOptions(false);
 
@@ -218,6 +225,26 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
             />
           )}
 
+          {/* Phase 8 — Price intelligence */}
+          {decision && decision.priceIntelligence && (
+            <PriceIntelligenceCard
+              priceIntelligence={decision.priceIntelligence}
+              trend={decision.trend}
+              confidence={decision.confidence}
+              timing={decision.timing}
+            />
+          )}
+
+          {/* Phase 8 — Price history chart */}
+          {decision && decision.priceIntelligence && (
+            <PriceHistoryChart
+              points={decision.priceIntelligence.historyPoints ?? []}
+              forecastPoints={decision.forecast?.hasEnoughData ? decision.forecast.points : []}
+              averagePrice={decision.priceIntelligence.averagePrice}
+              method={decision.forecast?.method ?? "Statistical trend projection"}
+            />
+          )}
+
           {/* The full comparison is shown by default when nothing is selected
               yet, and on demand via "View alternatives". */}
           {(showAllOptions || !selected) && !confirmedMessage && (
@@ -226,6 +253,11 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
               selectedId={selectedId}
               onSelect={setSelectedId}
             />
+          )}
+
+          {/* Phase 8 — Risk panel */}
+          {decision && decision.risks.length > 0 && (
+            <RiskPanel risks={decision.risks} dataGaps={decision.dataGaps} />
           )}
 
           {selected && !confirmedMessage && (

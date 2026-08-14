@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { Suspense } from "react";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
-import GlobalLoadingOverlay from "@/components/ui/GlobalLoadingOverlay";
-import NavigationLoadingListener from "@/components/ui/NavigationLoadingListener";
 import { auth } from "@/auth";
 
 
@@ -31,11 +28,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en">
       <body className={`${inter.className} overflow-x-hidden`}>
         <AuthProvider session={session}>
-
-          <Suspense fallback={null}>
-            <NavigationLoadingListener />
-          </Suspense>
-          <GlobalLoadingOverlay />
           {children}
         </AuthProvider>
       </body>

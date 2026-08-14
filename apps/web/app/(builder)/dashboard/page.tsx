@@ -1,156 +1,212 @@
-import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
-import { builderApiGet } from "@/lib/api";
-import RotatingRail from "@/components/builder/RotatingRail";
+"use client";
 
-type Order = {
-  id: string;
-  status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
-  totalLabel: string;
-  total: number;
-  items: Array<{ name: string }>;
-};
+import { useState } from "react";
 
-type Kpi    = { label: string; value: string; hint: string; href: string };
-type Action = { href: string; label: string };
+// ── Static data (mirrors posh-web-flair/dashboard.tsx exactly) ───────────────
 
-// ── Posh shell: deep warm dark container with radial gradient overlay ─────────
-function PoshShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="relative overflow-hidden rounded-3xl" style={{ background: "var(--posh-bg)" }}>
-      <div className="pointer-events-none absolute inset-0 rounded-3xl" style={{ background: "var(--posh-gradient-warm)" }} />
-      <div className="relative space-y-8 p-6 md:p-8">{children}</div>
-    </div>
-  );
-}
+const suggestions = [
+  { item: "Binding Wire 18G",    why: "Reordered every 3 weeks · due now",  move: "₹72,000/T",  delta: "+2.1%" },
+  { item: "Shuttering Ply 18mm", why: "Pairs with your slab schedule",       move: "₹92/sqft",   delta: "+1.3%" },
+  { item: "Fly Ash Bricks",      why: "12% under your last landed rate",     move: "₹6.4/nos",   delta: "-1.8%" },
+  { item: "TMT Fe-550D · 16mm",  why: "Grade upgrade, same lead time",       move: "₹64,100/T",  delta: "+0.6%" },
+  { item: "Curing Compound",     why: "Watchlist supplier cut price",         move: "₹210/L",     delta: "-3.4%" },
+];
 
-// ── Page header: editorial label + serif title + AI Sourcing CTA ──────────────
-function DashHeader() {
-  return (
-    <div className="flex items-end justify-between gap-4">
-      <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.3em]" style={{ color: "var(--posh-primary)" }}>
-          Procurement Desk
-        </p>
-        <h1 className="posh-heading text-[clamp(2rem,5vw,3.25rem)] leading-none" style={{ color: "var(--posh-fg)" }}>
-          Builder Dashboard
-        </h1>
-      </div>
-      <Link
-        href="/sourcing"
-        className="hidden shrink-0 items-center gap-2 rounded-full border px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-70 sm:flex"
-        style={{ borderColor: "var(--posh-border)", color: "var(--posh-primary)", background: "rgba(196,145,90,0.08)" }}
-      >
-        AI Sourcing <ArrowUpRight size={13} />
-      </Link>
-    </div>
-  );
-}
+const views = ["Outstanding", "Watchlist", "Reports", "Browse"] as const;
+type View = (typeof views)[number];
 
-// ── KPI grid: 3 dark cards with serif large number ───────────────────────────
-function KpiGrid({ kpis }: { kpis: Kpi[] }) {
-  return (
-    <section className="grid gap-4 sm:grid-cols-3">
-      {kpis.map((kpi) => (
-        <Link key={kpi.label} href={kpi.href} className="block">
-          <article
-            className="rounded-2xl border p-6 transition-opacity hover:opacity-80"
-            style={{ background: "var(--posh-bg-card)", borderColor: "var(--posh-border)" }}
-          >
-            <p className="text-[10px] font-semibold uppercase tracking-[0.25em]" style={{ color: "var(--posh-fg-muted)" }}>
-              {kpi.label}
-            </p>
-            <p className="posh-heading mt-4 text-5xl" style={{ color: "var(--posh-primary)" }}>
-              {kpi.value}
-            </p>
-            <p className="mt-2 text-sm" style={{ color: "var(--posh-fg-muted)" }}>{kpi.hint}</p>
-          </article>
-        </Link>
-      ))}
-    </section>
-  );
-}
+const outstanding = [
+  ["BH-4821", "TMT Fe-500D · 12mm", "Shree Steels",     "14 Aug", "₹11,23,200", "In transit"],
+  ["BH-4802", "M-Sand (Zone II)",   "Kaveri Aggregates", "13 Aug", "₹72,000",    "At weighbridge"],
+  ["BH-4780", "MS Pipe 50NB",       "Nandi Tubes",       "16 Aug", "₹2,85,600",  "Dispatched"],
+  ["BH-4776", "Formwork Ply",       "Anand Timber",      "18 Aug", "₹1,48,400",  "Confirmed"],
+];
 
-// UF-02 entry: builder dashboard summary — posh-web-flair editorial dark theme
-export default async function DashboardPage() {
-  let cartCount = 0;
-  let orders: Order[] = [];
-  let watchlistCount = 0;
+const watchlist = [
+  ["OPC Cement 53G",   "₹380 / bag",    "-0.5%", "Below your target of ₹390"],
+  ["TMT Bar Fe-500D",  "₹62,400 / T",   "+1.2%", "3 suppliers quoting"],
+  ["River Sand",       "₹1,800 / cum",  "+0.8%", "Monsoon premium easing"],
+  ["Structural Steel", "₹58,000 / T",   "-0.3%", "Stable for 9 days"],
+];
 
-  try {
-    const [cart, ordersData, watchlist] = await Promise.all([
-      builderApiGet<{ items: Array<{ id: string }> }>("/cart"),
-      builderApiGet<Order[]>("/orders"),
-      builderApiGet<Array<{ id: string }>>("/watchlist"),
-    ]);
+const reports = [
+  ["Spend this month",   "₹48.6 L", "-6% vs July"],
+  ["On-time delivery",   "94%",     "+3 pts"],
+  ["Avg. lead time",     "41 hrs",  "-7 hrs"],
+  ["Savings captured",   "₹3.2 L",  "vs quoted rate"],
+];
 
-    cartCount = cart.items.length;
-    orders = ordersData;
-    watchlistCount = watchlist.length;
-  } catch {
-    // show zeros on error
-  }
+const browse = [
+  ["Cement",         "18 grades"],
+  ["Steel & TMT",    "42 SKUs"],
+  ["Aggregates",     "11 grades"],
+  ["Blocks & Bricks","26 SKUs"],
+  ["Formwork",       "14 SKUs"],
+  ["Finishes",       "60+ SKUs"],
+];
 
-  const recentOrders = orders.slice(0, 5);
-
-  const kpis: Kpi[] = [
-    { label: "Active Orders", value: String(orders.length),   hint: "Orders in progress",     href: "/orders" },
-    { label: "Cart Items",    value: String(cartCount),       hint: "Items ready to checkout", href: "/cart" },
-    { label: "Price Alerts",  value: String(watchlistCount),  hint: "Watchlist materials",     href: "/watchlist" },
-  ];
-
-  const secondaryActions: Action[] = [
-    { href: "/cart",     label: "View Cart" },
-    { href: "/reports",  label: "View Reports" },
-    { href: "/disputes", label: "Raise Dispute" },
-  ];
+// ── Dashboard — exact port of posh-web-flair/src/routes/dashboard.tsx ─────────
+export default function DashboardPage() {
+  const [view, setView] = useState<View>("Outstanding");
 
   return (
-    <PoshShell>
-      <DashHeader />
-      <KpiGrid kpis={kpis} />
+    <main className="relative min-h-[calc(100vh-6rem)] overflow-hidden rounded-2xl" style={{ background: "var(--posh-bg)" }}>
+      <div className="pointer-events-none absolute inset-0" style={{ background: "var(--posh-gradient-warm)" }} />
+      <div className="relative flex min-h-[calc(100vh-6rem)] flex-col px-6 py-6 md:px-10 md:py-8">
 
-      {/* ── Bottom grid: Rotating Rail + Quick Actions ── */}
-      <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-
-        {/* Self-rotating left rail: Recent Orders ↔ AI Suggestions (posh-web-flair pattern) */}
-        <RotatingRail orders={recentOrders} />
-
-        {/* Quick Actions panel */}
-        <div className="rounded-2xl border p-6"
-          style={{ background: "var(--posh-bg-card)", borderColor: "var(--posh-border)" }}>
-          <h2 className="posh-heading mb-5 text-xl" style={{ color: "var(--posh-fg)" }}>Quick Actions</h2>
-          <div className="space-y-3">
-            <Link href="/products"
-              className="block rounded-2xl px-5 py-3 text-center text-sm font-medium transition-opacity hover:opacity-80"
-              style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
-              Browse Materials
-            </Link>
-            {secondaryActions.map(({ href, label }) => (
-              <Link key={href} href={href}
-                className="block rounded-2xl border px-5 py-3 text-center text-sm font-medium transition-colors hover:bg-white/5"
-                style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg-muted)" }}>
-                {label}
-              </Link>
+        {/* ── Page header ── */}
+        <header className="mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="posh-heading text-2xl tracking-tight" style={{ color: "var(--posh-fg)" }}>Buildohub</span>
+            <span className="hidden text-[10px] font-semibold uppercase tracking-[0.3em] sm:block" style={{ color: "var(--posh-fg-muted)" }}>
+              Procurement Desk
+            </span>
+          </div>
+          <nav className="flex items-center gap-1">
+            {[
+              { href: "/dashboard", label: "Dashboard" },
+              { href: "/orders",    label: "Orders" },
+              { href: "/watchlist", label: "Watchlist" },
+              { href: "/sourcing",  label: "AI Sourcing" },
+              { href: "/products",  label: "Browse" },
+            ].map(({ href, label }) => (
+              <a key={href} href={href} className="rounded-full px-4 py-1.5 text-sm transition-colors hover:bg-white/10"
+                style={{ color: "var(--posh-fg-muted)" }}>{label}</a>
             ))}
-          </div>
+          </nav>
+        </header>
 
-          {/* AI Sourcing — mobile only (sm+ sees it in the page header) */}
-          <div className="mt-6 border-t pt-5 sm:hidden" style={{ borderColor: "var(--posh-border)" }}>
-            <Link href="/sourcing"
-              className="flex items-center justify-center gap-2 rounded-2xl border px-5 py-3 text-sm font-medium transition-opacity hover:opacity-70"
-              style={{ borderColor: "var(--posh-border)", color: "var(--posh-primary)", background: "rgba(196,145,90,0.08)" }}>
-              AI Sourcing <ArrowUpRight size={13} />
-            </Link>
-          </div>
+        {/* ── Two-column body ── */}
+        <div className="flex flex-1 flex-col gap-6 lg:flex-row">
 
-          <p className="mt-6 border-t pt-4 text-[11px] leading-relaxed"
-            style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg-muted)" }}>
-            All prices reflect live supplier quotes. Last refreshed on page load.
-          </p>
+          {/* ── LEFT: AI Suggestions only ── */}
+          <aside className="w-full lg:w-[340px] lg:shrink-0">
+            <div className="rounded-3xl border p-7 backdrop-blur-xl"
+              style={{ background: "rgba(36,31,22,0.40)", borderColor: "var(--posh-border)" }}>
+              <div className="mb-6 flex items-center gap-2">
+                <span className="size-2 animate-pulse rounded-full" style={{ background: "var(--posh-primary)" }} />
+                <p className="text-xs font-semibold uppercase tracking-[0.25em]" style={{ color: "var(--posh-fg-muted)" }}>
+                  AI Suggestions
+                </p>
+              </div>
+              <div className="space-y-5">
+                {suggestions.map((s) => (
+                  <div key={s.item} className="flex items-start justify-between gap-4 border-b pb-5"
+                    style={{ borderColor: "var(--posh-border)" }}>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium" style={{ color: "var(--posh-fg)" }}>{s.item}</p>
+                      <p className="mt-1 text-xs leading-relaxed" style={{ color: "var(--posh-fg-muted)" }}>{s.why}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="posh-heading text-lg" style={{ color: "var(--posh-primary)" }}>{s.move}</p>
+                      <p className="mt-0.5 font-mono text-[10px] font-semibold"
+                        style={{ color: s.delta.startsWith("-") ? "#4ade80" : "#fbbf24" }}>{s.delta}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <a href="/sourcing" className="mt-6 inline-block text-sm transition-opacity hover:opacity-70"
+                style={{ color: "var(--posh-primary)" }}>Open AI Sourcing →</a>
+            </div>
+          </aside>
+
+          {/* RIGHT panel placeholder — filled below */}
+          <section className="flex flex-1 flex-col overflow-hidden rounded-3xl border p-7 backdrop-blur-xl md:p-10"
+            style={{ background: "rgba(36,31,22,0.40)", borderColor: "var(--posh-border)" }}>
+            <nav className="flex flex-wrap gap-2">
+              {views.map((v) => (
+                <button key={v} onClick={() => setView(v)}
+                  className="rounded-full border px-5 py-2 text-sm transition-colors duration-300"
+                  style={view === v
+                    ? { borderColor: "var(--posh-primary)", background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }
+                    : { borderColor: "var(--posh-border)", color: "var(--posh-fg-muted)" }}>
+                  {v}
+                </button>
+              ))}
+            </nav>
+            <div key={view} className="animate-rise mt-8 flex-1">
+              <RightPanelContent view={view} />
+
+            </div>
+          </section>
+
         </div>
-
-      </section>
-    </PoshShell>
+      </div>
+    </main>
   );
+}
+
+// ── Right panel tab content ───────────────────────────────────────────────────
+function RightPanelContent({ view }: { view: View }) {
+  if (view === "Outstanding") return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead className="text-xs uppercase tracking-[0.2em]" style={{ color: "var(--posh-fg-muted)" }}>
+          <tr>
+            {["Order", "Material", "Supplier", "ETA", "Value", "Status"].map((h) => (
+              <th key={h} className="border-b pb-3 pr-6 font-normal" style={{ borderColor: "var(--posh-border)" }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {outstanding.map((r) => (
+            <tr key={r[0]} className="transition-colors hover:bg-white/5">
+              <td className="border-b py-4 pr-6" style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg-muted)" }}>{r[0]}</td>
+              <td className="border-b py-4 pr-6" style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)" }}>{r[1]}</td>
+              <td className="border-b py-4 pr-6" style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg-muted)" }}>{r[2]}</td>
+              <td className="border-b py-4 pr-6" style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)" }}>{r[3]}</td>
+              <td className="posh-heading border-b py-4 pr-6 text-lg" style={{ borderColor: "var(--posh-border)", color: "var(--posh-primary)" }}>{r[4]}</td>
+              <td className="border-b py-4" style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg-muted)" }}>{r[5]}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  if (view === "Watchlist") return (
+    <div className="grid gap-px overflow-hidden rounded-3xl border sm:grid-cols-2"
+      style={{ borderColor: "var(--posh-border)", background: "var(--posh-border)" }}>
+      {watchlist.map((w) => (
+        <article key={w[0]} className="p-7 transition-colors hover:bg-white/5" style={{ background: "var(--posh-bg)" }}>
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-xl" style={{ color: "var(--posh-fg)" }}>{w[0]}</h3>
+            <span className="text-xs" style={{ color: "var(--posh-primary)" }}>{w[2]}</span>
+          </div>
+          <p className="posh-heading mt-3 text-3xl" style={{ color: "var(--posh-fg)" }}>{w[1]}</p>
+          <p className="mt-2 text-sm" style={{ color: "var(--posh-fg-muted)" }}>{w[3]}</p>
+        </article>
+      ))}
+    </div>
+  );
+
+  if (view === "Reports") return (
+    <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+      {reports.map((r) => (
+        <div key={r[0]} className="rounded-3xl border p-7"
+          style={{ borderColor: "var(--posh-border)", background: "rgba(36,31,22,0.60)" }}>
+          <p className="text-xs uppercase tracking-[0.25em]" style={{ color: "var(--posh-fg-muted)" }}>{r[0]}</p>
+          <p className="posh-heading mt-5 text-4xl" style={{ color: "var(--posh-primary)" }}>{r[1]}</p>
+          <p className="mt-2 text-sm" style={{ color: "var(--posh-fg-muted)" }}>{r[2]}</p>
+        </div>
+      ))}
+    </div>
+  );
+
+  if (view === "Browse") return (
+    <div className="grid gap-px overflow-hidden rounded-3xl border sm:grid-cols-2 xl:grid-cols-3"
+      style={{ borderColor: "var(--posh-border)", background: "var(--posh-border)" }}>
+      {browse.map((b) => (
+        <a key={b[0]} href="/products" className="group block p-8 text-left transition-colors hover:bg-white/5"
+          style={{ background: "var(--posh-bg)" }}>
+          <h3 className="text-2xl" style={{ color: "var(--posh-fg)" }}>{b[0]}</h3>
+          <p className="mt-2 text-sm" style={{ color: "var(--posh-fg-muted)" }}>{b[1]}</p>
+          <span className="mt-6 inline-block text-sm transition-transform duration-500 group-hover:translate-x-1"
+            style={{ color: "var(--posh-primary)" }}>Browse →</span>
+        </a>
+      ))}
+    </div>
+  );
+
+  return null;
 }

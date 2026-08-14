@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { builderApiGet } from "@/lib/api";
-import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
+import RotatingRail from "@/components/builder/RotatingRail";
 
 type Order = {
   id: string;
@@ -110,72 +110,11 @@ export default async function DashboardPage() {
       <DashHeader />
       <KpiGrid kpis={kpis} />
 
-      {/* ── Bottom grid: Recent Orders + Quick Actions ── */}
+      {/* ── Bottom grid: Rotating Rail + Quick Actions ── */}
       <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
 
-        {/* Recent orders panel */}
-        <div className="overflow-hidden rounded-2xl border"
-          style={{ background: "var(--posh-bg-card)", borderColor: "var(--posh-border)" }}>
-          <div className="flex items-center justify-between border-b px-6 py-4"
-            style={{ borderColor: "var(--posh-border)" }}>
-            <h2 className="posh-heading text-xl" style={{ color: "var(--posh-fg)" }}>Recent Orders</h2>
-            <Link href="/orders" className="text-xs font-medium transition-opacity hover:opacity-70"
-              style={{ color: "var(--posh-primary)" }}>
-              View all →
-            </Link>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr>
-                  {["Order", "Material", "Total", "Status"].map((h) => (
-                    <th key={h}
-                      className="border-b px-6 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.2em]"
-                      style={{ color: "var(--posh-fg-muted)", borderColor: "var(--posh-border)" }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {recentOrders.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center text-sm"
-                      style={{ color: "var(--posh-fg-muted)" }}>
-                      No orders yet.{" "}
-                      <Link href="/products"
-                        className="underline underline-offset-2 transition-opacity hover:opacity-70"
-                        style={{ color: "var(--posh-primary)" }}>
-                        Browse materials →
-                      </Link>
-                    </td>
-                  </tr>
-                ) : (
-                  recentOrders.map((order) => (
-                    <tr key={order.id} className="border-b transition-colors hover:bg-white/5"
-                      style={{ borderColor: "var(--posh-border)" }}>
-                      <td className="px-6 py-4">
-                        <Link href={`/orders/${order.id}`}
-                          className="font-mono text-xs transition-opacity hover:opacity-70"
-                          style={{ color: "var(--posh-primary)" }}>
-                          #{order.id.slice(0, 8)}
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4" style={{ color: "var(--posh-fg)" }}>
-                        {order.items?.[0]?.name ?? "—"}
-                        {(order.items?.length ?? 0) > 1 ? ` +${order.items.length - 1}` : ""}
-                      </td>
-                      <td className="px-6 py-4 font-medium" style={{ color: "var(--posh-fg)" }}>
-                        {order.totalLabel ?? `₹${order.total?.toLocaleString("en-IN")}`}
-                      </td>
-                      <td className="px-6 py-4"><OrderStatusBadge status={order.status} /></td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {/* Self-rotating left rail: Recent Orders ↔ AI Suggestions (posh-web-flair pattern) */}
+        <RotatingRail orders={recentOrders} />
 
         {/* Quick Actions panel */}
         <div className="rounded-2xl border p-6"

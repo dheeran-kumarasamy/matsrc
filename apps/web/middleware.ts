@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 // group-orders, dashboard) and therefore require an authenticated session.
 const PROTECTED_PREFIXES = [
   "/dashboard",
+  "/newdashboard",
   "/orders",
   "/reports",
   "/notifications",

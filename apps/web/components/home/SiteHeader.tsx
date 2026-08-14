@@ -65,7 +65,7 @@ export default function SiteHeader() {
               style={{ background: "var(--posh-border)" }}
             />
           ) : isAuthenticated ? (
-            <Link href="/dashboard" className="posh-btn-pill font-medium">
+            <Link href="/newdashboard" className="posh-btn-pill font-medium">
               Go to Dashboard
             </Link>
           ) : (
@@ -119,7 +119,7 @@ export default function SiteHeader() {
               ) : isAuthenticated ? (
                 <SheetClose asChild>
                   <Link
-                    href="/dashboard"
+                    href="/newdashboard"
                     className="flex min-h-[48px] items-center justify-center rounded-full text-base font-medium transition"
                     style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}
                   >

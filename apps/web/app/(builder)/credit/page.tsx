@@ -254,7 +254,7 @@ export default function CreditPage() {
           <h2 className="font-bold text-xl text-slate-800">Credit Activated!</h2>
           <p className="text-sm text-slate-500">Your credit limit of <strong>₹5,00,000</strong> is ready to use at checkout.</p>
           <p className="text-xs text-slate-400">Payment reminders will be sent 7 and 1 day before due date via WhatsApp & SMS.</p>
-          <a href="/dashboard" className="inline-block mt-2 bg-blue-700 text-white rounded-lg px-6 py-2 text-sm font-medium">Go to Dashboard</a>
+          <a href="/newdashboard" className="posh-btn mt-2 inline-block">Go to Dashboard</a>
         </div>
       )}
     </div>

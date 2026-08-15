@@ -13,8 +13,8 @@ export function MethodBadge({ label }: { label: DistrictPriceMethodLabel }) {
     <span
       className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${
         isObserved
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-amber-200 bg-amber-50 text-amber-700"
+          ? "border-black bg-black text-white"
+          : "border-black/20 bg-white text-black"
       }`}
       title={isObserved ? "Based on directly observed prices" : "Estimated from nearby market data"}
     >
@@ -24,10 +24,11 @@ export function MethodBadge({ label }: { label: DistrictPriceMethodLabel }) {
 }
 
 export function ConfidenceBadge({ confidence }: { confidence: "HIGH" | "MEDIUM" | "LOW" }) {
+  // Monochrome: confidence steps down from solid black to a faint chip.
   const styles: Record<string, string> = {
-    HIGH: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    MEDIUM: "border-amber-200 bg-amber-50 text-amber-700",
-    LOW: "border-rose-200 bg-rose-50 text-rose-700",
+    HIGH: "border-black bg-black text-white",
+    MEDIUM: "border-black bg-white text-black",
+    LOW: "border-black/20 bg-white text-black/50",
   };
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${styles[confidence]}`}>
@@ -39,9 +40,9 @@ export function ConfidenceBadge({ confidence }: { confidence: "HIGH" | "MEDIUM" 
 export function FreshnessIndicator({ label, isStale }: { label: string; isStale: boolean }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 text-xs font-medium ${isStale ? "text-rose-600" : "text-slate-500"}`}
+      className={`inline-flex items-center gap-1 text-xs font-medium ${isStale ? "font-bold text-black" : "text-black/55"}`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${isStale ? "bg-rose-500" : "bg-emerald-500"}`} aria-hidden />
+      <span className={`h-1.5 w-1.5 rounded-full ${isStale ? "bg-black" : "bg-black/30"}`} aria-hidden />
       {isStale ? "STALE" : label}
     </span>
   );
@@ -93,10 +94,11 @@ export function MarketPositionBadge({
   marketPosition: { status: "BELOW" | "WITHIN" | "ABOVE"; diffPct: number } | null;
 }) {
   if (!marketPosition) return null;
+  // Monochrome: "Below market" (the good outcome) is the solid-black chip.
   const styles: Record<string, string> = {
-    BELOW: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    WITHIN: "border-amber-200 bg-amber-50 text-amber-700",
-    ABOVE: "border-rose-200 bg-rose-50 text-rose-700",
+    BELOW: "border-black bg-black text-white",
+    WITHIN: "border-black bg-white text-black",
+    ABOVE: "border-black/20 bg-white text-black/60",
   };
   const label: Record<string, string> = {
     BELOW: "Below Market",

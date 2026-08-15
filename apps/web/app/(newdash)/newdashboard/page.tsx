@@ -201,34 +201,46 @@ export default function NewDashboardPage() {
     { href: "/products",     label: "Browse"    },
   ];
 
-  const FG  = "var(--posh-fg)";
-  const FM  = "var(--posh-fg-muted)";
-  const P   = "var(--posh-primary)";
-  const PFG = "var(--posh-primary-fg)";
-  const B60 = "rgba(240,232,216,0.10)";
-  const B40 = "rgba(240,232,216,0.08)";
-  const B12 = "rgba(240,232,216,0.12)";
+  // ── Monochrome design tokens ───────────────────────────────────────────────
+  // The dashboard used to run the homepage's warm dark palette (--posh-bg /
+  // --posh-primary). It now uses the same black-on-white surface as every
+  // other authenticated page, so these local aliases map to black at varying
+  // opacity instead. Kept as constants so the JSX below needs minimal churn.
+  const FG  = "#000000";                 // primary ink
+  const FM  = "rgba(0,0,0,0.55)";        // muted ink
+  const P   = "#000000";                 // accent (was warm gold)
+  const PFG = "#ffffff";                 // text on accent
+  const B60 = "rgba(0,0,0,0.10)";        // card border
+  const B40 = "rgba(0,0,0,0.08)";        // hairline divider
+  const B12 = "rgba(0,0,0,0.15)";        // control border
+  const CARD = "#ffffff";                // card surface
 
   return (
-    <main className="relative min-h-screen overflow-hidden" style={{ background: "var(--posh-bg)" }}>
-      <div className="pointer-events-none absolute inset-0" style={{ background: "var(--posh-gradient-warm)" }} />
+    <main className="posh-body relative min-h-screen overflow-hidden bg-white">
       <div className="relative mx-auto flex min-h-screen max-w-[110rem] flex-col px-6 py-6 md:px-10 md:py-8">
 
         {/* ── Header ── */}
         <header className="flex items-center justify-between gap-4">
           <div className="flex shrink-0 items-center gap-3">
-            <Link href="/" className="posh-heading text-2xl tracking-tight" style={{ color: FG }}>Buildohub</Link>
-            <span className="hidden text-xs tracking-[0.2em] sm:block" style={{ color: FM }}>Procurement Desk</span>
+            <Link href="/" className="posh-nav-brandmark text-2xl tracking-tight" style={{ color: FG }}>Buildohub</Link>
+            <span className="posh-eyebrow hidden sm:block">Procurement Desk</span>
           </div>
           <nav className="hidden items-center gap-1 text-sm md:flex">
             {navLinks.map(({ href, label }) => (
-              <Link key={href} href={href} className="rounded-full px-4 py-1.5 transition-colors hover:bg-white/10" style={{ color: FM }}>{label}</Link>
+              <Link
+                key={href}
+                href={href}
+                className="rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors hover:bg-black/[0.05] hover:text-black"
+                style={{ color: FM }}
+              >
+                {label}
+              </Link>
             ))}
           </nav>
           <div className="flex shrink-0 items-center gap-2">
             {/* Cart */}
             <button type="button" onClick={() => openCart("review")} aria-label="Open cart"
-              className="relative flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors hover:bg-white/10"
+              className="relative flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-black hover:text-black"
               style={{ borderColor: B12, color: FM }}>
               <ShoppingCart size={15} />
               <span className="hidden sm:inline">Cart</span>
@@ -241,22 +253,22 @@ export default function NewDashboardPage() {
             {/* Bell — live alerts dropdown */}
             <div className="relative" ref={bellRef}>
               <button type="button" onClick={() => setNotifsOpen((o) => !o)} aria-label="Alerts"
-                className="relative flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors hover:bg-white/10"
+                className="relative flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-black hover:text-black"
                 style={{ borderColor: B12, color: FM }}>
                 <Bell size={15} />
                 <span className="hidden sm:inline">Alerts</span>
                 {unreadCount > 0 && (
-                  <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white">
+                  <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-black px-1 text-[11px] font-bold text-white">
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
               </button>
               {notifsOpen && (
                 <div className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[90vw] overflow-hidden rounded-2xl border shadow-2xl"
-                  style={{ background: "var(--posh-bg-card)", borderColor: B60 }}>
+                  style={{ background: CARD, borderColor: B60 }}>
                   <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: B40 }}>
-                    <p className="text-sm font-semibold" style={{ color: FG }}>Alerts</p>
-                    {unreadCount > 0 && <button type="button" onClick={markAllRead} className="text-xs transition-opacity hover:opacity-70" style={{ color: P }}>Mark all read</button>}
+                    <p className="posh-card-title text-base">Alerts</p>
+                    {unreadCount > 0 && <button type="button" onClick={markAllRead} className="text-xs font-bold transition-opacity hover:opacity-70" style={{ color: P }}>Mark all read</button>}
                   </div>
                   <div className="max-h-80 overflow-y-auto">
                     {!notifsLoaded ? (
@@ -268,11 +280,11 @@ export default function NewDashboardPage() {
                         {notifs.map((n) => (
                           <li key={n.id}>
                             <button type="button" onClick={() => markRead(n)}
-                              className="flex w-full gap-2.5 border-b px-4 py-3 text-left transition hover:bg-white/5"
-                              style={{ borderColor: B40, background: !n.read ? "rgba(196,145,90,0.08)" : "transparent" }}>
+                              className="flex w-full gap-2.5 border-b px-4 py-3 text-left transition hover:bg-black/[0.03]"
+                              style={{ borderColor: B40, background: !n.read ? "rgba(0,0,0,0.04)" : "transparent" }}>
                               <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? "opacity-0" : ""}`} style={{ background: P }} />
                               <div className="min-w-0">
-                                <p className="truncate text-sm font-medium" style={{ color: n.read ? FM : FG }}>{n.title}</p>
+                                <p className="truncate text-sm font-bold" style={{ color: n.read ? FM : FG }}>{n.title}</p>
                                 <p className="mt-0.5 line-clamp-2 text-xs" style={{ color: FM }}>{n.body}</p>
                                 <p className="mt-1 text-[11px]" style={{ color: FM }}>{timeAgo(n.createdAt)}</p>
                               </div>
@@ -288,11 +300,11 @@ export default function NewDashboardPage() {
             <span className="mx-1 hidden opacity-20 sm:block" style={{ color: FG }}>|</span>
             {session?.user ? (
               <>
-                <Link href="/profile" className="hidden rounded-full px-3 py-1.5 text-sm transition-colors hover:bg-white/10 sm:block" style={{ color: FM }}>Account</Link>
-                <button type="button" onClick={() => signOut({ callbackUrl: "/" })} className="hidden rounded-full px-3 py-1.5 text-sm transition-colors hover:bg-white/10 sm:block" style={{ color: FM }}>Sign out</button>
+                <Link href="/profile" className="hidden rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-black/[0.05] hover:text-black sm:block" style={{ color: FM }}>Account</Link>
+                <button type="button" onClick={() => signOut({ callbackUrl: "/" })} className="hidden rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-black/[0.05] hover:text-black sm:block" style={{ color: FM }}>Sign out</button>
               </>
             ) : (
-              <Link href="/auth/login" className="rounded-full border px-3 py-1.5 text-sm transition-colors hover:bg-white/10" style={{ borderColor: B12, color: FG }}>Sign in</Link>
+              <Link href="/auth/login" className="rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-black" style={{ borderColor: B12, color: FG }}>Sign in</Link>
             )}
           </div>
         </header>
@@ -301,15 +313,15 @@ export default function NewDashboardPage() {
         <div className="mt-8 flex flex-1 flex-col gap-6 lg:flex-row">
 
           {/* LEFT — rotating panel: live recentOrders (0) ↔ suggestions (1) */}
-          <aside className="flex w-full flex-col rounded-[2rem] border p-7 backdrop-blur-xl lg:w-[340px] lg:shrink-0"
-            style={{ background: "rgba(28,24,16,0.40)", borderColor: B60 }}>
+          <aside className="flex w-full flex-col rounded-[2rem] border p-7 shadow-sm lg:w-[340px] lg:shrink-0"
+            style={{ background: CARD, borderColor: B60 }}>
             <div className="mb-5 flex items-center justify-between">
-              <p className="text-xs uppercase tracking-[0.2em]" style={{ color: FM }}>
+              <p className="posh-eyebrow">
                 {panel === 0 ? "Recent Orders" : "AI Suggestions"}
               </p>
               {panel === 0
-                ? <Link href="/orders" className="text-xs transition-opacity hover:opacity-70" style={{ color: P }}>View all →</Link>
-                : <Link href="/sourcing" className="text-xs transition-opacity hover:opacity-70" style={{ color: P }}>Open AI sourcing →</Link>
+                ? <Link href="/orders" className="posh-link">View all →</Link>
+                : <Link href="/sourcing" className="posh-link">Open AI sourcing →</Link>
               }
             </div>
             <div className="flex-1" style={{ opacity: fade ? 1 : 0, transition: "opacity 420ms ease" }}>
@@ -320,19 +332,19 @@ export default function NewDashboardPage() {
                     <p className="py-8 text-center text-xs" style={{ color: FM }}>Loading orders…</p>
                   ) : recentOrders.length === 0 ? (
                     <div className="py-8 text-center">
-                      <p className="text-sm" style={{ color: FM }}>No orders yet.</p>
-                      <Link href="/products" className="mt-2 inline-block text-xs transition-opacity hover:opacity-70" style={{ color: P }}>Browse materials →</Link>
+                      <p className="posh-muted text-sm">No orders yet.</p>
+                      <Link href="/products" className="posh-link mt-2 inline-block">Browse materials →</Link>
                     </div>
                   ) : recentOrders.map((o) => (
                     <Link key={o.id} href={`/orders/${o.id}`}
-                      className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-white/5">
+                      className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-black/[0.03]">
                       <div className="min-w-0">
-                        <p className="truncate text-sm" style={{ color: FG }}>{o.items?.[0]?.name ?? `Order #${o.id.slice(0,6)}`}{(o.itemCount??0) > 1 ? ` +${o.itemCount-1}` : ""}</p>
-                        <p className="mt-0.5 text-xs" style={{ color: FM }}>{o.supplierName ?? STATUS_LABELS[o.status] ?? o.status}</p>
+                        <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.items?.[0]?.name ?? `Order #${o.id.slice(0,6)}`}{(o.itemCount??0) > 1 ? ` +${o.itemCount-1}` : ""}</p>
+                        <p className="posh-label mt-1">{o.supplierName ?? STATUS_LABELS[o.status] ?? o.status}</p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="posh-heading text-base" style={{ color: P }}>{fmtInr(o.total)}</p>
-                        <p className="mt-0.5 text-[10px]" style={{ color: FM }}>{STATUS_LABELS[o.status]}</p>
+                        <p className="posh-card-title text-base">{fmtInr(o.total)}</p>
+                        <p className="posh-label mt-1">{STATUS_LABELS[o.status]}</p>
                       </div>
                     </Link>
                   ))}
@@ -343,13 +355,15 @@ export default function NewDashboardPage() {
                   {suggestions.map((s) => (
                     <div key={s.item} className="flex items-start justify-between gap-3 py-4">
                       <div className="min-w-0">
-                        <p className="text-sm" style={{ color: FG }}>{s.item}</p>
-                        <p className="mt-1 text-xs leading-relaxed" style={{ color: FM }}>{s.why}</p>
+                        <p className="text-sm font-bold" style={{ color: FG }}>{s.item}</p>
+                        <p className="mt-1 text-xs font-medium leading-relaxed" style={{ color: FM }}>{s.why}</p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="posh-heading text-base" style={{ color: P }}>{s.move}</p>
-                        <p className="mt-0.5 font-mono text-[10px] font-semibold"
-                          style={{ color: s.delta.startsWith("-") ? "#4ade80" : "#fbbf24" }}>{s.delta}</p>
+                        <p className="posh-card-title text-base">{s.move}</p>
+                        {/* Direction is carried by weight/opacity, not colour. */}
+                        <p className={`mt-0.5 font-mono text-[10px] font-bold ${s.delta.startsWith("-") ? "text-black" : "text-black/45"}`}>
+                          {s.delta}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -359,13 +373,12 @@ export default function NewDashboardPage() {
           </aside>
 
           {/* RIGHT — tabs */}
-          <section className="flex flex-1 flex-col rounded-[2rem] border p-7 backdrop-blur-xl md:p-10"
-            style={{ background: "rgba(28,24,16,0.40)", borderColor: B60 }}>
+          <section className="flex flex-1 flex-col rounded-[2rem] border p-7 shadow-sm md:p-10"
+            style={{ background: CARD, borderColor: B60 }}>
             <nav className="flex flex-wrap gap-2">
               {views.map((v) => (
                 <button key={v} type="button" onClick={() => setView(v)}
-                  className="rounded-full border px-5 py-2 text-sm transition-colors duration-300"
-                  style={view === v ? { borderColor: P, background: P, color: PFG } : { borderColor: B12, color: FM }}>
+                  className={view === v ? "posh-chip-active px-5 py-2" : "posh-chip px-5 py-2"}>
                   {v}
                 </button>
               ))}
@@ -375,29 +388,31 @@ export default function NewDashboardPage() {
               {/* Outstanding — live orders */}
               {view === "Outstanding" && (
                 <div className="overflow-x-auto">
-                  {!ordersReady ? <p className="py-8 text-center text-xs" style={{ color: FM }}>Loading…</p> :
+                  {!ordersReady ? <p className="posh-muted py-8 text-center text-xs">Loading…</p> :
                   activeOrders.length === 0 ? (
                     <div className="py-12 text-center">
-                      <p className="text-sm" style={{ color: FM }}>No outstanding orders.</p>
-                      <Link href="/products" className="mt-2 inline-block text-xs hover:opacity-70" style={{ color: P }}>Browse materials →</Link>
+                      <p className="posh-card-title">No outstanding orders</p>
+                      <Link href="/products" className="posh-link mt-3 inline-block">Browse materials →</Link>
                     </div>
                   ) : (
                     <table className="w-full text-left text-sm">
-                      <thead className="text-xs uppercase tracking-[0.2em]" style={{ color: FM }}>
+                      <thead>
                         <tr>{["Order","Material","Supplier","Total","Status"].map((h) => (
-                          <th key={h} className="border-b pb-3 pr-6 font-normal" style={{ borderColor: B60 }}>{h}</th>
+                          <th key={h} className="posh-th pr-6">{h}</th>
                         ))}</tr>
                       </thead>
                       <tbody>
                         {activeOrders.map((o) => (
-                          <tr key={o.id} className="transition-colors hover:bg-white/5">
+                          <tr key={o.id} className="transition-colors hover:bg-black/[0.03]">
                             <td className="border-b py-4 pr-6" style={{ borderColor: B40 }}>
-                              <Link href={`/orders/${o.id}`} className="font-mono text-xs hover:underline" style={{ color: P }}>{o.id.slice(0,8)}</Link>
+                              <Link href={`/orders/${o.id}`} className="font-mono text-xs font-bold text-black hover:underline">{o.id.slice(0,8)}</Link>
                             </td>
-                            <td className="border-b py-4 pr-6" style={{ borderColor: B40, color: FG }}>{o.items?.[0]?.name ?? "—"}{(o.itemCount??0)>1?` +${o.itemCount-1}`:""}</td>
-                            <td className="border-b py-4 pr-6" style={{ borderColor: B40, color: FM }}>{o.supplierName ?? "—"}</td>
-                            <td className="posh-heading border-b py-4 pr-6 text-lg" style={{ borderColor: B40, color: P }}>{fmtInr(o.total)}</td>
-                            <td className="border-b py-4" style={{ borderColor: B40, color: FM }}>{STATUS_LABELS[o.status]}</td>
+                            <td className="border-b py-4 pr-6 font-semibold" style={{ borderColor: B40, color: FG }}>{o.items?.[0]?.name ?? "—"}{(o.itemCount??0)>1?` +${o.itemCount-1}`:""}</td>
+                            <td className="border-b py-4 pr-6 font-medium" style={{ borderColor: B40, color: FM }}>{o.supplierName ?? "—"}</td>
+                            <td className="posh-card-title border-b py-4 pr-6 text-lg" style={{ borderColor: B40 }}>{fmtInr(o.total)}</td>
+                            <td className="border-b py-4" style={{ borderColor: B40 }}>
+                              <span className="posh-status">{STATUS_LABELS[o.status]}</span>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -408,26 +423,25 @@ export default function NewDashboardPage() {
 
               {/* Watchlist — live */}
               {view === "Watchlist" && (
-                !watchlistReady ? <p className="py-8 text-center text-xs" style={{ color: FM }}>Loading…</p> :
+                !watchlistReady ? <p className="posh-muted py-8 text-center text-xs">Loading…</p> :
                 watchlistItems.length === 0 ? (
                   <div className="py-12 text-center">
-                    <p className="text-sm" style={{ color: FM }}>No items in watchlist.</p>
-                    <Link href="/products" className="mt-2 inline-block text-xs hover:opacity-70" style={{ color: P }}>Browse & watchlist materials →</Link>
+                    <p className="posh-card-title">No items in watchlist</p>
+                    <Link href="/products" className="posh-link mt-3 inline-block">Browse &amp; watchlist materials →</Link>
                   </div>
                 ) : (
                   <div className="grid gap-px overflow-hidden rounded-[2rem] border sm:grid-cols-2"
                     style={{ borderColor: B60, background: B60 }}>
                     {watchlistItems.map((w) => (
-                      <Link key={w.id} href="/watchlist" className="block p-7 transition-colors hover:bg-[#241f16]"
-                        style={{ background: "var(--posh-bg)" }}>
+                      <Link key={w.id} href="/watchlist" className="block bg-white p-7 transition-colors hover:bg-black/[0.03]">
                         <div className="flex items-baseline justify-between">
-                          <h3 className="text-xl" style={{ color: FG }}>{w.name}</h3>
-                          <span className="text-xs" style={{ color: P }}>{gapLabel(w.priceIntelligence?.gapToTargetPct ?? null)}</span>
+                          <h3 className="posh-card-title">{w.name}</h3>
+                          <span className="posh-label">{gapLabel(w.priceIntelligence?.gapToTargetPct ?? null)}</span>
                         </div>
-                        <p className="posh-heading mt-3 text-3xl" style={{ color: FG }}>
+                        <p className="posh-page-title mt-3">
                           {w.priceIntelligence?.currentPricePerBaseUnit ? fmtInr(w.priceIntelligence.currentPricePerBaseUnit) : fmtInr(w.basePrice)} / {w.unit}
                         </p>
-                        <p className="mt-2 text-sm" style={{ color: FM }}>{w.targetPrice ? `Target: ${fmtInr(w.targetPrice)}` : "No target set"}</p>
+                        <p className="posh-subtitle mt-2">{w.targetPrice ? `Target: ${fmtInr(w.targetPrice)}` : "No target set"}</p>
                       </Link>
                     ))}
                   </div>
@@ -439,11 +453,11 @@ export default function NewDashboardPage() {
                 <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
                   {reportMetrics.map(([label, value, sub]) => (
                     <Link key={label} href="/reports"
-                      className="block rounded-[2rem] border p-7 transition-colors hover:bg-white/5"
-                      style={{ borderColor: B60, background: "rgba(36,31,22,0.60)" }}>
-                      <p className="text-xs uppercase tracking-[0.25em]" style={{ color: FM }}>{label}</p>
-                      <p className="posh-heading mt-5 text-4xl" style={{ color: P }}>{value}</p>
-                      <p className="mt-2 text-sm" style={{ color: FM }}>{sub}</p>
+                      className="block rounded-[2rem] border bg-white p-7 transition-colors hover:bg-black/[0.03]"
+                      style={{ borderColor: B60 }}>
+                      <p className="posh-eyebrow">{label}</p>
+                      <p className="posh-page-title mt-5 text-4xl">{value}</p>
+                      <p className="posh-subtitle mt-2">{sub}</p>
                     </Link>
                   ))}
                 </div>
@@ -455,11 +469,10 @@ export default function NewDashboardPage() {
                   style={{ borderColor: B60, background: B60 }}>
                   {browse.map((b) => (
                     <Link key={b[0]} href={`/products?category=${b[2]}`}
-                      className="group block p-8 text-left transition-colors hover:bg-[#241f16]"
-                      style={{ background: "var(--posh-bg)" }}>
-                      <h3 className="text-2xl" style={{ color: FG }}>{b[0]}</h3>
-                      <p className="mt-2 text-sm" style={{ color: FM }}>{b[1]}</p>
-                      <span className="mt-6 inline-block text-sm transition-transform duration-500 group-hover:translate-x-1" style={{ color: P }}>Browse →</span>
+                      className="group block bg-white p-8 text-left transition-colors hover:bg-black/[0.03]">
+                      <h3 className="posh-card-title text-2xl">{b[0]}</h3>
+                      <p className="posh-subtitle mt-2">{b[1]}</p>
+                      <span className="posh-link mt-6 inline-block no-underline transition-transform duration-500 group-hover:translate-x-1">Browse →</span>
                     </Link>
                   ))}
                 </div>

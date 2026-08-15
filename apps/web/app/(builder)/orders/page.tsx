@@ -51,29 +51,27 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
   const filtered = activeFilter === "All" ? orders : orders.filter((o) => o.status === activeFilter);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-bold text-slate-900">My Orders</h1>
-        <Link
-          href="/group-orders"
-          className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-        >
+    <div className="posh-body space-y-5">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="posh-eyebrow">Procurement desk</p>
+          <h1 className="posh-page-title mt-2">My Orders</h1>
+          <p className="posh-subtitle mt-2 max-w-2xl">
+            Track every enquiry from placement through supplier confirmation to delivery.
+          </p>
+        </div>
+        <Link href="/group-orders" className="posh-btn-ghost">
           My Group Orders →
         </Link>
-      </div>
-
+      </header>
 
       {/* Filters */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex flex-wrap gap-2">
         {STATUS_FILTERS.map((s) => (
           <Link
             key={s}
             href={s === "All" ? "/orders" : `/orders?status=${s}`}
-            className={`text-xs border rounded-full px-3 py-1 transition-colors ${
-              activeFilter === s
-                ? "bg-blue-700 text-white border-blue-700"
-                : "border-slate-200 hover:bg-slate-50"
-            }`}
+            className={activeFilter === s ? "posh-chip-active" : "posh-chip"}
           >
             {FILTER_LABELS[s]}
           </Link>
@@ -81,43 +79,39 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
       </div>
 
       {apiError ? (
-        <div className="panel p-10 text-center">
-          <p className="text-red-500 text-sm">Could not load orders right now.</p>
-          <p className="text-slate-400 text-xs mt-1">Please refresh and try again.</p>
+        <div className="posh-card p-10 text-center">
+          <p className="text-sm font-bold text-black">Could not load orders right now.</p>
+          <p className="posh-muted mt-1 text-xs">Please refresh and try again.</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="panel p-10 text-center">
-          <p className="text-slate-400 text-sm">No orders found.</p>
-          <Link href="/products" className="mt-3 inline-block text-sm text-blue-700 hover:underline">
+        <div className="posh-card p-10 text-center">
+          <p className="posh-card-title">No orders found</p>
+          <Link href="/products" className="posh-link mt-4 inline-block">
             Place your first order →
           </Link>
         </div>
       ) : (
-        <div className="panel divide-y divide-slate-100">
+        <div className="posh-card divide-y divide-black/10">
           {filtered.map((order) => (
-            <div key={order.id} className="p-4 flex items-center justify-between gap-3">
+            <div key={order.id} className="flex flex-wrap items-center justify-between gap-3 p-5">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-slate-800">Order #{order.id.slice(0, 8)}</p>
-                  {order.isAggregated ? (
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                      Group Order
-                    </span>
-                  ) : null}
+                  <p className="text-base font-bold tracking-tight text-black">Order #{order.id.slice(0, 8)}</p>
+                  {order.isAggregated ? <span className="posh-status">Group Order</span> : null}
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="mt-1 text-xs font-semibold text-black/60">
                   {order.supplierName ? `${order.supplierName} · ` : ""}{order.itemCount} items · INR {order.total.toLocaleString("en-IN")}
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <OrderStatusBadge status={order.status} />
 
                 {order.paymentLinkAvailable && order.paymentLink ? (
-                  <Link href={order.paymentLink} className="text-xs rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 hover:bg-emerald-100">
+                  <Link href={order.paymentLink} className="posh-status-strong">
                     Payment link enabled
                   </Link>
                 ) : null}
-                <Link href={`/orders/${order.id}`} className="text-xs text-blue-700 hover:underline">
+                <Link href={`/orders/${order.id}`} className="posh-link">
                   View
                 </Link>
               </div>

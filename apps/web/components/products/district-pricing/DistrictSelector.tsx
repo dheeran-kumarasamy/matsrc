@@ -31,7 +31,7 @@ export default function DistrictSelector({
         id="district-pricing-selector"
         value={selectedCode ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+        className="posh-input mt-1"
       >
         {options.map((option) => (
           <option key={option.code} value={option.code}>
@@ -40,7 +40,7 @@ export default function DistrictSelector({
         ))}
       </select>
       {isFallback ? (
-        <p className="mt-1 text-xs text-amber-600">
+        <p className="mt-1 text-xs font-semibold text-black/60">
           Estimated using nearby verified market data — no data for your project district yet.
         </p>
       ) : null}

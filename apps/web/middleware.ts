@@ -4,8 +4,10 @@ import { NextResponse } from "next/server";
 // Route prefixes that expose user-specific data (orders, reports, alerts,
 // cart/checkout, watchlist, purchase orders, credit, profile, disputes,
 // group-orders, dashboard) and therefore require an authenticated session.
+//
+// NOTE: the legacy "/dashboard" route was removed — /newdashboard is now the
+// single builder dashboard, so only that prefix is listed here.
 const PROTECTED_PREFIXES = [
-  "/dashboard",
   "/newdashboard",
   "/orders",
   "/reports",
@@ -40,7 +42,7 @@ export default auth((req) => {
 
   if (pathname.startsWith("/auth/")) {
     if (isLoggedIn) {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
+      return NextResponse.redirect(new URL("/newdashboard", req.url));
     }
     return NextResponse.next();
   }

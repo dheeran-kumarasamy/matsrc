@@ -45,7 +45,7 @@ export default function LoginPage() {
         body: JSON.stringify({ channel, identifier, otp }),
       });
       if (!res.ok) throw new Error((await res.json()).message);
-      router.push("/dashboard");
+      router.push("/newdashboard");
     } catch (err: any) {
       setError(err.message ?? "Invalid OTP");
     } finally {
@@ -66,7 +66,7 @@ export default function LoginPage() {
       <div className="flex flex-col gap-3 mb-6">
         <button
           type="button"
-          onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+          onClick={() => signIn("google", { callbackUrl: "/newdashboard" })}
           className="flex items-center justify-center gap-3 rounded-xl border py-2.5 text-sm font-medium transition-colors hover:opacity-80"
           style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)", background: "transparent" }}
         >

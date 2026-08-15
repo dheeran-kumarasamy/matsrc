@@ -50,7 +50,7 @@ export default function WatchlistButton({ productId, initialWatching = false }: 
       <button
         onClick={handleWatchlist}
         disabled={saving}
-        className={`w-full flex items-center justify-center gap-2 border-2 rounded-lg py-2.5 text-sm font-medium transition-all disabled:opacity-50 ${watching ? "border-green-500 text-green-600 bg-green-50" : "border-slate-200 text-slate-600 hover:border-blue-700 hover:text-blue-700"}`}
+        className={`flex w-full items-center justify-center gap-2 rounded-full border-2 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-50 ${watching ? "border-black bg-black text-white" : "border-black/15 text-black/60 hover:border-black hover:text-black"}`}
       >
         {watching ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
         {watching ? "Watching — Price Alert Set" : "Add to Watchlist"}
@@ -63,12 +63,12 @@ export default function WatchlistButton({ productId, initialWatching = false }: 
             placeholder="Alert me below ₹..."
             value={targetPrice}
             onChange={(e) => setTargetPrice(e.target.value)}
-            className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
+            className="flex-1 rounded-xl border border-black/15 px-3 py-2 text-xs font-medium text-black focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
           />
-          <button onClick={saveWatchlist} disabled={saving} className="bg-blue-700 text-white rounded-lg px-3 text-xs font-medium disabled:opacity-50">{saving ? "..." : "Save"}</button>
+          <button onClick={saveWatchlist} disabled={saving} className="rounded-full bg-black px-4 text-xs font-bold uppercase tracking-[0.14em] text-white disabled:opacity-50">{saving ? "..." : "Save"}</button>
         </div>
       )}
-      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+      {error && <p className="mt-1 text-xs font-bold text-black">{error}</p>}
     </div>
   );
 }

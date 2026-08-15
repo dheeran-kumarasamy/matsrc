@@ -70,14 +70,11 @@ export default async function OrderDetailPage({ params }: { params: { id: string
 
   if (loadError) {
     return (
-      <div className="mx-auto max-w-4xl">
-        <div className="panel space-y-3 p-8 text-center">
-          <p className="text-sm font-semibold text-slate-700">Could not load this order right now.</p>
-          <p className="text-sm text-slate-500">Please try again in a moment.</p>
-          <Link
-            href={`/orders/${params.id}`}
-            className="inline-block rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
-          >
+      <div className="posh-body mx-auto max-w-4xl">
+        <div className="posh-card space-y-3 p-10 text-center">
+          <p className="posh-card-title">Could not load this order right now.</p>
+          <p className="posh-muted text-sm">Please try again in a moment.</p>
+          <Link href={`/orders/${params.id}`} className="posh-btn inline-block">
             Retry
           </Link>
         </div>
@@ -91,33 +88,28 @@ export default async function OrderDetailPage({ params }: { params: { id: string
 
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="posh-body mx-auto max-w-4xl space-y-5">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">My Orders</p>
-          <h1 className="text-2xl font-bold text-slate-900">Order #{order.id.slice(0, 8)}</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="posh-eyebrow">My Orders</p>
+          <h1 className="posh-page-title mt-2">Order #{order.id.slice(0, 8)}</h1>
+          <p className="posh-subtitle mt-2">
             {order.supplierName} · Delivery: {order.deliveryDate}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <OrderStatusBadge status={order.status} />
-          {order.isAggregated ? (
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-              Group Order
-            </span>
-          ) : null}
+          {order.isAggregated ? <span className="posh-status">Group Order</span> : null}
           {order.paymentLinkAvailable ? (
-
-            <Link href={order.paymentLink} className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+            <Link href={order.paymentLink} className="posh-btn">
               Open payment link
             </Link>
           ) : null}
         </div>
-      </div>
+      </header>
 
       {order.status === "PROCESSING" ? (
-        <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        <div className="rounded-2xl border border-black/15 bg-black/[0.03] px-4 py-3 text-sm font-medium text-black/70">
           Supplier confirmed this enquiry. WhatsApp and in-app updates will continue as the order moves forward.
         </div>
       ) : null}
@@ -131,21 +123,21 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       ) : null}
 
       {order.status === "CANCELLED" ? (
-        <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <div className="rounded-2xl border border-black bg-white px-4 py-3 text-sm font-bold text-black">
           Supplier declined this enquiry. You can review the details and place a fresh order if needed.
         </div>
       ) : null}
 
       {order.isAggregated ? (
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          <p className="font-semibold">This is a Group &amp; Save order</p>
-          <p className="mt-1 text-emerald-700">
+        <div className="rounded-2xl border border-black/15 bg-black/[0.03] px-4 py-3 text-sm text-black">
+          <p className="posh-card-title text-base">This is a Group &amp; Save order</p>
+          <p className="mt-1 font-medium text-black/70">
             {order.poolLocked
               ? `Pool locked${order.priceAfterAggregation ? ` at INR ${order.priceAfterAggregation.toLocaleString("en-IN")}/unit` : ""}. This order will now proceed through the standard fulfilment stages below.`
               : "This order is still pooling with other builders to unlock a better price. It will convert once the pool locks."}
           </p>
           {order.priceBeforeAggregation && order.priceAfterAggregation && order.priceBeforeAggregation > order.priceAfterAggregation ? (
-            <p className="mt-1 text-xs font-semibold text-emerald-800">
+            <p className="mt-2 text-xs font-bold text-black">
               You saved INR {(order.priceBeforeAggregation - order.priceAfterAggregation).toLocaleString("en-IN")}/unit
             </p>
           ) : null}
@@ -155,19 +147,16 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       {/* Digital Purchase Order — additive layer on top of existing enquiry/order tracking */}
 
       {order.quoteAccepted ? (
-        <div className="panel space-y-3 p-5">
-          <h2 className="text-lg font-semibold text-slate-800">Purchase Order</h2>
+        <div className="posh-card space-y-3 p-6">
+          <h2 className="posh-card-title">Purchase Order</h2>
           {order.purchaseOrder ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-slate-600">
+              <p className="text-sm font-semibold text-black/70">
                 {order.purchaseOrder.poNumber}
                 {order.purchaseOrder.version > 1 ? ` (v${order.purchaseOrder.version})` : ""} ·{" "}
-                <span className="font-semibold">{order.purchaseOrder.status}</span>
+                <span className="font-bold text-black">{order.purchaseOrder.status}</span>
               </p>
-              <Link
-                href={`/purchase-orders/${order.purchaseOrder.id}`}
-                className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-              >
+              <Link href={`/purchase-orders/${order.purchaseOrder.id}`} className="posh-btn-ghost">
                 View Purchase Order
               </Link>
             </div>
@@ -178,53 +167,53 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       ) : null}
 
       <div className="grid gap-5 lg:grid-cols-[1.5fr_0.9fr]">
-        <section className="panel p-5 space-y-4">
+        <section className="posh-card space-y-4 p-6">
           <div>
-            <h2 className="text-lg font-semibold text-slate-800">Enquiry items</h2>
-            <p className="text-sm text-slate-500">This order starts as a supplier enquiry and becomes payable after supplier confirmation.</p>
+            <h2 className="posh-card-title">Enquiry items</h2>
+            <p className="posh-subtitle mt-1">This order starts as a supplier enquiry and becomes payable after supplier confirmation.</p>
           </div>
-          <div className="divide-y divide-slate-100 rounded-xl border border-slate-100">
+          <div className="divide-y divide-black/10 rounded-xl border border-black/10">
             {order.items.map((item) => (
               <div key={item.id} className="flex items-center justify-between px-4 py-3 text-sm">
                 <div>
-                  <p className="font-medium text-slate-800">{item.name}</p>
-                  <p className="text-xs text-slate-400">
+                  <p className="font-bold text-black">{item.name}</p>
+                  <p className="posh-label mt-1">
                     {item.quantity} {item.unit} · INR {item.unitPrice.toLocaleString("en-IN")}/unit
                   </p>
                 </div>
-                <p className="font-semibold text-slate-900">INR {(item.quantity * item.unitPrice).toLocaleString("en-IN")}</p>
+                <p className="font-bold text-black">INR {(item.quantity * item.unitPrice).toLocaleString("en-IN")}</p>
               </div>
             ))}
           </div>
-          <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm">
-            <span className="font-medium text-slate-600">Total</span>
-            <span className="font-bold text-slate-900">INR {order.total.toLocaleString("en-IN")}</span>
+          <div className="flex items-center justify-between rounded-xl border border-black/10 bg-black/[0.03] px-4 py-3 text-sm">
+            <span className="posh-label">Total</span>
+            <span className="text-base font-bold text-black">INR {order.total.toLocaleString("en-IN")}</span>
           </div>
         </section>
 
         <aside className="space-y-4">
-          <div className="panel p-5">
-            <h2 className="text-lg font-semibold text-slate-800">Status timeline</h2>
+          <div className="posh-card p-6">
+            <h2 className="posh-card-title">Status timeline</h2>
             <div className="mt-4">
               <OrderTimeline status={order.status} isAggregated={order.isAggregated} poolLocked={order.poolLocked} />
 
             </div>
           </div>
 
-          <div className="panel p-5 space-y-3">
-            <h2 className="text-lg font-semibold text-slate-800">Payment</h2>
-            <p className="text-sm text-slate-500">
+          <div className="posh-card space-y-3 p-6">
+            <h2 className="posh-card-title">Payment</h2>
+            <p className="posh-subtitle">
               {order.status === "CANCELLED"
                 ? "This enquiry was declined, so payment is not available."
                 : order.paymentLinkAvailable
                 ? "Supplier has confirmed this enquiry. The payment link is now enabled."
                 : "Waiting for supplier confirmation before payment becomes available."}
             </p>
-            <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Payment status: <span className="font-semibold text-slate-900">{order.paymentStatus}</span>
+            <div className="rounded-xl border border-black/10 bg-black/[0.03] px-4 py-3 text-sm font-medium text-black/70">
+              Payment status: <span className="font-bold text-black">{order.paymentStatus}</span>
             </div>
             {order.paymentLinkAvailable ? (
-              <Link href={order.paymentLink} className="block rounded-lg bg-blue-700 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-blue-800">
+              <Link href={order.paymentLink} className="posh-btn block text-center">
                 Open payment link
               </Link>
             ) : null}

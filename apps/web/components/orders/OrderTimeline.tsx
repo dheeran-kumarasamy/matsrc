@@ -19,9 +19,9 @@ type OrderTimelineProps = {
 export default function OrderTimeline({ status, isAggregated, poolLocked }: OrderTimelineProps) {
   if (status === "CANCELLED") {
     return (
-      <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800">
-        <p className="font-semibold">Enquiry declined</p>
-        <p className="mt-1 text-rose-700">The supplier declined this enquiry before confirmation. You can place a new request with another supplier.</p>
+      <div className="rounded-2xl border border-black bg-white p-4 text-sm text-black">
+        <p className="font-bold">Enquiry declined</p>
+        <p className="mt-1 font-medium text-black/70">The supplier declined this enquiry before confirmation. You can place a new request with another supplier.</p>
       </div>
     );
   }
@@ -46,17 +46,19 @@ export default function OrderTimeline({ status, isAggregated, poolLocked }: Orde
     <div className="relative">
       {poolingSteps.map((step, i) => (
         <div key={step.key} className="flex gap-4 pb-6 last:pb-0 relative">
-          <div className={`absolute left-3.5 top-7 bottom-0 w-0.5 ${step.done ? "bg-emerald-600" : "bg-slate-100"}`} />
+          {/* Monochrome rail: completed steps are solid black, pending ones a
+              faint black wash (site-wide black & white palette). */}
+          <div className={`absolute left-3.5 top-7 bottom-0 w-0.5 ${step.done ? "bg-black" : "bg-black/10"}`} />
           <div
             className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold z-10 ${
-              step.done ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-400"
+              step.done ? "bg-black text-white" : "bg-black/[0.06] text-black/40"
             }`}
           >
             {step.done ? "✓" : i + 1}
           </div>
           <div className="pt-0.5">
-            <p className={`text-sm font-medium ${step.done ? "text-slate-800" : "text-slate-400"}`}>{step.label}</p>
-            <p className="text-xs text-slate-400">{step.desc}</p>
+            <p className={`text-sm font-bold ${step.done ? "text-black" : "text-black/40"}`}>{step.label}</p>
+            <p className="text-xs font-medium text-black/45">{step.desc}</p>
           </div>
         </div>
       ))}
@@ -68,15 +70,15 @@ export default function OrderTimeline({ status, isAggregated, poolLocked }: Orde
           <div key={step.status} className="flex gap-4 pb-6 last:pb-0 relative">
             {/* Vertical line */}
             {i < steps.length - 1 && (
-              <div className={`absolute left-3.5 top-7 bottom-0 w-0.5 ${done ? "bg-blue-700" : "bg-slate-100"}`} />
+              <div className={`absolute left-3.5 top-7 bottom-0 w-0.5 ${done ? "bg-black" : "bg-black/10"}`} />
             )}
             {/* Dot */}
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold z-10 ${active ? "bg-blue-700 text-white ring-4 ring-blue-100" : done ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-400"}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold z-10 ${active ? "bg-black text-white ring-4 ring-black/10" : done ? "bg-black text-white" : "bg-black/[0.06] text-black/40"}`}>
               {done ? "✓" : i + 1}
             </div>
             <div className="pt-0.5">
-              <p className={`text-sm font-medium ${done ? "text-slate-800" : "text-slate-400"}`}>{step.label}</p>
-              <p className="text-xs text-slate-400">{step.desc}</p>
+              <p className={`text-sm font-bold ${done ? "text-black" : "text-black/40"}`}>{step.label}</p>
+              <p className="text-xs font-medium text-black/45">{step.desc}</p>
             </div>
           </div>
         );

@@ -55,19 +55,19 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
   const otherSuppliersCount = siblings.filter((listing) => listing.supplierId !== product.supplierId).length;
 
   return (
-    <div className="space-y-6">
-      <nav className="flex items-center gap-2 text-xs text-slate-400">
-        <Link href="/products" className="hover:text-blue-700">
+    <div className="posh-body space-y-6">
+      <nav className="posh-label flex items-center gap-2">
+        <Link href="/products" className="hover:text-black hover:underline">
           Materials
         </Link>
         <span>/</span>
-        <span className="text-slate-600">{product.name}</span>
+        <span className="text-black">{product.name}</span>
       </nav>
 
       <div className="grid gap-6 lg:grid-cols-[1.5fr_0.9fr]">
         <section className="space-y-5">
-          <div className="panel overflow-hidden p-0">
-            <div className="flex h-56 w-full items-center justify-center overflow-hidden bg-slate-100">
+          <div className="posh-card overflow-hidden p-0">
+            <div className="flex h-56 w-full items-center justify-center overflow-hidden bg-black/[0.04]">
               {imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
@@ -78,55 +78,53 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
               )}
             </div>
 
-            <div className="bg-gradient-to-br from-slate-50 to-white p-6">
+            <div className="bg-white p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Supplier Listing</p>
-                  <h1 className="text-3xl font-bold text-slate-900">{product.name}</h1>
-                  <p className="text-sm text-slate-500">
+                <div>
+                  <p className="posh-eyebrow">Supplier Listing</p>
+                  <h1 className="posh-page-title mt-2">{product.name}</h1>
+                  <p className="posh-subtitle mt-2">
                     {product.category} · {product.grade} · {product.unit}
                   </p>
                 </div>
-                <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                  Live enquiry pricing
-                </div>
+                <span className="posh-status">Live enquiry pricing</span>
               </div>
               {otherSuppliersCount > 0 ? (
-                <p className="mt-3 text-xs text-slate-500">
+                <p className="posh-muted mt-3 text-xs">
                   Showing the lowest price across {otherSuppliersCount + 1} verified suppliers for this product.
                 </p>
               ) : null}
             </div>
 
-            <div className="grid gap-4 border-t border-slate-100 p-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 border-t border-black/10 p-6 sm:grid-cols-2 lg:grid-cols-3">
               <div>
-                <p className="text-xs text-slate-400">Base price</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">{product.price}</p>
+                <p className="posh-label">Base price</p>
+                <p className="posh-card-title mt-1">{product.price}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-400">Stock</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">{product.stock}</p>
+                <p className="posh-label">Stock</p>
+                <p className="posh-card-title mt-1">{product.stock}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-400">Maximum serviceable</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">{product.maxServiceableQty}</p>
+                <p className="posh-label">Maximum serviceable</p>
+                <p className="posh-card-title mt-1">{product.maxServiceableQty}</p>
               </div>
             </div>
           </div>
 
-          <div className="panel p-5">
-            <h2 className="text-lg font-semibold text-slate-900">Pricing tiers</h2>
-            <p className="mt-1 text-sm text-slate-500">The enquiry value updates automatically as quantity changes.</p>
+          <div className="posh-card p-6">
+            <h2 className="posh-card-title">Pricing tiers</h2>
+            <p className="posh-subtitle mt-1">The enquiry value updates automatically as quantity changes.</p>
             <div className="mt-4 grid gap-3">
               {product.pricingTiers.map((tier) => (
-                <div key={`${tier.minQty}-${tier.maxQty}`} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm">
+                <div key={`${tier.minQty}-${tier.maxQty}`} className="flex items-center justify-between rounded-xl border border-black/10 bg-black/[0.03] px-4 py-3 text-sm">
                   <div>
-                    <p className="font-medium text-slate-800">
+                    <p className="font-bold text-black">
                       {tier.minQty} - {tier.maxQty} {product.unit}
                     </p>
-                    <p className="text-xs text-slate-400">Applicable quantity band</p>
+                    <p className="posh-label mt-1">Applicable quantity band</p>
                   </div>
-                  <p className="font-semibold text-slate-900">₹{parseNumericLabel(tier.price).toLocaleString("en-IN")}</p>
+                  <p className="font-bold text-black">₹{parseNumericLabel(tier.price).toLocaleString("en-IN")}</p>
                 </div>
               ))}
             </div>
@@ -138,17 +136,14 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
                 canonicalProductId={product.canonicalProductId}
                 basePrice={basePrice}
               />
-              <div className="panel flex items-center justify-between p-5">
+              <div className="posh-card flex flex-wrap items-center justify-between gap-4 p-6">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Price Desk</h2>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <h2 className="posh-card-title">Price Desk</h2>
+                  <p className="posh-subtitle mt-1">
                     Buy/Hold/Wait signal, forecast, landed cost across suppliers, and live market intelligence.
                   </p>
                 </div>
-                <Link
-                  href={`/products/${params.slug}/report`}
-                  className="whitespace-nowrap rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
-                >
+                <Link href={`/products/${params.slug}/report`} className="posh-btn whitespace-nowrap">
                   Open Price Report
                 </Link>
               </div>
@@ -166,7 +161,7 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
             maxServiceableQty={Math.max(maxServiceableQty, 1)}
             pricingTiers={product.pricingTiers.length > 0 ? product.pricingTiers : [{ minQty: "1", maxQty: String(Math.max(maxServiceableQty, 1)), price: String(basePrice) }]}
           />
-          <div className="panel p-5">
+          <div className="posh-card p-6">
             <WatchlistButton productId={product.id} />
           </div>
         </aside>

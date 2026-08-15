@@ -36,14 +36,11 @@ export function PriceIntelligenceEmptyState({
 }) {
   const copy = EMPTY_REASON_COPY[reason];
   return (
-    <div role="status" className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
-      <p className="text-sm font-semibold text-slate-700">{copy.title}</p>
-      <p className="mt-1 text-sm text-slate-500">{copy.description}</p>
+    <div role="status" className="rounded-xl border border-black/10 bg-black/[0.03] p-5 text-center">
+      <p className="posh-card-title text-base">{copy.title}</p>
+      <p className="posh-subtitle mt-1">{copy.description}</p>
       {onRequestQuote ? (
-        <button
-          onClick={onRequestQuote}
-          className="mt-4 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
-        >
+        <button onClick={onRequestQuote} className="posh-btn mt-4">
           Request Quote
         </button>
       ) : null}
@@ -61,23 +58,17 @@ export function PriceIntelligenceErrorState({
   onRequestQuote?: () => void;
 }) {
   return (
-    <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-5 text-center">
-      <p className="text-sm font-semibold text-rose-700">Couldn&apos;t load market data</p>
-      <p className="mt-1 text-sm text-rose-600">
+    <div role="alert" className="rounded-xl border border-black bg-white p-5 text-center">
+      <p className="posh-card-title text-base">Couldn&apos;t load market data</p>
+      <p className="posh-subtitle mt-1">
         {message || "Something went wrong while fetching price intelligence. Please try again."}
       </p>
       <div className="mt-4 flex items-center justify-center gap-3">
-        <button
-          onClick={onRetry}
-          className="rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100"
-        >
+        <button onClick={onRetry} className="posh-btn-ghost">
           Retry
         </button>
         {onRequestQuote ? (
-          <button
-            onClick={onRequestQuote}
-            className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
-          >
+          <button onClick={onRequestQuote} className="posh-btn">
             Request Quote
           </button>
         ) : null}

@@ -5,5 +5,5 @@ import { redirect } from "next/navigation";
 // layout header, rather than a separate full page. Redirect any stray
 // deep-links to /notifications back to the dashboard.
 export default function NotificationsPage() {
-  redirect("/dashboard");
+  redirect("/newdashboard");
 }

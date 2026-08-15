@@ -1,12 +1,15 @@
 type Status = "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
 
+// Monochrome status treatment (site-wide black & white palette). Progression
+// is expressed with contrast rather than hue: early states are faint chips,
+// in-transit states are outlined, and terminal states are solid black.
 const colours: Record<Status, string> = {
-  PLACED: "bg-blue-50 text-blue-700 border-blue-200",
-  PROCESSING: "bg-amber-50 text-amber-700 border-amber-200",
-  DISPATCHED: "bg-purple-50 text-purple-700 border-purple-200",
-  OUT_FOR_DELIVERY: "bg-orange-50 text-orange-700 border-orange-200",
-  DELIVERED: "bg-green-50 text-green-700 border-green-200",
-  CANCELLED: "bg-red-50 text-red-700 border-red-200",
+  PLACED: "bg-black/[0.04] text-black/60 border-black/15",
+  PROCESSING: "bg-white text-black border-black/25",
+  DISPATCHED: "bg-white text-black border-black/50",
+  OUT_FOR_DELIVERY: "bg-white text-black border-black",
+  DELIVERED: "bg-black text-white border-black",
+  CANCELLED: "bg-white text-black/50 border-black/20 line-through",
 };
 
 const labels: Record<Status, string> = {
@@ -20,7 +23,9 @@ const labels: Record<Status, string> = {
 
 export default function OrderStatusBadge({ status }: { status: Status }) {
   return (
-    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${colours[status]}`}>
+    <span
+      className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${colours[status]}`}
+    >
       {labels[status]}
     </span>
   );

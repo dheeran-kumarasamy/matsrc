@@ -16,7 +16,7 @@ import {
 
 
 const links = [
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/newdashboard", label: "Dashboard" },
   { href: "/sourcing", label: "AI Sourcing Assistant" },
   { href: "/products", label: "Browse Materials" },
   { href: "/orders", label: "My Orders" },

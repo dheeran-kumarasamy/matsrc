@@ -33,29 +33,29 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
-      <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Payment Link</p>
-        <h1 className="text-2xl font-bold text-slate-900">Order #{order.id.slice(0, 8)}</h1>
-        <p className="mt-1 text-sm text-slate-500">{order.supplierName}</p>
-      </div>
+    <div className="posh-body mx-auto max-w-2xl space-y-5">
+      <header>
+        <p className="posh-eyebrow">Payment Link</p>
+        <h1 className="posh-page-title mt-2">Order #{order.id.slice(0, 8)}</h1>
+        <p className="posh-subtitle mt-2">{order.supplierName}</p>
+      </header>
 
-      <div className="panel p-6 space-y-4">
-        <div className={`rounded-2xl p-4 text-sm ${order.status === "CANCELLED" ? "border border-rose-200 bg-rose-50 text-rose-800" : "border border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+      <div className="posh-card space-y-4 p-6">
+        <div className={`rounded-2xl p-4 text-sm font-medium ${order.status === "CANCELLED" ? "border border-black bg-white text-black" : "border border-black/15 bg-black/[0.03] text-black/70"}`}>
           {order.status === "CANCELLED"
             ? "This enquiry was declined, so payment cannot be completed for this order."
             : order.paymentLinkAvailable
             ? "Payment link is enabled because the supplier confirmed this enquiry."
             : "Payment is not yet enabled for this enquiry."}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 text-sm">
-          <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Payment status</p>
-            <p className="mt-1 font-semibold text-slate-900">{order.paymentStatus}</p>
+        <div className="grid gap-3 text-sm sm:grid-cols-2">
+          <div className="rounded-xl border border-black/10 bg-black/[0.03] px-4 py-3">
+            <p className="posh-label">Payment status</p>
+            <p className="mt-1 font-bold text-black">{order.paymentStatus}</p>
           </div>
-          <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Enquiry value</p>
-            <p className="mt-1 font-semibold text-slate-900">INR {order.total.toLocaleString("en-IN")}</p>
+          <div className="rounded-xl border border-black/10 bg-black/[0.03] px-4 py-3">
+            <p className="posh-label">Enquiry value</p>
+            <p className="mt-1 font-bold text-black">INR {order.total.toLocaleString("en-IN")}</p>
           </div>
         </div>
 
@@ -71,29 +71,26 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
         ) : null}
 
         <div className="flex flex-wrap gap-3">
-          <Link href={`/orders/${order.id}`} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+          <Link href={`/orders/${order.id}`} className="posh-btn-ghost">
             Back to order
           </Link>
-          <Link href="/orders" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
+          <Link href="/orders" className="posh-btn">
             View all orders
           </Link>
         </div>
       </div>
 
       {order.quoteAccepted ? (
-        <div className="panel space-y-3 p-6">
-          <h2 className="text-lg font-semibold text-slate-800">Purchase Order</h2>
+        <div className="posh-card space-y-3 p-6">
+          <h2 className="posh-card-title">Purchase Order</h2>
           {order.purchaseOrder ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-slate-600">
+              <p className="text-sm font-semibold text-black/70">
                 {order.purchaseOrder.poNumber}
                 {order.purchaseOrder.version > 1 ? ` (v${order.purchaseOrder.version})` : ""} ·{" "}
-                <span className="font-semibold">{order.purchaseOrder.status}</span>
+                <span className="font-bold text-black">{order.purchaseOrder.status}</span>
               </p>
-              <Link
-                href={`/purchase-orders/${order.purchaseOrder.id}`}
-                className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-              >
+              <Link href={`/purchase-orders/${order.purchaseOrder.id}`} className="posh-btn-ghost">
                 View Purchase Order
               </Link>
             </div>

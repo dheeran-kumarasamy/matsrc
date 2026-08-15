@@ -143,7 +143,7 @@ export default function NearbyDistrictComparisonTable({
                   <MethodBadge label={row.methodLabel} />
                 </td>
                 <td className="py-2 text-slate-500">{row.priceDate}</td>
-                <td className={`py-2 font-medium ${row.diffPct !== null && row.diffPct > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                <td className={`py-2 font-bold ${row.diffPct !== null && row.diffPct > 0 ? "text-black" : "text-black/55"}`}>
                   {row.diffPct !== null ? `${row.diffPct > 0 ? "+" : ""}${row.diffPct.toFixed(1)}%` : "—"}
                 </td>
               </tr>

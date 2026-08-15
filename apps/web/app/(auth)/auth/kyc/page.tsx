@@ -35,7 +35,7 @@ export default function KycPage() {
       });
       const res = await fetch("/api/kyc/upload", { method: "POST", body: form });
       if (!res.ok) throw new Error((await res.json()).message);
-      router.push("/dashboard");
+      router.push("/newdashboard");
     } catch (err: any) {
       setError(err.message ?? "Upload failed");
     } finally {

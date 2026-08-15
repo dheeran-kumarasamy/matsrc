@@ -50,7 +50,7 @@ export default function MarketTrendChart({
 
   if (trend.length === 0) {
     return (
-      <div className="flex h-[160px] items-center justify-center rounded-lg bg-slate-50 text-sm text-slate-400">
+      <div className="posh-muted flex h-[160px] items-center justify-center rounded-xl border border-black/10 bg-black/[0.03] text-sm">
         Not enough history yet to show a price trend.
       </div>
     );
@@ -59,16 +59,16 @@ export default function MarketTrendChart({
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-800">Market trend</h3>
-        <div role="tablist" aria-label="Trend range" className="flex gap-1 rounded-full bg-slate-100 p-1">
+        <h3 className="posh-card-title text-base">Market trend</h3>
+        <div role="tablist" aria-label="Trend range" className="flex gap-1 rounded-full bg-black/[0.05] p-1">
           {(Object.keys(RANGE_MONTHS) as RangeKey[]).map((key) => (
             <button
               key={key}
               role="tab"
               aria-selected={range === key}
               onClick={() => handleRangeChange(key)}
-              className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                range === key ? "bg-blue-700 text-white" : "text-slate-500 hover:text-blue-700"
+              className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
+                range === key ? "bg-black text-white" : "text-black/55 hover:text-black"
               }`}
             >
               {key === "ALL" ? "All" : key}
@@ -79,17 +79,22 @@ export default function MarketTrendChart({
       <div className="mt-3">
         <ResponsiveContainer width="100%" height={220}>
           <ComposedChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#00000010" />
-            <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} />
+            {/* Monochrome chart palette (site-wide black & white design). */}
+            <CartesianGrid strokeDasharray="3 3" stroke="#00000012" />
+            <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#000000" }} tickLine={false} stroke="#000000" />
             <YAxis
-              tick={{ fontSize: 10 }}
+              tick={{ fontSize: 10, fill: "#000000" }}
               tickLine={false}
               axisLine={false}
               tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
             />
-            <Tooltip formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Median"]} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Line type="monotone" dataKey="median" name="Median price" stroke="#1d4ed8" strokeWidth={2} dot={false} />
+            <Tooltip
+              formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Median"]}
+              labelStyle={{ color: "#000000" }}
+              itemStyle={{ color: "#000000" }}
+            />
+            <Legend wrapperStyle={{ fontSize: 11, color: "#000000" }} />
+            <Line type="monotone" dataKey="median" name="Median price" stroke="#000000" strokeWidth={2} dot={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

@@ -33,11 +33,13 @@ type PurchaseOrderDetail = {
   exportUrl: string;
 };
 
+// Monochrome status treatment — matches the PO list page (site-wide black &
+// white palette); the terminal state is the only solid-black badge.
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: "bg-slate-100 text-slate-600 border-slate-200",
-  ISSUED: "bg-amber-50 text-amber-700 border-amber-200",
-  ACKNOWLEDGED: "bg-blue-50 text-blue-700 border-blue-200",
-  FULFILLED: "bg-green-50 text-green-700 border-green-200",
+  DRAFT: "bg-black/[0.04] text-black/60 border-black/15",
+  ISSUED: "bg-white text-black border-black/20",
+  ACKNOWLEDGED: "bg-white text-black border-black",
+  FULFILLED: "bg-black text-white border-black",
 };
 
 // UF-04/PO: In-app review, edit, digital approval and issuance of a Purchase Order.
@@ -124,7 +126,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
       </div>
 
       {po.approvedAt ? (
-        <div className="panel border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+        <div className="panel border-black/20 bg-black/[0.04] p-4 text-sm font-medium text-black">
           Digitally approved{po.approvedBy ? ` by ${po.approvedBy}` : ""} on{" "}
           {new Date(po.approvedAt).toLocaleString()}. This OTP-based approval is the legal e-signature equivalent —
           no physical signature was required.
@@ -266,7 +268,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                 <button
                   onClick={approve}
                   disabled={approving || otp.length !== 6}
-                  className="flex-1 rounded-md bg-blue-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  className="flex-1 rounded-md bg-black px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
                 >
                   {approving ? "Approving..." : "Confirm & Issue PO"}
                 </button>
@@ -281,7 +283,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
           ) : (
             <button
               onClick={() => setShowOtp(true)}
-              className="rounded-md bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/85"
             >
               Approve & Issue PO
             </button>

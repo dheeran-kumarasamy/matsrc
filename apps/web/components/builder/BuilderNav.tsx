@@ -47,13 +47,13 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
             onClick={onNavigate}
             className={`relative flex min-h-[44px] items-center rounded-xl px-4 text-[13px] tracking-[0.01em] transition-all duration-200 ${
               active
-                ? "bg-blue-50 font-bold text-blue-700 shadow-sm ring-1 ring-inset ring-blue-100"
-                : "font-semibold text-slate-500 hover:bg-slate-50 hover:font-bold hover:text-slate-900"
+                ? "bg-black/[0.06] font-bold text-black shadow-sm ring-1 ring-inset ring-black/10"
+                : "font-semibold text-black/55 hover:bg-black/[0.03] hover:font-bold hover:text-black"
             }`}
           >
             {/* Posh accent rail on the active item */}
             {active ? (
-              <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-blue-700" />
+              <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-black" />
             ) : null}
             {link.label}
           </Link>
@@ -89,15 +89,15 @@ export function BuilderNavMobileTrigger() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open navigation menu"
-        className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:border-blue-700 hover:text-blue-700 lg:hidden"
+        className="flex h-11 w-11 items-center justify-center rounded-lg border border-black/15 bg-white text-black transition hover:border-black lg:hidden"
       >
         <Menu size={20} />
       </button>
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent className="flex flex-col border border-slate-200 bg-white p-0">
+        <SheetContent className="flex flex-col border border-black/10 bg-white p-0">
           <SheetHeader>
-            <SheetTitle className="posh-nav-brandmark text-2xl text-slate-900">Builder Hub</SheetTitle>
+            <SheetTitle className="posh-nav-brandmark text-2xl text-black">Builder Hub</SheetTitle>
           </SheetHeader>
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
             <BrandBlock />

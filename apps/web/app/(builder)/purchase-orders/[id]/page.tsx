@@ -43,8 +43,8 @@ export default async function PurchaseOrderDetailPage({ params }: { params: { id
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
-      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Purchase Orders</p>
+    <div className="posh-body mx-auto max-w-4xl space-y-4">
+      <p className="posh-eyebrow">Purchase Orders</p>
       <PurchaseOrderApprovalCard po={po} />
     </div>
   );

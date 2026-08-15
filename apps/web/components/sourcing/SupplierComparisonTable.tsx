@@ -35,14 +35,14 @@ function ComparisonRow({
   return (
     <tr
       className={`border-b border-slate-100 transition-colors ${
-        isSelected ? "bg-blue-50/70" : "hover:bg-slate-50"
+        isSelected ? "bg-black/[0.04]" : "hover:bg-slate-50"
       }`}
     >
       <td className="px-4 py-3">
         <div className="flex items-center gap-1.5 font-medium text-slate-800">
           {row.supplierName}
           {row.verifiedBadge && (
-            <BadgeCheck className="h-3.5 w-3.5 text-blue-600" aria-label="Verified supplier" />
+            <BadgeCheck className="h-3.5 w-3.5 text-black" aria-label="Verified supplier" />
           )}
         </div>
         {row.supplierRegion && <div className="text-xs text-slate-500">{row.supplierRegion}</div>}
@@ -51,7 +51,7 @@ function ComparisonRow({
       <td className="px-4 py-3 text-right font-medium text-slate-800">
         {formatInr(row.estimatedLandedCost)}
         {row.dataGaps.includes("freight") && row.estimatedLandedCost !== null && (
-          <div className="text-[11px] font-normal text-amber-600">excl. freight</div>
+          <div className="text-[11px] font-normal text-black">excl. freight</div>
         )}
       </td>
 
@@ -80,7 +80,7 @@ function ComparisonRow({
       <td className="px-4 py-3">
         <span
           className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-            isTop ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"
+            isTop ? "bg-black text-white" : "border border-black/15 bg-white text-black/60"
           }`}
         >
           {isTop ? "Recommended" : "Alternative"}
@@ -98,8 +98,8 @@ function ComparisonRow({
           onClick={() => onSelect(row.id)}
           className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
             isSelected
-              ? "border-blue-600 bg-blue-600 text-white"
-              : "border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-700"
+              ? "border-black bg-black text-white"
+              : "border-slate-200 text-slate-600 hover:border-black hover:text-black"
           }`}
           aria-pressed={isSelected}
         >

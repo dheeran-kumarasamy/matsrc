@@ -28,15 +28,15 @@ export default function RecommendationCard({
   unit,
 }: Props) {
   return (
-    <section className="panel border-blue-200 bg-blue-50/40 p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+    <section className="panel border-black/20 bg-black/[0.04] p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-black">
         {headline ?? "Recommended option"}
       </p>
 
       <div className="mt-1 flex items-center gap-1.5">
         <h2 className="text-lg font-semibold text-slate-900">{recommendation.supplierName}</h2>
         {recommendation.verifiedBadge && (
-          <BadgeCheck className="h-4 w-4 text-blue-600" aria-label="Verified supplier" />
+          <BadgeCheck className="h-4 w-4 text-black" aria-label="Verified supplier" />
         )}
       </div>
 
@@ -107,7 +107,7 @@ export default function RecommendationCard({
       )}
 
       {recommendation.dataGaps.length > 0 && (
-        <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">
+        <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-black/[0.04] p-2 text-xs text-black">
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>
             I don&apos;t currently have verified data for:{" "}

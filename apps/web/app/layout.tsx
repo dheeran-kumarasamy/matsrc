@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
 import { auth } from "@/auth";
 
-
-const inter = Inter({ subsets: ["latin"] });
+// Typography is intentionally centralised in app/globals.css (Work Sans for
+// body copy, Instrument Serif for display headings — both loaded via the
+// Google Fonts import there). The previous `next/font` Inter class on <body>
+// overrode that base rule and left the app running two different font stacks
+// (Inter everywhere, Work Sans only where a component re-declared it), so it
+// is removed here to keep the font uniform across every surface.
 
 export const metadata: Metadata = {
   title: { default: "Buildohub.in", template: "%s | Buildohub.in" },
@@ -26,7 +29,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const session = await auth();
   return (
     <html lang="en">
-      <body className={`${inter.className} overflow-x-hidden`}>
+      <body className="overflow-x-hidden">
         <AuthProvider session={session}>
           {children}
         </AuthProvider>

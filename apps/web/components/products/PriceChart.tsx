@@ -31,24 +31,35 @@ export default function PriceChart({ priceHistory }: { priceHistory: PriceEntry[
           <button
             key={p}
             onClick={() => setPeriod(p)}
-            className={`text-xs px-3 py-1 rounded-full border transition-colors ${period === p ? "bg-blue-700 text-white border-blue-700" : "border-slate-200 text-slate-500 hover:border-blue-700"}`}
+            className={period === p ? "posh-chip-active" : "posh-chip"}
           >
             {p}D
           </button>
         ))}
       </div>
       {data.length === 0 ? (
-        <div className="h-[200px] flex items-center justify-center text-slate-300 text-sm">
+        <div className="posh-muted flex h-[200px] items-center justify-center text-sm">
           No price history for this period
         </div>
       ) : (
       <ResponsiveContainer width="100%" height={200}>
+        {/* Black-and-white chart palette — series, axes and grid all render in
+            black so charts match the site-wide monochrome design. */}
         <LineChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} />
-          <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-          <Tooltip formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Price"]} />
-          <Line type="monotone" dataKey="price" stroke="#1a4f8a" strokeWidth={2} dot={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#00000012" />
+          <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#000000" }} tickLine={false} stroke="#000000" />
+          <YAxis
+            tick={{ fontSize: 10, fill: "#000000" }}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
+          />
+          <Tooltip
+            formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Price"]}
+            labelStyle={{ color: "#000000" }}
+            itemStyle={{ color: "#000000" }}
+          />
+          <Line type="monotone" dataKey="price" stroke="#000000" strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
       )}

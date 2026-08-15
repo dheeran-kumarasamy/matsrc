@@ -40,11 +40,13 @@ type WatchlistItem = {
   recentEvaluations: RecentEvaluation[];
 };
 
+// Confidence is expressed in monochrome: HIGH is solid black, MEDIUM an
+// outlined chip, LOW a faded chip. No colour is used anywhere in the portal.
 function confidenceBadgeClass(confidence: string | null) {
-  if (confidence === "HIGH") return "bg-green-50 text-green-700 border-green-200";
-  if (confidence === "MEDIUM") return "bg-amber-50 text-amber-700 border-amber-200";
-  if (confidence === "LOW") return "bg-red-50 text-red-700 border-red-200";
-  return "bg-slate-50 text-slate-500 border-slate-200";
+  if (confidence === "HIGH") return "bg-black text-white border-black";
+  if (confidence === "MEDIUM") return "bg-white text-black border-black";
+  if (confidence === "LOW") return "bg-white text-black/50 border-black/20";
+  return "bg-white text-black/40 border-black/15";
 }
 
 // UF-09: Watchlist & Price Alerts — FR-07, FR-31
@@ -83,19 +85,25 @@ export default function WatchlistPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-900">Watchlist</h1>
-        <span className="text-xs text-slate-400 flex items-center gap-1">
+    <div className="posh-body space-y-5">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="posh-eyebrow">Price desk</p>
+          <h1 className="posh-page-title mt-2">Watchlist</h1>
+          <p className="posh-subtitle mt-2 max-w-2xl">
+            Track the materials you buy most and get told the moment they hit your target price.
+          </p>
+        </div>
+        <span className="posh-label flex items-center gap-1.5">
           <Bell size={12} /> WhatsApp alerts enabled
         </span>
-      </div>
+      </header>
 
-      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3">
-        <TrendingDown className="text-blue-500 shrink-0 mt-0.5" size={18} />
+      <div className="posh-card flex gap-3 p-5">
+        <TrendingDown className="mt-0.5 shrink-0 text-black" size={18} />
         <div>
-          <p className="text-sm font-medium text-blue-800">How price alerts work</p>
-          <p className="text-xs text-blue-600 mt-0.5">
+          <p className="posh-card-title text-base">How price alerts work</p>
+          <p className="mt-1 text-xs font-medium text-black/60">
             Set a target price on any material. Once a verified market price for your area reaches your target, we
             send a WhatsApp alert. We only alert on confident, verified prices — never estimates or low-confidence
             data. (FR-07, FR-31)
@@ -105,33 +113,33 @@ export default function WatchlistPage() {
 
       {/* Watchlist items */}
       {items.length === 0 ? (
-        <div className="panel p-10 text-center">
-          <p className="text-slate-400 text-sm">No items in watchlist.</p>
-          <Link href="/products" className="mt-3 inline-block text-sm text-blue-700 hover:underline">
+        <div className="posh-card p-10 text-center">
+          <p className="posh-card-title">No items in watchlist</p>
+          <Link href="/products" className="posh-link mt-4 inline-block">
             Browse and watchlist materials →
           </Link>
         </div>
       ) : (
-        <div className="panel divide-y divide-slate-100">
+        <div className="posh-card divide-y divide-black/10">
           {items.map((item) => {
             const pi = item.priceIntelligence;
             return (
-              <div key={item.id} className="p-4 space-y-3">
+              <div key={item.id} className="space-y-3 p-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">{item.name}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="text-base font-bold tracking-tight text-black">{item.name}</p>
+                    <p className="mt-1 text-xs font-semibold text-black/60">
                       Listing price: INR {item.basePrice.toLocaleString("en-IN")} / {item.unit}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <p className="text-xs text-slate-600">
+                  <div className="flex items-center gap-4">
+                    <p className="posh-label">
                       Target: {item.targetPrice ? `INR ${item.targetPrice.toLocaleString("en-IN")}` : "Not set"}
                     </p>
                     <button
                       disabled={loadingId === item.id}
                       onClick={() => void handleRemove(item.productId, item.id)}
-                      className="text-slate-300 hover:text-red-500 transition-colors disabled:opacity-40"
+                      className="text-black/30 transition-colors hover:text-black disabled:opacity-40"
                       aria-label={`Remove ${item.name} from watchlist`}
                     >
                       <Trash2 size={16} />
@@ -141,13 +149,13 @@ export default function WatchlistPage() {
 
                 {/* Price Intelligence panel */}
                 {pi?.resolved ? (
-                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-                    <span className="font-medium text-slate-700">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-black/10 bg-black/[0.03] p-3 text-xs">
+                    <span className="font-bold text-black">
                       Market price: INR {pi.currentPricePerBaseUnit?.toLocaleString("en-IN")} / {pi.baseUnit}
                     </span>
                     {pi.confidence && (
                       <span
-                        className={`px-2 py-0.5 rounded-full border text-[11px] font-medium ${confidenceBadgeClass(
+                        className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${confidenceBadgeClass(
                           pi.confidence
                         )}`}
                       >
@@ -155,18 +163,18 @@ export default function WatchlistPage() {
                       </span>
                     )}
                     {pi.methodLabel && (
-                      <span className="px-2 py-0.5 rounded-full border border-slate-200 bg-white text-[11px] text-slate-600">
+                      <span className="rounded-full border border-black/15 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-black/60">
                         {pi.methodLabel}
                       </span>
                     )}
-                    {pi.districtName && <span className="text-slate-400">{pi.districtName}</span>}
+                    {pi.districtName && <span className="font-semibold text-black/50">{pi.districtName}</span>}
                     {pi.isStale && (
-                      <span className="flex items-center gap-1 text-amber-600">
+                      <span className="flex items-center gap-1 font-bold text-black/60">
                         <Clock size={11} /> Stale
                       </span>
                     )}
                     {typeof pi.gapToTarget === "number" && item.targetPrice && (
-                      <span className={pi.gapToTarget <= 0 ? "text-green-600 font-medium" : "text-slate-500"}>
+                      <span className={pi.gapToTarget <= 0 ? "font-bold text-black" : "font-semibold text-black/50"}>
                         {pi.gapToTarget <= 0
                           ? "Target reached"
                           : `INR ${pi.gapToTarget.toLocaleString("en-IN")} above target`}
@@ -174,7 +182,7 @@ export default function WatchlistPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 flex items-center gap-2 text-xs text-slate-400">
+                  <div className="flex items-center gap-2 rounded-xl border border-black/10 bg-black/[0.03] p-3 text-xs font-medium text-black/45">
                     <AlertCircle size={12} />
                     {pi?.emptyReason === "NO_DISTRICT"
                       ? "Add a site with a city to get market price alerts for your area."
@@ -186,11 +194,11 @@ export default function WatchlistPage() {
 
                 {/* Alert history */}
                 {item.recentEvaluations.length > 0 && (
-                  <div className="text-[11px] text-slate-400 space-y-0.5">
+                  <div className="space-y-0.5 text-[11px] font-medium text-black/45">
                     {item.recentEvaluations.slice(0, 3).map((ev, idx) => (
                       <div key={idx} className="flex items-center gap-1.5">
                         <span>{new Date(ev.evaluatedAt).toLocaleDateString("en-IN")}:</span>
-                        <span className={ev.didTrigger ? "text-green-600" : "text-slate-400"}>
+                        <span className={ev.didTrigger ? "font-bold text-black" : "text-black/45"}>
                           {ev.didTrigger ? "Alert sent" : ev.suppressedReasonLabel ?? "No alert"}
                         </span>
                       </div>

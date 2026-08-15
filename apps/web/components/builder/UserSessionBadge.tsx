@@ -26,7 +26,7 @@ export default function UserSessionBadge() {
       <button
         onClick={() => router.push("/auth/login")}
         aria-label="Sign in"
-        className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-blue-700 hover:text-blue-700"
+        className="flex items-center gap-2 rounded-full border border-black/15 bg-white px-3 py-1.5 text-sm font-bold text-black transition hover:border-black"
       >
         <LogIn size={16} />
         <span className="hidden sm:inline">Sign in</span>
@@ -43,9 +43,9 @@ export default function UserSessionBadge() {
         onClick={() => setOpen((prev) => !prev)}
         aria-label={`Logged in as ${label}`}
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-blue-700 hover:text-blue-700"
+        className="flex items-center gap-2 rounded-full border border-black/15 bg-white px-2.5 py-1.5 text-sm font-bold text-black transition hover:border-black"
       >
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-700 text-xs font-bold text-white">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black text-xs font-bold text-white">
           {initial}
         </span>
         <span className="hidden max-w-[8rem] truncate sm:inline">{label}</span>
@@ -80,7 +80,7 @@ export default function UserSessionBadge() {
                 setOpen(false);
                 void signOut({ callbackUrl: "/auth/login" });
               }}
-              className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-red-600 transition hover:bg-red-50"
+              className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-bold text-black transition hover:bg-black/[0.05]"
             >
               <LogOut size={14} />
               Sign out

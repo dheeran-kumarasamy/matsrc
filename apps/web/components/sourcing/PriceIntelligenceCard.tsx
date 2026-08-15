@@ -37,17 +37,19 @@ function inr(v: number | null): string {
 }
 
 function TrendIcon({ direction }: { direction: string }) {
-  if (direction === "RISING") return <TrendingUp className="h-4 w-4 text-amber-600" />;
-  if (direction === "FALLING") return <TrendingDown className="h-4 w-4 text-green-600" />;
-  if (direction === "VOLATILE") return <AlertTriangle className="h-4 w-4 text-amber-600" />;
+  if (direction === "RISING") return <TrendingUp className="h-4 w-4 text-black" />;
+  if (direction === "FALLING") return <TrendingDown className="h-4 w-4 text-black" />;
+  if (direction === "VOLATILE") return <AlertTriangle className="h-4 w-4 text-black" />;
   return <Minus className="h-4 w-4 text-slate-400" />;
 }
 
+// Mono badges: the actionable signal (BUY_NOW) is solid black, the advisory
+// ones are outlined, and "no data" stays a faint chip.
 const TIMING_BADGE: Record<string, string> = {
-  BUY_NOW: "bg-green-100 text-green-800",
-  WAIT: "bg-amber-100 text-amber-800",
-  MONITOR: "bg-blue-100 text-blue-700",
-  INSUFFICIENT_DATA: "bg-slate-100 text-slate-600",
+  BUY_NOW: "bg-black text-white",
+  WAIT: "border border-black bg-white text-black",
+  MONITOR: "border border-black/20 bg-white text-black",
+  INSUFFICIENT_DATA: "bg-black/[0.04] text-black/50",
 };
 
 const TIMING_LABEL: Record<string, string> = {
@@ -57,11 +59,12 @@ const TIMING_LABEL: Record<string, string> = {
   INSUFFICIENT_DATA: "Insufficient data",
 };
 
+// Confidence uses black at decreasing opacity/weight instead of colour.
 const CONFIDENCE_COLOR: Record<string, string> = {
-  HIGH: "text-green-700",
-  MEDIUM: "text-amber-700",
-  LOW: "text-red-600",
-  INSUFFICIENT_DATA: "text-slate-500",
+  HIGH: "font-bold text-black",
+  MEDIUM: "font-semibold text-black/70",
+  LOW: "font-medium text-black/50",
+  INSUFFICIENT_DATA: "font-medium text-black/40",
 };
 
 export default function PriceIntelligenceCard({
@@ -89,7 +92,7 @@ export default function PriceIntelligenceCard({
           <dt className="text-[11px] uppercase tracking-wide text-slate-500">30-day average</dt>
           <dd className="text-sm text-slate-800">{inr(averagePrice)}</dd>
           {vsAveragePct !== null && (
-            <dd className={`text-[11px] font-medium ${vsAveragePct < 0 ? "text-green-600" : vsAveragePct > 0 ? "text-amber-600" : "text-slate-500"}`}>
+            <dd className={`text-[11px] font-medium ${vsAveragePct < 0 ? "text-black" : vsAveragePct > 0 ? "text-black" : "text-slate-500"}`}>
               {vsAveragePct >= 0 ? "+" : ""}{vsAveragePct.toFixed(1)}% vs avg
             </dd>
           )}

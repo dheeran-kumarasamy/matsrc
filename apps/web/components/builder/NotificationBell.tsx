@@ -122,12 +122,12 @@ export default function NotificationBell() {
         onClick={() => setOpen((prev) => !prev)}
         aria-label="Notifications"
         aria-expanded={open}
-        className="relative flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-blue-700 hover:text-blue-700"
+        className="relative flex items-center gap-2 rounded-full border border-black/15 bg-white px-3 py-1.5 text-sm font-bold text-black transition hover:border-black"
       >
         <Bell size={16} />
         <span className="hidden sm:inline">Alerts</span>
         {unreadCount > 0 ? (
-          <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold text-white">
+          <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-black px-1 text-[11px] font-bold text-white">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         ) : null}
@@ -143,7 +143,7 @@ export default function NotificationBell() {
                 <button
                   type="button"
                   onClick={handleMarkAllRead}
-                  className="text-xs font-semibold text-blue-700 hover:underline"
+                  className="text-xs font-bold text-black hover:underline"
                 >
                   Mark all as read
                 </button>
@@ -154,7 +154,7 @@ export default function NotificationBell() {
               {loading ? (
                 <p className="px-4 py-6 text-center text-xs text-slate-400">Loading alerts…</p>
               ) : error ? (
-                <p className="px-4 py-6 text-center text-xs text-red-500">Could not load alerts.</p>
+                <p className="px-4 py-6 text-center text-xs font-bold text-black">Could not load alerts.</p>
               ) : items.length === 0 ? (
                 <div className="px-4 py-8 text-center">
                   <p className="text-sm text-slate-500">You&apos;re all caught up.</p>
@@ -170,13 +170,13 @@ export default function NotificationBell() {
                         type="button"
                         onClick={() => handleItemClick(item)}
                         className={`flex w-full gap-2.5 px-4 py-3 text-left transition hover:bg-slate-50 ${
-                          !item.read ? "bg-blue-50/60" : ""
+                          !item.read ? "bg-black/[0.04]" : ""
                         }`}
                       >
                         {/* Unread/read marker */}
                         <span
                           className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${
-                            item.read ? "bg-transparent" : "bg-blue-700"
+                            item.read ? "bg-transparent" : "bg-black"
                           }`}
                           aria-hidden="true"
                         />

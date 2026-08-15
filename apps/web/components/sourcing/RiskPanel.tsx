@@ -27,15 +27,17 @@ const DATA_GAP_LABELS: Record<string, string> = {
 };
 
 function SeverityIcon({ severity }: { severity: "INFO" | "WARNING" | "CRITICAL" }) {
-  if (severity === "CRITICAL") return <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />;
-  if (severity === "WARNING") return <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />;
-  return <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />;
+  if (severity === "CRITICAL") return <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white" />;
+  if (severity === "WARNING") return <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-black" />;
+  return <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-black" />;
 }
 
+// Severity is expressed with contrast and weight, not colour: CRITICAL is a
+// solid black block, WARNING an outlined block, INFO a plain tinted block.
 function severityBg(severity: "INFO" | "WARNING" | "CRITICAL"): string {
-  if (severity === "CRITICAL") return "bg-red-50 text-red-800";
-  if (severity === "WARNING") return "bg-amber-50 text-amber-800";
-  return "bg-blue-50 text-blue-800";
+  if (severity === "CRITICAL") return "bg-black font-semibold text-white";
+  if (severity === "WARNING") return "border border-black bg-white font-semibold text-black";
+  return "bg-black/[0.04] text-black";
 }
 
 export default function RiskPanel({ risks, dataGaps }: Props) {

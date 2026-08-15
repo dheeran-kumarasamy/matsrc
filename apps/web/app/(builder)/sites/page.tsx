@@ -143,78 +143,71 @@ export default function SitesPage() {
   const archivedSites = sites.filter((s) => s.status === "ARCHIVED");
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="posh-body mx-auto max-w-4xl space-y-5">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Projects</p>
-          <h1 className="text-2xl font-bold text-slate-900">Sites</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="posh-eyebrow">Projects</p>
+          <h1 className="posh-page-title mt-2">Sites</h1>
+          <p className="posh-subtitle mt-2 max-w-2xl">
             Tag purchases to a site to see spend broken down per construction project.
           </p>
         </div>
-        <button
-          onClick={openCreateForm}
-          className="flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
-        >
-          <Plus size={16} /> Add site
+        <button onClick={openCreateForm} className="posh-btn flex items-center gap-2">
+          <Plus size={14} /> Add site
         </button>
-      </div>
+      </header>
 
       {showForm ? (
-        <div className="panel space-y-3 p-5">
-          <h2 className="font-semibold text-slate-800">{editingId ? "Edit site" : "New site"}</h2>
+        <div className="posh-card space-y-4 p-6">
+          <h2 className="posh-card-title">{editingId ? "Edit site" : "New site"}</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <input
               placeholder="Site name *"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm sm:col-span-2"
+              className="posh-input sm:col-span-2"
             />
             <input
               placeholder="Site code (optional)"
               value={form.code}
               onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="posh-input"
             />
             <input
               placeholder="GSTIN (optional)"
               value={form.gstin}
               onChange={(e) => setForm((f) => ({ ...f, gstin: e.target.value }))}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="posh-input"
             />
             <input
               placeholder="Address line"
               value={form.addressLine}
               onChange={(e) => setForm((f) => ({ ...f, addressLine: e.target.value }))}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm sm:col-span-2"
+              className="posh-input sm:col-span-2"
             />
             <input
               placeholder="City"
               value={form.city}
               onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="posh-input"
             />
             <input
               placeholder="State"
               value={form.state}
               onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="posh-input"
             />
             <input
               placeholder="Pincode"
               value={form.pincode}
               onChange={(e) => setForm((f) => ({ ...f, pincode: e.target.value.replace(/\D/g, "") }))}
               maxLength={6}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="posh-input"
             />
           </div>
-          {formError ? <p className="text-xs text-red-600">{formError}</p> : null}
+          {formError ? <p className="text-xs font-bold text-black">{formError}</p> : null}
           <div className="flex gap-2">
-            <button
-              onClick={handleSubmit}
-              disabled={saving}
-              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
-            >
+            <button onClick={handleSubmit} disabled={saving} className="posh-btn">
               {saving ? "Saving..." : editingId ? "Save changes" : "Create site"}
             </button>
             <button
@@ -223,7 +216,7 @@ export default function SitesPage() {
                 setForm(emptyForm);
                 setEditingId(null);
               }}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              className="posh-btn-ghost"
             >
               Cancel
             </button>
@@ -232,18 +225,19 @@ export default function SitesPage() {
       ) : null}
 
       {loading ? (
-        <div className="panel p-10 text-center text-sm text-slate-400">Loading sites…</div>
+        <div className="posh-card posh-muted p-10 text-center">Loading sites…</div>
       ) : error ? (
-        <div className="panel p-10 text-center text-sm text-red-600">{error}</div>
+        <div className="posh-card p-10 text-center text-sm font-bold text-black">{error}</div>
       ) : sites.length === 0 ? (
-        <div className="panel p-10 text-center">
-          <MapPin className="mx-auto mb-2 text-slate-300" size={28} />
-          <p className="text-sm text-slate-400">No sites yet. Add your first construction site to start tagging purchases.</p>
+        <div className="posh-card p-10 text-center">
+          <MapPin className="mx-auto mb-3 text-black/25" size={28} />
+          <p className="posh-card-title">No sites yet</p>
+          <p className="posh-muted mt-2 text-xs">Add your first construction site to start tagging purchases.</p>
         </div>
       ) : (
         <div className="space-y-4">
           {activeSites.length > 0 ? (
-            <div className="panel divide-y divide-slate-100">
+            <div className="posh-card divide-y divide-black/10">
               {activeSites.map((site) => (
                 <SiteRow
                   key={site.id}
@@ -258,8 +252,8 @@ export default function SitesPage() {
 
           {archivedSites.length > 0 ? (
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Archived</p>
-              <div className="panel divide-y divide-slate-100 opacity-70">
+              <p className="posh-eyebrow mb-2">Archived</p>
+              <div className="posh-card divide-y divide-black/10 opacity-60">
                 {archivedSites.map((site) => (
                   <SiteRow
                     key={site.id}
@@ -290,21 +284,21 @@ function SiteRow({
   archiving: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 p-4">
+    <div className="flex items-center justify-between gap-4 p-5">
       <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-slate-800">
+        <p className="truncate text-base font-bold tracking-tight text-black">
           {site.name}
-          {site.code ? <span className="ml-2 text-xs font-normal text-slate-400">({site.code})</span> : null}
+          {site.code ? <span className="posh-label ml-2 align-middle">({site.code})</span> : null}
         </p>
-        <p className="truncate text-xs text-slate-500">
+        <p className="truncate text-xs font-semibold text-black/60">
           {[site.addressLine, site.city, site.state, site.pincode].filter(Boolean).join(", ") || "No address on file"}
         </p>
-        <p className="mt-0.5 text-xs text-slate-400">{site.orderCount} order(s) tagged</p>
+        <p className="posh-label mt-1">{site.orderCount} order(s) tagged</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <button
           onClick={onEdit}
-          className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:border-blue-200 hover:text-blue-700"
+          className="rounded-full border border-black/15 p-2 text-black/60 transition-colors hover:border-black hover:text-black"
           aria-label={`Edit ${site.name}`}
         >
           <Pencil size={14} />
@@ -312,7 +306,7 @@ function SiteRow({
         <button
           onClick={onToggleArchive}
           disabled={archiving}
-          className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:border-amber-200 hover:text-amber-700 disabled:opacity-40"
+          className="rounded-full border border-black/15 p-2 text-black/60 transition-colors hover:border-black hover:text-black disabled:opacity-40"
           aria-label={site.status === "ACTIVE" ? `Archive ${site.name}` : `Restore ${site.name}`}
         >
           {site.status === "ACTIVE" ? <Archive size={14} /> : <RotateCcw size={14} />}

@@ -198,15 +198,15 @@ function PriceHistoryModule({ history }: { history: ReportHistoryEntry[] }) {
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#00000010" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#000000" }} tickLine={false} />
               <YAxis
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 10, fill: "#000000" }}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
               />
               <Tooltip formatter={(v: number) => [money(v), "Price"]} />
-              <Line type="monotone" dataKey="price" stroke="#2B4C6F" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="price" stroke="#000000" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -262,16 +262,16 @@ function ForecastModule({ forecast }: { forecast: PriceReportResponse["forecast"
           <ResponsiveContainer width="100%" height={200}>
             <ComposedChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#00000010" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#000000" }} tickLine={false} />
               <YAxis
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 10, fill: "#000000" }}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
               />
               <Tooltip formatter={(v: number) => [money(v), "Projected"]} />
-              <Area dataKey="band" stroke="none" fill="#2B4C6F" fillOpacity={0.12} />
-              <Line type="monotone" dataKey="price" stroke="#2B4C6F" strokeWidth={2} strokeDasharray="4 3" dot={false} />
+              <Area dataKey="band" stroke="none" fill="#000000" fillOpacity={0.12} />
+              <Line type="monotone" dataKey="price" stroke="#000000" strokeWidth={2} strokeDasharray="4 3" dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>

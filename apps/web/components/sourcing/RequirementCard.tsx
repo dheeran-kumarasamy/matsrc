@@ -45,7 +45,7 @@ export default function RequirementCard({ requirement }: Props) {
   return (
     <section className="panel p-4">
       <header className="mb-3 flex items-center gap-2">
-        <Package className="h-4 w-4 text-blue-600" aria-hidden="true" />
+        <Package className="h-4 w-4 text-black" aria-hidden="true" />
         <h2 className="text-sm font-semibold text-slate-800">Your requirement</h2>
       </header>
 

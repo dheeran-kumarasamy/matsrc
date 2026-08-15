@@ -188,7 +188,7 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
       <Composer input={input} setInput={setInput} busy={busy} started={Boolean(stage)} onSend={send} />
 
       {error && (
-        <p className="panel border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+        <p className="panel border-black/20 bg-black/[0.04] p-3 text-sm text-black" role="alert">
           {error}
         </p>
       )}
@@ -271,7 +271,7 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
           )}
 
           {confirmedMessage && (
-            <p className="panel border-green-200 bg-green-50 p-4 text-sm text-green-800">
+            <p className="panel border-black/20 bg-black/[0.04] p-4 text-sm text-black">
               {confirmedMessage}
             </p>
           )}
@@ -300,7 +300,7 @@ function Composer({
       {!started && (
         <>
           <div className="mb-1 flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-blue-600" aria-hidden="true" />
+            <Sparkles className="h-4 w-4 text-black" aria-hidden="true" />
             <h1 className="text-base font-semibold text-slate-900">
               What material are you looking for?
             </h1>
@@ -325,13 +325,13 @@ function Composer({
           placeholder="Describe what you need..."
           maxLength={1000}
           disabled={busy}
-          className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm transition-colors focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-60"
+          className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm transition-colors focus:border-black focus:bg-white focus:outline-none focus:ring-2 focus:ring-black disabled:opacity-60"
           aria-label="Describe the material you need"
         />
         <button
           type="submit"
           disabled={busy || !input.trim()}
-          className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="flex items-center gap-1.5 rounded-xl bg-black px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:bg-black/30"
         >
           <Send className="h-4 w-4" aria-hidden="true" />
           {busy ? "Working…" : "Send"}
@@ -348,7 +348,7 @@ function Composer({
                 type="button"
                 onClick={() => onSend(example)}
                 disabled={busy}
-                className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition-colors hover:border-blue-300 hover:text-blue-700 disabled:opacity-50"
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition-colors hover:border-black hover:text-black disabled:opacity-50"
               >
                 {example}
               </button>

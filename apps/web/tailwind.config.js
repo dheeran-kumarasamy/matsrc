@@ -15,14 +15,18 @@ module.exports = {
       // "Pricing desk" surface palette — used only by the Builder price
       // report page (apps/web/app/(builder)/products/[slug]/report). Kept
       // additive/scoped here rather than in shared config since no other
-      // surface in the app should adopt this look. deskYellow is reserved
-      // exclusively for the Buy/Hold/Wait signal card per the design spec.
+      // surface in the app should adopt this look.
+      //
+      // These tokens are now MONOCHROME so the price desk matches the
+      // site-wide black & white palette: ink and the "steel" accent are both
+      // pure black, the surface is off-white, and deskYellow (the Buy/Hold/
+      // Wait signal card) is a light grey chip that keeps black text legible.
       colors: {
         ...baseConfig.theme?.extend?.colors,
-        deskBg: "#E7E5E0",
-        deskSteel: "#2B4C6F",
-        deskInk: "#1C1F26",
-        deskYellow: "#F5C400",
+        deskBg: "#F2F2F2",
+        deskSteel: "#000000",
+        deskInk: "#000000",
+        deskYellow: "#E3E3E3",
       },
       fontFamily: {
         ...baseConfig.theme?.extend?.fontFamily,

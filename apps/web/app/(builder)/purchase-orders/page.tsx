@@ -17,11 +17,14 @@ type PurchaseOrderListItem = {
 const STATUS_FILTERS = ["All", "DRAFT", "ISSUED", "ACKNOWLEDGED", "FULFILLED"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
+// Monochrome status treatment: the terminal state (FULFILLED) is the only
+// one rendered as solid black, so hierarchy is carried by weight/contrast
+// rather than colour (site-wide black & white palette).
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: "bg-slate-100 text-slate-600 border-slate-200",
-  ISSUED: "bg-amber-50 text-amber-700 border-amber-200",
-  ACKNOWLEDGED: "bg-blue-50 text-blue-700 border-blue-200",
-  FULFILLED: "bg-green-50 text-green-700 border-green-200",
+  DRAFT: "posh-status opacity-60",
+  ISSUED: "posh-status",
+  ACKNOWLEDGED: "posh-status",
+  FULFILLED: "posh-status-strong",
 };
 
 const FILTER_LABELS: Record<string, string> = {
@@ -57,23 +60,27 @@ export default async function PurchaseOrdersPage({
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">Purchase Orders</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Generate, review and digitally approve POs from accepted enquiries — entirely in-app, no printing or
-          manual signature required.
-        </p>
-      </div>
+    <div className="posh-body space-y-5">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="posh-eyebrow">Procurement desk</p>
+          <h1 className="posh-page-title mt-2">Purchase Orders</h1>
+          <p className="posh-subtitle mt-2 max-w-2xl">
+            Generate, review and digitally approve POs from accepted enquiries — entirely in-app, no printing or
+            manual signature required.
+          </p>
+        </div>
+        <span className="posh-eyebrow hidden md:inline">
+          {purchaseOrders.length} {purchaseOrders.length === 1 ? "record" : "records"}
+        </span>
+      </header>
 
       <div className="flex flex-wrap gap-2">
         {STATUS_FILTERS.map((s) => (
           <Link
             key={s}
             href={s === "All" ? "/purchase-orders" : `/purchase-orders?status=${s}`}
-            className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-              activeFilter === s ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 hover:bg-slate-50"
-            }`}
+            className={activeFilter === s ? "posh-chip-active" : "posh-chip"}
           >
             {FILTER_LABELS[s]}
           </Link>
@@ -81,40 +88,38 @@ export default async function PurchaseOrdersPage({
       </div>
 
       {apiError ? (
-        <div className="panel p-10 text-center">
-          <p className="text-sm text-red-500">Could not load purchase orders right now.</p>
-          <p className="mt-1 text-xs text-slate-400">Please refresh and try again.</p>
+        <div className="posh-card p-10 text-center">
+          <p className="text-sm font-bold text-black">Could not load purchase orders right now.</p>
+          <p className="posh-muted mt-1 text-xs">Please refresh and try again.</p>
         </div>
       ) : purchaseOrders.length === 0 ? (
-        <div className="panel p-10 text-center">
-          <p className="text-sm text-slate-400">No purchase orders yet.</p>
-          <p className="mt-1 text-xs text-slate-400">
+        <div className="posh-card p-10 text-center">
+          <p className="posh-card-title">No purchase orders yet</p>
+          <p className="posh-muted mt-2 text-xs">
             Once a supplier confirms a quote on an enquiry, open that order to generate its PO.
           </p>
-          <Link href="/orders" className="mt-3 inline-block text-sm text-blue-700 hover:underline">
+          <Link href="/orders" className="posh-link mt-4 inline-block">
             Go to My Orders →
           </Link>
         </div>
       ) : (
-        <div className="panel divide-y divide-slate-100">
+        <div className="posh-card divide-y divide-black/10">
           {purchaseOrders.map((po) => (
-            <div key={po.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div key={po.id} className="flex flex-wrap items-center justify-between gap-3 p-5">
               <div>
-                <p className="text-sm font-semibold text-slate-800">
+                <p className="text-base font-bold tracking-tight text-black">
                   {po.poNumber}
-                  {po.version > 1 ? <span className="ml-1 text-xs text-slate-400">v{po.version}</span> : null}
+                  {po.version > 1 ? (
+                    <span className="posh-label ml-2 align-middle">v{po.version}</span>
+                  ) : null}
                 </p>
-                <p className="mt-0.5 text-xs text-slate-500">
+                <p className="mt-1 text-xs font-semibold text-black/60">
                   {po.supplier.companyName} · {po.lineItems.length} items · INR {po.total.toLocaleString("en-IN")}
                 </p>
               </div>
-              <div className="flex items-center gap-3">
-                <span
-                  className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[po.status] ?? ""}`}
-                >
-                  {po.status}
-                </span>
-                <Link href={`/purchase-orders/${po.id}`} className="text-xs text-blue-700 hover:underline">
+              <div className="flex items-center gap-4">
+                <span className={STATUS_STYLES[po.status] ?? "posh-status"}>{po.status}</span>
+                <Link href={`/purchase-orders/${po.id}`} className="posh-link">
                   View
                 </Link>
               </div>

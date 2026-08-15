@@ -107,38 +107,41 @@ function NewDisputeForm() {
   }
 
   return (
-    <div className="max-w-xl mx-auto space-y-5">
-      <h1 className="text-xl font-bold text-slate-900">Raise a Dispute</h1>
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-700">
-        Disputes are reviewed within <strong>72 hours</strong>. Unresolved tickets escalate automatically to senior admin. (FR-16)
+    <div className="posh-body mx-auto max-w-xl space-y-5">
+      <header>
+        <p className="posh-eyebrow">Resolution desk</p>
+        <h1 className="posh-page-title mt-2">Raise a Dispute</h1>
+      </header>
+      <div className="rounded-xl border border-black/15 bg-black/[0.03] p-4 text-xs font-medium text-black/70">
+        Disputes are reviewed within <strong className="font-bold text-black">72 hours</strong>. Unresolved tickets escalate automatically to senior admin. (FR-16)
       </div>
 
       {hasNoOrders && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600">
+        <div className="rounded-xl border border-black/15 bg-black/[0.03] p-4 text-xs font-medium text-black/70">
           You don&apos;t have any orders yet, so there&apos;s nothing to raise a dispute against. Place an order first.
         </div>
       )}
       {ordersError && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs text-red-600">{ordersError}</div>
+        <div className="rounded-xl border border-black bg-white p-4 text-xs font-bold text-black">{ordersError}</div>
       )}
 
-      <form onSubmit={handleSubmit} className="panel p-5 space-y-4">
+      <form onSubmit={handleSubmit} className="posh-card space-y-4 p-6">
         <div>
-          <label className="text-xs font-medium text-slate-600 mb-1.5 block">Order</label>
+          <label className="posh-label mb-1.5 block">Order</label>
           <input
             type="text"
             value={orderQuery}
             onChange={(e) => setOrderQuery(e.target.value)}
             placeholder="Search by order ID or supplier..."
             disabled={ordersLoading || hasNoOrders}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-700 disabled:bg-slate-50 disabled:text-slate-400"
+            className="posh-input mb-2 disabled:bg-black/[0.04] disabled:text-black/40"
           />
           <select
             value={orderId}
             onChange={(e) => setOrderId(e.target.value)}
             required
             disabled={ordersLoading || hasNoOrders}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 disabled:bg-slate-50 disabled:text-slate-400"
+            className="posh-input disabled:bg-black/[0.04] disabled:text-black/40"
           >
             <option value="">
               {ordersLoading ? "Loading your orders..." : "Select an order"}
@@ -152,28 +155,28 @@ function NewDisputeForm() {
         </div>
 
         <div>
-          <label className="text-xs font-medium text-slate-600 mb-1.5 block">Issue Type</label>
-          <select value={issueType} onChange={(e) => setIssueType(e.target.value)} required className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700">
+          <label className="posh-label mb-1.5 block">Issue Type</label>
+          <select value={issueType} onChange={(e) => setIssueType(e.target.value)} required className="posh-input">
             <option value="">Select issue type</option>
             {issueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
 
         <div>
-          <label className="text-xs font-medium text-slate-600 mb-1.5 block">Description</label>
+          <label className="posh-label mb-1.5 block">Description</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             required
             rows={4}
             placeholder="Describe the issue in detail..."
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 resize-none"
+            className="posh-input resize-none"
           />
         </div>
 
         <div>
-          <label className="text-xs font-medium text-slate-600 mb-1.5 block">Photo Evidence</label>
-          <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center">
+          <label className="posh-label mb-1.5 block">Photo Evidence</label>
+          <div className="rounded-xl border-2 border-dashed border-black/20 p-4 text-center">
             <input
               type="file"
               accept="image/*"
@@ -182,18 +185,18 @@ function NewDisputeForm() {
               className="hidden"
               onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
             />
-            <label htmlFor="evidence" className="cursor-pointer text-sm text-blue-700 hover:underline">
+            <label htmlFor="evidence" className="posh-link cursor-pointer">
               {files.length > 0 ? `${files.length} file(s) selected` : "Upload photos (JPG / PNG)"}
             </label>
           </div>
         </div>
 
-        {error && <p className="text-red-500 text-xs">{error}</p>}
+        {error && <p className="text-xs font-bold text-black">{error}</p>}
 
         <button
           type="submit"
           disabled={loading || hasNoOrders || ordersLoading}
-          className="w-full bg-red-500 hover:bg-red-600 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
+          className="posh-btn w-full"
         >
           {loading ? "Submitting..." : "Submit Dispute"}
         </button>
@@ -204,7 +207,7 @@ function NewDisputeForm() {
 
 export default function NewDisputePage() {
   return (
-    <Suspense fallback={<div className="panel p-8 text-center text-slate-500 text-sm">Loading...</div>}>
+    <Suspense fallback={<div className="posh-card posh-muted p-8 text-center">Loading...</div>}>
       <NewDisputeForm />
     </Suspense>
   );

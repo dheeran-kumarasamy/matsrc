@@ -55,7 +55,7 @@ function CartPageQuantityInput({
           commit((event.target as HTMLInputElement).value);
         }
       }}
-      className="h-8 w-12 border-x border-slate-200 text-center text-sm focus:outline-none disabled:opacity-40"
+      className="h-8 w-12 border-x border-black/15 text-center text-sm font-bold text-black focus:outline-none disabled:opacity-40"
       aria-label={label}
     />
   );
@@ -186,35 +186,41 @@ export default function CartPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-bold text-slate-900">My Cart</h1>
+    <div className="posh-body space-y-5">
+      <header>
+        <p className="posh-eyebrow">Procurement desk</p>
+        <h1 className="posh-page-title mt-2">My Cart</h1>
+        <p className="posh-subtitle mt-2 max-w-2xl">
+          Review your materials, then submit a single enquiry to every supplier in one step.
+        </p>
+      </header>
 
-      <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col gap-6 lg:flex-row">
         {/* Cart items */}
         <div className="flex-1 space-y-3">
           {data.items.length === 0 ? (
-            <div className="panel p-10 text-center">
-              <p className="text-slate-400 text-sm">Your cart is empty.</p>
-              <Link href="/products" className="mt-3 inline-block text-sm text-blue-700 hover:underline">
+            <div className="posh-card p-10 text-center">
+              <p className="posh-card-title">Your cart is empty</p>
+              <Link href="/products" className="posh-link mt-4 inline-block">
                 Browse materials →
               </Link>
             </div>
           ) : (
             data.items.map((item) => (
-              <div key={item.id} className="panel p-4 flex gap-4">
-                <div className="w-16 h-16 bg-slate-100 rounded-lg shrink-0" />
+              <div key={item.id} className="posh-card flex gap-4 p-5">
+                <div className="h-16 w-16 shrink-0 rounded-xl border border-black/10 bg-black/[0.04]" />
                 <div className="flex-1">
-                  <p className="font-medium text-slate-800 text-sm">{item.name}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Supplier: {item.supplierName}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Unit price: INR {item.unitPrice.toLocaleString("en-IN")}</p>
-                  <div className="flex items-center gap-3 mt-2">
-                    <div className="flex items-center rounded-lg border border-slate-200">
+                  <p className="text-base font-bold tracking-tight text-black">{item.name}</p>
+                  <p className="posh-label mt-1">Supplier: {item.supplierName}</p>
+                  <p className="posh-label mt-0.5">Unit price: INR {item.unitPrice.toLocaleString("en-IN")}</p>
+                  <div className="mt-3 flex items-center gap-3">
+                    <div className="flex items-center rounded-full border border-black/15">
                       <button
                         type="button"
                         disabled={updatingId === item.id || item.quantity <= 1}
                         onClick={() => void handleUpdateQuantity(item.productId, item.id, item.quantity - 1)}
                         aria-label={`Decrease quantity for ${item.name}`}
-                        className="flex h-8 w-8 items-center justify-center text-slate-500 transition hover:text-blue-700 disabled:opacity-40"
+                        className="flex h-8 w-8 items-center justify-center text-black/60 transition hover:text-black disabled:opacity-40"
                       >
                         <Minus size={14} />
                       </button>
@@ -230,20 +236,20 @@ export default function CartPage() {
                         disabled={updatingId === item.id}
                         onClick={() => void handleUpdateQuantity(item.productId, item.id, item.quantity + 1)}
                         aria-label={`Increase quantity for ${item.name}`}
-                        className="flex h-8 w-8 items-center justify-center text-slate-500 transition hover:text-blue-700 disabled:opacity-40"
+                        className="flex h-8 w-8 items-center justify-center text-black/60 transition hover:text-black disabled:opacity-40"
                       >
                         <Plus size={14} />
                       </button>
                     </div>
-                    <span className="text-xs text-slate-400">{item.unit}</span>
-                    <span className="text-sm font-semibold text-slate-800">INR {item.lineTotal.toLocaleString("en-IN")}</span>
+                    <span className="posh-label">{item.unit}</span>
+                    <span className="text-sm font-bold text-black">INR {item.lineTotal.toLocaleString("en-IN")}</span>
                   </div>
 
                 </div>
                 <button
                   disabled={loadingId === item.id}
                   onClick={() => void handleRemove(item.productId, item.id)}
-                  className="text-slate-300 hover:text-red-500 transition-colors disabled:opacity-40"
+                  className="text-black/30 transition-colors hover:text-black disabled:opacity-40"
                 >
                   <Trash2 size={16} />
                 </button>
@@ -253,47 +259,44 @@ export default function CartPage() {
         </div>
 
         {/* Order summary */}
-        <div className="w-full lg:w-80 shrink-0">
-          <div className="panel p-5 sticky top-20 space-y-4">
-            <h2 className="font-semibold text-slate-800">Order Summary</h2>
+        <div className="w-full shrink-0 lg:w-80">
+          <div className="posh-card sticky top-20 space-y-4 p-6">
+            <h2 className="posh-card-title">Order Summary</h2>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between text-slate-500">
+              <div className="flex justify-between font-semibold text-black/60">
                 <span>Subtotal</span><span>INR {data.summary.subtotal.toLocaleString("en-IN")}</span>
               </div>
-              <div className="flex justify-between text-slate-500">
+              <div className="flex justify-between font-semibold text-black/60">
                 <span>GST (18%)</span><span>INR {gst.toLocaleString("en-IN")}</span>
               </div>
-              <div className="flex justify-between text-slate-500">
+              <div className="flex justify-between font-semibold text-black/60">
                 <span>Freight</span><span>—</span>
               </div>
-              <div className="border-t border-slate-100 pt-2 flex justify-between font-bold text-slate-800">
+              <div className="flex justify-between border-t border-black/10 pt-3 text-base font-bold text-black">
                 <span>Total</span><span>INR {total.toLocaleString("en-IN")}</span>
               </div>
             </div>
             <button
               onClick={() => void handleSubmitEnquiry()}
               disabled={data.items.length === 0 || submitting}
-              className="block w-full rounded-lg bg-blue-700 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-800 disabled:opacity-50"
+              className="posh-btn block w-full text-center"
             >
               {submitting ? "Submitting..." : "Submit Enquiry"}
             </button>
             {data.items.length === 0 ? (
               <span
                 aria-disabled="true"
-                className="block w-full cursor-not-allowed text-center text-xs text-slate-300"
+                className="block w-full cursor-not-allowed text-center text-[10px] font-bold uppercase tracking-[0.14em] text-black/25"
               >
                 Review on checkout page
               </span>
             ) : (
-              <Link
-                href="/checkout"
-                className="block w-full text-center text-xs text-slate-500 hover:text-slate-700 hover:underline"
-              >
+              <Link href="/checkout" className="posh-link block w-full text-center">
                 Review on checkout page
               </Link>
             )}
 
-            {submitError ? <p className="text-xs text-red-600">{submitError}</p> : null}
+            {submitError ? <p className="text-xs font-bold text-black">{submitError}</p> : null}
           </div>
         </div>
       </div>

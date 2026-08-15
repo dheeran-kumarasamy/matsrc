@@ -18,7 +18,7 @@ export default function HeaderIconLink({
     <Link
       href={href}
       aria-label={ariaLabel}
-      className="relative flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-blue-700 hover:text-blue-700"
+      className="relative flex items-center gap-2 rounded-full border border-black/15 bg-white px-3 py-1.5 text-sm font-bold text-black transition hover:border-black"
     >
       <Icon size={16} />
       <span className="hidden sm:inline">{label}</span>

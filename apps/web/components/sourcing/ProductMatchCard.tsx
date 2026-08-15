@@ -36,7 +36,7 @@ export default function ProductMatchCard({ matches, alternatives }: Props) {
   return (
     <section className="panel p-4">
       <header className="mb-2 flex items-center gap-2">
-        <Boxes className="h-4 w-4 text-blue-600" aria-hidden="true" />
+        <Boxes className="h-4 w-4 text-black" aria-hidden="true" />
         <h2 className="text-sm font-semibold text-slate-800">
           {matches.length > 0 ? "Products found" : "Closest products in the catalogue"}
         </h2>

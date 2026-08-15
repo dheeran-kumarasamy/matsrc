@@ -25,13 +25,13 @@ export default function CartLauncher() {
     <button
       type="button"
       onClick={() => openCart("review")}
-      className="relative flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-blue-700 hover:text-blue-700"
+      className="relative flex items-center gap-2 rounded-full border border-black/15 bg-white px-3 py-1.5 text-sm font-bold text-black transition hover:border-black"
       aria-label="Open cart"
     >
       <ShoppingCart size={16} />
       <span className="hidden sm:inline">Cart</span>
       {itemCount > 0 ? (
-        <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-700 px-1 text-[11px] font-bold text-white">
+        <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-black px-1 text-[11px] font-bold text-white">
           {itemCount}
         </span>
       ) : null}

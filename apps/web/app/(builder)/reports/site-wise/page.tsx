@@ -297,12 +297,26 @@ export default function SiteWiseReportPage() {
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="report-display mb-4 text-xl text-slate-900">Spend by Supplier</h2>
               <ResponsiveContainer width="100%" height={240}>
+                {/* Monochrome chart palette — bars, lines, axes and ticks are
+                    all black to match the site-wide black & white design. */}
                 <BarChart data={summary.spendBySupplier.slice(0, 8)}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="supplierName" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={60} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: number) => formatCurrency(v)} />
-                  <Bar dataKey="spend" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#00000012" />
+                  <XAxis
+                    dataKey="supplierName"
+                    tick={{ fontSize: 10, fill: "#000000" }}
+                    stroke="#000000"
+                    interval={0}
+                    angle={-20}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis tick={{ fontSize: 10, fill: "#000000" }} stroke="#000000" />
+                  <Tooltip
+                    formatter={(v: number) => formatCurrency(v)}
+                    labelStyle={{ color: "#000000" }}
+                    itemStyle={{ color: "#000000" }}
+                  />
+                  <Bar dataKey="spend" fill="#000000" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -310,11 +324,15 @@ export default function SiteWiseReportPage() {
               <h2 className="report-display mb-4 text-xl text-slate-900">Spend Over Time</h2>
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={summary.spendOverTime}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: number) => formatCurrency(v)} />
-                  <Line type="monotone" dataKey="spend" stroke="#2563eb" strokeWidth={2} dot={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#00000012" />
+                  <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#000000" }} stroke="#000000" />
+                  <YAxis tick={{ fontSize: 10, fill: "#000000" }} stroke="#000000" />
+                  <Tooltip
+                    formatter={(v: number) => formatCurrency(v)}
+                    labelStyle={{ color: "#000000" }}
+                    itemStyle={{ color: "#000000" }}
+                  />
+                  <Line type="monotone" dataKey="spend" stroke="#000000" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

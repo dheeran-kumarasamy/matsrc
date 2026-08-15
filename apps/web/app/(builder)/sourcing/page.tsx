@@ -20,10 +20,11 @@ export const metadata = {
 
 export default function SourcingPage() {
   return (
-    <div className="space-y-4">
+    <div className="posh-body space-y-5">
       <header>
-        <h1 className="text-lg font-semibold text-slate-900">AI Sourcing Assistant</h1>
-        <p className="text-sm text-slate-500">
+        <p className="posh-eyebrow">Sourcing desk</p>
+        <h1 className="posh-page-title mt-2">AI Sourcing Assistant</h1>
+        <p className="posh-subtitle mt-2 max-w-2xl">
           Tell us what material you need. Our AI Sourcing Assistant will help you find the best
           sourcing option.
         </p>

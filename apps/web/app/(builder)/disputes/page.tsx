@@ -10,11 +10,13 @@ type Dispute = {
   createdAt: string;
 };
 
+// Monochrome status treatment — escalated/resolved read as solid black so
+// they still stand out without introducing colour into the palette.
 const statusColors: Record<string, string> = {
-  OPEN: "bg-yellow-100 text-yellow-700",
-  UNDER_REVIEW: "bg-blue-100 text-blue-700",
-  RESOLVED: "bg-green-100 text-green-700",
-  ESCALATED: "bg-red-100 text-red-700",
+  OPEN: "posh-status",
+  UNDER_REVIEW: "posh-status",
+  RESOLVED: "posh-status-strong",
+  ESCALATED: "posh-status-strong",
 };
 
 // UF-10: Dispute list — FR-16
@@ -28,27 +30,37 @@ export default async function DisputesPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-900">Disputes</h1>
-        <Link href="/disputes/new" className="text-sm bg-red-50 text-red-600 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-100 transition-colors">
+    <div className="posh-body space-y-5">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="posh-eyebrow">Resolution desk</p>
+          <h1 className="posh-page-title mt-2">Disputes</h1>
+          <p className="posh-subtitle mt-2 max-w-2xl">
+            Raise and track issues on delivered orders — quality, quantity, damage or billing.
+          </p>
+        </div>
+        <Link href="/disputes/new" className="posh-btn">
           + Raise Dispute
         </Link>
-      </div>
+      </header>
+
       {disputes.length === 0 ? (
-        <div className="panel p-10 text-center">
-          <p className="text-slate-400 text-sm">No disputes raised.</p>
+        <div className="posh-card p-10 text-center">
+          <p className="posh-card-title">No disputes raised</p>
+          <p className="posh-muted mt-2 text-xs">Everything you have ordered has been accepted as delivered.</p>
         </div>
       ) : (
-        <div className="panel divide-y divide-slate-100">
+        <div className="posh-card divide-y divide-black/10">
           {disputes.map((d) => (
-            <div key={d.id} className="p-4 flex items-start justify-between gap-3">
+            <div key={d.id} className="flex items-start justify-between gap-4 p-5">
               <div>
-                <p className="text-sm font-semibold text-slate-800">{d.issueType.replace(/_/g, " ")}</p>
-                <p className="text-xs text-slate-500 mt-0.5">Order #{d.orderId.slice(0, 8)} · {new Date(d.createdAt).toLocaleDateString("en-IN")}</p>
-                <p className="text-xs text-slate-600 mt-1 line-clamp-2">{d.description}</p>
+                <p className="text-base font-bold tracking-tight text-black">{d.issueType.replace(/_/g, " ")}</p>
+                <p className="posh-label mt-1">
+                  Order #{d.orderId.slice(0, 8)} · {new Date(d.createdAt).toLocaleDateString("en-IN")}
+                </p>
+                <p className="mt-2 line-clamp-2 text-sm font-medium text-black/70">{d.description}</p>
               </div>
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${statusColors[d.status] ?? "bg-slate-100 text-slate-600"}`}>
+              <span className={`whitespace-nowrap ${statusColors[d.status] ?? "posh-status"}`}>
                 {d.status.replace(/_/g, " ")}
               </span>
             </div>

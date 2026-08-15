@@ -59,14 +59,14 @@ export default function ApprovalBar({
           type="button"
           onClick={onProceed}
           disabled={submitting || !hasVerifiedCost}
-          className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:bg-black/30"
         >
           {submitting ? "Submitting…" : "Proceed"}
         </button>
         <button
           type="button"
           onClick={onViewAlternatives}
-          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-blue-300 hover:text-blue-700"
+          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-black hover:text-black"
         >
           View alternatives
         </button>

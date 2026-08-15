@@ -43,9 +43,9 @@ export default function PriceHistoryChart({
 }: PriceHistoryChartProps) {
   if (points.length === 0) {
     return (
-      <section className="panel p-4">
-        <h2 className="mb-1 text-sm font-semibold text-slate-800">Price History</h2>
-        <p className="text-xs text-slate-400">
+      <section className="posh-card p-5">
+        <h2 className="posh-card-title mb-1 text-base">Price History</h2>
+        <p className="posh-muted text-xs">
           Not enough historical data to display a reliable price trend.
         </p>
       </section>
@@ -75,17 +75,19 @@ export default function PriceHistoryChart({
   const hasForecast = forecastPoints.length > 0;
 
   return (
-    <section className="panel p-4">
+    <section className="posh-card p-5">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-800">Price History</h2>
-        <div className="flex items-center gap-3 text-[11px] text-slate-400">
+        <h2 className="posh-card-title text-base">Price History</h2>
+        {/* Observed vs forecast is distinguished by fill/dash, not colour —
+            the whole surface is black & white. */}
+        <div className="posh-label flex items-center gap-3">
           <span className="flex items-center gap-1">
-            <span className="h-2 w-4 rounded-sm bg-blue-500 opacity-80" />
+            <span className="h-2 w-4 rounded-sm bg-black" />
             Observed
           </span>
           {hasForecast && (
             <span className="flex items-center gap-1">
-              <span className="h-2 w-4 rounded-sm bg-amber-400 opacity-60" />
+              <span className="h-2 w-4 rounded-sm border border-black bg-white" />
               Forecast
             </span>
           )}
@@ -94,15 +96,16 @@ export default function PriceHistoryChart({
 
       <ResponsiveContainer width="100%" height={180}>
         <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#00000012" />
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 10, fill: "#94a3b8" }}
+            tick={{ fontSize: 10, fill: "#000000" }}
             tickLine={false}
+            stroke="#000000"
             interval="preserveStartEnd"
           />
           <YAxis
-            tick={{ fontSize: 10, fill: "#94a3b8" }}
+            tick={{ fontSize: 10, fill: "#000000" }}
             tickLine={false}
             tickFormatter={(v) => `₹${Math.round(v / 1000)}k`}
             width={44}
@@ -112,34 +115,36 @@ export default function PriceHistoryChart({
               formatInr(value),
               name === "price" ? "Observed" : "Forecast",
             ]}
-            labelStyle={{ fontSize: 11 }}
+            labelStyle={{ fontSize: 11, color: "#000000" }}
+            itemStyle={{ color: "#000000" }}
             contentStyle={{ fontSize: 11 }}
           />
           {averagePrice !== null && (
             <ReferenceLine
               y={averagePrice}
-              stroke="#94a3b8"
+              stroke="#000000"
               strokeDasharray="4 3"
-              label={{ value: "Avg", position: "right", fontSize: 10, fill: "#94a3b8" }}
+              label={{ value: "Avg", position: "right", fontSize: 10, fill: "#000000" }}
             />
           )}
-          {/* Historical */}
+          {/* Historical — solid black line with a light black wash. */}
           <Area
             type="monotone"
             dataKey="price"
-            stroke="#3b82f6"
-            fill="#eff6ff"
+            stroke="#000000"
+            fill="#00000012"
             strokeWidth={1.5}
             dot={false}
             connectNulls
           />
-          {/* Forecast band */}
+          {/* Forecast band — same black, dashed and unfilled so it is clearly
+              distinguished from observed data without using colour. */}
           {hasForecast && (
             <Area
               type="monotone"
               dataKey="forecastPrice"
-              stroke="#f59e0b"
-              fill="#fef3c7"
+              stroke="#000000"
+              fill="#00000006"
               strokeWidth={1.5}
               strokeDasharray="5 3"
               dot={false}
@@ -150,7 +155,7 @@ export default function PriceHistoryChart({
       </ResponsiveContainer>
 
       {hasForecast && (
-        <p className="mt-2 text-[11px] text-slate-400">
+        <p className="mt-2 text-[11px] font-medium text-black/45">
           Forecast: {method} · Not a guaranteed future price.
         </p>
       )}

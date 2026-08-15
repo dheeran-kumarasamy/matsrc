@@ -359,7 +359,7 @@ export default function CartDrawer() {
                     Location captured ({deliveryLat.toFixed(4)}, {deliveryLng.toFixed(4)})
                   </p>
                 ) : null}
-                {locationError ? <p className="mt-2 text-xs text-red-400">{locationError}</p> : null}
+                {locationError ? <p className="mt-2 text-xs font-bold text-black">{locationError}</p> : null}
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium" style={{ color: "var(--posh-fg-muted)" }}>
@@ -376,7 +376,7 @@ export default function CartDrawer() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Delivery address (optional)</label>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-[0.18em] text-black/60">Delivery address (optional)</label>
 
                 <input
                   placeholder="e.g. Site name, street, area"
@@ -420,7 +420,7 @@ export default function CartDrawer() {
               <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
                 Submitting will send a separate enquiry to each supplier represented in your basket. No payment is collected now.
               </p>
-              {submitError ? <p className="text-xs text-red-400">{submitError}</p> : null}
+              {submitError ? <p className="text-xs font-bold text-black">{submitError}</p> : null}
             </div>
           ) : null}
 

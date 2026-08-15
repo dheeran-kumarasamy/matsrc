@@ -127,83 +127,83 @@ export default function TallySettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <Link href="/reports/site-wise" className="text-xs font-medium text-blue-600 hover:underline">
+    <div className="report-body mx-auto max-w-3xl px-4 py-8">
+      <Link href="/reports/site-wise" className="text-[10px] font-bold uppercase tracking-[0.25em] text-blue-600 hover:underline">
         ← Back to Site-wise Report
       </Link>
-      <h1 className="mt-1 text-2xl font-semibold text-slate-900">Tally Export</h1>
-      <p className="text-sm text-slate-500">
+      <h1 className="report-display mt-2 text-4xl text-slate-900 md:text-5xl">Tally Export</h1>
+      <p className="mt-2 text-sm font-medium text-slate-600">
         Export your purchases as a Tally-compatible XML file for your accountant to import into
         TallyPrime or Tally.ERP 9. Only <span className="font-medium">paid</span> orders are included
         by default.
       </p>
 
       {/* Ledger mapping settings */}
-      <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-slate-900">Ledger Mapping</h2>
+      <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="report-display mb-4 text-xl text-slate-900">Ledger Mapping</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Tally Company Name</label>
+            <label className="report-label mb-1.5 block">Tally Company Name</label>
             <input
               value={mapping.companyName}
               onChange={(e) => updateField("companyName", e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="w-full rounded-xl border border-slate-200 px-2.5 py-2 text-sm font-semibold text-slate-800"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Purchase Ledger</label>
+            <label className="report-label mb-1.5 block">Purchase Ledger</label>
             <input
               value={mapping.purchaseLedger}
               onChange={(e) => updateField("purchaseLedger", e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="w-full rounded-xl border border-slate-200 px-2.5 py-2 text-sm font-semibold text-slate-800"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">CGST Ledger</label>
+            <label className="report-label mb-1.5 block">CGST Ledger</label>
             <input
               value={mapping.cgstLedger}
               onChange={(e) => updateField("cgstLedger", e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="w-full rounded-xl border border-slate-200 px-2.5 py-2 text-sm font-semibold text-slate-800"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">SGST Ledger</label>
+            <label className="report-label mb-1.5 block">SGST Ledger</label>
             <input
               value={mapping.sgstLedger}
               onChange={(e) => updateField("sgstLedger", e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="w-full rounded-xl border border-slate-200 px-2.5 py-2 text-sm font-semibold text-slate-800"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">IGST Ledger</label>
+            <label className="report-label mb-1.5 block">IGST Ledger</label>
             <input
               value={mapping.igstLedger}
               onChange={(e) => updateField("igstLedger", e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="w-full rounded-xl border border-slate-200 px-2.5 py-2 text-sm font-semibold text-slate-800"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Round Off Ledger</label>
+            <label className="report-label mb-1.5 block">Round Off Ledger</label>
             <input
               value={mapping.roundOffLedger}
               onChange={(e) => updateField("roundOffLedger", e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="w-full rounded-xl border border-slate-200 px-2.5 py-2 text-sm font-semibold text-slate-800"
             />
           </div>
         </div>
 
         {mapping.suppliers.length > 0 ? (
           <div className="mt-4">
-            <h3 className="mb-2 text-xs font-semibold text-slate-700">Supplier → Tally Party Ledger</h3>
+            <h3 className="report-label mb-2.5">Supplier → Tally Party Ledger</h3>
             <div className="space-y-2">
               {mapping.suppliers.map((s) => (
                 <div key={s.id} className="flex items-center gap-3">
-                  <span className="w-40 shrink-0 text-xs text-slate-600">{s.name}</span>
+                  <span className="w-40 shrink-0 text-xs font-semibold text-slate-700">{s.name}</span>
                   <input
                     placeholder={s.name}
                     value={mapping.supplierLedgerMap[s.id] ?? ""}
                     onChange={(e) => updateSupplierLedger(s.id, e.target.value)}
-                    className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                    className="flex-1 rounded-xl border border-slate-200 px-2.5 py-2 text-sm font-semibold text-slate-800"
                   />
                 </div>
               ))}
@@ -215,34 +215,34 @@ export default function TallySettingsPage() {
           <button
             onClick={handleSaveSettings}
             disabled={saving}
-            className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+            className="rounded-full bg-blue-700 px-5 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white transition-colors hover:bg-blue-800 disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save Settings"}
           </button>
-          {savedAt ? <span className="text-xs text-emerald-600">Saved</span> : null}
+          {savedAt ? <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-600">Saved</span> : null}
         </div>
       </div>
 
       {/* Export */}
-      <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-slate-900">Generate Export</h2>
+      <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="report-display mb-4 text-xl text-slate-900">Generate Export</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Site</label>
+            <label className="report-label mb-1.5 block">Site</label>
             <select
               value={siteId}
               onChange={(e) => {
                 setSiteId(e.target.value);
                 setDryRun(null);
               }}
-              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="w-full rounded-xl border border-slate-200 px-2.5 py-2 text-sm font-semibold text-slate-800"
             >
               <option value="all">All sites</option>
               <option value="unassigned">Unassigned</option>
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">From</label>
+            <label className="report-label mb-1.5 block">From</label>
             <input
               type="date"
               value={dateFrom}
@@ -250,11 +250,11 @@ export default function TallySettingsPage() {
                 setDateFrom(e.target.value);
                 setDryRun(null);
               }}
-              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="w-full rounded-xl border border-slate-200 px-2.5 py-2 text-sm font-semibold text-slate-800"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">To</label>
+            <label className="report-label mb-1.5 block">To</label>
             <input
               type="date"
               value={dateTo}
@@ -262,7 +262,7 @@ export default function TallySettingsPage() {
                 setDateTo(e.target.value);
                 setDryRun(null);
               }}
-              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="w-full rounded-xl border border-slate-200 px-2.5 py-2 text-sm font-semibold text-slate-800"
             />
           </div>
         </div>
@@ -271,14 +271,14 @@ export default function TallySettingsPage() {
           <button
             onClick={handleCheck}
             disabled={checking}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-full border border-slate-200 bg-white px-5 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
           >
             {checking ? "Checking…" : "Validate Export"}
           </button>
           <button
             onClick={handleDownload}
             disabled={!dryRun || dryRun.blockers.length > 0 || dryRun.voucherCount === 0}
-            className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full bg-blue-700 px-5 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white transition-colors hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Download Tally XML
           </button>

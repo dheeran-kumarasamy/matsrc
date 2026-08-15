@@ -87,11 +87,11 @@ export default function ReportsExplorer() {
   }, [openId]);
 
   return (
-    <div className="space-y-6">
+    <div className="report-body space-y-6">
       <header className="flex items-baseline justify-between gap-4">
-        <h1 className="text-xl font-bold text-slate-900">Reports</h1>
-        <span className="hidden text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400 sm:inline">
-          Procurement desk
+        <h1 className="report-display text-4xl text-slate-900 md:text-5xl">Reports</h1>
+        <span className="report-eyebrow hidden sm:inline">
+          Procurement desk · {VISIBLE_REPORTS.length + 1} views
         </span>
       </header>
 
@@ -101,19 +101,19 @@ export default function ReportsExplorer() {
             key={report.id}
             type="button"
             onClick={() => setOpenId(report.id)}
-            className="panel flex flex-col gap-2 p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+            className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg"
           >
-            <div className="flex items-start justify-between gap-2">
-              <h2 className="text-sm font-bold text-slate-900">{report.title}</h2>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="report-display text-xl text-slate-900">{report.title}</h2>
               <span
-                className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${
                   DATA_SOURCE_STYLES[report.dataSource] ?? "border-slate-200 bg-slate-50 text-slate-600"
                 }`}
               >
                 {report.dataSource}
               </span>
             </div>
-            <p className="text-xs text-slate-600">{report.description}</p>
+            <p className="text-xs font-medium leading-relaxed text-slate-600">{report.description}</p>
           </button>
         ))}
 
@@ -122,15 +122,15 @@ export default function ReportsExplorer() {
         <button
           type="button"
           onClick={() => router.push("/reports/site-wise")}
-          className="flex flex-col gap-2 rounded-2xl border border-blue-200 bg-blue-50 p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-100 hover:shadow-md"
+          className="flex flex-col gap-3 rounded-3xl border border-blue-300 bg-blue-50 p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-blue-100 hover:shadow-lg"
         >
-          <div className="flex items-start justify-between gap-2">
-            <h2 className="text-sm font-bold text-blue-900">Site-wise Report</h2>
-            <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="report-display text-xl text-blue-900">Site-wise Report</h2>
+            <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-blue-700">
               Account data
             </span>
           </div>
-          <p className="text-xs text-blue-700">
+          <p className="text-xs font-medium leading-relaxed text-blue-700">
             Everything purchased through Buildohub, broken down by construction site — with CSV/XLSX/PDF
             export and Tally XML export for your accountant.
           </p>
@@ -147,12 +147,12 @@ export default function ReportsExplorer() {
         >
           <section
             onClick={(event) => event.stopPropagation()}
-            className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-5 shadow-xl md:p-8"
+            className="report-body w-full max-w-4xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl md:p-10"
           >
             <div className="flex items-start justify-between gap-6">
               <div>
-                <h2 className="text-lg font-bold text-slate-900 md:text-xl">{active.title}</h2>
-                <p className="mt-1 text-xs text-slate-600">{active.description}</p>
+                <h2 className="report-display text-3xl text-slate-900 md:text-4xl">{active.title}</h2>
+                <p className="mt-2 text-xs font-medium leading-relaxed text-slate-600">{active.description}</p>
               </div>
               <button
                 type="button"
@@ -166,9 +166,11 @@ export default function ReportsExplorer() {
 
             <div className="mt-6">
               {loading ? (
-                <p className="text-xs text-slate-500">Generating report…</p>
+                <p className="report-eyebrow">Generating report…</p>
               ) : error ? (
-                <p className="text-xs text-red-500">Could not generate this report. Please try again.</p>
+                <p className="text-xs font-semibold text-red-500">
+                  Could not generate this report. Please try again.
+                </p>
               ) : data ? (
                 <ReportResult reportId={active.id} data={data} />
               ) : null}

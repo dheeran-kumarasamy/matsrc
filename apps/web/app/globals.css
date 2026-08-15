@@ -74,6 +74,39 @@
     border-color: var(--posh-primary);
   }
 
+  /* ── Reports surface typography (posh-web-flair parity) ─────────────────
+     The reports pages use the editorial display face for every heading and
+     headline number, plus a wide-tracked uppercase "eyebrow" for labels —
+     exactly like src/routes/reports.tsx in
+     github.com/dheeran-kumarasamy/posh-web-flair. Weights are pushed up a
+     step (semibold → bold) so the light builder surface reads as boldly as
+     the dark reference design. */
+  .report-display {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+  }
+
+  .report-eyebrow {
+    @apply text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400;
+  }
+
+  .report-label {
+    @apply text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500;
+  }
+
+  /* Report body copy — Work Sans at a readable, non-light weight. */
+  .report-body {
+    font-family: 'Work Sans', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 500;
+  }
+
+  /* Table headers inside report surfaces. */
+  .report-th {
+    @apply border-b border-slate-200 pb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500;
+  }
+
   /* ── Posh frosted nav ── */
   .posh-nav {
     background: rgba(28, 24, 16, 0.55);

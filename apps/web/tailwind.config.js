@@ -27,6 +27,16 @@ module.exports = {
       fontFamily: {
         ...baseConfig.theme?.extend?.fontFamily,
         deskMono: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
+        // Editorial display face used by the posh-web-flair design system
+        // (github.com/dheeran-kumarasamy/posh-web-flair → --font-display).
+        // Loaded via the Google Fonts import at the top of app/globals.css.
+        display: ["Instrument Serif", "Georgia", "serif"],
+      },
+      borderRadius: {
+        ...baseConfig.theme?.extend?.borderRadius,
+        // posh-web-flair uses --radius: 1.5rem with a rounded-4xl step on
+        // its report surfaces (calc(var(--radius) + 16px) = 2.5rem).
+        "4xl": "2.5rem",
       },
       keyframes: {
         marquee: { "0%": { transform: "translateX(0%)" }, "100%": { transform: "translateX(-50%)" } },

@@ -1,52 +1,16 @@
-import Link from "next/link";
-import { REPORT_DEFINITIONS } from "@/lib/reports-definitions";
-import ReportCard from "@/components/reports/ReportCard";
+import ReportsExplorer from "@/components/reports/ReportsExplorer";
 
 // Standalone full page for direct navigation / refresh / shared links —
-// mirrors app/(builder)/orders/page.tsx. When navigated to from within the
-// builder layout, the intercepting route at
-// app/(builder)/@modal/(.)reports/page.tsx renders this as an overlay
-// instead (spec 5A single-page overlay pattern). The overlay only shows the
-// "Basic Reports" section below — the "Detailed Reports" section (Site-wise
-// Purchase Report) is only reachable here, via a forced full navigation link
-// from the overlay.
+// mirrors app/(builder)/orders/page.tsx.
+//
+// Layout adapted from the posh-web-flair reports design: a single grid of
+// report-name cards where clicking a name opens the report detail as an
+// overlay with a close button. The "Site-wise Report" card is the one
+// exception — it redirects to the dedicated /reports/site-wise page (filters,
+// charts, CSV/XLSX/PDF and Tally XML export).
+//
+// The "AI Recommendation: When to Buy" report is not shown here — no
+// LLM-backed buy/hold/wait data source is wired for it yet.
 export default function ReportsPage() {
-  return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-bold text-slate-900">Reports</h1>
-
-      {/* Detailed Reports section: Site-wise Purchase Report + Tally export —
-          a dedicated full page (filters/charts/exports) rather than the
-          inline-generate card pattern used by the basic reports below. */}
-      <section className="space-y-3">
-        <h2 className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">Detailed Reports</h2>
-        <Link
-          href="/reports/site-wise"
-          className="block rounded-xl border border-blue-200 bg-blue-50 p-4 transition-colors hover:bg-blue-100"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-bold text-blue-900">Site-wise Purchase Report</h3>
-              <p className="mt-1 text-xs text-blue-700">
-                Everything purchased through Buildohub, broken down by construction site — with CSV/XLSX/PDF
-                export and Tally XML export for your accountant.
-              </p>
-            </div>
-            <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-              Account data
-            </span>
-          </div>
-        </Link>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">Basic Reports</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {REPORT_DEFINITIONS.map((report) => (
-            <ReportCard key={report.id} report={report} />
-          ))}
-        </div>
-      </section>
-    </div>
-  );
+  return <ReportsExplorer />;
 }

@@ -73,7 +73,7 @@ export default function HeroSection() {
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Link
-              href="/auth/register"
+              href="/newdashboard"
               className="flex min-h-[48px] items-center justify-center rounded-full px-8 py-3 text-sm font-medium transition-opacity hover:opacity-85"
               style={{
                 background: "var(--posh-primary)",

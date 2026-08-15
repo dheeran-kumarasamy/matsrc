@@ -126,7 +126,7 @@ export default function HomeEditorialSections() {
           </h2>
           <div className="mx-auto mt-12 flex max-w-xl flex-col gap-4 sm:flex-row sm:justify-center">
             <Link
-              href="/auth/register"
+              href="/newdashboard"
               className="flex min-h-[52px] items-center justify-center rounded-full px-10 py-4 text-sm font-medium transition-opacity hover:opacity-85"
               style={{ background: "var(--posh-cream-fg)", color: "var(--posh-cream)" }}
             >

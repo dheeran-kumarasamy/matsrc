@@ -90,35 +90,35 @@ function CartQuantityInput({
           commit((event.target as HTMLInputElement).value);
         }
       }}
-      className="h-7 w-10 border-x border-slate-200 text-center text-xs focus:outline-none disabled:opacity-40"
+      className="h-7 w-10 border-x text-center text-xs focus:outline-none disabled:opacity-40"
+      style={{ background: "transparent", borderColor: "rgba(240,232,216,0.15)", color: "var(--posh-fg)" }}
       aria-label={label}
     />
   );
 }
 
 function StepIndicator({ current }: { current: string }) {
-
   const currentIndex = STEP_LABELS.findIndex((step) => step.key === current);
   return (
     <div className="flex items-center gap-2">
       {STEP_LABELS.map((step, index) => {
         const isActive = index === currentIndex;
-        const isDone = index < currentIndex;
+        const isDone   = index < currentIndex;
         return (
           <div key={step.key} className="flex items-center gap-2">
-            <div
-              className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${
-                isActive
-                  ? "bg-blue-700 text-white"
-                  : isDone
-                  ? "bg-emerald-600 text-white"
-                  : "bg-slate-100 text-slate-400"
-              }`}
-            >
+            <div className="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold"
+              style={{
+                background: isActive ? "var(--posh-primary)" : isDone ? "#4ade80" : "rgba(240,232,216,0.12)",
+                color:      isActive ? "var(--posh-primary-fg)" : isDone ? "#1c1810" : "var(--posh-fg-muted)",
+              }}>
               {isDone ? <CheckCircle2 size={14} /> : index + 1}
             </div>
-            <span className={`text-xs font-medium ${isActive ? "text-slate-900" : "text-slate-400"}`}>{step.label}</span>
-            {index < STEP_LABELS.length - 1 ? <div className="mx-1 h-px w-4 bg-slate-200" /> : null}
+            <span className="text-xs font-medium" style={{ color: isActive ? "var(--posh-fg)" : "var(--posh-fg-muted)" }}>
+              {step.label}
+            </span>
+            {index < STEP_LABELS.length - 1
+              ? <div className="mx-1 h-px w-4" style={{ background: "rgba(240,232,216,0.15)" }} />
+              : null}
           </div>
         );
       })}
@@ -248,16 +248,22 @@ export default function CartDrawer() {
     router.push("/orders");
   }
 
+  const P   = "var(--posh-primary)";
+  const PFG = "var(--posh-primary-fg)";
+
   return (
     <Sheet open={isCartOpen} onOpenChange={handleOpenChange}>
-      <SheetContent className="flex flex-col p-0">
-        <SheetHeader>
+      <SheetContent
+        className="flex flex-col border-l p-0"
+        style={{ background: "var(--posh-bg)", borderColor: "rgba(240,232,216,0.10)", color: "var(--posh-fg)" }}
+      >
+        <SheetHeader style={{ borderColor: "rgba(240,232,216,0.10)" }}>
           <div className="flex items-center justify-between">
             <div>
-              <SheetTitle>
+              <SheetTitle style={{ color: "var(--posh-fg)" }}>
                 {checkoutStep === "success" ? "Enquiry submitted" : "Your enquiry basket"}
               </SheetTitle>
-              <SheetDescription>
+              <SheetDescription style={{ color: "var(--posh-fg-muted)" }}>
                 {checkoutStep === "success"
                   ? "Suppliers will confirm and unlock payment links."
                   : "No payment is taken here — this submits a supplier enquiry."}
@@ -275,65 +281,54 @@ export default function CartDrawer() {
           {checkoutStep === "review" ? (
             <div className="space-y-3">
               {items.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center">
-                  <p className="text-sm text-slate-400">Your enquiry basket is empty.</p>
-                  <Link
-                    href="/products"
-                    onClick={() => closeCart()}
-                    className="mt-3 inline-block text-sm text-blue-700 hover:underline"
-                  >
+                <div className="rounded-2xl border border-dashed p-8 text-center" style={{ borderColor: "rgba(240,232,216,0.20)" }}>
+                  <p className="text-sm" style={{ color: "var(--posh-fg-muted)" }}>Your enquiry basket is empty.</p>
+                  <Link href="/products" onClick={() => closeCart()}
+                    className="mt-3 inline-block text-sm transition-opacity hover:opacity-70"
+                    style={{ color: "var(--posh-primary)" }}>
                     Browse materials →
                   </Link>
                 </div>
               ) : (
                 items.map((item) => (
-                  <div key={item.id} className="flex gap-3 rounded-xl border border-slate-100 p-3">
-                    <div className="h-14 w-14 shrink-0 rounded-lg bg-slate-100" />
+                  <div key={item.id} className="flex gap-3 rounded-2xl border p-3" style={{ borderColor: "rgba(240,232,216,0.12)", background: "rgba(36,31,22,0.50)" }}>
+                    <div className="h-14 w-14 shrink-0 rounded-xl" style={{ background: "rgba(240,232,216,0.08)" }} />
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-slate-800">{item.name}</p>
-                      <p className="text-xs text-slate-400">{item.supplierName}</p>
-                      <p className="text-xs text-slate-400">₹{item.unitPrice.toLocaleString("en-IN")}/unit</p>
+                      <p className="text-sm font-medium" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
+                      <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>{item.supplierName}</p>
+                      <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>₹{item.unitPrice.toLocaleString("en-IN")}/unit</p>
                       <div className="mt-1.5 flex items-center gap-2">
-                        <div className="flex items-center rounded-lg border border-slate-200">
-                          <button
-                            type="button"
+                        <div className="flex items-center rounded-lg border" style={{ borderColor: "rgba(240,232,216,0.15)" }}>
+                          <button type="button"
                             disabled={isMutating || item.quantity <= 1}
                             onClick={() => void updateQuantity(item.productId, item.id, item.quantity - 1)}
                             aria-label={`Decrease quantity for ${item.name}`}
-                            className="flex h-7 w-7 items-center justify-center text-slate-500 transition hover:text-blue-700 disabled:opacity-40"
-                          >
+                            className="flex h-7 w-7 items-center justify-center transition disabled:opacity-40"
+                            style={{ color: "var(--posh-fg-muted)" }}>
                             <Minus size={12} />
                           </button>
-                          <CartQuantityInput
-                            quantity={item.quantity}
-                            disabled={isMutating}
+                          <CartQuantityInput quantity={item.quantity} disabled={isMutating}
                             label={`Quantity for ${item.name}`}
-                            onCommit={(nextQuantity) => void updateQuantity(item.productId, item.id, nextQuantity)}
-                          />
-
-                          <button
-                            type="button"
-                            disabled={isMutating}
+                            onCommit={(nextQuantity) => void updateQuantity(item.productId, item.id, nextQuantity)} />
+                          <button type="button" disabled={isMutating}
                             onClick={() => void updateQuantity(item.productId, item.id, item.quantity + 1)}
                             aria-label={`Increase quantity for ${item.name}`}
-                            className="flex h-7 w-7 items-center justify-center text-slate-500 transition hover:text-blue-700 disabled:opacity-40"
-                          >
+                            className="flex h-7 w-7 items-center justify-center transition disabled:opacity-40"
+                            style={{ color: "var(--posh-fg-muted)" }}>
                             <Plus size={12} />
                           </button>
                         </div>
-                        <span className="text-xs text-slate-400">{item.unit}</span>
+                        <span className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>{item.unit}</span>
                       </div>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                      <p className="posh-heading mt-1 text-base" style={{ color: "var(--posh-primary)" }}>
                         ₹{item.lineTotal.toLocaleString("en-IN")}
                       </p>
                     </div>
-
-                    <button
-                      onClick={() => void removeItem(item.productId, item.id)}
-                      disabled={isMutating}
-                      className="self-start text-slate-300 transition hover:text-red-500 disabled:opacity-40"
+                    <button onClick={() => void removeItem(item.productId, item.id)} disabled={isMutating}
+                      className="self-start transition disabled:opacity-40" style={{ color: "rgba(240,232,216,0.30)" }}
                       aria-label={`Remove ${item.name}`}
-                    >
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "#f87171")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(240,232,216,0.30)")}>
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -341,7 +336,7 @@ export default function CartDrawer() {
               )}
 
               {supplierGroups.length > 1 ? (
-                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <p className="rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(196,145,90,0.15)", color: "var(--posh-primary)" }}>
                   Items span {supplierGroups.length} suppliers — these will be submitted as separate enquiries.
                 </p>
               ) : null}
@@ -351,26 +346,23 @@ export default function CartDrawer() {
           {checkoutStep === "delivery" ? (
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Delivery location (optional)</label>
-                <button
-                  type="button"
-                  onClick={handleUseMyLocation}
-                  disabled={locating}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-                >
+                <label className="mb-1 block text-xs font-medium" style={{ color: "var(--posh-fg-muted)" }}>Delivery location (optional)</label>
+                <button type="button" onClick={handleUseMyLocation} disabled={locating}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition disabled:opacity-50"
+                  style={{ borderColor: "rgba(240,232,216,0.15)", color: "var(--posh-fg-muted)", background: "rgba(240,232,216,0.05)" }}>
                   <LocateFixed size={14} />
                   {locating ? "Fetching location..." : "Use my current location"}
                 </button>
                 {deliveryLat !== null && deliveryLng !== null ? (
-                  <p className="mt-2 flex items-center gap-1 text-xs text-emerald-700">
+                  <p className="mt-2 flex items-center gap-1 text-xs" style={{ color: "#4ade80" }}>
                     <MapPin size={12} />
                     Location captured ({deliveryLat.toFixed(4)}, {deliveryLng.toFixed(4)})
                   </p>
                 ) : null}
-                {locationError ? <p className="mt-2 text-xs text-red-600">{locationError}</p> : null}
+                {locationError ? <p className="mt-2 text-xs text-red-400">{locationError}</p> : null}
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">
+                <label className="mb-1 block text-xs font-medium" style={{ color: "var(--posh-fg-muted)" }}>
                   Select on map (optional)
                 </label>
                 <MapLocationPicker
@@ -390,13 +382,13 @@ export default function CartDrawer() {
                   placeholder="e.g. Site name, street, area"
                   value={deliveryAddress}
                   onChange={(event) => setDeliveryAddress(event.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none"
+                  style={{ borderColor: "rgba(240,232,216,0.15)", background: "rgba(240,232,216,0.05)", color: "var(--posh-fg)" }}
                 />
               </div>
               <SiteSelector value={siteId} onChange={setSiteId} />
-              <p className="text-xs text-slate-400">
-                This is used to route your enquiry to nearby suppliers and estimate freight — it does not commit you to
-                a payment.
+              <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
+                This is used to route your enquiry to nearby suppliers and estimate freight — it does not commit you to a payment.
               </p>
             </div>
           ) : null}
@@ -404,76 +396,66 @@ export default function CartDrawer() {
 
           {checkoutStep === "confirm" ? (
             <div className="space-y-4">
-              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
-                <h3 className="text-sm font-semibold text-slate-800">Order summary</h3>
+              <div className="rounded-2xl border p-4" style={{ borderColor: "rgba(240,232,216,0.12)", background: "rgba(36,31,22,0.50)" }}>
+                <h3 className="text-sm font-semibold" style={{ color: "var(--posh-fg)" }}>Order summary</h3>
                 <div className="mt-3 space-y-2 text-sm">
-                  <div className="flex justify-between text-slate-500">
-                    <span>Subtotal</span>
-                    <span>₹{summary.subtotal.toLocaleString("en-IN")}</span>
+                  <div className="flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
+                    <span>Subtotal</span><span>₹{summary.subtotal.toLocaleString("en-IN")}</span>
                   </div>
-                  <div className="flex justify-between text-slate-500">
-                    <span>GST (18%)</span>
-                    <span>₹{gst.toLocaleString("en-IN")}</span>
+                  <div className="flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
+                    <span>GST (18%)</span><span>₹{gst.toLocaleString("en-IN")}</span>
                   </div>
-                  <div className="flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-800">
-                    <span>Estimated total</span>
-                    <span>₹{total.toLocaleString("en-IN")}</span>
+                  <div className="flex justify-between border-t pt-2" style={{ borderColor: "rgba(240,232,216,0.12)" }}>
+                    <span className="font-bold" style={{ color: "var(--posh-fg)" }}>Estimated total</span>
+                    <span className="posh-heading text-lg" style={{ color: "var(--posh-primary)" }}>₹{total.toLocaleString("en-IN")}</span>
                   </div>
                 </div>
               </div>
               {deliveryLat !== null && deliveryLng !== null ? (
-                <p className="text-xs text-slate-500">
-                  Delivery location: <span className="font-medium text-slate-700">{deliveryLat.toFixed(4)}, {deliveryLng.toFixed(4)}</span>
+                <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
+                  Delivery location: <span className="font-medium" style={{ color: "var(--posh-fg)" }}>{deliveryLat.toFixed(4)}, {deliveryLng.toFixed(4)}</span>
                   {deliveryAddress ? ` · ${deliveryAddress}` : ""}
                 </p>
               ) : null}
-
-              <p className="text-xs text-slate-400">
-                Submitting will send a separate enquiry to each supplier represented in your basket. No payment is
-                collected now.
+              <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
+                Submitting will send a separate enquiry to each supplier represented in your basket. No payment is collected now.
               </p>
-              {submitError ? <p className="text-xs text-red-600">{submitError}</p> : null}
+              {submitError ? <p className="text-xs text-red-400">{submitError}</p> : null}
             </div>
           ) : null}
 
           {checkoutStep === "success" ? (
             <div className="flex flex-col items-center gap-3 py-10 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: "rgba(74,222,128,0.15)", color: "#4ade80" }}>
                 <CheckCircle2 size={28} />
               </div>
-              <p className="text-sm font-semibold text-slate-800">Enquiry {lastOrderReference} submitted</p>
-              <p className="max-w-xs text-xs text-slate-500">
-                {/* TODO(launch): replace this mocked payment-link messaging with real supplier confirmation + Razorpay/Stripe payment link generation */}
-                Suppliers have been notified. Once a supplier confirms, a payment link will appear on the order detail
-                page — no payment is required yet.
+              <p className="text-sm font-semibold" style={{ color: "var(--posh-fg)" }}>Enquiry {lastOrderReference} submitted</p>
+              <p className="max-w-xs text-xs" style={{ color: "var(--posh-fg-muted)" }}>
+                Suppliers have been notified. Once a supplier confirms, a payment link will appear on the order detail page — no payment is required yet.
               </p>
             </div>
           ) : null}
         </div>
 
-        <SheetFooter className="space-y-3">
+        <SheetFooter className="space-y-3" style={{ borderColor: "rgba(240,232,216,0.10)" }}>
           {checkoutStep === "review" ? (
-            <button
-              onClick={() => setCheckoutStep("delivery")}
-              disabled={items.length === 0}
-              className="w-full rounded-lg bg-blue-700 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:opacity-50"
-            >
+            <button onClick={() => setCheckoutStep("delivery")} disabled={items.length === 0}
+              className="w-full rounded-2xl py-2.5 text-sm font-semibold transition disabled:opacity-50"
+              style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
               Continue to delivery
             </button>
           ) : null}
 
           {checkoutStep === "delivery" ? (
             <div className="flex gap-2">
-              <button
-                onClick={goToPreviousStep}
-                className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-              >
+              <button onClick={goToPreviousStep}
+                className="flex items-center justify-center gap-1 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition"
+                style={{ borderColor: "rgba(240,232,216,0.15)", color: "var(--posh-fg-muted)", background: "rgba(240,232,216,0.05)" }}>
                 <ChevronLeft size={14} /> Back
               </button>
-              <button
-                onClick={goToNextStep}
-                className="flex-1 rounded-lg bg-blue-700 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800"
-              >
+              <button onClick={goToNextStep}
+                className="flex-1 rounded-2xl py-2.5 text-sm font-semibold transition"
+                style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
                 Continue to confirm
               </button>
             </div>
@@ -481,28 +463,23 @@ export default function CartDrawer() {
 
           {checkoutStep === "confirm" ? (
             <div className="flex gap-2">
-              <button
-                onClick={goToPreviousStep}
-                disabled={submitting}
-                className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
-              >
+              <button onClick={goToPreviousStep} disabled={submitting}
+                className="flex items-center justify-center gap-1 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50"
+                style={{ borderColor: "rgba(240,232,216,0.15)", color: "var(--posh-fg-muted)", background: "rgba(240,232,216,0.05)" }}>
                 <ChevronLeft size={14} /> Back
               </button>
-              <button
-                onClick={() => void handleSubmitEnquiry()}
-                disabled={submitting || items.length === 0}
-                className="flex-1 rounded-lg bg-emerald-700 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-50"
-              >
+              <button onClick={() => void handleSubmitEnquiry()} disabled={submitting || items.length === 0}
+                className="flex-1 rounded-2xl py-2.5 text-sm font-semibold transition disabled:opacity-50"
+                style={{ background: "#4ade80", color: "#1c1810" }}>
                 {submitting ? "Submitting..." : "Submit Enquiry"}
               </button>
             </div>
           ) : null}
 
           {checkoutStep === "success" ? (
-            <button
-              onClick={handleViewOrders}
-              className="w-full rounded-lg bg-blue-700 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800"
-            >
+            <button onClick={handleViewOrders}
+              className="w-full rounded-2xl py-2.5 text-sm font-semibold transition"
+              style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
               View My Orders
             </button>
           ) : null}

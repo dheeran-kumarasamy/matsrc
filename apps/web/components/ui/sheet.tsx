@@ -42,7 +42,7 @@ const SheetContent = React.forwardRef<
       ref={ref}
       className={cn(
         // Mobile-first: full-width bottom sheet; becomes a right-hand drawer at sm+
-        "fixed inset-x-0 bottom-0 z-50 flex max-h-[94vh] w-full flex-col rounded-t-2xl border border-slate-200 bg-white shadow-xl outline-none",
+        "fixed inset-x-0 bottom-0 z-50 flex max-h-[94vh] w-full flex-col rounded-t-2xl shadow-xl outline-none",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-bottom-4 data-[state=open]:slide-in-from-bottom-4",
         "sm:inset-y-0 sm:right-0 sm:left-auto sm:bottom-auto sm:h-full sm:max-h-none sm:w-full sm:max-w-md sm:rounded-none sm:rounded-l-2xl",
         "sm:data-[state=closed]:slide-out-to-bottom-0 sm:data-[state=open]:slide-in-from-bottom-0 sm:data-[state=closed]:slide-out-to-right sm:data-[state=open]:slide-in-from-right",

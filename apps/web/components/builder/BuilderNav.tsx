@@ -86,7 +86,7 @@ export function BuilderNavMobileTrigger() {
       </button>
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent className="flex flex-col p-0">
+        <SheetContent className="flex flex-col border border-slate-200 bg-white p-0">
           <SheetHeader>
             <SheetTitle>Builder Hub</SheetTitle>
           </SheetHeader>

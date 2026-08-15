@@ -61,6 +61,20 @@
     line-height: 0.95;
   }
 
+  /* ── Posh side-panel navigation typography ──────────────────────────────
+     Used by the builder left sidebar and its mobile drawer (BuilderNav.tsx).
+     The global `body` rule sets font-weight: 300, so nav weights must be
+     declared explicitly for the panel to read boldly on every screen. */
+  .posh-nav-eyebrow {
+    @apply text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400;
+  }
+
+  .posh-nav-brandmark {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
   /* ── Posh pill button (nav CTA) ── */
   .posh-btn-pill {
     @apply rounded-full border px-5 py-2 text-sm backdrop-blur-md transition-colors;

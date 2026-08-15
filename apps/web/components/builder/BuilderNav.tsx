@@ -30,9 +30,14 @@ const links = [
 ];
 
 
+// Shared by BOTH the desktop sidebar (BuilderNav) and the mobile Sheet drawer
+// (BuilderNavMobileTrigger), so the typography below applies on every screen
+// size. Weights are set explicitly because the global `body` rule in
+// globals.css is `font-weight: 300` — without them the nav renders thin.
 function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
   return (
     <nav className="space-y-1">
+      <p className="posh-nav-eyebrow px-4 pb-1.5 pt-1">Navigation</p>
       {links.map((link) => {
         const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
         return (
@@ -40,12 +45,16 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
             key={link.href}
             href={link.href}
             onClick={onNavigate}
-            className={`flex min-h-[44px] items-center rounded-xl px-4 text-sm transition-all duration-150 ${
+            className={`relative flex min-h-[44px] items-center rounded-xl px-4 text-[13px] tracking-[0.01em] transition-all duration-200 ${
               active
-                ? "bg-blue-50 font-semibold text-blue-700 shadow-sm"
-                : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                ? "bg-blue-50 font-bold text-blue-700 shadow-sm ring-1 ring-inset ring-blue-100"
+                : "font-semibold text-slate-500 hover:bg-slate-50 hover:font-bold hover:text-slate-900"
             }`}
           >
+            {/* Posh accent rail on the active item */}
+            {active ? (
+              <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-blue-700" />
+            ) : null}
             {link.label}
           </Link>
         );
@@ -88,7 +97,7 @@ export function BuilderNavMobileTrigger() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent className="flex flex-col border border-slate-200 bg-white p-0">
           <SheetHeader>
-            <SheetTitle>Builder Hub</SheetTitle>
+            <SheetTitle className="posh-nav-brandmark text-2xl text-slate-900">Builder Hub</SheetTitle>
           </SheetHeader>
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
             <BrandBlock />

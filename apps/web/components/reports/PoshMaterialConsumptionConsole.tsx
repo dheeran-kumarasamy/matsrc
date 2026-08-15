@@ -326,9 +326,7 @@ function ReportSidebar() {
           <span className="flex h-5 w-5 items-center justify-center rounded bg-white">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
           </span>
-          <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-slate-100">
-            Reports
-          </span>
+          <span className="report-display text-xl text-white">Reports</span>
         </div>
       </div>
 
@@ -336,7 +334,7 @@ function ReportSidebar() {
       <nav className="flex-1 overflow-y-auto p-3">
         {NAV_GROUPS.map(({ group, items }) => (
           <div key={group}>
-            <p className="px-3 pb-1.5 pt-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 first:pt-2">
+            <p className="px-3 pb-2 pt-5 text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400 first:pt-2">
               {group}
             </p>
             {items.map((item) => {
@@ -346,7 +344,7 @@ function ReportSidebar() {
                   <button
                     key={item.id}
                     aria-current="page"
-                    className="flex w-full items-center gap-3 rounded bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-inset ring-slate-700"
+                    className="flex w-full items-center gap-3 rounded-lg bg-slate-800 px-3 py-2.5 text-[13px] font-bold tracking-[0.01em] text-white ring-1 ring-inset ring-slate-700"
                   >
                     <span className="h-3 w-3 shrink-0 rounded-sm bg-amber-400" />
                     {item.label}
@@ -357,7 +355,7 @@ function ReportSidebar() {
                 <Link
                   key={item.id}
                   href={item.href!}
-                  className="flex w-full items-center gap-3 rounded px-3 py-2 text-xs font-semibold text-slate-400 transition-colors hover:text-slate-100"
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-semibold tracking-[0.01em] text-slate-400 transition-colors hover:bg-slate-800/60 hover:font-bold hover:text-white"
                 >
                   <span className="h-3 w-3 shrink-0 rounded-sm border border-slate-700" />
                   {item.label}
@@ -372,7 +370,7 @@ function ReportSidebar() {
       <div className="shrink-0 border-t border-slate-800 p-4">
         <Link
           href="/reports"
-          className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 transition-colors hover:text-slate-300"
+          className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400 transition-colors hover:text-white"
         >
           ← All Reports
         </Link>

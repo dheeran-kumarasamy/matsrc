@@ -14,6 +14,8 @@ import { PublicPricingController } from "./public-pricing.controller";
 import { NotificationsModule } from "src/notifications/notifications.module";
 import { WatchlistBridgeService } from "./alerting/watchlist-bridge.service";
 import { PricingAlertEvaluationService } from "./alerting/pricing-alert-evaluation.service";
+import { PricingCronController } from "./pricing-cron.controller";
+import { CronSecretGuard } from "./cron-secret.guard";
 
 /**
  * Price Intelligence ingestion module (Phase 2 of the district-wise price
@@ -39,11 +41,21 @@ import { PricingAlertEvaluationService } from "./alerting/pricing-alert-evaluati
  * building new notification infrastructure. The alert engine is invoked
  * directly by PricingSchedulerService immediately after a successful daily
  * rollup — it is never scheduled independently.
+ *
+ * IMPORTANT — scheduling on Vercel: apps/api is deployed as a Vercel
+ * serverless function (see apps/api/api/index.ts), so PricingSchedulerService's
+ * @Cron methods never actually fire in production (no long-lived process
+ * for @nestjs/schedule's in-memory timers). PricingCronController exposes
+ * the same job methods behind a CronSecretGuard-protected HTTP route so a
+ * real Vercel Cron Job (apps/api/vercel.json's `crons` array) can trigger
+ * them on schedule instead. See pricing-cron.controller.ts for exactly
+ * what is (and, deliberately, is not) covered.
  */
 @Module({
   imports: [ScheduleModule.forRoot(), NotificationsModule],
-  controllers: [PublicPricingController],
+  controllers: [PublicPricingController, PricingCronController],
   providers: [
+    CronSecretGuard,
     PricingConfigService,
     StubApifyActorClient,
     LiveApifyActorClient,

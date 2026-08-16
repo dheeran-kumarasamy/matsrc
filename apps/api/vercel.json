@@ -13,5 +13,15 @@
       "source": "/(.*)",
       "destination": "/api/index"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/pricing/cron/daily",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/pricing/cron/monthly",
+      "schedule": "0 3 * * *"
+    }
   ]
 }

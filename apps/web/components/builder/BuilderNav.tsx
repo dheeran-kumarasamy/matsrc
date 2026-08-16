@@ -21,10 +21,8 @@ const links = [
   { href: "/products", label: "Browse Materials" },
   { href: "/orders", label: "My Orders" },
   { href: "/purchase-orders", label: "Purchase Orders" },
-  { href: "/cart", label: "Cart" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/sites", label: "Sites" },
-  { href: "/reports", label: "Reports" },
 
   { href: "/disputes", label: "Disputes" },
 ];

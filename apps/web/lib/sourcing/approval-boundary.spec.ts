@@ -133,6 +133,16 @@ describe("the message route performs no consequential write", () => {
   it("caps the customer message length", () => {
     expect(messageRoute).toContain("MAX_MESSAGE_LENGTH");
   });
+
+  it("refuses to run a new turn on an already-CONFIRMED session", () => {
+    // Bug fix: without this guard, a stale tab or replayed request could run a
+    // fresh sourcing turn against a session whose requirement/recommendations
+    // were already approved, silently merging a new request's fields on top
+    // of the old (confirmed) ones. The customer-facing fix is the "New
+    // search" action in SourcingAssistant.tsx; this is the server backstop.
+    expect(messageRoute).toContain('session.status === "CONFIRMED"');
+    expect(messageRoute).toContain("already been confirmed");
+  });
 });
 
 describe("awaitingApproval gating", () => {

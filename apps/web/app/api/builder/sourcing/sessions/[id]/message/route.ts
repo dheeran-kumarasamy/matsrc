@@ -37,6 +37,22 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ message: "Sourcing session not found" }, { status: 404 });
     }
 
+    // A CONFIRMED session already resulted in an enquiry (see /confirm). It is
+    // a completed transaction, not a resumable conversation — running a new
+    // turn on it would silently merge a fresh request's fields on top of the
+    // approved one's stale requirement/recommendations. The client's "New
+    // search" action creates a fresh session instead; this is the server-side
+    // backstop for any caller that doesn't (a stale tab, a replayed request).
+    if (session.status === "CONFIRMED") {
+      return NextResponse.json(
+        {
+          message:
+            "This sourcing request has already been confirmed. Please start a new sourcing request.",
+        },
+        { status: 409 }
+      );
+    }
+
     const body = (await request.json().catch(() => ({}))) as { message?: unknown };
     const rawMessage = typeof body.message === "string" ? body.message.trim() : "";
     if (!rawMessage) {

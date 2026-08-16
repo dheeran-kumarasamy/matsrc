@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Send, Sparkles } from "lucide-react";
+import { RotateCcw, Send, Sparkles } from "lucide-react";
 
 import { ApiError, builderApiGet, builderApiPost } from "@/lib/api";
 
@@ -96,6 +96,35 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
     return created.id;
   }
 
+  /**
+   * Clears every piece of client state back to its pre-search default and
+   * drops the current session id, so the NEXT `send()` creates a brand new
+   * `SourcingSession` instead of reusing (and re-merging requirement fields
+   * into) the old one. This is the customer's only way to definitively start
+   * over — without it, a confirmed/completed session's stale requirement,
+   * recommendations and "already confirmed" banner would persist forever and
+   * silently bleed into whatever the customer types next.
+   */
+  function startNewSearch() {
+    setSessionId(null);
+    setInput("");
+    setBusy(false);
+    setSubmitting(false);
+    setError(null);
+    setStage(null);
+    setRequirement(null);
+    setAssistantMessage(null);
+    setMatches([]);
+    setAlternatives([]);
+    setSupplierCount(0);
+    setRecommendations([]);
+    setHeadline(null);
+    setSelectedId(null);
+    setConfirmedMessage(null);
+    setShowAllOptions(false);
+    setDecision(null);
+  }
+
   async function send(message: string) {
     const trimmed = message.trim();
     if (!trimmed || busy) return;
@@ -130,11 +159,18 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
       }
     } catch (caught) {
       // §24: show a normal application-level error, never provider internals.
-      setError(
-        caught instanceof ApiError && caught.status === 429
-          ? "You're sending requests too quickly. Please wait a moment and try again."
-          : "I couldn't complete that sourcing request. Please try again."
-      );
+      if (caught instanceof ApiError && caught.status === 429) {
+        setError("You're sending requests too quickly. Please wait a moment and try again.");
+      } else if (caught instanceof ApiError && caught.status === 409) {
+        // The session this message targeted was already CONFIRMED (server-side
+        // backstop — see the /message route). The customer's fix is the same
+        // "New search" action, so reset first, then surface the server's own
+        // explanation (startNewSearch() clears `error`, so it must run first).
+        startNewSearch();
+        setError(caught.message);
+      } else {
+        setError("I couldn't complete that sourcing request. Please try again.");
+      }
     } finally {
       setBusy(false);
     }
@@ -195,7 +231,7 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
 
       {stage && (
         <>
-          <div className="panel p-4">
+          <div className="panel flex flex-wrap items-center justify-between gap-3 p-4">
             <SourcingProgressRail
               stage={stage}
               requirementComplete={requirementComplete}
@@ -203,11 +239,36 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
               supplierCount={supplierCount}
               optionCount={recommendations.length}
             />
+            {/* Always available once a session has started — the only reliable
+                way to leave stale requirement/recommendation state behind and
+                begin sourcing a genuinely new request (see startNewSearch). */}
+            <button
+              type="button"
+              onClick={startNewSearch}
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-black hover:text-black"
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              New search
+            </button>
           </div>
 
           {assistantMessage && (
             <div className="panel p-4">
               <p className="whitespace-pre-line text-sm text-slate-700">{assistantMessage}</p>
+            </div>
+          )}
+
+          {confirmedMessage && (
+            <div className="panel border-black/20 bg-black/[0.04] p-4 space-y-3">
+              <p className="text-sm text-black">{confirmedMessage}</p>
+              <button
+                type="button"
+                onClick={startNewSearch}
+                className="flex items-center gap-1.5 rounded-xl bg-black px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-black/85"
+              >
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                Start a new sourcing request
+              </button>
             </div>
           )}
 
@@ -270,11 +331,6 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
             />
           )}
 
-          {confirmedMessage && (
-            <p className="panel border-black/20 bg-black/[0.04] p-4 text-sm text-black">
-              {confirmedMessage}
-            </p>
-          )}
         </>
       )}
     </div>

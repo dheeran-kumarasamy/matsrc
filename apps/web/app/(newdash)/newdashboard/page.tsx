@@ -193,14 +193,6 @@ export default function NewDashboardPage() {
     ["Delivered",       String(orders.filter((o) => o.status === "DELIVERED").length), "Successfully delivered"],
   ];
 
-  const navLinks = [
-    { href: "/newdashboard", label: "Dashboard" },
-    { href: "/orders",       label: "Orders"    },
-    { href: "/watchlist",    label: "Watchlist" },
-    { href: "/reports",      label: "Reports"   },
-    { href: "/products",     label: "Browse"    },
-  ];
-
   // ── Monochrome design tokens ───────────────────────────────────────────────
   // The dashboard used to run the homepage's warm dark palette (--posh-bg /
   // --posh-primary). It now uses the same black-on-white surface as every
@@ -225,18 +217,6 @@ export default function NewDashboardPage() {
             <Link href="/" className="posh-nav-brandmark text-2xl tracking-tight" style={{ color: FG }}>Buildohub</Link>
             <span className="posh-eyebrow hidden sm:block">Procurement Desk</span>
           </div>
-          <nav className="hidden items-center gap-1 text-sm md:flex">
-            {navLinks.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className="rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors hover:bg-black/[0.05] hover:text-black"
-                style={{ color: FM }}
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
           <div className="flex shrink-0 items-center gap-2">
             {/* Cart */}
             <button type="button" onClick={() => openCart("review")} aria-label="Open cart"

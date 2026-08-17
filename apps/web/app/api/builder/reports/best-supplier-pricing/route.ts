@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
-import { getSupplierListings, parseListingPrice } from "@/lib/listings";
-import type { BestSupplierPricingRow, SupplierPriceOption } from "@/lib/reports-types";
+import { getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { getBestSupplierPricingRows } from "@/lib/reports-data";
 
 export const dynamic = "force-dynamic";
 
@@ -11,81 +10,14 @@ export const dynamic = "force-dynamic";
 // cross-supplier canonical-product grouping plus the live public listings
 // feed already used by the products/checkout flows — real, queryable data,
 // no new model required.
+//
+// Aggregation logic lives in @/lib/reports-data so the XLSX/PDF export route
+// (app/api/builder/reports/[reportId]/export) computes identical rows.
 export async function GET(request: Request) {
   try {
     const ctx = getUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
-
-    const orderedProducts = await prisma.orderItem.findMany({
-      where: { order: { userId: user.id } },
-      select: {
-        product: {
-          select: {
-            id: true,
-            name: true,
-            unit: true,
-            canonicalProductId: true,
-            canonicalProduct: { select: { canonicalKey: true, title: true } },
-          },
-        },
-      },
-    });
-
-    // Only materials with a resolved canonical grouping can be compared
-    // across suppliers; legacy/ungrouped products are skipped rather than
-    // shown with a misleading single-supplier "comparison".
-    //
-    // NOTE: listings from the public feed carry `canonicalProductId` set to
-    // the CanonicalProduct's cuid `id` (see
-    // apps/supplier/lib/supplier-data.ts `getPublicSupplierListings()`), not
-    // the composite `canonicalKey` string. Match against `product.id` here
-    // (previously incorrectly matched against `canonicalKey`, which meant
-    // this report's `matches` filter always returned zero rows).
-    const canonicalById = new Map<string, { canonicalKey: string; title: string; unit: string }>();
-    for (const item of orderedProducts) {
-      const canonicalProduct = item.product.canonicalProduct;
-      if (!canonicalProduct || !item.product.canonicalProductId) continue;
-      if (!canonicalById.has(item.product.canonicalProductId)) {
-        canonicalById.set(item.product.canonicalProductId, {
-          canonicalKey: canonicalProduct.canonicalKey,
-          title: canonicalProduct.title,
-          unit: item.product.unit,
-        });
-      }
-    }
-
-    if (canonicalById.size === 0) {
-      return NextResponse.json([]);
-    }
-
-    const listings = await getSupplierListings();
-
-    const rows: BestSupplierPricingRow[] = [];
-
-    for (const [canonicalProductId, meta] of canonicalById.entries()) {
-      const matches = listings.filter(
-        (listing) => listing.canonicalProductId === canonicalProductId && listing.active
-      );
-      if (matches.length === 0) continue;
-
-      const rawOptions = matches.map((listing) => ({
-        supplierId: listing.supplierId,
-        price: parseListingPrice(listing.price),
-      }));
-
-      const cheapestPrice = Math.min(...rawOptions.map((o) => o.price));
-      const withCheapestFlag: SupplierPriceOption[] = rawOptions
-        .map((option) => ({ ...option, isCheapest: option.price === cheapestPrice }))
-        .sort((a, b) => a.price - b.price);
-
-      rows.push({
-        canonicalKey: meta.canonicalKey,
-        name: meta.title,
-        unit: meta.unit,
-        options: withCheapestFlag,
-      });
-    }
-
+    const rows = await getBestSupplierPricingRows(user.id);
     return NextResponse.json(rows);
   } catch (error) {
     console.error("Best supplier pricing report error:", error);

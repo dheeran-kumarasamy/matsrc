@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
-import type { MaterialConsumptionRow } from "@/lib/reports-types";
+import { getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { getMaterialConsumptionRows } from "@/lib/reports-data";
 
 export const dynamic = "force-dynamic";
 
@@ -8,55 +8,14 @@ export const dynamic = "force-dynamic";
 // by product — total quantity ordered, number of orders it appeared in, and
 // the most recent order date. Real, queryable data (Order/OrderItem tables),
 // no dependency on any external/live service.
+//
+// Aggregation logic lives in @/lib/reports-data so the XLSX/PDF export route
+// (app/api/builder/reports/[reportId]/export) computes identical rows.
 export async function GET(request: Request) {
   try {
     const ctx = getUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
-
-    const items = await prisma.orderItem.findMany({
-      where: { order: { userId: user.id } },
-      select: {
-        quantity: true,
-        productId: true,
-        order: { select: { createdAt: true } },
-        product: {
-          select: {
-            name: true,
-            unit: true,
-            category: { select: { name: true } },
-          },
-        },
-      },
-      orderBy: { order: { createdAt: "desc" } },
-    });
-
-    const byProduct = new Map<string, MaterialConsumptionRow>();
-
-    for (const item of items) {
-      const existing = byProduct.get(item.productId);
-      const createdAt = item.order.createdAt.toISOString();
-
-      if (existing) {
-        existing.totalQuantity += item.quantity;
-        existing.orderCount += 1;
-        if (createdAt > existing.lastOrderedAt) existing.lastOrderedAt = createdAt;
-      } else {
-        byProduct.set(item.productId, {
-          productId: item.productId,
-          name: item.product.name,
-          unit: item.product.unit,
-          category: item.product.category?.name ?? "—",
-          totalQuantity: item.quantity,
-          orderCount: 1,
-          lastOrderedAt: createdAt,
-        });
-      }
-    }
-
-    const rows = Array.from(byProduct.values()).sort(
-      (a, b) => b.totalQuantity - a.totalQuantity
-    );
-
+    const rows = await getMaterialConsumptionRows(user.id);
     return NextResponse.json(rows);
   } catch (error) {
     console.error("Material consumption report error:", error);

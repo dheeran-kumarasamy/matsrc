@@ -7,6 +7,7 @@ import type {
   HistoricalPriceTrendRow,
   DistrictPriceIntelligenceRow,
 } from "@/lib/reports-types";
+import ReportDownloadButtons from "@/components/reports/ReportDownloadButtons";
 
 
 type Props = {
@@ -50,31 +51,34 @@ function MaterialConsumptionResult({ rows }: { rows: MaterialConsumptionRow[] })
   }
 
   return (
-    <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-100">
-      <table className="min-w-full text-xs">
-        <thead className="bg-slate-50 text-left">
-          <tr>
-            <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Material</th>
-            <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Qty ordered</th>
-            <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Orders</th>
-            <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Last ordered</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.productId} className="border-t border-slate-100">
-              <td className="px-3 py-2.5 font-semibold text-slate-800">{row.name}</td>
-              <td className="px-3 py-2.5 font-medium text-slate-600">
-                {row.totalQuantity} {row.unit}
-              </td>
-              <td className="px-3 py-2.5 font-medium text-slate-600">{row.orderCount}</td>
-              <td className="px-3 py-2.5 font-medium text-slate-500">
-                {new Date(row.lastOrderedAt).toLocaleDateString("en-IN")}
-              </td>
+    <div>
+      <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-100">
+        <table className="min-w-full text-xs">
+          <thead className="bg-slate-50 text-left">
+            <tr>
+              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Material</th>
+              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Qty ordered</th>
+              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Orders</th>
+              <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Last ordered</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.productId} className="border-t border-slate-100">
+                <td className="px-3 py-2.5 font-semibold text-slate-800">{row.name}</td>
+                <td className="px-3 py-2.5 font-medium text-slate-600">
+                  {row.totalQuantity} {row.unit}
+                </td>
+                <td className="px-3 py-2.5 font-medium text-slate-600">{row.orderCount}</td>
+                <td className="px-3 py-2.5 font-medium text-slate-500">
+                  {new Date(row.lastOrderedAt).toLocaleDateString("en-IN")}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <ReportDownloadButtons reportId="material-consumption" />
     </div>
   );
 }
@@ -89,29 +93,32 @@ function BestSupplierPricingResult({ rows }: { rows: BestSupplierPricingRow[] })
   }
 
   return (
-    <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-slate-100 p-3">
-      {rows.map((row) => (
-        <div key={row.canonicalKey}>
-          <p className="text-sm font-bold text-slate-800">
-            {row.name} <span className="font-normal text-slate-400">({row.unit})</span>
-          </p>
-          <div className="mt-1 flex flex-wrap gap-2">
-            {row.options.map((option) => (
-              <span
-                key={option.supplierId}
-                className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${
-                  option.isCheapest
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-slate-200 bg-slate-50 text-slate-600"
-                }`}
-              >
-                ₹{option.price.toLocaleString("en-IN")}
-                {option.isCheapest ? " · Best" : ""}
-              </span>
-            ))}
+    <div>
+      <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-slate-100 p-3">
+        {rows.map((row) => (
+          <div key={row.canonicalKey}>
+            <p className="text-sm font-bold text-slate-800">
+              {row.name} <span className="font-normal text-slate-400">({row.unit})</span>
+            </p>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {row.options.map((option) => (
+                <span
+                  key={option.supplierId}
+                  className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${
+                    option.isCheapest
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-slate-200 bg-slate-50 text-slate-600"
+                  }`}
+                >
+                  ₹{option.price.toLocaleString("en-IN")}
+                  {option.isCheapest ? " · Best" : ""}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      <ReportDownloadButtons reportId="best-supplier-pricing" />
     </div>
   );
 }
@@ -152,6 +159,7 @@ function CostSavingsResult({ summary }: { summary: CostSavingsSummary }) {
           </tbody>
         </table>
       </div>
+      <ReportDownloadButtons reportId="potential-cost-savings" />
     </div>
   );
 }
@@ -166,27 +174,30 @@ function LiveMarketPriceResult({ rows }: { rows: LiveMarketPriceRow[] }) {
   }
 
   return (
-    <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-slate-100 p-3">
-      {rows.map((row) => (
-        <div key={row.canonicalKey}>
-          <p className="text-sm font-bold text-slate-800">
-            {row.name} <span className="font-normal text-slate-400">({row.unit})</span>
-          </p>
-          <p className="text-[11px] font-medium text-slate-500">
-            ₹{row.lowestPrice.toLocaleString("en-IN")} – ₹{row.highestPrice.toLocaleString("en-IN")}
-          </p>
-          <div className="mt-1 flex flex-wrap gap-2">
-            {row.offers.map((offer) => (
-              <span
-                key={offer.supplierId ?? offer.label}
-                className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600"
-              >
-                {offer.supplierName ?? offer.label} · ₹{offer.price.toLocaleString("en-IN")}
-              </span>
-            ))}
+    <div>
+      <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-slate-100 p-3">
+        {rows.map((row) => (
+          <div key={row.canonicalKey}>
+            <p className="text-sm font-bold text-slate-800">
+              {row.name} <span className="font-normal text-slate-400">({row.unit})</span>
+            </p>
+            <p className="text-[11px] font-medium text-slate-500">
+              ₹{row.lowestPrice.toLocaleString("en-IN")} – ₹{row.highestPrice.toLocaleString("en-IN")}
+            </p>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {row.offers.map((offer) => (
+                <span
+                  key={offer.supplierId ?? offer.label}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600"
+                >
+                  {offer.supplierName ?? offer.label} · ₹{offer.price.toLocaleString("en-IN")}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      <ReportDownloadButtons reportId="live-market-prices" />
     </div>
   );
 }
@@ -201,25 +212,28 @@ function RegionalPriceComparisonResult({ rows }: { rows: RegionalPriceComparison
   }
 
   return (
-    <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-slate-100 p-3">
-      {rows.map((row) => (
-        <div key={row.canonicalKey}>
-          <p className="text-sm font-bold text-slate-800">
-            {row.name} <span className="font-normal text-slate-400">({row.unit})</span>
-          </p>
-          <div className="mt-1 flex flex-wrap gap-2">
-            {row.regions.map((region) => (
-              <span
-                key={region.region}
-                className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600"
-              >
-                {region.region} · ₹{region.averagePrice.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                <span className="font-normal text-slate-400"> ({region.sampleSize})</span>
-              </span>
-            ))}
+    <div>
+      <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-slate-100 p-3">
+        {rows.map((row) => (
+          <div key={row.canonicalKey}>
+            <p className="text-sm font-bold text-slate-800">
+              {row.name} <span className="font-normal text-slate-400">({row.unit})</span>
+            </p>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {row.regions.map((region) => (
+                <span
+                  key={region.region}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600"
+                >
+                  {region.region} · ₹{region.averagePrice.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                  <span className="font-normal text-slate-400"> ({region.sampleSize})</span>
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      <ReportDownloadButtons reportId="regional-price-comparison" />
     </div>
   );
 }
@@ -234,24 +248,27 @@ function HistoricalPriceTrendResult({ rows }: { rows: HistoricalPriceTrendRow[] 
   }
 
   return (
-    <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-slate-100 p-3">
-      {rows.map((row) => (
-        <div key={row.canonicalKey}>
-          <p className="text-sm font-bold text-slate-800">
-            {row.name} <span className="font-normal text-slate-400">({row.unit})</span>
-          </p>
-          <div className="mt-1 flex flex-wrap gap-2">
-            {row.points.map((point) => (
-              <span
-                key={point.period}
-                className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600"
-              >
-                {point.period} · ₹{point.averagePrice.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-              </span>
-            ))}
+    <div>
+      <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-slate-100 p-3">
+        {rows.map((row) => (
+          <div key={row.canonicalKey}>
+            <p className="text-sm font-bold text-slate-800">
+              {row.name} <span className="font-normal text-slate-400">({row.unit})</span>
+            </p>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {row.points.map((point) => (
+                <span
+                  key={point.period}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600"
+                >
+                  {point.period} · ₹{point.averagePrice.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      <ReportDownloadButtons reportId="historical-price-trends" />
     </div>
   );
 }
@@ -273,48 +290,51 @@ function DistrictPriceIntelligenceResult({ rows }: { rows: DistrictPriceIntellig
   }
 
   return (
-    <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-slate-100 p-3">
-      {rows.map((row) => (
-        <div key={`${row.canonicalSkuCode}:${row.districtCode}`}>
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-bold text-slate-800">
-              {row.materialName}{" "}
-              <span className="font-normal text-slate-400">
-                ({row.districtName} · {row.baseUnit})
-              </span>
-            </p>
-            <span
-              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-                CONFIDENCE_BADGE_CLASSES[row.confidence] ?? CONFIDENCE_BADGE_CLASSES.LOW
-              }`}
-            >
-              {row.confidence}
-            </span>
-          </div>
-          <p className="text-[11px] font-medium text-slate-500">
-            Median ₹{row.medianPerBaseUnit.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-            {row.minPerBaseUnit !== null && row.maxPerBaseUnit !== null
-              ? ` (range ₹${row.minPerBaseUnit.toLocaleString("en-IN", { maximumFractionDigits: 2 })} – ₹${row.maxPerBaseUnit.toLocaleString("en-IN", { maximumFractionDigits: 2 })})`
-              : ""}
-            {" · as of "}
-            {new Date(row.latestPriceDate).toLocaleDateString("en-IN")}
-          </p>
-          {row.trend.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-2">
-              {row.trend.map((point) => (
-                <span
-                  key={point.monthStart}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600"
-                >
-                  {point.monthStart.slice(0, 7)} · ₹
-                  {point.medianPerBaseUnit.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                  {point.momChangePct !== null ? ` (${point.momChangePct > 0 ? "+" : ""}${point.momChangePct.toFixed(1)}% MoM)` : ""}
+    <div>
+      <div className="max-h-64 space-y-3 overflow-y-auto rounded-lg border border-slate-100 p-3">
+        {rows.map((row) => (
+          <div key={`${row.canonicalSkuCode}:${row.districtCode}`}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-bold text-slate-800">
+                {row.materialName}{" "}
+                <span className="font-normal text-slate-400">
+                  ({row.districtName} · {row.baseUnit})
                 </span>
-              ))}
+              </p>
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                  CONFIDENCE_BADGE_CLASSES[row.confidence] ?? CONFIDENCE_BADGE_CLASSES.LOW
+                }`}
+              >
+                {row.confidence}
+              </span>
             </div>
-          )}
-        </div>
-      ))}
+            <p className="text-[11px] font-medium text-slate-500">
+              Median ₹{row.medianPerBaseUnit.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+              {row.minPerBaseUnit !== null && row.maxPerBaseUnit !== null
+                ? ` (range ₹${row.minPerBaseUnit.toLocaleString("en-IN", { maximumFractionDigits: 2 })} – ₹${row.maxPerBaseUnit.toLocaleString("en-IN", { maximumFractionDigits: 2 })})`
+                : ""}
+              {" · as of "}
+              {new Date(row.latestPriceDate).toLocaleDateString("en-IN")}
+            </p>
+            {row.trend.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-2">
+                {row.trend.map((point) => (
+                  <span
+                    key={point.monthStart}
+                    className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600"
+                  >
+                    {point.monthStart.slice(0, 7)} · ₹
+                    {point.medianPerBaseUnit.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                    {point.momChangePct !== null ? ` (${point.momChangePct > 0 ? "+" : ""}${point.momChangePct.toFixed(1)}% MoM)` : ""}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <ReportDownloadButtons reportId="district-price-intelligence" />
     </div>
   );
 }

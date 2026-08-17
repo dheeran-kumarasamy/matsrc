@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ScheduleModule } from "@nestjs/schedule";
 import { PricingConfigService } from "./pricing-config.service";
-import { APIFY_ACTOR_CLIENT, LiveApifyActorClient, StubApifyActorClient } from "./apify-actor-client";
+import { APIFY_ACTOR_CLIENT, ApifyActorClient, LiveApifyActorClient, StubApifyActorClient } from "./apify-actor-client";
 import { NATIVE_EXTRACTOR_CLIENT, NativeHttpExtractorClient } from "./native-http-extractor-client";
 import { PricingIngestionService } from "./pricing-ingestion.service";
 import { PricingNormalizationService } from "./pricing-normalization.service";
@@ -50,7 +50,37 @@ import { CronSecretGuard } from "./cron-secret.guard";
  * real Vercel Cron Job (apps/api/vercel.json's `crons` array) can trigger
  * them on schedule instead. See pricing-cron.controller.ts for exactly
  * what is (and, deliberately, is not) covered.
+ *
+ * IMPORTANT — LiveApifyActorClient must never be an eagerly-instantiated
+ * standalone provider. Nest builds every non-request-scoped provider listed
+ * in `providers` at module-bootstrap time, regardless of whether anything
+ * ends up injecting it — so if `LiveApifyActorClient` were listed directly
+ * (as it once was), its constructor (which throws when APIFY_TOKEN is
+ * absent) would run, and crash app startup, even when
+ * PRICING_APIFY_LIVE_ENABLED=false. apifyActorClientFactory() below is the
+ * only place LiveApifyActorClient is ever constructed (via `new`, not via
+ * DI), and only when isApifyLiveEnabled() is true — so with the flag off
+ * (the default/current production setting), no LiveApifyActorClient
+ * instance is ever created and no APIFY_TOKEN is required to boot.
  */
+
+/**
+ * Resolves the ApifyActorClient bound to APIFY_ACTOR_CLIENT. Exported (and
+ * kept as a plain, named function rather than an inline arrow in the
+ * @Module decorator) so it can be unit-tested directly without booting a
+ * full Nest TestingModule — see pricing.module.spec.ts.
+ *
+ * LiveApifyActorClient is deliberately constructed here with `new`, lazily,
+ * only inside the `isApifyLiveEnabled()` branch — never listed as its own
+ * provider in the module (see the module-level comment above for why).
+ */
+export function apifyActorClientFactory(
+  config: PricingConfigService,
+  stub: StubApifyActorClient
+): ApifyActorClient {
+  return config.isApifyLiveEnabled() ? new LiveApifyActorClient() : stub;
+}
+
 @Module({
   imports: [ScheduleModule.forRoot(), NotificationsModule],
   controllers: [PublicPricingController, PricingCronController],
@@ -58,12 +88,10 @@ import { CronSecretGuard } from "./cron-secret.guard";
     CronSecretGuard,
     PricingConfigService,
     StubApifyActorClient,
-    LiveApifyActorClient,
     {
       provide: APIFY_ACTOR_CLIENT,
-      useFactory: (config: PricingConfigService, stub: StubApifyActorClient, live: LiveApifyActorClient) =>
-        config.isApifyLiveEnabled() ? live : stub,
-      inject: [PricingConfigService, StubApifyActorClient, LiveApifyActorClient],
+      useFactory: apifyActorClientFactory,
+      inject: [PricingConfigService, StubApifyActorClient],
     },
     // Phase 6E-3 Batch D-3: native (non-Apify) extraction client, used only
     // for the small set of sources proven to need it (see

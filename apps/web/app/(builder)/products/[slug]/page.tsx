@@ -24,8 +24,15 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   const product = await getSupplierProduct(params.slug);
   if (!product) return {};
 
-  const brandPart = product.brand ? `${product.brand} ` : "";
-  const title = `${brandPart}${product.name}`;
+  // P2-D fix: Product.name in this catalogue already includes the brand
+  // (e.g. "UltraTech Cement OPC 53 Grade Cement"), so prepending
+  // product.brand again produced a visibly duplicated title
+  // ("UltraTech Cement UltraTech Cement OPC 53 Grade Cement"). Only prepend
+  // the brand when the name doesn't already start with it.
+  const title =
+    product.brand && !product.name.toLowerCase().startsWith(product.brand.toLowerCase())
+      ? `${product.brand} ${product.name}`
+      : product.name;
   const description = `${title} — compare live prices from verified suppliers${
     product.category ? ` in ${product.category}` : ""
   } on Buildohub.`;

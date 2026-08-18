@@ -37,7 +37,17 @@ export async function GET(_req: Request, { params }: { params: { entity: string 
     let rows;
     switch (entity as Entity) {
       case "category":
-        rows = await prisma.category.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
+        // P1 fix (Category Discovery): only surface categories that actually
+        // have at least one active listing. An admin can mark a Category
+        // isActive=true with zero live Products under it (e.g. newly added,
+        // or every listing since deactivated) — without this filter the
+        // homepage/PLP would show a tile/filter option that always leads to
+        // an empty "No products found" result. `some: { isActive: true }`
+        // is a single indexed EXISTS-style query, not an N+1 fan-out.
+        rows = await prisma.category.findMany({
+          where: { isActive: true, products: { some: { isActive: true } } },
+          orderBy: { name: "asc" },
+        });
         break;
       case "brand":
         rows = await prisma.brand.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });

@@ -36,6 +36,14 @@ import type {
 const money = (n: number) =>
   `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
+// P1 (Matsrc Intelligence Integration): honest, plain-language disclosure of
+// which real data series the signal/forecast below were actually computed
+// from — never presented as if the two sources were interchangeable.
+const DATA_SOURCE_LABEL: Record<string, string> = {
+  district_intelligence: "Based on district/state price intelligence",
+  order_history: "Based on this platform's order history",
+  insufficient_data: "Not enough price data to determine a source",
+};
 
 export default function PriceReportView({ canonicalProductId }: { canonicalProductId: string }) {
   const [data, setData] = useState<PriceReportResponse | null>(null);
@@ -85,7 +93,7 @@ export default function PriceReportView({ canonicalProductId }: { canonicalProdu
         <p className="text-sm text-deskInk/60">{data.category}</p>
       </header>
 
-      <SignalCard signal={data.signal} />
+      <SignalCard signal={data.signal} dataSource={data.dataSource} />
       <PriceHistoryModule history={data.history} />
       <ForecastModule forecast={data.forecast} />
       <BestPriceModule offers={data.bestPrice} />
@@ -97,7 +105,13 @@ export default function PriceReportView({ canonicalProductId }: { canonicalProdu
 }
 
 // ── Module 1: Buy/Hold/Wait signal ─────────────────────────────────────
-function SignalCard({ signal }: { signal: PriceReportResponse["signal"] }) {
+function SignalCard({
+  signal,
+  dataSource,
+}: {
+  signal: PriceReportResponse["signal"];
+  dataSource?: PriceReportResponse["dataSource"];
+}) {
   const verdictStyles: Record<string, string> = {
     BUY: "bg-deskYellow text-deskInk",
     WAIT: "bg-deskYellow text-deskInk",
@@ -129,6 +143,9 @@ function SignalCard({ signal }: { signal: PriceReportResponse["signal"] }) {
           </li>
         ))}
       </ul>
+      {dataSource ? (
+        <p className="mt-3 text-xs opacity-60">{DATA_SOURCE_LABEL[dataSource]}</p>
+      ) : null}
     </div>
   );
 }
@@ -297,7 +314,9 @@ function BestPriceModule({ offers }: { offers: BestPriceOffer[] }) {
     <section className="rounded-2xl bg-white p-5 shadow-sm">
       <h3 className="text-base font-semibold text-deskInk">Best price finder</h3>
       <p className="mt-1 text-xs text-deskInk/50">
-        Ranked by estimated landed cost (base price + indicative delivery + GST). Freight is confirmed at checkout.
+        Ranked by estimated landed cost (base price + known freight + GST). Freight shown as "Not available" when the
+        platform has no real freight observation for that supplier — never a guessed figure. Final freight is
+        confirmed at checkout.
       </p>
       <div className="mt-4 space-y-2">
         {offers.map((offer, idx) => {
@@ -333,8 +352,12 @@ function BestPriceModule({ offers }: { offers: BestPriceOffer[] }) {
                   <div className="grid grid-cols-2 gap-y-1 sm:grid-cols-4">
                     <span>Base price</span>
                     <span className="font-deskMono tabular-nums">{money(offer.landedCost.basePrice)}</span>
-                    <span>Delivery (est.)</span>
-                    <span className="font-deskMono tabular-nums">{money(offer.landedCost.estimatedDelivery)}</span>
+                    <span>Freight</span>
+                    <span className="font-deskMono tabular-nums">
+                      {offer.landedCost.dataGaps?.includes("freight")
+                        ? "Not available"
+                        : money(offer.landedCost.estimatedDelivery)}
+                    </span>
                     <span>GST ({offer.landedCost.gstRatePercent}%)</span>
                     <span className="font-deskMono tabular-nums">{money(offer.landedCost.gstAmount)}</span>
                     <span>Stock</span>

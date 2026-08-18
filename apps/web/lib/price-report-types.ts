@@ -11,6 +11,11 @@ export type ReportSignal = {
   reasons: string[];
 };
 
+// P1 (Matsrc Intelligence Integration): discloses which real data series the
+// signal/forecast were actually computed from, so the UI never presents the
+// numbers as if their provenance were interchangeable.
+export type ReportDataSource = "district_intelligence" | "order_history" | "insufficient_data";
+
 export type ForecastPoint = {
   date: string;
   price: number;
@@ -44,6 +49,9 @@ export type LandedCostBreakdown = {
   gstAmount: number;
   landedCost: number;
   landedUnitCost: number;
+  // P1: which inputs were unavailable (e.g. ["freight"]) — additive/optional
+  // so existing consumers of this type are unaffected.
+  dataGaps?: string[];
 };
 
 export type BestPriceOffer = {
@@ -94,4 +102,10 @@ export type PriceReportResponse = {
   bestPrice: BestPriceOffer[];
   regional: ReportRegional;
   marketInsight: MarketInsight | null;
+  // P1 (Matsrc Intelligence Integration) — additive/optional fields.
+  // dataSource discloses whether signal/forecast came from the canonical
+  // district/state price-intelligence series or the platform's own
+  // order-history snapshots (or neither, when there's insufficient data).
+  dataSource?: ReportDataSource;
+  intelligenceDataGaps?: string[];
 };

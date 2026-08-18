@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
-import { computeForecast, computeSignal, estimateLandedCost, type HistoryPoint } from "@/lib/price-forecast";
+import type { HistoryPoint } from "@/lib/price-forecast";
 import { getOrRefreshMarketInsight } from "@/lib/market-insight";
+import { buildReportIntelligence } from "@/lib/report-intelligence";
+import { computeReportLandedCost } from "@/lib/report-landed-cost";
+import {
+  loadPriceHistoryRows,
+  resolveCanonicalSkuId,
+  resolveDistrictId,
+} from "@/lib/sourcing/sourcing-intelligence-data";
+import { loadFreightObservations } from "@/lib/sourcing/sourcing-data";
+import { resolveFreight } from "@/lib/sourcing/price-lookup";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +48,12 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
 
     // Builder's own region — derived from their first active Site.state,
     // per the audit decision to reuse Site.state as the region key rather
-    // than introduce a new Region model.
+    // than introduce a new Region model. Also grab the site's city, which is
+    // what the canonical district-intelligence resolution keys on (mirrors
+    // the district-pricing route's own convention).
     const builderSite = await prisma.site.findFirst({
       where: { builderId: user.id, status: "ACTIVE" },
-      select: { state: true },
+      select: { state: true, city: true },
       orderBy: { createdAt: "asc" },
     });
     const builderRegion = builderSite?.state || null;
@@ -79,14 +90,39 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
     ]);
 
     // ── Module 1 & 3: signal + forecast ──────────────────────────────
+    // P1 (Matsrc Intelligence Integration): prefer the canonical
+    // district/state price-intelligence series (same data the AI Sourcing
+    // Assistant uses) over the platform's own sparse PriceSnapshot series,
+    // via the shared buildReportIntelligence() adapter — never a duplicate
+    // calculation. resolveCanonicalSkuId/resolveDistrictId/loadPriceHistoryRows
+    // are the exact same functions lib/sourcing/pipeline.ts calls.
+    const canonicalSkuId = await resolveCanonicalSkuId(canonicalProductId);
+    const districtId = builderSite?.city ? await resolveDistrictId(builderSite.city) : null;
+    const canonicalDailyRows = canonicalSkuId
+      ? await loadPriceHistoryRows(canonicalSkuId, districtId, 120)
+      : [];
+
     const historyPoints: HistoryPoint[] = historyRows.map((r) => ({ price: Number(r.price), capturedAt: r.capturedAt }));
-    const forecast = computeForecast(historyPoints, 30);
-    const signal = computeSignal(historyPoints, forecast);
+    const hasSupplierPrice = offers.length > 0;
+    const intelligence = buildReportIntelligence({
+      canonicalDailyRows,
+      snapshotHistory: historyPoints,
+      hasSupplierPrice,
+      hasLandedCost: hasSupplierPrice,
+    });
+    const { signal, forecast } = intelligence;
 
     // ── Module 4: best price finder (landed cost) ────────────────────
+    // P1: uses the sourcing assistant's calculateLandedCost() (via the
+    // computeReportLandedCost adapter) instead of the old flat-fee
+    // estimateLandedCost(), so freight is disclosed as a genuine data gap
+    // rather than a fabricated ₹250 delivery estimate whenever the platform
+    // has no real freight observation for that product.
+    const freightByProduct = await loadFreightObservations(offers.map((o) => o.id));
     const bestPrice = offers
       .map((offer) => {
-        const breakdown = estimateLandedCost(Number(offer.basePrice), 1);
+        const { freight } = resolveFreight(freightByProduct.get(offer.id) ?? [], builderRegion);
+        const breakdown = computeReportLandedCost(Number(offer.basePrice), freight);
         return {
           productId: offer.id,
           supplierId: offer.supplierId,
@@ -145,6 +181,8 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
       bestPrice,
       regional,
       marketInsight,
+      dataSource: intelligence.dataSource,
+      intelligenceDataGaps: intelligence.dataGaps,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {

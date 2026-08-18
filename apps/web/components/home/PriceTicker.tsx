@@ -1,24 +1,49 @@
 "use client";
 
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { useEffect, useState } from "react";
 
-interface PriceItem { name: string; price: number; change: number }
+interface PriceItem { name: string; price: number }
 
-// FR-24: Live scrolling price ticker for top 10 materials — Posh editorial style
-const ITEMS: PriceItem[] = [
-  { name: "TMT Bar Fe-500D",   price: 62400, change: -1.2 },
-  { name: "OPC Cement 53G",    price: 380,   change:  0.5 },
-  { name: "River Sand",        price: 1800,  change: -0.8 },
-  { name: "AAC Blocks",        price: 3200,  change:  1.1 },
-  { name: "Structural Steel",  price: 58000, change: -0.3 },
-  { name: "Fly Ash Bricks",    price: 5200,  change:  0.0 },
-  { name: "Binding Wire",      price: 72000, change: -2.1 },
-  { name: "MS Pipe",           price: 68000, change:  0.7 },
-  { name: "GI Sheet",          price: 84000, change: -0.5 },
-  { name: "Plywood 18mm",      price: 92,    change:  1.3 },
-];
+// FR-24: Live scrolling price ticker for top 10 materials — Posh editorial style.
+//
+// P0 fix (Phase 9): this previously rendered a fully hardcoded array of 10
+// fake material names/prices/% changes with no underlying data source (the
+// "live" ticker was not live at all, and the ±% change figures were
+// mathematically fabricated for presentation). It now fetches real,
+// currently-active listing prices from the same supplier-listings source the
+// /products catalogue uses (via /api/proxy/public/ticker →
+// getSupplierListings()). There is no real day-over-day price-history feed
+// wired into this app, so the fabricated % change indicator has been removed
+// entirely rather than replaced with another invented number.
+const TICKER_API_URL = "/api/proxy/public/ticker";
 
 export default function PriceTicker() {
+  const [items, setItems] = useState<PriceItem[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const response = await fetch(TICKER_API_URL, { cache: "no-store" });
+        if (!response.ok) throw new Error("Failed to load ticker prices");
+        const data = (await response.json()) as PriceItem[];
+        if (!cancelled) setItems(data);
+      } catch {
+        if (!cancelled) setItems([]);
+      }
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (items.length === 0) {
+    return null;
+  }
+
   return (
     // Layout matches the Lovable design exactly: a STATIC (not fixed/sticky)
     // full-bleed band that sits directly BELOW the hero section and ABOVE the
@@ -41,25 +66,15 @@ export default function PriceTicker() {
       <div className="flex w-max animate-marquee-posh">
         {[0, 1].map((dup) => (
           <div key={dup} className="flex shrink-0" aria-hidden={dup === 1}>
-            {ITEMS.map((item) => (
+            {items.map((item) => (
               <span
                 key={`${dup}-${item.name}`}
                 className="flex items-baseline gap-3 whitespace-nowrap px-8 text-sm"
               >
                 <span style={{ color: "var(--posh-fg-muted)" }}>{item.name}</span>
                 <span style={{ color: "var(--posh-fg)" }}>
-                  ₹{item.price.toLocaleString("en-IN")}
+                  From ₹{item.price.toLocaleString("en-IN")}
                 </span>
-                {item.change !== 0 && (
-                  <span
-                    className="flex items-center gap-0.5 text-xs"
-                    style={{ color: "var(--posh-primary)" }}
-                  >
-                    {item.change < 0 ? <TrendingDown size={11} /> : <TrendingUp size={11} />}
-                    {item.change > 0 ? "+" : "-"}
-                    {Math.abs(item.change)}%
-                  </span>
-                )}
               </span>
             ))}
           </div>

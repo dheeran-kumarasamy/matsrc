@@ -12,8 +12,11 @@ interface Props {
     minPrice?: number | null;
     maxPrice?: number | null;
     supplier: string;
-    rating: number;
-    change: number;
+    // P0 fix (Phase 9): replaces the previous fabricated `rating`/`change`
+    // fields (hardcoded ★4.6 and "↑ 0% today" for every card, backed by no
+    // real data) with a truthful, data-backed count of suppliers actually
+    // quoting this canonical product.
+    supplierCount: number;
     slug: string;
     image?: string;
     category?: string;
@@ -85,11 +88,12 @@ export default function ProductCard({ skeleton, product }: Props) {
               ₹{product.price.toLocaleString("en-IN")}
             </div>
           )}
-          <div className={`text-[11px] mt-0.5 ${product.change < 0 ? "text-red-500" : "text-emerald-600"}`}>
-            {product.change < 0 ? "↓" : "↑"} {Math.abs(product.change)}% today
-          </div>
         </div>
-        <span className="text-amber-500 text-xs font-medium">★ {product.rating}</span>
+        <span className="text-[11px] font-medium text-slate-500">
+          {product.supplierCount > 1
+            ? `${product.supplierCount} suppliers quoting`
+            : "1 supplier quoting"}
+        </span>
       </div>
     </Link>
   );

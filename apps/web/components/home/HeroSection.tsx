@@ -72,8 +72,16 @@ export default function HeroSection() {
           </p>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            {/* P0 fix: this previously linked straight to /newdashboard, which
+                is an authenticated route — unregistered visitors clicking
+                "Get started free" were bounced to a login wall instead of
+                the registration funnel. Send them to /auth/register instead;
+                an already-authenticated visitor is redirected on to
+                /newdashboard automatically by middleware.ts's `/auth/*`
+                handling, so this is safe for both logged-out and logged-in
+                users. */}
             <Link
-              href="/newdashboard"
+              href="/auth/register"
               className="flex min-h-[48px] items-center justify-center rounded-full px-8 py-3 text-sm font-medium transition-opacity hover:opacity-85"
               style={{
                 background: "var(--posh-primary)",

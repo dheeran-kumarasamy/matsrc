@@ -111,6 +111,13 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
   }
 
 
+  // P0 fix (Phase 9): previously every card was given a fabricated
+  // `rating: 4.6` and `change: 0` ("↑ 0% today") with no underlying data
+  // source — there is no ratings/day-over-day pricing feed wired into this
+  // page. Replaced with a truthful, data-backed value: the number of
+  // suppliers actually quoting this canonical product (from
+  // `groupedListingIds`, populated by dedupeByCanonicalGroup()/the
+  // cross-supplier resolution in apps/supplier/lib/supplier-data.ts).
   const cardProducts = filtered.map((listing) => ({
     slug: listing.id,
     name: listing.name,
@@ -118,8 +125,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
     minPrice: listing.minPrice ?? undefined,
     maxPrice: listing.maxPrice ?? undefined,
     supplier: "Verified Supplier",
-    rating: 4.6,
-    change: 0,
+    supplierCount: listing.groupedListingIds?.length || 1,
     image: listing.images && listing.images.length > 0 ? listing.images[0] : undefined,
     category: listing.category,
   }));

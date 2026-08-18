@@ -1,19 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { authErrorMessage } from "@/lib/auth-error-message";
 
 // UF-01 Step 2–4: Choose channel, enter credentials, verify OTP
+//
+// Wrapped in Suspense because useSearchParams() (needed to read Auth.js's
+// `?error=...` redirect, see P0 fix below) requires it in the App Router —
+// without this, `next build` fails/deopts the whole route to client-only
+// rendering.
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [channel, setChannel] = useState<"phone" | "email">("phone");
   const [identifier, setIdentifier] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"identifier" | "otp">("identifier");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  // P0 fix: surface Auth.js's `?error=...` redirect (e.g. after a failed
+  // Google sign-in) as a real message instead of silently dropping it —
+  // previously the page never read this param at all, so a failed Google
+  // login looked identical to the page just doing nothing.
+  const [error, setError] = useState(() => authErrorMessage(searchParams.get("error")) || "");
 
   async function handleSendOtp(e: React.FormEvent) {
     e.preventDefault();

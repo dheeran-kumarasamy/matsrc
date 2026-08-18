@@ -1,33 +1,6 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
-
-// Route prefixes that expose user-specific data (orders, reports, alerts,
-// cart/checkout, watchlist, purchase orders, credit, profile, disputes,
-// group-orders, dashboard) and therefore require an authenticated session.
-//
-// NOTE: the legacy "/dashboard" route was removed — /newdashboard is now the
-// single builder dashboard, so only that prefix is listed here.
-const PROTECTED_PREFIXES = [
-  "/newdashboard",
-  "/orders",
-  "/reports",
-  "/notifications",
-  "/watchlist",
-  "/purchase-orders",
-  "/credit",
-  "/cart",
-  "/checkout",
-  "/disputes",
-  "/group-orders",
-  "/profile",
-  "/sites",
-  // AI Sourcing Assistant — session/conversation state is per-customer, so the
-  // page requires a signed-in builder just like every other portal route. The
-  // /api/builder/sourcing/* endpoints are already covered by the
-  // /api/builder prefix check below.
-  "/sourcing",
-];
-
+import { isLegacyDashboardRoute, isProtectedRoute } from "@/lib/route-guards";
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -40,6 +13,17 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
+  // P0 fix (Phase 6): `/dashboard` isn't a real route in this app —
+  // `/newdashboard` is the canonical customer dashboard. Redirect anyone
+  // hitting the conventional path (old bookmarks/links) straight there
+  // instead of letting it 404. Not a "retire a duplicate" migration — there
+  // was never a working `/dashboard` implementation to begin with.
+  if (isLegacyDashboardRoute(pathname)) {
+    const target = new URL("/newdashboard", req.url);
+    target.search = req.nextUrl.search;
+    return NextResponse.redirect(target, { status: 308 });
+  }
+
   if (pathname.startsWith("/auth/")) {
     if (isLoggedIn) {
       return NextResponse.redirect(new URL("/newdashboard", req.url));
@@ -47,9 +31,7 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  const isProtected = PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-  );
+  const isProtected = isProtectedRoute(pathname);
 
   // Protect the builder-facing user-data API routes as well.
   const isProtectedApi = pathname.startsWith("/api/builder");

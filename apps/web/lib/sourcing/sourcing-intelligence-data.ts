@@ -63,6 +63,56 @@ export async function resolveDistrictId(districtName: string): Promise<string | 
   return district?.id ?? null;
 }
 
+// P2-A (Market Benchmark) — additive lookups. Resolves the canonical SKU's
+// public `code` and its material category id (needed to call the public
+// `public/pricing/resolve` endpoint and to look up a genuine unit-conversion
+// factor), and a district's public `code` (needed for the same call). Never
+// guesses either — returns null when not found, same convention as
+// resolveCanonicalSkuId/resolveDistrictId above.
+export async function getCanonicalSkuMarketContext(
+  canonicalSkuId: string
+): Promise<{ code: string; materialCategoryId: string; baseUnit: string } | null> {
+  const sku = await prisma.pricingCanonicalSku.findUnique({
+    where: { id: canonicalSkuId },
+    select: { code: true, materialCategoryId: true, baseUnit: true },
+  });
+  return sku ?? null;
+}
+
+export async function getDistrictCode(districtId: string): Promise<string | null> {
+  const district = await prisma.pricingDistrict.findUnique({
+    where: { id: districtId },
+    select: { code: true },
+  });
+  return district?.code ?? null;
+}
+
+/**
+ * Looks up a genuine unit-conversion factor from PricingUnitConversion for
+ * converting one `fromUnitLabel` (e.g. the report's Product.unit, "MT") into
+ * one base unit of the given material category. Case-insensitive match on
+ * `fromLabel`. Returns null (never a guessed factor) when no verified
+ * conversion row exists, or when the row is flagged `isAmbiguous` — an
+ * ambiguous conversion is, by definition, not safe to apply automatically.
+ */
+export async function resolveUnitConversionFactor(
+  materialCategoryId: string,
+  fromUnitLabel: string
+): Promise<number | null> {
+  if (!fromUnitLabel) return null;
+  const conversion = await prisma.pricingUnitConversion.findFirst({
+    where: {
+      materialCategoryId,
+      fromLabel: { equals: fromUnitLabel.trim(), mode: "insensitive" },
+      isAmbiguous: false,
+    },
+    select: { factor: true },
+  });
+  if (!conversion) return null;
+  const factor = Number(conversion.factor);
+  return Number.isFinite(factor) && factor > 0 ? factor : null;
+}
+
 /**
  * Loads daily price rows for a canonical SKU and district over a trailing
  * window. Only publicDisplayAllowed rows are returned.

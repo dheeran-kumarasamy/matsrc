@@ -10,9 +10,14 @@ import { auth } from "@/auth";
 // (Inter everywhere, Work Sans only where a component re-declared it), so it
 // is removed here to keep the font uniform across every surface.
 
+// P2-D — root/homepage metadata. Route-level `generateMetadata`/`metadata`
+// exports (products catalogue, category filter, PDP, price report) override
+// title/description/canonical/robots per-route via Next's metadata merging;
+// this stays the site-wide default/fallback and homepage copy.
 export const metadata: Metadata = {
   title: { default: "Buildohub.in", template: "%s | Buildohub.in" },
-  description: "India's B2B construction material procurement marketplace",
+  description:
+    "Buildohub — India's B2B construction material procurement marketplace. Compare live prices from verified suppliers for cement, TMT bars, and more.",
   manifest: "/manifest.json",
   themeColor: "#1a4f8a",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "Buildohub.in" },

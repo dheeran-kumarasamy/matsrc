@@ -92,6 +92,30 @@ export type MarketInsight = {
   stale: boolean;
 };
 
+// P2-A (Market Benchmark) — mirrors lib/market-benchmark.ts's
+// MarketBenchmarkResult shape (kept as its own type here rather than
+// importing across the client/server boundary casually, matching this
+// file's existing "shared response shape" convention).
+export type MarketBenchmark =
+  | {
+      available: true;
+      referencePrice: number;
+      referenceUnit: string;
+      referenceLevel: "DISTRICT" | "STATE" | "NATIONAL";
+      locationLabel: string;
+      asOf: string;
+      isStale: boolean;
+      fallbackUsed: boolean;
+      comparisonPrice: number;
+      differenceAbsolute: number;
+      differencePercent: number;
+      comparisonStatus: "BELOW_MARKET" | "AT_MARKET" | "ABOVE_MARKET";
+    }
+  | {
+      available: false;
+      unavailableReason: "NO_REFERENCE_DATA" | "UNIT_INCOMPATIBLE";
+    };
+
 export type PriceReportResponse = {
   canonicalProductId: string;
   title: string;
@@ -108,4 +132,6 @@ export type PriceReportResponse = {
   // order-history snapshots (or neither, when there's insufficient data).
   dataSource?: ReportDataSource;
   intelligenceDataGaps?: string[];
+  // P2-A (Market Benchmark) — additive/optional.
+  marketBenchmark?: MarketBenchmark;
 };

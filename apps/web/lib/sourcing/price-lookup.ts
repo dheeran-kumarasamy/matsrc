@@ -32,6 +32,12 @@ export type MarketReferencePrice = {
   district: string | null;
   state: string | null;
   fallbackUsed: boolean;
+  // P2-A (Market Benchmark): the resolution endpoint already returns these —
+  // additive fields so the report's "vs. market" feature can show freshness
+  // without a second request. Optional/backward-compatible for existing
+  // (currently unused) callers.
+  asOf?: string | null;
+  isStale?: boolean;
   source: "AGNI_PRICE_INTELLIGENCE";
 };
 
@@ -72,6 +78,8 @@ export async function getMarketReferencePrice(
       district?: string | null;
       state?: string | null;
       fallbackUsed?: boolean;
+      asOf?: string | null;
+      isStale?: boolean;
     };
 
     if (typeof data.price !== "number" || !Number.isFinite(data.price)) return null;
@@ -83,6 +91,8 @@ export async function getMarketReferencePrice(
       district: data.district ?? null,
       state: data.state ?? null,
       fallbackUsed: Boolean(data.fallbackUsed),
+      asOf: data.asOf ?? null,
+      isStale: Boolean(data.isStale),
       source: "AGNI_PRICE_INTELLIGENCE",
     };
   } catch (error) {

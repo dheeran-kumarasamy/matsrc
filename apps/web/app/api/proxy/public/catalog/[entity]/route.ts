@@ -36,7 +36,7 @@ export async function GET(_req: Request, { params }: { params: { entity: string 
   try {
     let rows;
     switch (entity as Entity) {
-      case "category":
+      case "category": {
         // P1 fix (Category Discovery): only surface categories that actually
         // have at least one active listing. An admin can mark a Category
         // isActive=true with zero live Products under it (e.g. newly added,
@@ -44,11 +44,35 @@ export async function GET(_req: Request, { params }: { params: { entity: string 
         // homepage/PLP would show a tile/filter option that always leads to
         // an empty "No products found" result. `some: { isActive: true }`
         // is a single indexed EXISTS-style query, not an N+1 fan-out.
+        //
+        // P2-B (Category Discovery imagery): additionally exposes imageUrl
+        // (real, admin/backfill-set only — see Category.imageUrl's schema
+        // comment; never fabricated here) and a real activeListingCount so
+        // the homepage card can show truthful availability instead of
+        // fabricating a number. One extra _count aggregate per category,
+        // still no N+1 (Prisma batches this into the same query).
         rows = await prisma.category.findMany({
           where: { isActive: true, products: { some: { isActive: true } } },
           orderBy: { name: "asc" },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            isActive: true,
+            imageUrl: true,
+            _count: { select: { products: { where: { isActive: true } } } },
+          },
         });
+        rows = rows.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          slug: r.slug,
+          isActive: r.isActive,
+          imageUrl: r.imageUrl,
+          activeListingCount: r._count.products,
+        }));
         break;
+      }
       case "brand":
         rows = await prisma.brand.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
         break;

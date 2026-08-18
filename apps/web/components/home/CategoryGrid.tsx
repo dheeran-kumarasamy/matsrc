@@ -10,7 +10,16 @@ import Link from "next/link";
 // net::ERR_CONNECTION_REFUSED and the category grid to silently render empty.
 const CATALOG_API_BASE_URL = "/api/proxy/public/catalog";
 
-type CatalogCategory = { id: string; name: string; code?: string | null };
+type CatalogCategory = {
+  id: string;
+  name: string;
+  code?: string | null;
+  // P2-B (Category Discovery imagery) — additive/optional so this type still
+  // matches whatever the catalog endpoint returns for brand/grade/unit
+  // entities that don't have these fields.
+  imageUrl?: string | null;
+  activeListingCount?: number;
+};
 
 
 // BUG-05 fix: previously this grid used a hardcoded list of 8 categories
@@ -50,6 +59,63 @@ const ICONS_BY_NAME: Record<string, string> = {
 
 function iconForCategory(name: string) {
   return ICONS_BY_NAME[name.trim().toLowerCase()] ?? "🏢";
+}
+
+// P2-B (Category Discovery imagery): shows a real, category-backed photo
+// (Category.imageUrl — see its schema comment; never fabricated/stock) when
+// present, and gracefully falls back to the existing emoji icon on load
+// failure or when no image has been set yet (true for both live categories
+// today, since no supplier has uploaded product photos yet). Also shows the
+// real active-listing count queried server-side — never an invented number.
+function CategoryCard({
+  name,
+  imageUrl,
+  activeListingCount,
+}: {
+  name: string;
+  imageUrl?: string | null;
+  activeListingCount?: number;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const showImage = Boolean(imageUrl) && !imageFailed;
+
+  return (
+    <Link
+      href={`/products?category=${encodeURIComponent(name)}`}
+      className="flex min-h-[80px] flex-col items-center justify-center rounded-2xl border p-5 text-center transition-all duration-200"
+      style={{
+        background: "var(--posh-bg-card)",
+        borderColor: "var(--posh-border)",
+        color: "var(--posh-fg-muted)",
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--posh-primary)";
+        (e.currentTarget as HTMLElement).style.color = "var(--posh-fg)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--posh-border)";
+        (e.currentTarget as HTMLElement).style.color = "var(--posh-fg-muted)";
+      }}
+    >
+      {showImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageUrl as string}
+          alt={name}
+          className="mb-2 h-10 w-10 rounded-lg object-cover"
+          onError={() => setImageFailed(true)}
+        />
+      ) : (
+        <div className="text-3xl mb-2">{iconForCategory(name)}</div>
+      )}
+      <div className="text-sm font-medium leading-tight">{name}</div>
+      {typeof activeListingCount === "number" ? (
+        <div className="mt-0.5 text-[11px] opacity-60">
+          {activeListingCount} {activeListingCount === 1 ? "listing" : "listings"}
+        </div>
+      ) : null}
+    </Link>
+  );
 }
 
 export default function CategoryGrid() {
@@ -107,28 +173,13 @@ export default function CategoryGrid() {
                   <div className="h-3 w-16 rounded" style={{ background: "var(--posh-border)" }} />
                 </div>
               ))
-            : categories.map(({ id, name }) => (
-                <Link
+            : categories.map(({ id, name, imageUrl, activeListingCount }) => (
+                <CategoryCard
                   key={id}
-                  href={`/products?category=${encodeURIComponent(name)}`}
-                  className="flex min-h-[80px] flex-col items-center justify-center rounded-2xl border p-5 text-center transition-all duration-200"
-                  style={{
-                    background: "var(--posh-bg-card)",
-                    borderColor: "var(--posh-border)",
-                    color: "var(--posh-fg-muted)",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--posh-primary)";
-                    (e.currentTarget as HTMLElement).style.color = "var(--posh-fg)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.borderColor = "var(--posh-border)";
-                    (e.currentTarget as HTMLElement).style.color = "var(--posh-fg-muted)";
-                  }}
-                >
-                  <div className="text-3xl mb-2">{iconForCategory(name)}</div>
-                  <div className="text-sm font-medium leading-tight">{name}</div>
-                </Link>
+                  name={name}
+                  imageUrl={imageUrl}
+                  activeListingCount={activeListingCount}
+                />
               ))}
         </div>
       </div>

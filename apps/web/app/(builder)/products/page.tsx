@@ -1,5 +1,10 @@
+import type { Metadata } from "next";
 import ProductCard from "@/components/products/ProductCard";
 import ProductFilters from "@/components/products/ProductFilters";
+import Breadcrumbs from "@/components/products/Breadcrumbs";
+import { catalogueBreadcrumbs, categoryBreadcrumbs } from "@/lib/breadcrumbs";
+import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
+import { getSiteUrl } from "@/lib/site-url";
 import { getSupplierListings, dedupeByCanonicalGroup, parseListingPrice } from "@/lib/listings";
 
 
@@ -12,6 +17,36 @@ interface SearchParams {
   maxPrice?: string;
   sort?: string;
   q?: string;
+}
+
+// P2-D — unique metadata per category-filtered view. Canonical URL policy:
+// category-filtered catalogue pages ARE treated as distinct indexable
+// discovery pages (they show genuinely different, real content — a filtered
+// product set), so each gets its own canonical `?category=` URL rather than
+// all collapsing to the bare /products canonical. Other filter params
+// (brand/price/sort/q) are NOT given distinct canonicals — they narrow an
+// already-indexable page rather than representing a separate discovery
+// surface, so their canonical points back to the (optionally
+// category-scoped) page without those params, avoiding duplicate indexation
+// from irrelevant query-parameter combinations.
+export async function generateMetadata({ searchParams }: { searchParams: SearchParams }): Promise<Metadata> {
+  const category = normalizeParam(searchParams.category);
+  const siteUrl = getSiteUrl();
+
+  if (category) {
+    const canonical = `${siteUrl}/products?category=${encodeURIComponent(category)}`;
+    return {
+      title: `${category} — Buy Construction Materials Online`,
+      description: `Compare live prices from verified suppliers for ${category} on Buildohub — India's B2B construction material procurement marketplace.`,
+      alternates: { canonical },
+    };
+  }
+
+  return {
+    title: "Browse Materials",
+    description: "Compare live prices from verified suppliers across cement, TMT bars, and more construction materials on Buildohub.",
+    alternates: { canonical: `${siteUrl}/products` },
+  };
 }
 
 function normalizeParam(value?: string | string[]) {
@@ -131,8 +166,27 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
   }));
 
 
+  // P2-C — the category name in the crumb must be the real, admin-configured
+  // Category name (matching what the filter/link actually uses), not the raw
+  // free-text query param, so it stays accurate even if a user hand-edits
+  // the URL with different casing.
+  const matchedCategoryName =
+    category && filtered.length > 0
+      ? filtered.find((l) => l.category.toLowerCase().includes(category.toLowerCase()))?.category ?? category
+      : category;
+  const breadcrumbItems = matchedCategoryName ? categoryBreadcrumbs(matchedCategoryName) : catalogueBreadcrumbs();
+
   return (
     <div className="space-y-4">
+      {/* P2-D — BreadcrumbList JSON-LD, derived from the exact same
+          breadcrumbItems the visible <Breadcrumbs> renders (single source
+          of truth, see lib/breadcrumbs.ts / lib/json-ld.ts). */}
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildBreadcrumbJsonLd(breadcrumbItems)) }}
+      />
+      <Breadcrumbs items={breadcrumbItems} />
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-900">Browse Materials</h1>
         <span className="text-sm text-slate-400">{cardProducts.length} live listings from suppliers</span>

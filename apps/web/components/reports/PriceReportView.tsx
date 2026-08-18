@@ -18,6 +18,7 @@ import type {
   PriceReportResponse,
   ReportHistoryEntry,
   BestPriceOffer,
+  MarketBenchmark,
 } from "@/lib/price-report-types";
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -94,6 +95,7 @@ export default function PriceReportView({ canonicalProductId }: { canonicalProdu
       </header>
 
       <SignalCard signal={data.signal} dataSource={data.dataSource} />
+      <MarketBenchmarkModule benchmark={data.marketBenchmark} />
       <PriceHistoryModule history={data.history} />
       <ForecastModule forecast={data.forecast} />
       <BestPriceModule offers={data.bestPrice} />
@@ -147,6 +149,83 @@ function SignalCard({
         <p className="mt-3 text-xs opacity-60">{DATA_SOURCE_LABEL[dataSource]}</p>
       ) : null}
     </div>
+  );
+}
+
+// ── Module (P2-A): "How does this compare?" market benchmark ────────────
+// Renders the honest DISTRICT/STATE/NATIONAL comparison computed server-side
+// by lib/market-benchmark.ts (via computeMarketBenchmark) — this component
+// never computes a difference/percentage itself, only formats what the
+// server already decided. Absent entirely (renders nothing) only when the
+// backing report response predates this field (defensive, not expected in
+// practice); an explicit, honest "not available" card is shown whenever the
+// server marks the benchmark unavailable — never a fabricated ₹0/0%/"At market".
+function MarketBenchmarkModule({ benchmark }: { benchmark?: MarketBenchmark }) {
+  if (!benchmark) return null;
+
+  if (!benchmark.available) {
+    return (
+      <section className="rounded-2xl bg-white p-5 shadow-sm">
+        <h3 className="text-base font-semibold text-deskInk">How does this compare?</h3>
+        <p className="mt-2 text-sm text-deskInk/50">
+          No comparable market reference is currently available for this product and location.
+        </p>
+      </section>
+    );
+  }
+
+  const levelLabel =
+    benchmark.referenceLevel === "DISTRICT"
+      ? "District"
+      : benchmark.referenceLevel === "STATE"
+      ? "State"
+      : "National";
+
+  const statusLabel =
+    benchmark.comparisonStatus === "BELOW_MARKET"
+      ? "below"
+      : benchmark.comparisonStatus === "ABOVE_MARKET"
+      ? "above"
+      : "in line with";
+
+  const statusColor =
+    benchmark.comparisonStatus === "BELOW_MARKET"
+      ? "text-emerald-700"
+      : benchmark.comparisonStatus === "ABOVE_MARKET"
+      ? "text-red-700"
+      : "text-deskInk/70";
+
+  return (
+    <section className="rounded-2xl bg-white p-5 shadow-sm">
+      <h3 className="text-base font-semibold text-deskInk">How does this compare?</h3>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-deskInk/40">Your current price</p>
+          <p className="mt-1 text-xl font-bold text-deskInk">
+            {money(benchmark.comparisonPrice)}/{benchmark.referenceUnit}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-wide text-deskInk/40">
+            {levelLabel} market reference
+          </p>
+          <p className="mt-1 text-xl font-bold text-deskInk">
+            {money(benchmark.referencePrice)}/{benchmark.referenceUnit}
+          </p>
+        </div>
+      </div>
+      <p className={`mt-3 text-sm font-medium ${statusColor}`}>
+        {money(Math.abs(benchmark.differenceAbsolute))}/{benchmark.referenceUnit} {statusLabel} the{" "}
+        {benchmark.fallbackUsed ? `${levelLabel.toLowerCase()} ` : ""}market reference (
+        {benchmark.differencePercent >= 0 ? "+" : ""}
+        {benchmark.differencePercent.toFixed(1)}%)
+      </p>
+      <p className="mt-1 text-xs text-deskInk/40">
+        Reference level: {levelLabel} · {benchmark.locationLabel} · Updated{" "}
+        {benchmark.asOf ? new Date(benchmark.asOf).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "recently"}
+        {benchmark.isStale ? " (may be outdated)" : ""}
+      </p>
+    </section>
   );
 }
 

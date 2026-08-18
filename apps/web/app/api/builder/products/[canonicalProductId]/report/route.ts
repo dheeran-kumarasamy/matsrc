@@ -4,13 +4,17 @@ import type { HistoryPoint } from "@/lib/price-forecast";
 import { getOrRefreshMarketInsight } from "@/lib/market-insight";
 import { buildReportIntelligence } from "@/lib/report-intelligence";
 import { computeReportLandedCost } from "@/lib/report-landed-cost";
+import { computeMarketBenchmark, type MarketBenchmarkResult } from "@/lib/market-benchmark";
 import {
+  getCanonicalSkuMarketContext,
+  getDistrictCode,
   loadPriceHistoryRows,
   resolveCanonicalSkuId,
   resolveDistrictId,
+  resolveUnitConversionFactor,
 } from "@/lib/sourcing/sourcing-intelligence-data";
 import { loadFreightObservations } from "@/lib/sourcing/sourcing-data";
-import { resolveFreight } from "@/lib/sourcing/price-lookup";
+import { getMarketReferencePrice, resolveFreight } from "@/lib/sourcing/price-lookup";
 
 export const dynamic = "force-dynamic";
 
@@ -137,6 +141,48 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
       })
       .sort((a, b) => a.landedCost.landedCost - b.landedCost.landedCost);
 
+    // ── Module 4b: market benchmark ("vs. market") ────────────────────
+    // P2-A (Market Benchmark): reuses the existing, previously-unwired
+    // getMarketReferencePrice() (PricingResolutionService's DISTRICT > STATE
+    // > NATIONAL hierarchy via apps/api's public/pricing/resolve) — no
+    // second pricing-intelligence engine. Only ever compares the report's
+    // own MATERIAL-ONLY price (the cheapest active offer's basePrice) against
+    // the resolved reference, never a landed cost — see computeMarketBenchmark's
+    // mandatory rules. Unit compatibility is checked via a genuine
+    // PricingUnitConversion lookup, never guessed.
+    let marketBenchmark: MarketBenchmarkResult = { available: false, unavailableReason: "NO_REFERENCE_DATA" };
+    const cheapestOffer = bestPrice[0] ?? null;
+    if (canonicalSkuId && cheapestOffer) {
+      const skuContext = await getCanonicalSkuMarketContext(canonicalSkuId);
+      const districtCode = districtId ? await getDistrictCode(districtId) : null;
+      if (skuContext && districtCode) {
+        const reference = await getMarketReferencePrice(skuContext.code, districtCode);
+        const unitsDiffer =
+          reference?.unit && reference.unit.trim().toLowerCase() !== cheapestOffer.unit.trim().toLowerCase();
+        const unitConversionFactor = unitsDiffer
+          ? await resolveUnitConversionFactor(skuContext.materialCategoryId, cheapestOffer.unit)
+          : null;
+        marketBenchmark = computeMarketBenchmark({
+          reportUnit: cheapestOffer.unit,
+          comparisonPrice: cheapestOffer.basePrice,
+          reference:
+            reference && reference.unit && reference.geographyLevel
+              ? {
+                  price: reference.price,
+                  unit: reference.unit,
+                  geographyLevel: reference.geographyLevel,
+                  district: reference.district,
+                  state: reference.state,
+                  asOf: reference.asOf ?? "",
+                  isStale: reference.isStale ?? false,
+                  fallbackUsed: reference.fallbackUsed,
+                }
+              : null,
+          unitConversionFactorToReferenceUnit: unitConversionFactor,
+        });
+      }
+    }
+
     // ── Module 5: regional price variation ───────────────────────────
     // Groups snapshot rows by region (free-text, e.g. Site.state); "not
     // enough data" whenever fewer than 2 regions have at least 1 snapshot.
@@ -183,6 +229,7 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
       marketInsight,
       dataSource: intelligence.dataSource,
       intelligenceDataGaps: intelligence.dataGaps,
+      marketBenchmark,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {

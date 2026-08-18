@@ -145,6 +145,14 @@ model Category {
   name              String             @unique
   slug              String             @unique
   isActive          Boolean            @default(true)
+  // P2-B (Category Discovery): nullable/additive — no category-specific
+  // imagery exists anywhere in the platform today (no CMS/asset pipeline),
+  // so this is never auto-fabricated. Populated opportunistically from a
+  // real active listing's own photo within this category (see
+  // CategoryGrid.tsx's fallback behaviour) or left null, which renders the
+  // existing emoji fallback — never a stock photo substituted for a real
+  // category image.
+  imageUrl          String?
   products          Product[]
   canonicalProducts CanonicalProduct[]
 }

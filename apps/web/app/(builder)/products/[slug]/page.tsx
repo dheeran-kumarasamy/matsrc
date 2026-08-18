@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import EnquiryPanel from "@/components/products/EnquiryPanel";
@@ -5,12 +6,36 @@ import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import WatchlistButton from "@/components/products/WatchlistButton";
 import PriceIntelligenceSection from "@/components/products/PriceIntelligenceSection";
 import DistrictPriceIntelligencePanel from "@/components/products/district-pricing/DistrictPriceIntelligencePanel";
+import Breadcrumbs from "@/components/products/Breadcrumbs";
+import { productBreadcrumbs } from "@/lib/breadcrumbs";
+import { buildBreadcrumbJsonLd, buildProductJsonLd } from "@/lib/json-ld";
+import { getSiteUrl } from "@/lib/site-url";
 
 import { getCategoryEmoji } from "@/lib/category-images";
 
-import { getSupplierListings, parseNumericLabel, type SupplierListing } from "@/lib/listings";
+import { getSupplierListings, getSupplierProduct, parseNumericLabel, type SupplierListing } from "@/lib/listings";
 
 export const dynamic = "force-dynamic";
+
+// P2-D — unique per-product metadata using only real name/brand/category
+// (no generic duplicated title across products). Canonical points at this
+// product's own slug URL.
+export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+  const product = await getSupplierProduct(params.slug);
+  if (!product) return {};
+
+  const brandPart = product.brand ? `${product.brand} ` : "";
+  const title = `${brandPart}${product.name}`;
+  const description = `${title} — compare live prices from verified suppliers${
+    product.category ? ` in ${product.category}` : ""
+  } on Buildohub.`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: `${getSiteUrl()}/products/${params.slug}` },
+  };
+}
 
 // Given the requested listing (by slug/id), resolve the full cross-supplier
 // canonical group it belongs to so the PDP can show the group's lowest
@@ -54,15 +79,34 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
 
   const otherSuppliersCount = siblings.filter((listing) => listing.supplierId !== product.supplierId).length;
 
+  const breadcrumbItems = productBreadcrumbs({ categoryName: product.category ?? null, productName: product.name });
+  // P2-D — Product JSON-LD from only genuinely available fields (name,
+  // brand, category, image, sku=Product.id). Deliberately no `offers` (the
+  // price is quantity-tier/location/supplier dependent, never a single
+  // universally-purchasable price) and no `aggregateRating` (no real
+  // persisted product review/rating data exists anywhere in this schema —
+  // see P0's fabricated-★4.6 finding).
+  const productJsonLd = buildProductJsonLd({
+    name: product.name,
+    image: imageUrl,
+    brand: product.brand ?? null,
+    category: product.category ?? null,
+    sku: product.id,
+  });
+
   return (
     <div className="posh-body space-y-6">
-      <nav className="posh-label flex items-center gap-2">
-        <Link href="/products" className="hover:text-black hover:underline">
-          Materials
-        </Link>
-        <span>/</span>
-        <span className="text-black">{product.name}</span>
-      </nav>
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildBreadcrumbJsonLd(breadcrumbItems)) }}
+      />
+      <Breadcrumbs items={breadcrumbItems} />
 
       <div className="grid gap-6 lg:grid-cols-[1.5fr_0.9fr]">
         <section className="space-y-5">

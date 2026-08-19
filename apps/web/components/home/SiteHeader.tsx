@@ -7,7 +7,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, X } from "lucide-react";
+import { Menu, Search, X } from "lucide-react";
 
 import { useSession } from "next-auth/react";
 import {
@@ -33,7 +33,7 @@ export default function SiteHeader() {
 
   return (
     <header className="posh-nav fixed inset-x-0 top-0 z-50">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 md:px-10">
+      <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-5 md:gap-8 md:px-10">
 
         {/* Wordmark */}
         <Link
@@ -44,8 +44,38 @@ export default function SiteHeader() {
           Buildohub
         </Link>
 
+        {/* Desktop search — ports the Lovable reference design's header
+            search bar (previously missing here). Submits a plain GET form
+            to the existing /products?q= search, the same deep-link pattern
+            already used by the builder portal's persistent header search
+            (see app/(builder)/layout.tsx), so no new search API is needed. */}
+        <form
+          action="/products"
+          method="GET"
+          role="search"
+          className="relative hidden flex-1 md:block"
+        >
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2"
+            style={{ color: "var(--posh-fg-muted)" }}
+          />
+          <input
+            type="search"
+            name="q"
+            aria-label="Search materials, suppliers or grades"
+            placeholder="Search cement, TMT bars, aggregates, suppliers…"
+            className="w-full rounded-full border py-2.5 pl-11 pr-4 text-sm outline-none backdrop-blur-md transition-colors"
+            style={{
+              borderColor: "var(--posh-border)",
+              background: "rgba(240,232,216,0.06)",
+              color: "var(--posh-fg)",
+            }}
+          />
+        </form>
+
         {/* Desktop nav */}
-        <nav className="hidden items-center gap-6 md:flex">
+        <nav className="ml-auto hidden items-center gap-6 md:flex">
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
@@ -102,6 +132,34 @@ export default function SiteHeader() {
             </SheetTitle>
           </SheetHeader>
           <div className="flex-1 space-y-2 p-6">
+            {/* Mobile search — same /products?q= deep link as the desktop
+                search bar above, surfaced inside the drawer since this
+                header uses a Sheet-based mobile menu rather than an inline
+                search row below the nav bar. */}
+            <form
+              action="/products"
+              method="GET"
+              role="search"
+              className="relative mb-4"
+            >
+              <Search
+                aria-hidden
+                className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2"
+                style={{ color: "var(--posh-fg-muted)" }}
+              />
+              <input
+                type="search"
+                name="q"
+                aria-label="Search materials, suppliers or grades"
+                placeholder="Search materials or suppliers…"
+                className="w-full rounded-full border py-2.5 pl-11 pr-4 text-sm outline-none transition-colors"
+                style={{
+                  borderColor: "var(--posh-border)",
+                  background: "rgba(240,232,216,0.06)",
+                  color: "var(--posh-fg)",
+                }}
+              />
+            </form>
             {NAV_LINKS.map((link) => (
               <SheetClose asChild key={link.href}>
                 <Link

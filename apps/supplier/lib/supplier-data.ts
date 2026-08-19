@@ -738,6 +738,37 @@ export async function getSupplierListingById(id: string, email: string) {
 }
 
 
+/**
+ * Inserts a single append-only PriceSnapshot row (source: LISTING) whenever a
+ * supplier creates a listing or changes its price from the Supplier Portal.
+ * Mirrors `ListingsService.recordPriceSnapshot` in `apps/api` (used by the
+ * WhatsApp price-update flow) so price history is captured consistently
+ * regardless of which surface the supplier used to make the change. Never
+ * updates/deletes existing rows — every call creates a brand new record —
+ * and is deliberately fire-and-forget so a snapshot failure never blocks the
+ * listing create/update the supplier is waiting on.
+ */
+async function recordPriceSnapshot(params: {
+  productId: string;
+  supplierId: string;
+  canonicalProductId: string | null;
+  price: number;
+  unit?: string | null;
+  region?: string | null;
+}): Promise<void> {
+  await prisma.priceSnapshot.create({
+    data: {
+      productId: params.productId,
+      supplierId: params.supplierId,
+      canonicalProductId: params.canonicalProductId ?? undefined,
+      price: params.price,
+      unit: params.unit ?? undefined,
+      region: params.region ?? undefined,
+      source: "LISTING",
+    },
+  });
+}
+
 function parsePositiveInt(value: string, field: string) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) {
@@ -919,16 +950,34 @@ export async function createSupplierListing(input: ListingInput, email: string) 
       return product;
     });
 
+  let product: any;
   try {
-    return await createWithPricingSchema();
+    product = await createWithPricingSchema();
   } catch (error) {
     if (!isMissingPricingSchemaError(error)) throw error;
     await ensurePricingSchema();
-    return createWithPricingSchema();
+    product = await createWithPricingSchema();
   }
+
+  // Price-discovery snapshot hook (additive, non-blocking): capture the
+  // listing's initial price as the first PriceSnapshot row for this Product.
+  // Never blocks/affects listing creation on failure.
+  void recordPriceSnapshot({
+    productId: product.id,
+    supplierId: product.supplierId,
+    canonicalProductId: product.canonicalProductId,
+    price: Number(product.basePrice),
+    unit: product.unit,
+    region: supplierProfile.region,
+  }).catch((error) => {
+    console.error(`Failed to record price snapshot for new listing ${product.id}:`, error);
+  });
+
+  return product;
 }
 
 export async function updateSupplierListing(id: string, input: ListingInput, email: string) {
+  const { supplierProfile } = await ensureSupplierContext(email);
   const existing = await getSupplierListingById(id, email);
   if (!existing) return null;
 
@@ -990,13 +1039,36 @@ export async function updateSupplierListing(id: string, input: ListingInput, ema
       return product;
     });
 
+  let product: any;
   try {
-    return await updateWithPricingSchema();
+    product = await updateWithPricingSchema();
   } catch (error) {
     if (!isMissingPricingSchemaError(error)) throw error;
     await ensurePricingSchema();
-    return updateWithPricingSchema();
+    product = await updateWithPricingSchema();
   }
+
+  // Price-discovery snapshot hook (additive, non-blocking): capture every
+  // actual price change (repricing) as a new PriceSnapshot row — a supplier
+  // can reprice/edit a listing at any time, even after it has been
+  // published, and every such repricing is recorded here as append-only
+  // price history (never updates/deletes prior rows).
+  const previousPrice = Number(existing.price);
+  const newPrice = Number(product.basePrice);
+  if (newPrice !== previousPrice) {
+    void recordPriceSnapshot({
+      productId: product.id,
+      supplierId: product.supplierId,
+      canonicalProductId: product.canonicalProductId,
+      price: newPrice,
+      unit: product.unit,
+      region: supplierProfile.region,
+    }).catch((error) => {
+      console.error(`Failed to record price snapshot for listing ${product.id}:`, error);
+    });
+  }
+
+  return product;
 }
 
 export async function getSupplierOrders(email: string): Promise<SupplierOrderRow[]> {

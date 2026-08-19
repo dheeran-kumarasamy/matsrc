@@ -586,16 +586,13 @@ export async function getPublicSupplierListings() {
       // BUG-04 fix: expose updatedAt so the builder-side "Newest" sort option
       // has real data to sort against.
       updatedAt: product.updatedAt ? product.updatedAt.toISOString() : null,
-      images:
-        Array.isArray(product.images) && product.images.length > 0
-          ? product.images
-          : [
-              getProductImage({
-                category: product.category?.name,
-                brand: product.brandRef?.name ?? product.brand,
-                name: product.name,
-              }),
-            ],
+      // Kept as the RAW (possibly empty) supplier-uploaded images here —
+      // deliberately NOT defaulted to a category fallback photo at this
+      // per-listing stage. Cross-supplier canonical grouping below needs to
+      // tell a genuine supplier upload apart from "nobody uploaded a photo"
+      // so it can borrow a sibling listing's real photo before ever falling
+      // back to a generic category image (see resolveGroupImages()).
+      images: Array.isArray(product.images) ? product.images : [],
       pricingTiers: pricingTiers.map((tier: any) => ({
         minQty: String(tier.minQty),
         maxQty: String(tier.maxQty),
@@ -651,8 +648,26 @@ export async function getPublicSupplierListings() {
       ...publicFields
     } = listing;
 
+    // Cross-supplier photo resolution: when multiple suppliers share this
+    // canonical group, prefer a genuinely supplier-uploaded photo over the
+    // generic category fallback whenever *any* group member has one — so a
+    // builder never sees the default emoji/stock image just because the
+    // specific listing surfaced as the group's headline happens to be from
+    // a supplier who hasn't uploaded a photo yet.
+    //   - Exactly one supplier has uploaded photos -> show that supplier's photo.
+    //   - Multiple suppliers have uploaded photos -> show whichever supplier's
+    //     photo was uploaded/updated most recently (Product.updatedAt).
+    //   - No supplier in the group has uploaded a photo -> generic category
+    //     fallback image (unchanged prior behavior).
+    const images = resolveGroupImages(group, {
+      category: listing.category,
+      brand: listing.brand,
+      name: listing.name,
+    });
+
     return {
       ...publicFields,
+      images,
       groupedListingIds: group.map((item: any) => item.id),
       headlinePrice: headline
         ? `${formatCurrency(headline.unitPrice)} / ${listing.unit}`
@@ -666,6 +681,36 @@ export async function getPublicSupplierListings() {
       maxPrice: range ? range.maxPrice : null,
     };
   });
+}
+
+// Picks the effective image set for a canonical group of listings (see call
+// site above for the exact rule). `updatedAt` is used as the "uploaded at"
+// signal since Product has no separate per-image timestamp — editing a
+// listing's `images` field goes through the same `product.update()` call
+// that bumps `updatedAt` (Prisma `@updatedAt`), so the most recently updated
+// group member with a non-empty `images` array is the most recently
+// uploaded photo.
+function resolveGroupImages(
+  group: any[],
+  fallback: { category?: string | null; brand?: string | null; name?: string | null }
+): string[] {
+  const withImages = group.filter((item) => Array.isArray(item.images) && item.images.length > 0);
+
+  if (withImages.length === 0) {
+    return [getProductImage(fallback)];
+  }
+
+  if (withImages.length === 1) {
+    return withImages[0].images;
+  }
+
+  const mostRecentlyUploaded = withImages.reduce((latest, candidate) => {
+    const latestTime = latest.updatedAt ? new Date(latest.updatedAt).getTime() : 0;
+    const candidateTime = candidate.updatedAt ? new Date(candidate.updatedAt).getTime() : 0;
+    return candidateTime >= latestTime ? candidate : latest;
+  });
+
+  return mostRecentlyUploaded.images;
 }
 
 

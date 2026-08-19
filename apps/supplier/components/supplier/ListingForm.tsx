@@ -387,56 +387,58 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
 
         <label className="space-y-1 text-sm text-slate-700">
           <span>Category</span>
-          <select
+          <input
             required
+            list="category-options"
             value={form.category}
             onChange={(e) => updateField("category", e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            disabled={categoriesLoading}
-          >
-            <option value="">{categoriesLoading ? "Loading..." : "Select category"}</option>
+            placeholder={categoriesLoading ? "Loading..." : "e.g. TMT Bars"}
+          />
+          <datalist id="category-options">
             {categoryOptions.map((option) => (
-              <option key={option.id} value={option.name}>
-                {option.name}
-              </option>
+              <option key={option.id} value={option.name} />
             ))}
-          </select>
+          </datalist>
+          <p className="text-xs text-slate-500">Pick an existing category or type a new one.</p>
         </label>
 
         <label className="space-y-1 text-sm text-slate-700">
           <span>Grade / Spec</span>
-          <select
+          <input
             required
+            list="grade-options"
             value={form.grade}
             onChange={(e) => updateField("grade", e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            disabled={gradesLoading}
-          >
-            <option value="">{gradesLoading ? "Loading..." : "Select grade"}</option>
+            placeholder={gradesLoading ? "Loading..." : "e.g. Fe 500D"}
+          />
+          <datalist id="grade-options">
             {gradeOptions.map((option) => (
-              <option key={option.id} value={option.name}>
-                {option.name}
-              </option>
+              <option key={option.id} value={option.name} />
             ))}
-          </select>
+          </datalist>
+          <p className="text-xs text-slate-500">Pick an existing grade/spec or type a new one.</p>
         </label>
 
         <label className="space-y-1 text-sm text-slate-700">
           <span>Unit</span>
-          <select
+          <input
             required
+            list="unit-options"
             value={form.unit}
             onChange={(e) => updateField("unit", e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            disabled={unitsLoading}
-          >
-            <option value="">{unitsLoading ? "Loading..." : "Select unit"}</option>
+            placeholder={unitsLoading ? "Loading..." : "e.g. MT"}
+          />
+          <datalist id="unit-options">
             {unitOptions.map((option) => (
               <option key={option.id} value={option.code || option.name}>
                 {option.name} {option.code ? `(${option.code})` : ""}
               </option>
             ))}
-          </select>
+          </datalist>
+          <p className="text-xs text-slate-500">Pick an existing unit or type a new one.</p>
         </label>
 
         <label className="space-y-1 text-sm text-slate-700">
@@ -464,19 +466,19 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
 
         <label className="space-y-1 text-sm text-slate-700">
           <span>Brand</span>
-          <select
+          <input
+            list="brand-options"
             value={form.brand}
             onChange={(e) => updateField("brand", e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            disabled={brandsLoading}
-          >
-            <option value="">{brandsLoading ? "Loading..." : "Select brand"}</option>
+            placeholder={brandsLoading ? "Loading..." : "e.g. Tata Tiscon"}
+          />
+          <datalist id="brand-options">
             {brandOptions.map((option) => (
-              <option key={option.id} value={option.name}>
-                {option.name}
-              </option>
+              <option key={option.id} value={option.name} />
             ))}
-          </select>
+          </datalist>
+          <p className="text-xs text-slate-500">Can't find your brand? Just type it — it'll be added for you.</p>
         </label>
 
         <label className="space-y-1 text-sm text-slate-700 md:col-span-2">

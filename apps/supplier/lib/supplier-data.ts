@@ -829,13 +829,33 @@ function normalizePricingTiers(tiers: PricingTierInput[] | undefined, maxService
   return normalized;
 }
 
-// Resolves Brand/Grade/Unit free-text values (now guaranteed to be exact
-// master-data matches since ListingForm only sends dropdown-selected values)
-// to their FK ids, and finds-or-creates the CanonicalProduct row that groups
-// this listing with any other supplier's listing for the "same" product
-// (category + brand + grade + unit). Mirrors the logic in
-// packages/db/scripts/backfill-catalog-master-data.js so canonicalKey stays
-// consistent between the one-off backfill and ongoing listing writes.
+// Derives a short unit code from a free-text unit label, mirroring
+// `apps/api/src/admin/catalog/catalog.service.ts`'s `shortCode` helper so a
+// supplier-entered unit (e.g. "Metric Ton") gets a sensible code (e.g. "MET-TON")
+// when it's added to the shared Unit master-data list for the first time.
+function shortUnitCode(label: string): string {
+  const cleaned = label.trim().toUpperCase();
+  if (cleaned.length <= 8 && !cleaned.includes(" ")) return cleaned;
+  return cleaned
+    .split(/\s+/)
+    .map((word) => word.slice(0, 3))
+    .join("-")
+    .slice(0, 12);
+}
+
+// Resolves Brand/Grade/Unit free-text values to their FK ids, and finds-or-creates
+// the CanonicalProduct row that groups this listing with any other supplier's
+// listing for the "same" product (category + brand + grade + unit). Mirrors the
+// logic in packages/db/scripts/backfill-catalog-master-data.js so canonicalKey
+// stays consistent between the one-off backfill and ongoing listing writes.
+//
+// Suppliers are free to type a brand/grade/unit that isn't already in the
+// shared master-data list (ListingForm now uses free-text inputs with
+// autocomplete suggestions rather than closed dropdowns) — when no existing
+// row matches by name (case-insensitively), a new Brand/Grade/Unit row is
+// created here so it's immediately available for autocomplete on this and
+// every other supplier's next listing, mirroring the admin Catalog service's
+// create-if-missing behavior.
 async function resolveCanonicalAssignment(
   transaction: any,
   params: {
@@ -851,22 +871,51 @@ async function resolveCanonicalAssignment(
 
   let brandId: string | null = null;
   if (brandName && brandName.trim()) {
-    const brand = await transaction.brand.findFirst({ where: { name: brandName.trim() } });
-    brandId = brand?.id ?? null;
+    const trimmed = brandName.trim();
+    const brand = await transaction.brand.findFirst({ where: { name: { equals: trimmed, mode: "insensitive" } } });
+    if (brand) {
+      brandId = brand.id;
+    } else {
+      const created = await transaction.brand.create({
+        data: { name: trimmed, slug: slugify(trimmed) },
+      });
+      brandId = created.id;
+    }
   }
 
   let gradeId: string | null = null;
   if (gradeName && gradeName.trim()) {
-    const grade = await transaction.grade.findFirst({ where: { name: gradeName.trim() } });
-    gradeId = grade?.id ?? null;
+    const trimmed = gradeName.trim();
+    const grade = await transaction.grade.findFirst({ where: { name: { equals: trimmed, mode: "insensitive" } } });
+    if (grade) {
+      gradeId = grade.id;
+    } else {
+      const created = await transaction.grade.create({
+        data: { name: trimmed, slug: slugify(trimmed) },
+      });
+      gradeId = created.id;
+    }
   }
 
   let unitId: string | null = null;
   if (unitValue && unitValue.trim()) {
+    const trimmed = unitValue.trim();
     const unit = await transaction.unit.findFirst({
-      where: { OR: [{ code: unitValue.trim() }, { name: unitValue.trim() }] },
+      where: {
+        OR: [
+          { code: { equals: trimmed, mode: "insensitive" } },
+          { name: { equals: trimmed, mode: "insensitive" } },
+        ],
+      },
     });
-    unitId = unit?.id ?? null;
+    if (unit) {
+      unitId = unit.id;
+    } else {
+      const created = await transaction.unit.create({
+        data: { name: trimmed, code: shortUnitCode(trimmed) },
+      });
+      unitId = created.id;
+    }
   }
 
   const canonicalKey = [categoryId, brandId ?? "none", gradeId ?? "none", unitId ?? "none"].join(":");

@@ -1,11 +1,11 @@
 "use client";
 
 import axios from "axios";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { KpiCard } from "@/components/supplier/KpiCard";
 import { OrderQueueTable } from "@/components/supplier/OrderQueueTable";
-import { ListingDetailButton } from "@/components/supplier/ListingDetailButton";
 import { OrderDetailButton } from "@/components/supplier/OrderDetailButton";
 import type { SupplierListingRow } from "@/lib/supplier-data";
 
@@ -63,11 +63,12 @@ function ListingQueueTable({ listings }: { listings: SupplierListingRow[] }) {
               {listings.map((item) => (
                 <tr key={item.id} className="border-t border-slate-100">
                   <td className="px-7 py-5 text-slate-800">
-                    <ListingDetailButton
-                      listingId={item.id}
-                      label={item.name}
+                    <Link
+                      href={`/listings/${item.id}`}
                       className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
-                    />
+                    >
+                      {item.name}
+                    </Link>
                   </td>
                   <td className="px-7 py-5 text-slate-800">{item.category}</td>
                   <td className="px-7 py-5 text-slate-800">{item.price}</td>

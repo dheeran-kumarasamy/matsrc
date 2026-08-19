@@ -1,36 +1,31 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 
 const links = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/onboarding", label: "Onboarding" },
   { href: "/listings", label: "Listings" },
   { href: "/orders", label: "Orders" },
   { href: "/rfqs", label: "RFQs" },
   { href: "/reports/market-intelligence", label: "Market Intelligence" },
   { href: "/purchase-orders", label: "Purchase Orders" },
+  { href: "/onboarding", label: "Onboarding" },
   { href: "/profile", label: "Profile & KYC" },
 ];
 
+// Primary sidebar navigation for the Supplier Portal. Rendered from
+// `app/(supplier)/layout.tsx` so it's available on every authenticated
+// supplier page (dashboard, listings, orders, etc.) — this is the only
+// in-app path to `/listings` besides the dashboard's "Active Listings" KPI
+// card and the FAB's "Add New Listing" shortcut.
 export function SupplierNav() {
   const pathname = usePathname();
 
   return (
-    <aside className="panel sticky top-4 h-fit p-4">
-      <Link
-        href="/dashboard"
-        className="relative block h-20 w-full overflow-hidden rounded-xl bg-white p-3 transition hover:opacity-90"
-      >
-        <Image src="/icons/logo-full.png" alt="Buildohub" fill className="object-contain" priority />
-      </Link>
-
-
-
-      <nav className="mt-4 space-y-1">
+    <aside className="panel sticky top-4 h-fit p-3">
+      <nav className="space-y-1">
         {links.map((link) => {
           const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
           return (

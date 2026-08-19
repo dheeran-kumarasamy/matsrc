@@ -2,9 +2,23 @@
 
 import axios from "axios";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+
+// Max local image upload size — kept conservative since uploaded files are
+// encoded as base64 data URIs and stored directly in `Product.images`
+// (String[] column), with no separate object-storage backend in this repo.
+const MAX_IMAGE_UPLOAD_BYTES = 2 * 1024 * 1024; // 2MB
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
 
 type CatalogOption = { id: string; name: string; code?: string | null };
 
@@ -110,6 +124,9 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const [uploadingImageIndex, setUploadingImageIndex] = useState<number | null>(null);
+  const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   function updateAggregationTier(index: number, field: keyof AggregationTierRow, value: string) {
     setSaved(false);
@@ -172,6 +189,34 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
   function removeImage(index: number) {
     setSaved(false);
     setImages((prev) => prev.filter((_, urlIndex) => urlIndex !== index));
+  }
+
+  async function handleImageFileSelect(index: number, fileList: FileList | null) {
+    const file = fileList?.[0];
+    if (!file) return;
+
+    setImageUploadError(null);
+
+    if (!file.type.startsWith("image/")) {
+      setImageUploadError("Please select an image file (PNG, JPG, etc.).");
+      return;
+    }
+    if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+      setImageUploadError("Image is too large — please upload a file under 2MB.");
+      return;
+    }
+
+    setUploadingImageIndex(index);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      updateImage(index, dataUrl);
+    } catch {
+      setImageUploadError("Unable to read the selected file. Please try again.");
+    } finally {
+      setUploadingImageIndex(null);
+      const input = fileInputRefs.current[index];
+      if (input) input.value = "";
+    }
   }
 
 
@@ -450,28 +495,44 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
         <div>
           <h4 className="text-lg font-bold text-slate-900">Product Photos</h4>
           <p className="text-sm text-slate-600">
-            Add image URLs to showcase your product. If no photo is added, a default image for the selected category
-            will be shown to builders across the marketplace.
+            Paste an image URL or upload a photo from your device (max 2MB). You can update photos anytime, even
+            after publishing. If no photo is added, a default image for the selected category will be shown to
+            builders across the marketplace.
           </p>
         </div>
 
         <div className="space-y-3">
           {images.map((url, index) => (
-            <div key={index} className="flex items-start gap-3">
-              <div className="flex-1 space-y-1">
+            <div key={index} className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:flex-row sm:items-start">
+              <div className="flex-1 space-y-2">
                 <input
-                  value={url}
+                  value={url.startsWith("data:") ? "" : url}
                   onChange={(e) => updateImage(index, e.target.value)}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder="https://example.com/product-photo.jpg"
+                  placeholder={url.startsWith("data:") ? "Uploaded from device — paste a URL to replace it" : "https://example.com/product-photo.jpg"}
                 />
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase text-slate-400">or</span>
+                  <label className="cursor-pointer rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                    {uploadingImageIndex === index ? "Uploading..." : "Upload from device"}
+                    <input
+                      ref={(el) => {
+                        fileInputRefs.current[index] = el;
+                      }}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleImageFileSelect(index, e.target.files)}
+                    />
+                  </label>
+                </div>
               </div>
               {url.trim() ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={url}
                   alt="Preview"
-                  className="h-10 w-10 rounded-lg border border-slate-200 object-cover"
+                  className="h-16 w-16 shrink-0 rounded-lg border border-slate-200 object-cover"
                   onError={(e) => {
                     (e.currentTarget as HTMLImageElement).style.display = "none";
                   }}
@@ -481,13 +542,15 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
                 type="button"
                 onClick={() => removeImage(index)}
                 disabled={images.length === 1}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Remove
               </button>
             </div>
           ))}
         </div>
+
+        {imageUploadError ? <p className="text-sm font-semibold text-red-700">{imageUploadError}</p> : null}
 
         <button
           type="button"

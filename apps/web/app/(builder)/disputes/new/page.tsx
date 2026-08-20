@@ -112,12 +112,12 @@ function NewDisputeForm() {
         <p className="posh-eyebrow">Resolution desk</p>
         <h1 className="posh-page-title mt-2">Raise a Dispute</h1>
       </header>
-      <div className="rounded-xl border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.03)] p-4 text-xs font-medium text-[color:var(--posh-fg-muted)]">
+      <div className="rounded-xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.03)] p-4 text-xs font-medium text-[color:var(--posh-fg-muted)]">
         Disputes are reviewed within <strong className="font-bold text-[color:var(--posh-fg)]">72 hours</strong>. Unresolved tickets escalate automatically to senior admin. (FR-16)
       </div>
 
       {hasNoOrders && (
-        <div className="rounded-xl border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.03)] p-4 text-xs font-medium text-[color:var(--posh-fg-muted)]">
+        <div className="rounded-xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.03)] p-4 text-xs font-medium text-[color:var(--posh-fg-muted)]">
           You don&apos;t have any orders yet, so there&apos;s nothing to raise a dispute against. Place an order first.
         </div>
       )}

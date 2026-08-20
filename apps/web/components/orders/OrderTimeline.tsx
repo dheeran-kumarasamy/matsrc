@@ -48,10 +48,10 @@ export default function OrderTimeline({ status, isAggregated, poolLocked }: Orde
         <div key={step.key} className="flex gap-4 pb-6 last:pb-0 relative">
           {/* Monochrome rail: completed steps are solid black, pending ones a
               faint black wash (site-wide black & white palette). */}
-          <div className={`absolute left-3.5 top-7 bottom-0 w-0.5 ${step.done ? "bg-[color:var(--posh-primary)]" : "bg-[rgba(240,232,216,0.06)]"}`} />
+          <div className={`absolute left-3.5 top-7 bottom-0 w-0.5 ${step.done ? "bg-[color:var(--posh-primary)]" : "bg-[rgba(var(--posh-wash-rgb),0.06)]"}`} />
           <div
             className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold z-10 ${
-              step.done ? "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)]" : "bg-[rgba(240,232,216,0.06)] text-[color:var(--posh-fg-muted)]"
+              step.done ? "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)]" : "bg-[rgba(var(--posh-wash-rgb),0.06)] text-[color:var(--posh-fg-muted)]"
             }`}
           >
             {step.done ? "✓" : i + 1}
@@ -70,10 +70,10 @@ export default function OrderTimeline({ status, isAggregated, poolLocked }: Orde
           <div key={step.status} className="flex gap-4 pb-6 last:pb-0 relative">
             {/* Vertical line */}
             {i < steps.length - 1 && (
-              <div className={`absolute left-3.5 top-7 bottom-0 w-0.5 ${done ? "bg-[color:var(--posh-primary)]" : "bg-[rgba(240,232,216,0.06)]"}`} />
+              <div className={`absolute left-3.5 top-7 bottom-0 w-0.5 ${done ? "bg-[color:var(--posh-primary)]" : "bg-[rgba(var(--posh-wash-rgb),0.06)]"}`} />
             )}
             {/* Dot */}
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold z-10 ${active ? "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] ring-4 ring-[color:var(--posh-border)]" : done ? "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)]" : "bg-[rgba(240,232,216,0.06)] text-[color:var(--posh-fg-muted)]"}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold z-10 ${active ? "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] ring-4 ring-[color:var(--posh-border)]" : done ? "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)]" : "bg-[rgba(var(--posh-wash-rgb),0.06)] text-[color:var(--posh-fg-muted)]"}`}>
               {done ? "✓" : i + 1}
             </div>
             <div className="pt-0.5">

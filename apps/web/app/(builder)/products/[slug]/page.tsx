@@ -118,7 +118,7 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
       <div className="grid gap-6 lg:grid-cols-[1.5fr_0.9fr]">
         <section className="space-y-5">
           <div className="posh-card overflow-hidden p-0">
-            <div className="flex h-56 w-full items-center justify-center overflow-hidden bg-[rgba(240,232,216,0.04)]">
+            <div className="flex h-56 w-full items-center justify-center overflow-hidden bg-[rgba(var(--posh-wash-rgb),0.04)]">
               {imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
@@ -179,7 +179,7 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
             <p className="posh-subtitle mt-1">The enquiry value updates automatically as quantity changes.</p>
             <div className="mt-4 grid gap-3">
               {product.pricingTiers.map((tier) => (
-                <div key={`${tier.minQty}-${tier.maxQty}`} className="flex items-center justify-between rounded-xl border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.03)] px-4 py-3 text-sm">
+                <div key={`${tier.minQty}-${tier.maxQty}`} className="flex items-center justify-between rounded-xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.03)] px-4 py-3 text-sm">
                   <div>
                     <p className="font-bold text-[color:var(--posh-fg)]">
                       {tier.minQty} - {tier.maxQty} {product.unit}

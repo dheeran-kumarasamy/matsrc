@@ -36,7 +36,7 @@ type PurchaseOrderDetail = {
 // Monochrome status treatment — matches the PO list page (site-wide black &
 // white palette); the terminal state is the only solid-black badge.
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: "bg-[rgba(240,232,216,0.04)] text-[color:var(--posh-fg-muted)] border-[color:var(--posh-border)]",
+  DRAFT: "bg-[rgba(var(--posh-wash-rgb),0.04)] text-[color:var(--posh-fg-muted)] border-[color:var(--posh-border)]",
   ISSUED: "bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)] border-[color:var(--posh-border)]",
   ACKNOWLEDGED: "bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)] border-[color:var(--posh-primary)]",
   FULFILLED: "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] border-[color:var(--posh-primary)]",
@@ -126,7 +126,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
       </div>
 
       {po.approvedAt ? (
-        <div className="panel border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] p-4 text-sm font-medium text-[color:var(--posh-fg)]">
+        <div className="panel border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] p-4 text-sm font-medium text-[color:var(--posh-fg)]">
           Digitally approved{po.approvedBy ? ` by ${po.approvedBy}` : ""} on{" "}
           {new Date(po.approvedAt).toLocaleString()}. This OTP-based approval is the legal e-signature equivalent —
           no physical signature was required.

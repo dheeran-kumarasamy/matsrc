@@ -219,7 +219,7 @@ export default function QuickRequestForm({ floating }: Props) {
           <span className="hidden sm:inline">Quick Request</span>
         </button>
         {open && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[rgba(240,232,216,0.16)] p-4">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[rgba(var(--posh-wash-rgb),0.16)] p-4">
             <div className="bg-[color:var(--posh-bg-card)] rounded-2xl shadow-xl w-full max-w-sm p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-slate-800">Quick Material Request</h3>

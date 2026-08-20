@@ -112,8 +112,8 @@ function StepIndicator({ current }: { current: string }) {
                 isActive
                   ? { background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }
                   : isDone
-                  ? { background: "rgba(240,232,216,0.12)", color: "var(--posh-fg)" }
-                  : { background: "rgba(240,232,216,0.06)", color: "var(--posh-fg-muted)" }
+                  ? { background: "rgba(var(--posh-wash-rgb),0.12)", color: "var(--posh-fg)" }
+                  : { background: "rgba(var(--posh-wash-rgb),0.06)", color: "var(--posh-fg-muted)" }
               }
             >
               {isDone ? <CheckCircle2 size={14} /> : index + 1}
@@ -296,8 +296,8 @@ export default function CartDrawer() {
                 </div>
               ) : (
                 items.map((item) => (
-                  <div key={item.id} className="flex gap-3 rounded-2xl border p-3" style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.03)" }}>
-                    <div className="h-14 w-14 shrink-0 rounded-xl" style={{ background: "rgba(240,232,216,0.08)" }} />
+                  <div key={item.id} className="flex gap-3 rounded-2xl border p-3" style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.03)" }}>
+                    <div className="h-14 w-14 shrink-0 rounded-xl" style={{ background: "rgba(var(--posh-wash-rgb),0.08)" }} />
                     <div className="flex-1">
                       <p className="text-sm font-medium" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
                       <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>{item.supplierName}</p>
@@ -340,7 +340,7 @@ export default function CartDrawer() {
               )}
 
               {supplierGroups.length > 1 ? (
-                <p className="rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(240,232,216,0.06)", color: "var(--posh-fg-muted)" }}>
+                <p className="rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(var(--posh-wash-rgb),0.06)", color: "var(--posh-fg-muted)" }}>
                   Items span {supplierGroups.length} suppliers — these will be submitted as separate enquiries.
                 </p>
               ) : null}
@@ -353,7 +353,7 @@ export default function CartDrawer() {
                 <label className="mb-1 block text-xs font-medium" style={{ color: "var(--posh-fg-muted)" }}>Delivery location (optional)</label>
                 <button type="button" onClick={handleUseMyLocation} disabled={locating}
                   className="flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition disabled:opacity-50"
-                  style={{ borderColor: "rgba(240,232,216,0.15)", color: "var(--posh-fg-muted)", background: "rgba(240,232,216,0.05)" }}>
+                  style={{ borderColor: "rgba(var(--posh-wash-rgb),0.15)", color: "var(--posh-fg-muted)", background: "rgba(var(--posh-wash-rgb),0.05)" }}>
                   <LocateFixed size={14} />
                   {locating ? "Fetching location..." : "Use my current location"}
                 </button>
@@ -387,7 +387,7 @@ export default function CartDrawer() {
                   value={deliveryAddress}
                   onChange={(event) => setDeliveryAddress(event.target.value)}
                   className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none"
-                  style={{ borderColor: "rgba(240,232,216,0.15)", background: "rgba(240,232,216,0.05)", color: "var(--posh-fg)" }}
+                  style={{ borderColor: "rgba(var(--posh-wash-rgb),0.15)", background: "rgba(var(--posh-wash-rgb),0.05)", color: "var(--posh-fg)" }}
                 />
               </div>
               <SiteSelector value={siteId} onChange={setSiteId} />
@@ -400,7 +400,7 @@ export default function CartDrawer() {
 
           {checkoutStep === "confirm" ? (
             <div className="space-y-4">
-              <div className="rounded-2xl border p-4" style={{ borderColor: "rgba(240,232,216,0.12)", background: "rgba(36,31,22,0.50)" }}>
+              <div className="rounded-2xl border p-4" style={{ borderColor: "rgba(var(--posh-wash-rgb),0.12)", background: "rgba(36,31,22,0.50)" }}>
                 <h3 className="text-sm font-semibold" style={{ color: "var(--posh-fg)" }}>Order summary</h3>
                 <div className="mt-3 space-y-2 text-sm">
                   <div className="flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
@@ -409,7 +409,7 @@ export default function CartDrawer() {
                   <div className="flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
                     <span>GST (18%)</span><span>₹{gst.toLocaleString("en-IN")}</span>
                   </div>
-                  <div className="flex justify-between border-t pt-2" style={{ borderColor: "rgba(240,232,216,0.12)" }}>
+                  <div className="flex justify-between border-t pt-2" style={{ borderColor: "rgba(var(--posh-wash-rgb),0.12)" }}>
                     <span className="font-bold" style={{ color: "var(--posh-fg)" }}>Estimated total</span>
                     <span className="posh-heading text-lg" style={{ color: "var(--posh-primary)" }}>₹{total.toLocaleString("en-IN")}</span>
                   </div>
@@ -441,7 +441,7 @@ export default function CartDrawer() {
           ) : null}
         </div>
 
-        <SheetFooter className="space-y-3" style={{ borderColor: "rgba(240,232,216,0.10)" }}>
+        <SheetFooter className="space-y-3" style={{ borderColor: "rgba(var(--posh-wash-rgb),0.10)" }}>
           {checkoutStep === "review" ? (
             <button onClick={() => setCheckoutStep("delivery")} disabled={items.length === 0}
               className="w-full rounded-2xl py-2.5 text-sm font-semibold transition disabled:opacity-50"
@@ -454,7 +454,7 @@ export default function CartDrawer() {
             <div className="flex gap-2">
               <button onClick={goToPreviousStep}
                 className="flex items-center justify-center gap-1 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition"
-                style={{ borderColor: "rgba(240,232,216,0.15)", color: "var(--posh-fg-muted)", background: "rgba(240,232,216,0.05)" }}>
+                style={{ borderColor: "rgba(var(--posh-wash-rgb),0.15)", color: "var(--posh-fg-muted)", background: "rgba(var(--posh-wash-rgb),0.05)" }}>
                 <ChevronLeft size={14} /> Back
               </button>
               <button onClick={goToNextStep}
@@ -469,7 +469,7 @@ export default function CartDrawer() {
             <div className="flex gap-2">
               <button onClick={goToPreviousStep} disabled={submitting}
                 className="flex items-center justify-center gap-1 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50"
-                style={{ borderColor: "rgba(240,232,216,0.15)", color: "var(--posh-fg-muted)", background: "rgba(240,232,216,0.05)" }}>
+                style={{ borderColor: "rgba(var(--posh-wash-rgb),0.15)", color: "var(--posh-fg-muted)", background: "rgba(var(--posh-wash-rgb),0.05)" }}>
                 <ChevronLeft size={14} /> Back
               </button>
               <button onClick={() => void handleSubmitEnquiry()} disabled={submitting || items.length === 0}

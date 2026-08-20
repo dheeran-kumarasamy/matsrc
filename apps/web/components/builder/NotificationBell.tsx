@@ -170,7 +170,7 @@ export default function NotificationBell() {
                         type="button"
                         onClick={() => handleItemClick(item)}
                         className={`flex w-full gap-2.5 px-4 py-3 text-left transition hover:bg-slate-50 ${
-                          !item.read ? "bg-[rgba(240,232,216,0.04)]" : ""
+                          !item.read ? "bg-[rgba(var(--posh-wash-rgb),0.04)]" : ""
                         }`}
                       >
                         {/* Unread/read marker */}

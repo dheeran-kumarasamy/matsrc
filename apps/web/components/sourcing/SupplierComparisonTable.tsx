@@ -35,7 +35,7 @@ function ComparisonRow({
   return (
     <tr
       className={`border-b border-slate-100 transition-colors ${
-        isSelected ? "bg-[rgba(240,232,216,0.04)]" : "hover:bg-slate-50"
+        isSelected ? "bg-[rgba(var(--posh-wash-rgb),0.04)]" : "hover:bg-slate-50"
       }`}
     >
       <td className="px-4 py-3">

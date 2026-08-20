@@ -80,7 +80,7 @@ export default function UserSessionBadge() {
                 setOpen(false);
                 void signOut({ callbackUrl: "/auth/login" });
               }}
-              className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-bold text-[color:var(--posh-fg)] transition hover:bg-[rgba(240,232,216,0.05)]"
+              className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-bold text-[color:var(--posh-fg)] transition hover:bg-[rgba(var(--posh-wash-rgb),0.05)]"
             >
               <LogOut size={14} />
               Sign out

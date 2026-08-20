@@ -28,7 +28,7 @@ export default function RecommendationCard({
   unit,
 }: Props) {
   return (
-    <section className="panel border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] p-4">
+    <section className="panel border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] p-4">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--posh-fg)]">
         {headline ?? "Recommended option"}
       </p>
@@ -107,7 +107,7 @@ export default function RecommendationCard({
       )}
 
       {recommendation.dataGaps.length > 0 && (
-        <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-[rgba(240,232,216,0.04)] p-2 text-xs text-[color:var(--posh-fg)]">
+        <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-[rgba(var(--posh-wash-rgb),0.04)] p-2 text-xs text-[color:var(--posh-fg)]">
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>
             I don&apos;t currently have verified data for:{" "}

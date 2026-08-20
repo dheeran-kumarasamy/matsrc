@@ -6,6 +6,22 @@
 @tailwind utilities;
 
 @layer base {
+  /* ══════════════════════════════════════════════════════════════════════
+     THEME ARCHITECTURE — route-aware, single source of truth
+     ══════════════════════════════════════════════════════════════════════
+     Home (`/`) keeps its own dark warm-brown editorial identity. Every
+     other page ("the application": /newdashboard, sourcing, products,
+     orders, reports, cart, checkout, disputes, sites, profile, credit,
+     watchlist, purchase-orders, auth, …) shares ONE lighter warm
+     brown/beige "application" theme, extracted from /newdashboard.
+
+     Mechanism: the --posh-* custom properties below are consumed
+     everywhere (shared classes here + ~65 components/pages). By default
+     (:root) they resolve to the lighter application palette. `.theme-home`
+     — applied ONLY to Home's top-level <main> in app/page.tsx —
+     re-declares every one of these variables back to their original dark
+     values, so the CSS custom-property cascade scopes Home's look to Home
+     alone without touching a single Home component or duplicating colour. */
   :root {
     /* Legacy brand tokens kept for builder portal compatibility */
     --brand-500: #1a4f8a;
@@ -13,19 +29,88 @@
     --ink-900: #0f172a;
     --sky-50: #eef6ff;
 
-    /* ── Lovable Design System (warm editorial palette) ── */
-    --posh-bg:          #1c1810;   /* deep warm near-black */
-    --posh-bg-card:     #241f16;   /* card surface (slightly lighter) */
-    --posh-fg:          #f0e8d8;   /* warm cream foreground */
-    --posh-fg-muted:    #a89880;   /* muted warm text */
-    --posh-primary:     #c4915a;   /* warm amber / gold primary */
-    --posh-primary-fg:  #1c1810;   /* text on primary */
-    --posh-border:      rgba(240,232,216,0.10);  /* subtle warm border */
-    --posh-cream:       #f4edda;   /* cream section bg */
-    --posh-cream-fg:    #1c1810;   /* text on cream */
+    /* ── Application theme (warm brown / beige) — ref: /newdashboard ──
+       Lighter, warm, premium surface in the same brown/gold hue family as
+       Home (--posh-primary keeps its exact hex, so the accent colour is
+       identical in both themes) but flipped onto a light beige base. */
+    --posh-bg:          #f7f1e5;   /* warm beige application background */
+    --posh-bg-card:     #fffdf8;   /* elevated card/surface — warm off-white */
+    --posh-fg:          #2b2013;   /* primary ink — dark warm brown */
+    --posh-fg-muted:    #8a7862;   /* secondary/muted warm brown-grey text */
+    --posh-primary:     #c4915a;   /* warm amber / gold accent — unchanged */
+    --posh-primary-fg:  #2b2013;   /* text on primary/accent */
+    --posh-border:      rgba(43,32,19,0.12);  /* subtle warm brown border */
+    --posh-cream:       #f4edda;   /* cream section bg (Home CTA band only) */
+    --posh-cream-fg:    #1c1810;   /* text on cream (Home CTA band only) */
     --posh-radius:      1.5rem;    /* 24px — large friendly radius */
 
-    /* Warm gradient (hero overlay) */
+    /* Hover / selected-state tokens (application theme) */
+    --posh-primary-hover: #ad7c48;
+    --posh-primary-soft:  rgba(196,145,90,0.14);
+
+    /* RGB triplet behind every "wash" overlay in the shared component kit
+       (hover backgrounds, faint fills, dividers). Application theme washes
+       the light surface with a warm brown tint; Home (.theme-home) washes
+       its dark surface with cream, unchanged from before. */
+    --posh-wash-rgb: 43,32,19;
+
+    /* Semantic status colours — warm-toned to harmonise with the palette. */
+    --posh-success: #2f7d4f;
+    --posh-warning: #b8862e;
+    --posh-error:   #b3402f;
+
+    /* Warm gradient (hero overlay — Home only, pinned in .theme-home too) */
+    --posh-gradient-warm: radial-gradient(
+      110% 90% at 70% 0%,
+      rgba(120, 75, 30, 0.55) 0%,
+      rgba(28, 24, 16, 0) 60%
+    );
+
+    /* ── Semantic application design tokens ──────────────────────────────
+       Canonical names for the non-Home "application" UI, aliased onto the
+       --posh-* values above so there is exactly one place that owns the
+       actual colours. New/updated components may prefer these semantic
+       names; existing components keep consuming --posh-* directly — both
+       resolve to the identical value. */
+    --app-bg:            var(--posh-bg);
+    --app-bg-elevated:   var(--posh-bg-card);
+    --app-surface:       var(--posh-bg-card);
+    --app-sidebar:       var(--posh-bg-card);
+    --app-header:        var(--posh-bg-card);
+    --app-fg:            var(--posh-fg);
+    --app-fg-secondary:  var(--posh-fg-muted);
+    --app-fg-muted:      var(--posh-fg-muted);
+    --app-border:        var(--posh-border);
+    --app-accent:        var(--posh-primary);
+    --app-accent-fg:     var(--posh-primary-fg);
+    --app-accent-hover:  var(--posh-primary-hover);
+    --app-selected:      var(--posh-primary-soft);
+    --app-success:       var(--posh-success);
+    --app-warning:       var(--posh-warning);
+    --app-error:         var(--posh-error);
+  }
+
+  /* ── Home page scope — locks in the ORIGINAL dark warm-brown identity ──
+     Applied to the single top-level <main className="theme-home"> in
+     app/page.tsx. Every value below is byte-for-byte what :root held
+     before this theme split, so Home is visually unchanged. */
+  .theme-home {
+    --posh-bg:          #1c1810;
+    --posh-bg-card:     #241f16;
+    --posh-fg:          #f0e8d8;
+    --posh-fg-muted:    #a89880;
+    --posh-primary:     #c4915a;
+    --posh-primary-fg:  #1c1810;
+    --posh-border:      rgba(240,232,216,0.10);
+    --posh-cream:       #f4edda;
+    --posh-cream-fg:    #1c1810;
+    --posh-radius:      1.5rem;
+    --posh-primary-hover: #d6a670;
+    --posh-primary-soft:  rgba(196,145,90,0.22);
+    --posh-wash-rgb: 240,232,216;
+    --posh-success: #22c55e;
+    --posh-warning: #eab308;
+    --posh-error:   #ef4444;
     --posh-gradient-warm: radial-gradient(
       110% 90% at 70% 0%,
       rgba(120, 75, 30, 0.55) 0%,
@@ -33,20 +118,21 @@
     );
   }
 
-  /* Single uniform font stack for the whole product. Body copy sits at 400
-     (not 300) so every surface outside the homepage reads solidly rather
-     than thin — the "bolder text" requirement. */
+  /* Single uniform font stack for the whole product — reused by BOTH themes
+     (Home and the application), so typography never forks. Body copy sits
+     at 400 (not 300) so every surface reads solidly rather than thin. */
   body {
     @apply min-h-screen antialiased;
     font-family: 'Work Sans', ui-sans-serif, system-ui, sans-serif;
     font-weight: 400;
     letter-spacing: 0.01em;
     -webkit-font-smoothing: antialiased;
-    /* posh-web-flair parity: the whole product (not just the marketing
-       homepage) now sits on the same warm dark editorial base surface, so
-       there is no visible seam between the home page and the authenticated
-       builder portal. Individual pages/components may still layer their
-       own --posh-* backgrounds on top (cards, panels, cream CTA band, …). */
+    /* Resolves to the application's warm beige background/ink by default
+       (:root tokens above). Home's top-level <main className="theme-home">
+       overrides --posh-bg/--posh-fg back to the dark palette for that one
+       subtree, so this rule needs no route-specific branching. Individual
+       pages/components still layer their own --posh-* backgrounds on top
+       (cards, panels, cream CTA band, …). */
     background: var(--posh-bg);
     color: var(--posh-fg);
   }
@@ -60,11 +146,12 @@
 }
 
 @layer components {
-  /* ── Builder portal panels ──
-     Ported to the posh-web-flair warm dark editorial surface (previously a
-     black-and-white mono card) so every authenticated page reads as part of
-     the same design system as the marketing homepage. Uses the shared
-     --posh-* tokens, not new colours, to keep a single source of truth. */
+  /* ── Application panels ──
+     Consumes the shared --posh-* tokens (see the THEME ARCHITECTURE note
+     above), so every non-Home page renders the lighter warm brown/beige
+     "application" surface by default, while Home's own <main
+     className="theme-home"> keeps the original dark card colour for any
+     Home-owned usage. Single source of truth, no new colours. */
   .panel {
     @apply rounded-2xl border shadow-sm;
     border-color: var(--posh-border);
@@ -114,13 +201,11 @@
     border-color: var(--posh-primary);
   }
 
-  /* ── Reports surface typography (posh-web-flair parity) ─────────────────
+  /* ── Reports surface typography ──────────────────────────────────────
      The reports pages use the editorial display face for every heading and
-     headline number, plus a wide-tracked uppercase "eyebrow" for labels —
-     exactly like src/routes/reports.tsx in
-     github.com/dheeran-kumarasamy/posh-web-flair. Now themed on the shared
-     warm dark --posh-* surface (previously a light mono surface) so the
-     reports pages match the rest of the portal and the marketing homepage. */
+     headline number, plus a wide-tracked uppercase "eyebrow" for labels.
+     Themed on the shared --posh-* tokens, so reports render the lighter
+     warm brown/beige application surface, matching /newdashboard. */
   .report-display {
     font-family: 'Instrument Serif', Georgia, serif;
     font-weight: 600;
@@ -153,12 +238,13 @@
     color: var(--posh-fg-muted);
   }
 
-  /* ── Shared "posh" surface kit ─────────────────────────────────────────
-     Used by every authenticated page (purchase orders, sites, disputes,
-     cart, watchlist, sourcing, reports, …) so the whole portal reads as ONE
-     design system with the marketing homepage: warm dark paper, cream ink,
-     editorial display headings and wide-tracked uppercase labels, driven by
-     the shared --posh-* tokens (single source of truth, no new colours). */
+  /* ── Shared "application" surface kit ──────────────────────────────────
+     Used by every non-Home page (newdashboard, purchase orders, sites,
+     disputes, cart, watchlist, sourcing, reports, …) so the whole
+     application reads as ONE design system: warm beige paper, dark warm
+     brown ink, editorial display headings and wide-tracked uppercase
+     labels — driven by the shared --posh-* tokens (single source of
+     truth, no new colours). Home is unaffected via .theme-home. */
 
   /* Page title — big editorial serif. */
   .posh-page-title {

@@ -57,7 +57,7 @@ export default function SourcingProgressRail(props: Props) {
             <div
               className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                 isDone
-                  ? "bg-[rgba(240,232,216,0.04)] text-[color:var(--posh-fg)]"
+                  ? "bg-[rgba(var(--posh-wash-rgb),0.04)] text-[color:var(--posh-fg)]"
                   : isCurrent
                     ? "bg-slate-100 text-slate-700"
                     : "bg-slate-50 text-slate-400"
@@ -65,7 +65,7 @@ export default function SourcingProgressRail(props: Props) {
             >
               <span
                 className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
-                  isDone ? "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)]" : "bg-[rgba(240,232,216,0.10)] text-[color:var(--posh-primary-fg)]"
+                  isDone ? "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)]" : "bg-[rgba(var(--posh-wash-rgb),0.10)] text-[color:var(--posh-primary-fg)]"
                 }`}
                 aria-hidden="true"
               >

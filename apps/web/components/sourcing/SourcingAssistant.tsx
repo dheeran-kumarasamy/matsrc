@@ -224,7 +224,7 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
       <Composer input={input} setInput={setInput} busy={busy} started={Boolean(stage)} onSend={send} />
 
       {error && (
-        <p className="panel border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] p-3 text-sm text-[color:var(--posh-fg)]" role="alert">
+        <p className="panel border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] p-3 text-sm text-[color:var(--posh-fg)]" role="alert">
           {error}
         </p>
       )}
@@ -259,7 +259,7 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
           )}
 
           {confirmedMessage && (
-            <div className="panel border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] p-4 space-y-3">
+            <div className="panel border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] p-4 space-y-3">
               <p className="text-sm text-[color:var(--posh-fg)]">{confirmedMessage}</p>
               <button
                 type="button"

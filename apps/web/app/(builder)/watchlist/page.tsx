@@ -160,7 +160,7 @@ export default function WatchlistPage() {
                 {pi?.resolved ? (
                   <div
                     className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border p-3 text-xs"
-                    style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.04)" }}
+                    style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)" }}
                   >
                     <span className="font-bold" style={{ color: "var(--posh-fg)" }}>
                       Market price: INR {pi.currentPricePerBaseUnit?.toLocaleString("en-IN")} / {pi.baseUnit}
@@ -201,7 +201,7 @@ export default function WatchlistPage() {
                 ) : (
                   <div
                     className="flex items-center gap-2 rounded-xl border p-3 text-xs font-medium"
-                    style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.04)", color: "var(--posh-fg-muted)" }}
+                    style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)", color: "var(--posh-fg-muted)" }}
                   >
                     <AlertCircle size={12} />
                     {pi?.emptyReason === "NO_DISTRICT"

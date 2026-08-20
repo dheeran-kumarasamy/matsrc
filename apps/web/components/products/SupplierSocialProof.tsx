@@ -78,7 +78,7 @@ export default function SupplierSocialProof({
   }
 
   return (
-    <div className={`rounded-2xl border px-4 py-3 text-sm ${acceptedContext ? "border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.03)]" : "border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)]"}`}>
+    <div className={`rounded-2xl border px-4 py-3 text-sm ${acceptedContext ? "border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.03)]" : "border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)]"}`}>
       {acceptedContext ? <p className="font-semibold text-slate-800">Why this is a strong choice</p> : null}
       {ratingsLine ? <p className="mt-1 text-slate-700">{ratingsLine}</p> : null}
       {showAnchoring ? (

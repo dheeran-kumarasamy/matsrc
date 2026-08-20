@@ -209,7 +209,7 @@ export default function CartPage() {
           ) : (
             data.items.map((item) => (
               <div key={item.id} className="posh-card flex gap-4 p-5">
-                <div className="h-16 w-16 shrink-0 rounded-xl border" style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.06)" }} />
+                <div className="h-16 w-16 shrink-0 rounded-xl border" style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.06)" }} />
                 <div className="flex-1">
                   <p className="text-base font-bold tracking-tight" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
                   <p className="posh-label mt-1">Supplier: {item.supplierName}</p>

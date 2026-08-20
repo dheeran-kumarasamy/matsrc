@@ -42,7 +42,7 @@ export function FreshnessIndicator({ label, isStale }: { label: string; isStale:
     <span
       className={`inline-flex items-center gap-1 text-xs font-medium ${isStale ? "font-bold text-[color:var(--posh-fg)]" : "text-[color:var(--posh-fg-muted)]"}`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${isStale ? "bg-[color:var(--posh-primary)]" : "bg-[rgba(240,232,216,0.12)]"}`} aria-hidden />
+      <span className={`h-1.5 w-1.5 rounded-full ${isStale ? "bg-[color:var(--posh-primary)]" : "bg-[rgba(var(--posh-wash-rgb),0.12)]"}`} aria-hidden />
       {isStale ? "STALE" : label}
     </span>
   );

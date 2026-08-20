@@ -260,8 +260,8 @@ export default function NewDashboardPage() {
                         {notifs.map((n) => (
                           <li key={n.id}>
                             <button type="button" onClick={() => markRead(n)}
-                              className="flex w-full gap-2.5 border-b px-4 py-3 text-left transition hover:bg-[rgba(240,232,216,0.03)]"
-                              style={{ borderColor: B40, background: !n.read ? "rgba(240,232,216,0.04)" : "transparent" }}>
+                              className="flex w-full gap-2.5 border-b px-4 py-3 text-left transition hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
+                              style={{ borderColor: B40, background: !n.read ? "rgba(var(--posh-wash-rgb),0.04)" : "transparent" }}>
                               <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? "opacity-0" : ""}`} style={{ background: P }} />
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-bold" style={{ color: n.read ? FM : FG }}>{n.title}</p>
@@ -280,8 +280,8 @@ export default function NewDashboardPage() {
             <span className="mx-1 hidden opacity-20 sm:block" style={{ color: FG }}>|</span>
             {session?.user ? (
               <>
-                <Link href="/profile" className="hidden rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-[rgba(240,232,216,0.05)] hover:text-[color:var(--posh-fg)] sm:block" style={{ color: FM }}>Account</Link>
-                <button type="button" onClick={() => signOut({ callbackUrl: "/" })} className="hidden rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-[rgba(240,232,216,0.05)] hover:text-[color:var(--posh-fg)] sm:block" style={{ color: FM }}>Sign out</button>
+                <Link href="/profile" className="hidden rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.05)] hover:text-[color:var(--posh-fg)] sm:block" style={{ color: FM }}>Account</Link>
+                <button type="button" onClick={() => signOut({ callbackUrl: "/" })} className="hidden rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.05)] hover:text-[color:var(--posh-fg)] sm:block" style={{ color: FM }}>Sign out</button>
               </>
             ) : (
               <Link href="/auth/login" className="rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-[color:var(--posh-primary)]" style={{ borderColor: B12, color: FG }}>Sign in</Link>
@@ -317,7 +317,7 @@ export default function NewDashboardPage() {
                     </div>
                   ) : recentOrders.map((o) => (
                     <Link key={o.id} href={`/orders/${o.id}`}
-                      className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-[rgba(240,232,216,0.03)]">
+                      className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.items?.[0]?.name ?? `Order #${o.id.slice(0,6)}`}{(o.itemCount??0) > 1 ? ` +${o.itemCount-1}` : ""}</p>
                         <p className="posh-label mt-1">{o.supplierName ?? STATUS_LABELS[o.status] ?? o.status}</p>
@@ -383,7 +383,7 @@ export default function NewDashboardPage() {
                       </thead>
                       <tbody>
                         {activeOrders.map((o) => (
-                          <tr key={o.id} className="transition-colors hover:bg-[rgba(240,232,216,0.03)]">
+                          <tr key={o.id} className="transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
                             <td className="border-b py-4 pr-6" style={{ borderColor: B40 }}>
                               <Link href={`/orders/${o.id}`} className="font-mono text-xs font-bold text-[color:var(--posh-fg)] hover:underline">{o.id.slice(0,8)}</Link>
                             </td>
@@ -413,7 +413,7 @@ export default function NewDashboardPage() {
                   <div className="grid gap-px overflow-hidden rounded-[2rem] border sm:grid-cols-2"
                     style={{ borderColor: B60, background: B60 }}>
                     {watchlistItems.map((w) => (
-                      <Link key={w.id} href="/watchlist" className="block bg-[color:var(--posh-bg-card)] p-7 transition-colors hover:bg-[rgba(240,232,216,0.03)]">
+                      <Link key={w.id} href="/watchlist" className="block bg-[color:var(--posh-bg-card)] p-7 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
                         <div className="flex items-baseline justify-between">
                           <h3 className="posh-card-title">{w.name}</h3>
                           <span className="posh-label">{gapLabel(w.priceIntelligence?.gapToTargetPct ?? null)}</span>
@@ -433,7 +433,7 @@ export default function NewDashboardPage() {
                 <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
                   {reportMetrics.map(([label, value, sub]) => (
                     <Link key={label} href="/reports"
-                      className="block rounded-[2rem] border bg-[color:var(--posh-bg-card)] p-7 transition-colors hover:bg-[rgba(240,232,216,0.03)]"
+                      className="block rounded-[2rem] border bg-[color:var(--posh-bg-card)] p-7 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
                       style={{ borderColor: B60 }}>
                       <p className="posh-eyebrow">{label}</p>
                       <p className="posh-page-title mt-5 text-4xl">{value}</p>
@@ -449,7 +449,7 @@ export default function NewDashboardPage() {
                   style={{ borderColor: B60, background: B60 }}>
                   {browse.map((b) => (
                     <Link key={b[0]} href={`/products?category=${b[2]}`}
-                      className="group block bg-[color:var(--posh-bg-card)] p-8 text-left transition-colors hover:bg-[rgba(240,232,216,0.03)]">
+                      className="group block bg-[color:var(--posh-bg-card)] p-8 text-left transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
                       <h3 className="posh-card-title text-2xl">{b[0]}</h3>
                       <p className="posh-subtitle mt-2">{b[1]}</p>
                       <span className="posh-link mt-6 inline-block no-underline transition-transform duration-500 group-hover:translate-x-1">Browse →</span>

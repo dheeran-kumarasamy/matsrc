@@ -111,7 +111,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       {order.status === "PROCESSING" ? (
         <div
           className="rounded-2xl border px-4 py-3 text-sm font-medium"
-          style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.04)", color: "var(--posh-fg-muted)" }}
+          style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)", color: "var(--posh-fg-muted)" }}
         >
           Supplier confirmed this enquiry. WhatsApp and in-app updates will continue as the order moves forward.
         </div>
@@ -137,7 +137,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       {order.isAggregated ? (
         <div
           className="rounded-2xl border px-4 py-3 text-sm"
-          style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.04)", color: "var(--posh-fg)" }}
+          style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)", color: "var(--posh-fg)" }}
         >
           <p className="posh-card-title text-base">This is a Group &amp; Save order</p>
           <p className="mt-1 font-medium" style={{ color: "var(--posh-fg-muted)" }}>
@@ -196,7 +196,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           </div>
           <div
             className="flex items-center justify-between rounded-xl border px-4 py-3 text-sm"
-            style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.04)" }}
+            style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)" }}
           >
             <span className="posh-label">Total</span>
             <span className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>INR {order.total.toLocaleString("en-IN")}</span>
@@ -223,7 +223,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             </p>
             <div
               className="rounded-xl border px-4 py-3 text-sm font-medium"
-              style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.04)", color: "var(--posh-fg-muted)" }}
+              style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)", color: "var(--posh-fg-muted)" }}
             >
               Payment status: <span className="font-bold" style={{ color: "var(--posh-fg)" }}>{order.paymentStatus}</span>
             </div>

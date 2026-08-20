@@ -50,7 +50,7 @@ export default function MarketTrendChart({
 
   if (trend.length === 0) {
     return (
-      <div className="posh-muted flex h-[160px] items-center justify-center rounded-xl border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.03)] text-sm">
+      <div className="posh-muted flex h-[160px] items-center justify-center rounded-xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.03)] text-sm">
         Not enough history yet to show a price trend.
       </div>
     );
@@ -60,7 +60,7 @@ export default function MarketTrendChart({
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="posh-card-title text-base">Market trend</h3>
-        <div role="tablist" aria-label="Trend range" className="flex gap-1 rounded-full bg-[rgba(240,232,216,0.05)] p-1">
+        <div role="tablist" aria-label="Trend range" className="flex gap-1 rounded-full bg-[rgba(var(--posh-wash-rgb),0.05)] p-1">
           {(Object.keys(RANGE_MONTHS) as RangeKey[]).map((key) => (
             <button
               key={key}

@@ -37,7 +37,7 @@ function SeverityIcon({ severity }: { severity: "INFO" | "WARNING" | "CRITICAL" 
 function severityBg(severity: "INFO" | "WARNING" | "CRITICAL"): string {
   if (severity === "CRITICAL") return "bg-[color:var(--posh-primary)] font-semibold text-[color:var(--posh-primary-fg)]";
   if (severity === "WARNING") return "border border-[color:var(--posh-primary)] bg-[color:var(--posh-bg-card)] font-semibold text-[color:var(--posh-fg)]";
-  return "bg-[rgba(240,232,216,0.04)] text-[color:var(--posh-fg)]";
+  return "bg-[rgba(var(--posh-wash-rgb),0.04)] text-[color:var(--posh-fg)]";
 }
 
 export default function RiskPanel({ risks, dataGaps }: Props) {

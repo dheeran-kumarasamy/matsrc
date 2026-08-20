@@ -121,7 +121,7 @@ export default function BuilderProfilePage() {
         </div>
 
         {/* WhatsApp Preferences */}
-        <div className="bg-[rgba(240,232,216,0.04)] border border-[color:var(--posh-border)] rounded-lg p-3">
+        <div className="bg-[rgba(var(--posh-wash-rgb),0.04)] border border-[color:var(--posh-border)] rounded-lg p-3">
           <label className="flex items-start gap-2 cursor-pointer">
             <input
               type="checkbox"

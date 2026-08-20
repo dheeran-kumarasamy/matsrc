@@ -87,19 +87,23 @@ export default function RegisterPage() {
 
   return (
     <>
-      <h2 className="text-xl font-semibold text-gray-800 mb-2">Create your account</h2>
+      <h2 className="posh-heading text-2xl mb-2" style={{ color: "var(--posh-fg)" }}>Create your account</h2>
 
       {/* Step indicator */}
       <div className="flex items-center gap-2 mb-6 overflow-x-auto">
         {["Details", "Verify OTP", "Select Role", "Contact"].map((label, i) => {
           const stepIndex = ["channel", "otp", "role", "contact"].indexOf(step);
+          const done = i <= stepIndex;
           return (
             <div key={label} className="flex items-center gap-2 flex-shrink-0">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i <= stepIndex ? "bg-brand-500 text-[color:var(--posh-primary-fg)]" : "bg-gray-100 text-gray-400"}`}>
+              <div
+                className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                style={done ? { background: "var(--posh-primary)", color: "var(--posh-primary-fg)" } : { background: "var(--posh-border)", color: "var(--posh-fg-muted)" }}
+              >
                 {i + 1}
               </div>
-              <span className={`text-xs whitespace-nowrap ${i <= stepIndex ? "text-brand-500 font-medium" : "text-gray-400"}`}>{label}</span>
-              {i < 3 && <div className={`h-px w-4 flex-shrink-0 ${i < stepIndex ? "bg-brand-500" : "bg-gray-200"}`} />}
+              <span className="text-xs whitespace-nowrap font-medium" style={{ color: done ? "var(--posh-primary)" : "var(--posh-fg-muted)" }}>{label}</span>
+              {i < 3 && <div className="h-px w-4 flex-shrink-0" style={{ background: i < stepIndex ? "var(--posh-primary)" : "var(--posh-border)" }} />}
             </div>
           );
         })}
@@ -110,13 +114,14 @@ export default function RegisterPage() {
           {/* Social login */}
           <a
             href="/api/auth/signin/google?callbackUrl=%2Fdashboard"
-            className="w-full flex items-center justify-center gap-3 border border-gray-200 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
+            className="w-full flex items-center justify-center gap-3 rounded-lg border py-2.5 text-sm font-medium transition-colors hover:opacity-80"
+            style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)" }}
           >
             Continue with Google
           </a>
           <div className="relative">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
-            <div className="relative flex justify-center text-xs text-gray-400 bg-[color:var(--posh-bg-card)] px-2">or</div>
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t" style={{ borderColor: "var(--posh-border)" }} /></div>
+            <div className="relative flex justify-center text-xs px-2" style={{ color: "var(--posh-fg-muted)", background: "var(--posh-bg-card)" }}>or</div>
           </div>
 
           <input
@@ -125,12 +130,15 @@ export default function RegisterPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full rounded-lg border px-4 py-2.5 text-base focus:outline-none focus:ring-2"
+            style={{ borderColor: "var(--posh-border)", background: "transparent", color: "var(--posh-fg)" }}
           />
 
-          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-            <button type="button" onClick={() => setChannel("phone")} className={`flex-1 py-2 text-sm font-medium ${channel === "phone" ? "bg-brand-500 text-[color:var(--posh-primary-fg)]" : "text-gray-500 hover:bg-gray-50"}`}>Phone</button>
-            <button type="button" onClick={() => setChannel("email")} className={`flex-1 py-2 text-sm font-medium ${channel === "email" ? "bg-brand-500 text-[color:var(--posh-primary-fg)]" : "text-gray-500 hover:bg-gray-50"}`}>Email</button>
+          <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: "var(--posh-border)" }}>
+            <button type="button" onClick={() => setChannel("phone")} className="flex-1 py-2 text-sm font-medium transition-colors"
+              style={channel === "phone" ? { background: "var(--posh-primary)", color: "var(--posh-primary-fg)" } : { color: "var(--posh-fg-muted)" }}>Phone</button>
+            <button type="button" onClick={() => setChannel("email")} className="flex-1 py-2 text-sm font-medium transition-colors"
+              style={channel === "email" ? { background: "var(--posh-primary)", color: "var(--posh-primary-fg)" } : { color: "var(--posh-fg-muted)" }}>Email</button>
           </div>
 
           <input
@@ -139,10 +147,12 @@ export default function RegisterPage() {
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             required
-            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full rounded-lg border px-4 py-2.5 text-base focus:outline-none focus:ring-2"
+            style={{ borderColor: "var(--posh-border)", background: "transparent", color: "var(--posh-fg)" }}
           />
-          {error && <p className="text-red-500 text-xs">{error}</p>}
-          <button type="submit" disabled={loading} className="w-full min-h-[44px] bg-brand-500 text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
+          {error && <p className="text-red-400 text-xs">{error}</p>}
+          <button type="submit" disabled={loading} className="w-full min-h-[44px] rounded-lg py-2.5 text-sm font-medium transition-opacity disabled:opacity-50 hover:opacity-85"
+            style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
             {loading ? "Sending..." : "Send OTP"}
           </button>
         </form>
@@ -150,7 +160,7 @@ export default function RegisterPage() {
 
       {step === "otp" && (
         <form onSubmit={handleVerifyOtp} className="space-y-4">
-          <p className="text-sm text-gray-500">Enter the 6-digit OTP sent to <strong>{identifier}</strong></p>
+          <p className="text-sm" style={{ color: "var(--posh-fg-muted)" }}>Enter the 6-digit OTP sent to <strong style={{ color: "var(--posh-fg)" }}>{identifier}</strong></p>
           <input
             type="text"
             inputMode="numeric"
@@ -159,10 +169,12 @@ export default function RegisterPage() {
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
             required
-            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full rounded-lg border px-4 py-2.5 text-base text-center tracking-widest focus:outline-none focus:ring-2"
+            style={{ borderColor: "var(--posh-border)", background: "transparent", color: "var(--posh-fg)" }}
           />
-          {error && <p className="text-red-500 text-xs">{error}</p>}
-          <button type="submit" disabled={loading || otp.length < 6} className="w-full bg-brand-500 text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
+          {error && <p className="text-red-400 text-xs">{error}</p>}
+          <button type="submit" disabled={loading || otp.length < 6} className="w-full rounded-lg py-2.5 text-sm font-medium transition-opacity disabled:opacity-50 hover:opacity-85"
+            style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
             {loading ? "Verifying..." : "Verify OTP"}
           </button>
         </form>
@@ -170,23 +182,27 @@ export default function RegisterPage() {
 
       {step === "role" && (
         <form onSubmit={handleRoleSelect} className="space-y-4">
-          <p className="text-sm text-gray-500 mb-4">How will you use Buildohub.in?</p>
+          <p className="text-sm mb-4" style={{ color: "var(--posh-fg-muted)" }}>How will you use Buildohub.in?</p>
           <div className="grid grid-cols-2 gap-3">
             {(["BUILDER", "SUPPLIER"] as const).map((r) => (
               <button
                 key={r}
                 type="button"
                 onClick={() => setRole(r)}
-                className={`border-2 rounded-xl p-4 text-left transition-all ${role === r ? "border-brand-500 bg-brand-50" : "border-gray-200 hover:border-gray-300"}`}
+                className="rounded-xl border-2 p-4 text-left transition-all"
+                style={role === r
+                  ? { borderColor: "var(--posh-primary)", background: "rgba(196,145,90,0.10)" }
+                  : { borderColor: "var(--posh-border)" }}
               >
                 <div className="text-2xl mb-1">{r === "BUILDER" ? "🏗️" : "🏭"}</div>
-                <div className="font-semibold text-sm text-gray-800">{r === "BUILDER" ? "Builder" : "Supplier"}</div>
-                <div className="text-xs text-gray-500 mt-1">{r === "BUILDER" ? "Buy construction materials" : "Sell construction materials"}</div>
+                <div className="font-semibold text-sm" style={{ color: "var(--posh-fg)" }}>{r === "BUILDER" ? "Builder" : "Supplier"}</div>
+                <div className="text-xs mt-1" style={{ color: "var(--posh-fg-muted)" }}>{r === "BUILDER" ? "Buy construction materials" : "Sell construction materials"}</div>
               </button>
             ))}
           </div>
-          {error && <p className="text-red-500 text-xs">{error}</p>}
-          <button type="submit" disabled={loading || !role} className="w-full bg-brand-500 text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
+          {error && <p className="text-red-400 text-xs">{error}</p>}
+          <button type="submit" disabled={loading || !role} className="w-full rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
+            style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
             {loading ? "Saving..." : "Continue →"}
           </button>
         </form>
@@ -195,42 +211,44 @@ export default function RegisterPage() {
       {step === "contact" && (
         <form onSubmit={handleContactSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">WhatsApp Number (Optional)</label>
-            <p className="text-xs text-gray-500 mb-2">For order updates & support. We'll use your phone number if you skip this.</p>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--posh-fg-muted)" }}>WhatsApp Number (Optional)</label>
+            <p className="text-xs mb-2" style={{ color: "var(--posh-fg-muted)" }}>For order updates & support. We'll use your phone number if you skip this.</p>
             <input
               type="tel"
               placeholder="+91 98765 43210"
               value={whatsappNumber}
               onChange={(e) => setWhatsappNumber(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full rounded-lg border px-4 py-2.5 text-base focus:outline-none focus:ring-2"
+              style={{ borderColor: "var(--posh-border)", background: "transparent", color: "var(--posh-fg)" }}
             />
           </div>
 
-          <div className="bg-[rgba(240,232,216,0.04)] border border-[color:var(--posh-border)] rounded-lg p-3 space-y-2">
+          <div className="rounded-lg border p-3 space-y-2" style={{ background: "rgba(var(--posh-wash-rgb),0.04)", borderColor: "var(--posh-border)" }}>
             <label className="flex items-start gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={whatsappConsent}
                 onChange={(e) => setWhatsappConsent(e.target.checked)}
-                className="w-4 h-4 mt-0.5 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                className="w-4 h-4 mt-0.5 rounded accent-[color:var(--posh-primary)]"
               />
-              <span className="text-xs text-gray-700">
-                <strong>Enable WhatsApp Notifications</strong><br/>
+              <span className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
+                <strong style={{ color: "var(--posh-fg)" }}>Enable WhatsApp Notifications</strong><br/>
                 Get real-time order updates, price alerts, and support messages on WhatsApp
               </span>
             </label>
           </div>
 
-          {error && <p className="text-red-500 text-xs">{error}</p>}
-          <button type="submit" disabled={loading} className="w-full bg-brand-500 text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
+          {error && <p className="text-red-400 text-xs">{error}</p>}
+          <button type="submit" disabled={loading} className="w-full rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
+            style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
             {loading ? "Saving..." : "Continue to KYC →"}
           </button>
         </form>
       )}
 
-      <p className="text-center text-xs text-gray-400 mt-6">
+      <p className="text-center text-xs mt-6" style={{ color: "var(--posh-fg-muted)" }}>
         Already have an account?{" "}
-        <Link href="/auth/login" className="text-brand-500 font-medium hover:underline">Sign in</Link>
+        <Link href="/auth/login" className="font-medium hover:underline" style={{ color: "var(--posh-primary)" }}>Sign in</Link>
       </p>
     </>
   );

@@ -51,7 +51,7 @@ export default function PaymentMethodSelector({ orderId, currentMethod, bankGuar
           disabled={saving}
           className={`rounded-xl border p-4 text-left transition-all disabled:opacity-60 ${
             selected === "BANK_TRANSFER"
-              ? "border-[color:var(--posh-primary)] bg-[rgba(240,232,216,0.04)]"
+              ? "border-[color:var(--posh-primary)] bg-[rgba(var(--posh-wash-rgb),0.04)]"
               : "border-slate-200 bg-[color:var(--posh-bg-card)] hover:border-slate-300"
           }`}
         >
@@ -65,7 +65,7 @@ export default function PaymentMethodSelector({ orderId, currentMethod, bankGuar
           disabled={saving || !bankGuaranteeAvailable}
           className={`rounded-xl border p-4 text-left transition-all disabled:opacity-50 ${
             selected === "CREDIT"
-              ? "border-[color:var(--posh-primary)] bg-[rgba(240,232,216,0.04)]"
+              ? "border-[color:var(--posh-primary)] bg-[rgba(var(--posh-wash-rgb),0.04)]"
               : "border-slate-200 bg-[color:var(--posh-bg-card)] hover:border-slate-300"
           }`}
         >

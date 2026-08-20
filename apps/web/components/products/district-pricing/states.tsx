@@ -36,7 +36,7 @@ export function PriceIntelligenceEmptyState({
 }) {
   const copy = EMPTY_REASON_COPY[reason];
   return (
-    <div role="status" className="rounded-xl border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.03)] p-5 text-center">
+    <div role="status" className="rounded-xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.03)] p-5 text-center">
       <p className="posh-card-title text-base">{copy.title}</p>
       <p className="posh-subtitle mt-1">{copy.description}</p>
       {onRequestQuote ? (

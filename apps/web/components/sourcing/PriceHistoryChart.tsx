@@ -144,7 +144,7 @@ export default function PriceHistoryChart({
               type="monotone"
               dataKey="forecastPrice"
               stroke="var(--posh-primary)"
-              fill="rgba(240,232,216,0.06)"
+              fill="rgba(var(--posh-wash-rgb),0.06)"
               strokeWidth={1.5}
               strokeDasharray="5 3"
               dot={false}

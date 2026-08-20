@@ -8,7 +8,11 @@ import HomeEditorialSections from "@/components/home/HomeEditorialSections";
 export default function HomePage() {
   return (
     <main
-      className="overflow-x-hidden"
+      // theme-home scopes the Home page's dark warm-brown editorial palette
+      // to this subtree only (see the THEME ARCHITECTURE note in
+      // app/globals.css) — every other route now renders the lighter warm
+      // brown/beige "application" theme by default, matching /newdashboard.
+      className="theme-home overflow-x-hidden"
       style={{ background: "var(--posh-bg)", color: "var(--posh-fg)" }}
     >
       {/* Fixed frosted nav — overlays the hero */}

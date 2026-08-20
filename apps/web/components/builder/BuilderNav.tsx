@@ -49,7 +49,7 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
             style={
               active
                 ? {
-                    background: "rgba(240,232,216,0.08)",
+                    background: "rgba(var(--posh-wash-rgb),0.08)",
                     color: "var(--posh-fg)",
                     borderColor: "var(--posh-border)",
                   }
@@ -57,7 +57,7 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
             }
             onMouseEnter={(e) => {
               if (!active) {
-                (e.currentTarget as HTMLElement).style.background = "rgba(240,232,216,0.04)";
+                (e.currentTarget as HTMLElement).style.background = "rgba(var(--posh-wash-rgb),0.04)";
                 (e.currentTarget as HTMLElement).style.color = "var(--posh-fg)";
               }
             }}

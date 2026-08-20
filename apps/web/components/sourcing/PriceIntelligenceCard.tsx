@@ -49,7 +49,7 @@ const TIMING_BADGE: Record<string, string> = {
   BUY_NOW: "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)]",
   WAIT: "border border-[color:var(--posh-primary)] bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)]",
   MONITOR: "border border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)]",
-  INSUFFICIENT_DATA: "bg-[rgba(240,232,216,0.04)] text-[color:var(--posh-fg-muted)]",
+  INSUFFICIENT_DATA: "bg-[rgba(var(--posh-wash-rgb),0.04)] text-[color:var(--posh-fg-muted)]",
 };
 
 const TIMING_LABEL: Record<string, string> = {

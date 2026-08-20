@@ -96,7 +96,7 @@ export default function HeroSection() {
               style={{
                 borderColor: "var(--posh-border)",
                 color: "var(--posh-fg)",
-                background: "rgba(240,232,216,0.06)",
+                background: "rgba(var(--posh-wash-rgb),0.06)",
               }}
             >
               Browse materials

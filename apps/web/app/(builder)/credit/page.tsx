@@ -224,7 +224,7 @@ export default function CreditPage() {
       {step === "kfs" && (
         <div className="panel p-6 space-y-4">
           <div className="flex items-center gap-2">
-            <span className="bg-[rgba(240,232,216,0.04)] text-[color:var(--posh-primary)] text-xs font-semibold px-2 py-0.5 rounded">RBI Mandated</span>
+            <span className="bg-[rgba(var(--posh-wash-rgb),0.04)] text-[color:var(--posh-primary)] text-xs font-semibold px-2 py-0.5 rounded">RBI Mandated</span>
             <h2 className="font-semibold text-slate-800">Key Fact Statement (KFS)</h2>
           </div>
           <div className="bg-slate-50 rounded-lg p-4 text-xs text-slate-600 space-y-2 max-h-48 overflow-y-auto">

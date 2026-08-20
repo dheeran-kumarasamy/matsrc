@@ -144,7 +144,7 @@ export default function GroupOrdersPage() {
                   <span
                     className={`rounded-full px-3 py-1 text-xs font-semibold ${
                       isLocked
-                        ? "bg-[rgba(240,232,216,0.08)] text-[color:var(--posh-primary)]"
+                        ? "bg-[rgba(var(--posh-wash-rgb),0.08)] text-[color:var(--posh-primary)]"
                         : "bg-emerald-100 text-emerald-700"
                     }`}
                   >
@@ -189,7 +189,7 @@ export default function GroupOrdersPage() {
                 ) : null}
 
                 {isLocked ? (
-                  <p className="rounded-lg border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] px-3 py-2 text-xs text-[color:var(--posh-fg)]">
+                  <p className="rounded-lg border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] px-3 py-2 text-xs text-[color:var(--posh-fg)]">
                     This pool has been locked and can no longer be modified. Your order will now proceed through
                     standard fulfilment.
                   </p>

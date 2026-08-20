@@ -68,7 +68,7 @@ export default function SiteHeader() {
             className="w-full rounded-full border py-2.5 pl-11 pr-4 text-sm outline-none backdrop-blur-md transition-colors"
             style={{
               borderColor: "var(--posh-border)",
-              background: "rgba(240,232,216,0.06)",
+              background: "rgba(var(--posh-wash-rgb),0.06)",
               color: "var(--posh-fg)",
             }}
           />
@@ -117,10 +117,13 @@ export default function SiteHeader() {
         </button>
       </div>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer — Radix renders this via a Portal to document.body,
+          which sits OUTSIDE the theme-home-scoped <main> in app/page.tsx.
+          Re-applying theme-home directly on the portalled content keeps the
+          --posh-* variables resolving to Home's dark palette here too. */}
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent
-          className="flex flex-col border-0 p-0"
+          className="theme-home flex flex-col border-0 p-0"
           style={{ background: "var(--posh-bg-card)", color: "var(--posh-fg)" }}
         >
           <SheetHeader className="border-b px-6 py-5" style={{ borderColor: "var(--posh-border)" }}>
@@ -155,7 +158,7 @@ export default function SiteHeader() {
                 className="w-full rounded-full border py-2.5 pl-11 pr-4 text-sm outline-none transition-colors"
                 style={{
                   borderColor: "var(--posh-border)",
-                  background: "rgba(240,232,216,0.06)",
+                  background: "rgba(var(--posh-wash-rgb),0.06)",
                   color: "var(--posh-fg)",
                 }}
               />

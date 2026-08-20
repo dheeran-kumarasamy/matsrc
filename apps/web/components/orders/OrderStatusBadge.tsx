@@ -4,7 +4,7 @@ type Status = "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DEL
 // is expressed with contrast rather than hue: early states are faint chips,
 // in-transit states are outlined, and terminal states are solid black.
 const colours: Record<Status, string> = {
-  PLACED: "bg-[rgba(240,232,216,0.04)] text-[color:var(--posh-fg-muted)] border-[color:var(--posh-border)]",
+  PLACED: "bg-[rgba(var(--posh-wash-rgb),0.04)] text-[color:var(--posh-fg-muted)] border-[color:var(--posh-border)]",
   PROCESSING: "bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)] border-[color:var(--posh-border)]",
   DISPATCHED: "bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)] border-[color:var(--posh-border)]",
   OUT_FOR_DELIVERY: "bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)] border-[color:var(--posh-primary)]",

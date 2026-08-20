@@ -1,5 +1,8 @@
-/* ─── Google Fonts — Instrument Serif + Work Sans ─── */
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Work+Sans:wght@300;400;500;600;700&display=swap');
+/* ─── Google Fonts — Inter ───
+   Single modern sans-serif family for the entire product (Home + every
+   application page). Replaces the previous Instrument Serif / Work Sans
+   editorial pairing as part of the industrial-palette redesign. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,63 +10,66 @@
 
 @layer base {
   /* ══════════════════════════════════════════════════════════════════════
-     THEME ARCHITECTURE — route-aware, single source of truth
+     THEME ARCHITECTURE — single unified industrial palette
      ══════════════════════════════════════════════════════════════════════
-     Home (`/`) keeps its own dark warm-brown editorial identity. Every
-     other page ("the application": /newdashboard, sourcing, products,
-     orders, reports, cart, checkout, disputes, sites, profile, credit,
-     watchlist, purchase-orders, auth, …) shares ONE lighter warm
-     brown/beige "application" theme, extracted from /newdashboard.
+     Home (`/`) and every application page ("the application":
+     /newdashboard, sourcing, products, orders, reports, cart, checkout,
+     disputes, sites, profile, credit, watchlist, purchase-orders, auth, …)
+     now share ONE professional industrial palette: deep charcoal/slate
+     (#1E293B) ink, a clean off-white (#F8FAFC) surface, and a vibrant
+     construction-accent orange (#F97316) for CTAs — a deliberate move away
+     from the previous dark-vs-light dual-tone system to one consistent,
+     modern brand across the whole site.
 
-     Mechanism: the --posh-* custom properties below are consumed
-     everywhere (shared classes here + ~65 components/pages). By default
-     (:root) they resolve to the lighter application palette. `.theme-home`
-     — applied ONLY to Home's top-level <main> in app/page.tsx —
-     re-declares every one of these variables back to their original dark
-     values, so the CSS custom-property cascade scopes Home's look to Home
-     alone without touching a single Home component or duplicating colour. */
+     Mechanism unchanged: the --posh-* custom properties below are consumed
+     everywhere (shared classes here + ~65 components/pages). `.theme-home`
+     is kept as a no-op alias (re-declaring the same values) purely so the
+     `className="theme-home"` marker already present on Home's top-level
+     <main> keeps working without needing to touch that file. */
   :root {
-    /* Legacy brand tokens kept for builder portal compatibility */
-    --brand-500: #1a4f8a;
-    --accent-500: #e87722;
+    /* Legacy brand tokens kept for builder portal compatibility — now
+       aligned to the new industrial accent colour. */
+    --brand-500: #1e293b;
+    --accent-500: #f97316;
     --ink-900: #0f172a;
     --sky-50: #eef6ff;
 
-    /* ── Application theme (warm brown / beige) — ref: /newdashboard ──
-       Lighter, warm, premium surface in the same brown/gold hue family as
-       Home (--posh-primary keeps its exact hex, so the accent colour is
-       identical in both themes) but flipped onto a light beige base. */
-    --posh-bg:          #f7f1e5;   /* warm beige application background */
-    --posh-bg-card:     #fffdf8;   /* elevated card/surface — warm off-white */
-    --posh-fg:          #2b2013;   /* primary ink — dark warm brown */
-    --posh-fg-muted:    #8a7862;   /* secondary/muted warm brown-grey text */
-    --posh-primary:     #c4915a;   /* warm amber / gold accent — unchanged */
-    --posh-primary-fg:  #2b2013;   /* text on primary/accent */
-    --posh-border:      rgba(43,32,19,0.12);  /* subtle warm brown border */
-    --posh-cream:       #f4edda;   /* cream section bg (Home CTA band only) */
-    --posh-cream-fg:    #1c1810;   /* text on cream (Home CTA band only) */
-    --posh-radius:      1.5rem;    /* 24px — large friendly radius */
+    /* ── Industrial application theme (charcoal / off-white / orange) ── */
+    --posh-bg:          #f8fafc;   /* off-white page background */
+    --posh-bg-card:     #ffffff;   /* elevated card/surface — clean white */
+    --posh-fg:          #1e293b;   /* primary ink — deep charcoal/slate */
+    --posh-fg-muted:    #64748b;   /* secondary/muted slate-gray text */
+    --posh-primary:     #f97316;   /* construction-accent orange */
+    --posh-primary-fg:  #ffffff;   /* text on primary/accent */
+    --posh-border:      rgba(30,41,59,0.10);  /* subtle slate border */
+    --posh-cream:       #f1f5f9;   /* light slate section bg (CTA bands) */
+    --posh-cream-fg:    #1e293b;   /* text on cream/CTA bands */
+    --posh-radius:      1rem;      /* 16px — restrained modern radius */
 
     /* Hover / selected-state tokens (application theme) */
-    --posh-primary-hover: #ad7c48;
-    --posh-primary-soft:  rgba(196,145,90,0.14);
+    --posh-primary-hover: #ea580c;
+    --posh-primary-soft:  rgba(249,115,22,0.12);
 
     /* RGB triplet behind every "wash" overlay in the shared component kit
-       (hover backgrounds, faint fills, dividers). Application theme washes
-       the light surface with a warm brown tint; Home (.theme-home) washes
-       its dark surface with cream, unchanged from before. */
-    --posh-wash-rgb: 43,32,19;
+       (hover backgrounds, faint fills, dividers) — slate tint. */
+    --posh-wash-rgb: 30,41,59;
 
-    /* Semantic status colours — warm-toned to harmonise with the palette. */
-    --posh-success: #2f7d4f;
-    --posh-warning: #b8862e;
-    --posh-error:   #b3402f;
+    /* Semantic status colours. */
+    --posh-success: #16a34a;
+    --posh-warning: #d97706;
+    --posh-error:   #dc2626;
 
-    /* Warm gradient (hero overlay — Home only, pinned in .theme-home too) */
-    --posh-gradient-warm: radial-gradient(
-      110% 90% at 70% 0%,
-      rgba(120, 75, 30, 0.55) 0%,
-      rgba(28, 24, 16, 0) 60%
+    /* Soft, multi-layered depth shadow — used by cards/panels/CTA in place
+       of harsh solid borders (see .panel / .posh-card below). */
+    --posh-shadow-soft: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    --posh-shadow-elevated: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.06);
+
+    /* Hero overlay gradient — subtle charcoal wash instead of the previous
+       warm-brown radial, so it reads as industrial rather than editorial. */
+    --posh-gradient-warm: linear-gradient(
+      180deg,
+      rgba(15, 23, 42, 0.65) 0%,
+      rgba(15, 23, 42, 0.15) 60%
     );
 
     /* ── Semantic application design tokens ──────────────────────────────
@@ -90,58 +96,57 @@
     --app-error:         var(--posh-error);
   }
 
-  /* ── Home page scope — locks in the ORIGINAL dark warm-brown identity ──
-     Applied to the single top-level <main className="theme-home"> in
-     app/page.tsx. Every value below is byte-for-byte what :root held
-     before this theme split, so Home is visually unchanged. */
+  /* ── Home page scope — now a no-op alias ──────────────────────────────
+     Home (`/`) no longer carries a separate dark identity: the whole
+     product (Home + application) shares one industrial charcoal/orange/
+     off-white palette. `.theme-home` is kept (re-declaring the identical
+     :root values) purely so the existing `className="theme-home"` marker
+     on Home's top-level <main> in app/page.tsx keeps resolving without
+     needing to edit that file. */
   .theme-home {
-    --posh-bg:          #1c1810;
-    --posh-bg-card:     #241f16;
-    --posh-fg:          #f0e8d8;
-    --posh-fg-muted:    #a89880;
-    --posh-primary:     #c4915a;
-    --posh-primary-fg:  #1c1810;
-    --posh-border:      rgba(240,232,216,0.10);
-    --posh-cream:       #f4edda;
-    --posh-cream-fg:    #1c1810;
-    --posh-radius:      1.5rem;
-    --posh-primary-hover: #d6a670;
-    --posh-primary-soft:  rgba(196,145,90,0.22);
-    --posh-wash-rgb: 240,232,216;
-    --posh-success: #22c55e;
-    --posh-warning: #eab308;
-    --posh-error:   #ef4444;
-    --posh-gradient-warm: radial-gradient(
-      110% 90% at 70% 0%,
-      rgba(120, 75, 30, 0.55) 0%,
-      rgba(28, 24, 16, 0) 60%
+    --posh-bg:          #f8fafc;
+    --posh-bg-card:     #ffffff;
+    --posh-fg:          #1e293b;
+    --posh-fg-muted:    #64748b;
+    --posh-primary:     #f97316;
+    --posh-primary-fg:  #ffffff;
+    --posh-border:      rgba(30,41,59,0.10);
+    --posh-cream:       #f1f5f9;
+    --posh-cream-fg:    #1e293b;
+    --posh-radius:      1rem;
+    --posh-primary-hover: #ea580c;
+    --posh-primary-soft:  rgba(249,115,22,0.12);
+    --posh-wash-rgb: 30,41,59;
+    --posh-success: #16a34a;
+    --posh-warning: #d97706;
+    --posh-error:   #dc2626;
+    --posh-gradient-warm: linear-gradient(
+      180deg,
+      rgba(15, 23, 42, 0.65) 0%,
+      rgba(15, 23, 42, 0.15) 60%
     );
   }
 
-  /* Single uniform font stack for the whole product — reused by BOTH themes
-     (Home and the application), so typography never forks. Body copy sits
-     at 400 (not 300) so every surface reads solidly rather than thin. */
+  /* Single uniform modern sans-serif stack for the whole product — Home and
+     the application never fork typography. */
   body {
     @apply min-h-screen antialiased;
-    font-family: 'Work Sans', ui-sans-serif, system-ui, sans-serif;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
     font-weight: 400;
-    letter-spacing: 0.01em;
+    letter-spacing: 0;
     -webkit-font-smoothing: antialiased;
-    /* Resolves to the application's warm beige background/ink by default
-       (:root tokens above). Home's top-level <main className="theme-home">
-       overrides --posh-bg/--posh-fg back to the dark palette for that one
-       subtree, so this rule needs no route-specific branching. Individual
-       pages/components still layer their own --posh-* backgrounds on top
-       (cards, panels, cream CTA band, …). */
+    /* Resolves to the shared off-white background/charcoal ink (:root
+       tokens above) on every route, including Home via .theme-home. */
     background: var(--posh-bg);
     color: var(--posh-fg);
   }
 
-  /* Headings default to the editorial display face everywhere. */
+  /* Headings — bold, distinct Inter weights for a clear hierarchy instead
+     of the previous serif display face. */
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Instrument Serif', Georgia, serif;
-    font-weight: 600;
-    letter-spacing: -0.015em;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
 }
 
@@ -153,10 +158,11 @@
      className="theme-home"> keeps the original dark card colour for any
      Home-owned usage. Single source of truth, no new colours. */
   .panel {
-    @apply rounded-2xl border shadow-sm;
+    @apply rounded-2xl border;
     border-color: var(--posh-border);
     background: var(--posh-bg-card);
     color: var(--posh-fg);
+    box-shadow: var(--posh-shadow-soft);
   }
 
   /* ── Posh editorial section wrapper ── */
@@ -166,10 +172,10 @@
 
   /* ── Posh display heading ── */
   .posh-heading {
-    font-family: 'Instrument Serif', Georgia, serif;
-    font-weight: 400;
-    letter-spacing: -0.015em;
-    line-height: 0.95;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
   }
 
   /* ── Posh side-panel navigation typography ──────────────────────────────
@@ -182,8 +188,8 @@
   }
 
   .posh-nav-brandmark {
-    font-family: 'Instrument Serif', Georgia, serif;
-    font-weight: 600;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
     letter-spacing: -0.01em;
     color: var(--posh-fg);
   }
@@ -192,7 +198,7 @@
   .posh-btn-pill {
     @apply rounded-full border px-5 py-2 text-sm backdrop-blur-md transition-colors;
     border-color: var(--posh-border);
-    background: rgba(240,232,216,0.08);
+    background: rgba(var(--posh-wash-rgb),0.04);
     color: var(--posh-fg);
   }
   .posh-btn-pill:hover {
@@ -207,8 +213,8 @@
      Themed on the shared --posh-* tokens, so reports render the lighter
      warm brown/beige application surface, matching /newdashboard. */
   .report-display {
-    font-family: 'Instrument Serif', Georgia, serif;
-    font-weight: 600;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 800;
     letter-spacing: -0.02em;
     line-height: 1.05;
     color: var(--posh-fg);
@@ -224,9 +230,9 @@
     color: var(--posh-fg-muted);
   }
 
-  /* Report body copy — Work Sans at a readable, non-light weight. */
+  /* Report body copy — Inter at a readable, non-light weight. */
   .report-body {
-    font-family: 'Work Sans', ui-sans-serif, system-ui, sans-serif;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
     font-weight: 500;
     color: var(--posh-fg);
   }
@@ -248,19 +254,19 @@
 
   /* Page title — big editorial serif. */
   .posh-page-title {
-    font-family: 'Instrument Serif', Georgia, serif;
-    font-weight: 600;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 800;
     letter-spacing: -0.02em;
-    line-height: 1.05;
+    line-height: 1.1;
     @apply text-3xl md:text-4xl;
     color: var(--posh-fg);
   }
 
   /* Section / card title — one step down from the page title. */
   .posh-card-title {
-    font-family: 'Instrument Serif', Georgia, serif;
-    font-weight: 600;
-    letter-spacing: -0.015em;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.01em;
     @apply text-xl;
     color: var(--posh-fg);
   }
@@ -285,14 +291,16 @@
 
   /* Body copy inside posh surfaces — solid, never light. */
   .posh-body {
-    font-family: 'Work Sans', ui-sans-serif, system-ui, sans-serif;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
     font-weight: 500;
     color: var(--posh-fg);
   }
 
-  /* Card surface. */
+  /* Card surface — soft, multi-layered depth shadow instead of a heavy
+     border, per the industrial redesign's "soft depth" principle. */
   .posh-card {
-    @apply rounded-2xl border shadow-sm;
+    @apply rounded-2xl border;
+    box-shadow: var(--posh-shadow-soft);
     border-color: var(--posh-border);
     background: var(--posh-bg-card);
     color: var(--posh-fg);
@@ -322,7 +330,7 @@
   .posh-status {
     @apply rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em];
     border-color: var(--posh-border);
-    background: rgba(240,232,216,0.06);
+    background: rgba(var(--posh-wash-rgb),0.04);
     color: var(--posh-fg);
   }
 
@@ -347,7 +355,7 @@
   .posh-btn-ghost {
     @apply rounded-full border px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition-colors disabled:opacity-40;
     border-color: var(--posh-border);
-    background: rgba(240,232,216,0.06);
+    background: rgba(var(--posh-wash-rgb),0.03);
     color: var(--posh-fg);
   }
   .posh-btn-ghost:hover {
@@ -377,7 +385,7 @@
   .posh-input {
     @apply w-full rounded-xl border px-3 py-2.5 text-sm font-medium outline-none focus:ring-1;
     border-color: var(--posh-border);
-    background: rgba(240,232,216,0.06);
+    background: var(--posh-bg-card);
     color: var(--posh-fg);
   }
   .posh-input::placeholder {
@@ -400,9 +408,10 @@
     color: var(--posh-fg-muted);
   }
 
-  /* ── Posh frosted nav ── */
+  /* ── Frosted nav ── light off-white glass, matching the industrial
+     palette (previously a dark overlay tuned for the old dark Home hero). */
   .posh-nav {
-    background: rgba(28, 24, 16, 0.55);
+    background: rgba(248, 250, 252, 0.82);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--posh-border);

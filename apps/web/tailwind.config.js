@@ -31,10 +31,11 @@ module.exports = {
       fontFamily: {
         ...baseConfig.theme?.extend?.fontFamily,
         deskMono: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
-        // Editorial display face used by the posh-web-flair design system
-        // (github.com/dheeran-kumarasamy/posh-web-flair → --font-display).
-        // Loaded via the Google Fonts import at the top of app/globals.css.
-        display: ["Instrument Serif", "Georgia", "serif"],
+        // Industrial redesign — a single modern sans-serif (Inter) replaces
+        // the previous Instrument Serif editorial display face everywhere,
+        // including anywhere `font-display` was used. Loaded via the
+        // Google Fonts import at the top of app/globals.css.
+        display: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       borderRadius: {
         ...baseConfig.theme?.extend?.borderRadius,

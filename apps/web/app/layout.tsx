@@ -3,12 +3,10 @@ import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
 import { auth } from "@/auth";
 
-// Typography is intentionally centralised in app/globals.css (Work Sans for
-// body copy, Instrument Serif for display headings — both loaded via the
-// Google Fonts import there). The previous `next/font` Inter class on <body>
-// overrode that base rule and left the app running two different font stacks
-// (Inter everywhere, Work Sans only where a component re-declared it), so it
-// is removed here to keep the font uniform across every surface.
+// Typography is intentionally centralised in app/globals.css (Inter for both
+// body copy and headings, loaded via the Google Fonts import there) so the
+// whole product — Home and the application — renders one consistent modern
+// sans-serif type system rather than forking per surface.
 
 // P2-D — root/homepage metadata. Route-level `generateMetadata`/`metadata`
 // exports (products catalogue, category filter, PDP, price report) override

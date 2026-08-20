@@ -7,14 +7,15 @@ type BuilderKpiCardProps = {
   href?: string;
 };
 
-// KPI card — refined with Instrument Serif large value and amber accent label.
+// KPI card — bold Inter value in the deep charcoal brand ink, orange-accent
+// eyebrow label, soft shadow surface (industrial redesign).
 export function BuilderKpiCard({ label, value, hint, href }: BuilderKpiCardProps) {
   const content = (
     <article className="panel p-5 hover:shadow-md transition-shadow group">
       <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-400">{label}</p>
       <p
-        className="mt-2 text-4xl font-normal tracking-tight"
-        style={{ fontFamily: "'Instrument Serif', Georgia, serif", color: "#1a4f8a" }}
+        className="mt-2 text-4xl font-extrabold tracking-tight"
+        style={{ color: "#1e293b" }}
       >
         {value}
       </p>

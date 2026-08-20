@@ -159,6 +159,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
     price: parseListingPrice(listing.price),
     minPrice: listing.minPrice ?? undefined,
     maxPrice: listing.maxPrice ?? undefined,
+    unit: listing.unit,
     supplier: "Verified Supplier",
     supplierCount: listing.groupedListingIds?.length || 1,
     image: listing.images && listing.images.length > 0 ? listing.images[0] : undefined,

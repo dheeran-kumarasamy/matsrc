@@ -9,16 +9,19 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        // Industrial redesign — deep charcoal/slate brand, construction
+        // accent orange. Shared across web/admin/supplier via this base
+        // config; individual apps may layer additional tokens on top.
         brand: {
-          50:  "#eef4fb",
-          100: "#cfe0f5",
-          500: "#1a4f8a",
-          600: "#163f6e",
-          900: "#0d2540",
+          50:  "#f8fafc",
+          100: "#e2e8f0",
+          500: "#1e293b",
+          600: "#0f172a",
+          900: "#020617",
         },
         accent: {
-          500: "#e87722",
-          600: "#c96318",
+          500: "#f97316",
+          600: "#ea580c",
         },
       },
       fontFamily: {

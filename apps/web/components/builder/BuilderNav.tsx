@@ -15,18 +15,36 @@ import {
 } from "@/components/ui/sheet";
 
 
-const links = [
-  { href: "/newdashboard", label: "Dashboard" },
-  { href: "/sourcing", label: "AI Sourcing Assistant" },
-  { href: "/products", label: "Browse Materials" },
-  { href: "/orders", label: "My Orders" },
-  { href: "/purchase-orders", label: "Purchase Orders" },
-  { href: "/watchlist", label: "Watchlist" },
-  { href: "/sites", label: "Sites" },
-
-  { href: "/disputes", label: "Disputes" },
+// Grouped by mental model (Overview / Procurement / Intelligence /
+// Operations) rather than one flat list, so the nav communicates what the
+// user can do at a glance. Routes/labels are unchanged — only the grouping
+// and section headings are new.
+const linkGroups: { heading: string; links: { href: string; label: string }[] }[] = [
+  {
+    heading: "Overview",
+    links: [{ href: "/newdashboard", label: "Dashboard" }],
+  },
+  {
+    heading: "Procurement",
+    links: [
+      { href: "/products", label: "Browse Materials" },
+      { href: "/sourcing", label: "AI Sourcing Assistant" },
+      { href: "/sites", label: "Sites" },
+    ],
+  },
+  {
+    heading: "Intelligence",
+    links: [{ href: "/watchlist", label: "Watchlist" }],
+  },
+  {
+    heading: "Operations",
+    links: [
+      { href: "/orders", label: "My Orders" },
+      { href: "/purchase-orders", label: "Purchase Orders" },
+      { href: "/disputes", label: "Disputes" },
+    ],
+  },
 ];
-
 
 // Shared by BOTH the desktop sidebar (BuilderNav) and the mobile Sheet drawer
 // (BuilderNavMobileTrigger), so the typography below applies on every screen
@@ -34,51 +52,55 @@ const links = [
 // globals.css is `font-weight: 300` — without them the nav renders thin.
 function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
   return (
-    <nav className="space-y-1">
-      <p className="posh-nav-eyebrow px-4 pb-1.5 pt-1">Navigation</p>
-      {links.map((link) => {
-        const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
-        return (
-          <Link
-            key={link.href}
-            href={link.href}
-            onClick={onNavigate}
-            className={`relative flex min-h-[44px] items-center rounded-xl border px-4 text-[13px] tracking-[0.01em] transition-all duration-200 ${
-              active ? "font-bold shadow-sm" : "border-transparent font-semibold"
-            }`}
-            style={
-              active
-                ? {
-                    background: "rgba(var(--posh-wash-rgb),0.08)",
-                    color: "var(--posh-fg)",
-                    borderColor: "var(--posh-border)",
+    <nav className="space-y-4">
+      {linkGroups.map((group) => (
+        <div key={group.heading} className="space-y-1">
+          <p className="posh-nav-eyebrow px-4 pb-1.5 pt-1">{group.heading}</p>
+          {group.links.map((link) => {
+            const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={onNavigate}
+                className={`relative flex min-h-[44px] items-center rounded-xl border px-4 text-[13px] tracking-[0.01em] transition-all duration-200 ${
+                  active ? "font-bold shadow-sm" : "border-transparent font-semibold"
+                }`}
+                style={
+                  active
+                    ? {
+                        background: "rgba(var(--posh-wash-rgb),0.08)",
+                        color: "var(--posh-fg)",
+                        borderColor: "var(--posh-border)",
+                      }
+                    : { color: "var(--posh-fg-muted)" }
+                }
+                onMouseEnter={(e) => {
+                  if (!active) {
+                    (e.currentTarget as HTMLElement).style.background = "rgba(var(--posh-wash-rgb),0.04)";
+                    (e.currentTarget as HTMLElement).style.color = "var(--posh-fg)";
                   }
-                : { color: "var(--posh-fg-muted)" }
-            }
-            onMouseEnter={(e) => {
-              if (!active) {
-                (e.currentTarget as HTMLElement).style.background = "rgba(var(--posh-wash-rgb),0.04)";
-                (e.currentTarget as HTMLElement).style.color = "var(--posh-fg)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!active) {
-                (e.currentTarget as HTMLElement).style.background = "transparent";
-                (e.currentTarget as HTMLElement).style.color = "var(--posh-fg-muted)";
-              }
-            }}
-          >
-            {/* Posh accent rail on the active item */}
-            {active ? (
-              <span
-                className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full"
-                style={{ background: "var(--posh-primary)" }}
-              />
-            ) : null}
-            {link.label}
-          </Link>
-        );
-      })}
+                }}
+                onMouseLeave={(e) => {
+                  if (!active) {
+                    (e.currentTarget as HTMLElement).style.background = "transparent";
+                    (e.currentTarget as HTMLElement).style.color = "var(--posh-fg-muted)";
+                  }
+                }}
+              >
+                {/* Posh accent rail on the active item */}
+                {active ? (
+                  <span
+                    className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full"
+                    style={{ background: "var(--posh-primary)" }}
+                  />
+                ) : null}
+                {link.label}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 }

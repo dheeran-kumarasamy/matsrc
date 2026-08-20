@@ -360,6 +360,19 @@
     color: var(--posh-fg);
   }
 
+  /* Tertiary action — a plain text button (no underline/border/fill),
+     for the lowest-emphasis action in a group (e.g. "Cancel" next to a
+     primary "Save"). Completes the posh-btn (primary) /
+     posh-btn-ghost (secondary) / posh-btn-tertiary (tertiary) hierarchy. */
+  .posh-btn-tertiary {
+    @apply rounded-full px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition-colors disabled:opacity-40;
+    background: transparent;
+    color: var(--posh-fg-muted);
+  }
+  .posh-btn-tertiary:hover {
+    color: var(--posh-fg);
+  }
+
   /* Form control. */
   .posh-input {
     @apply w-full rounded-xl border px-3 py-2.5 text-sm font-medium outline-none focus:ring-1;

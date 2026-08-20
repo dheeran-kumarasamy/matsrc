@@ -214,13 +214,13 @@ export default function QuickRequestForm({ floating }: Props) {
   if (floating) {
     return (
       <>
-        <button onClick={() => setOpen(true)} className="fixed bottom-6 right-6 z-40 flex min-h-[44px] items-center gap-2 rounded-full bg-accent-500 px-5 py-3 text-sm font-medium text-white shadow-lg transition-colors hover:bg-accent-600">
+        <button onClick={() => setOpen(true)} className="fixed bottom-6 right-6 z-40 flex min-h-[44px] items-center gap-2 rounded-full bg-accent-500 px-5 py-3 text-sm font-medium text-[color:var(--posh-primary-fg)] shadow-lg transition-colors hover:bg-accent-600">
           <MessageSquarePlus size={18} />
           <span className="hidden sm:inline">Quick Request</span>
         </button>
         {open && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[rgba(240,232,216,0.16)] p-4">
+            <div className="bg-[color:var(--posh-bg-card)] rounded-2xl shadow-xl w-full max-w-sm p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-slate-800">Quick Material Request</h3>
                 <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
@@ -230,7 +230,7 @@ export default function QuickRequestForm({ floating }: Props) {
                   <div className="text-4xl mb-2">✅</div>
                   <p className="font-medium text-slate-800">Request Submitted!</p>
                   <p className="text-sm text-slate-400 mt-1">Suppliers will respond with quotes shortly.</p>
-                  <button onClick={() => router.push("/orders")} className="mt-4 block w-full text-xs text-blue-700 hover:underline">View my orders</button>
+                  <button onClick={() => router.push("/orders")} className="mt-4 block w-full text-xs text-[color:var(--posh-primary)] hover:underline">View my orders</button>
                   <button onClick={reset} className="mt-2 text-xs text-slate-400 hover:underline">Submit another</button>
                 </div>
               ) : noMatchMessage ? (
@@ -238,7 +238,7 @@ export default function QuickRequestForm({ floating }: Props) {
                   <div className="text-4xl mb-2">🔍</div>
                   <p className="font-medium text-slate-800">No close match found</p>
                   <p className="text-sm text-slate-400 mt-1">{noMatchMessage}</p>
-                  <button onClick={() => { setOpen(false); router.push("/products"); }} className="mt-4 block w-full text-xs text-blue-700 hover:underline">Browse categories</button>
+                  <button onClick={() => { setOpen(false); router.push("/products"); }} className="mt-4 block w-full text-xs text-[color:var(--posh-primary)] hover:underline">Browse categories</button>
                   <button onClick={() => setNoMatchMessage(null)} className="mt-2 text-xs text-slate-400 hover:underline">Try again</button>
                 </div>
               ) : (
@@ -249,7 +249,7 @@ export default function QuickRequestForm({ floating }: Props) {
                     value={category}
                     onChange={(e) => handleCategoryChange(e.target.value)}
                     disabled={categoriesLoading}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-700"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-[color:var(--posh-primary)]"
                   >
                     <option value="">Select category</option>
                     {categoryOptions.map((c) => (
@@ -263,7 +263,7 @@ export default function QuickRequestForm({ floating }: Props) {
                     value={brand}
                     onChange={(e) => handleBrandChange(e.target.value)}
                     disabled={brandsLoading}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-700"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-[color:var(--posh-primary)]"
                   >
                     <option value="">Select brand</option>
                     {brandOptions.map((b) => {
@@ -280,7 +280,7 @@ export default function QuickRequestForm({ floating }: Props) {
                     value={productId}
                     onChange={(e) => setProductId(e.target.value)}
                     disabled={listingsLoading}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-700"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-[color:var(--posh-primary)]"
                   >
                     <option value="">Select product</option>
                     {productOptions.map((p) => (
@@ -296,7 +296,7 @@ export default function QuickRequestForm({ floating }: Props) {
                       placeholder="Quantity"
                       value={quantity}
                       onChange={(e) => setQuantity(e.target.value)}
-                      className="flex-1 border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-700"
+                      className="flex-1 border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-[color:var(--posh-primary)]"
                     />
                     <div className="flex items-center justify-center min-w-[64px] rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500">
                       {selectedProduct?.unit || "Unit"}
@@ -304,10 +304,10 @@ export default function QuickRequestForm({ floating }: Props) {
                   </div>
 
                   {/* Pincode (free text) */}
-                  <input required placeholder="Delivery pincode" maxLength={6} value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-700" />
+                  <input required placeholder="Delivery pincode" maxLength={6} value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-[color:var(--posh-primary)]" />
 
                   {error && <p className="text-xs text-red-600">{error}</p>}
-                  <button type="submit" disabled={loading} className="w-full bg-accent-500 hover:bg-accent-600 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
+                  <button type="submit" disabled={loading} className="w-full bg-accent-500 hover:bg-accent-600 text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
                     {loading ? "Submitting..." : "Get Quotes from Suppliers"}
                   </button>
                   <p className="text-xs text-slate-400 text-center">Takes less than 30 seconds</p>

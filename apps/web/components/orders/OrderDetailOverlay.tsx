@@ -91,7 +91,7 @@ export function OrderDetailErrorOverlay({ orderId }: { orderId: string }) {
           <p className="text-sm text-slate-500">Please try again in a moment.</p>
           <Link
             href={`/orders/${orderId}`}
-            className="inline-block rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+            className="inline-block rounded-lg bg-[color:var(--posh-primary)] px-4 py-2 text-sm font-semibold text-[color:var(--posh-primary-fg)] hover:opacity-85"
           >
             Retry
           </Link>
@@ -162,7 +162,7 @@ export default function OrderDetailOverlay({ order }: Props) {
 
         <div className="max-h-[70vh] space-y-5 overflow-y-auto p-5">
           {order.status === "PROCESSING" ? (
-            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            <div className="rounded-2xl border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] px-4 py-3 text-sm text-[color:var(--posh-fg)]">
               Supplier confirmed this enquiry. WhatsApp and in-app updates will continue as the order moves forward.
             </div>
           ) : null}
@@ -205,7 +205,7 @@ export default function OrderDetailOverlay({ order }: Props) {
                   </p>
                   <Link
                     href={`/purchase-orders/${order.purchaseOrder.id}`}
-                    className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                    className="rounded-lg border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] px-4 py-2 text-xs font-semibold text-[color:var(--posh-primary)] hover:bg-[rgba(240,232,216,0.08)]"
                   >
                     View Purchase Order
                   </Link>
@@ -268,7 +268,7 @@ export default function OrderDetailOverlay({ order }: Props) {
                 {order.paymentLinkAvailable ? (
                   <Link
                     href={order.paymentLink}
-                    className="block rounded-lg bg-blue-700 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-blue-800"
+                    className="block rounded-lg bg-[color:var(--posh-primary)] px-4 py-3 text-center text-sm font-semibold text-[color:var(--posh-primary-fg)] hover:opacity-85"
                   >
                     Open payment link
                   </Link>

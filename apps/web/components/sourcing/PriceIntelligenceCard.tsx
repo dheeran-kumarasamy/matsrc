@@ -37,19 +37,19 @@ function inr(v: number | null): string {
 }
 
 function TrendIcon({ direction }: { direction: string }) {
-  if (direction === "RISING") return <TrendingUp className="h-4 w-4 text-black" />;
-  if (direction === "FALLING") return <TrendingDown className="h-4 w-4 text-black" />;
-  if (direction === "VOLATILE") return <AlertTriangle className="h-4 w-4 text-black" />;
+  if (direction === "RISING") return <TrendingUp className="h-4 w-4 text-[color:var(--posh-fg)]" />;
+  if (direction === "FALLING") return <TrendingDown className="h-4 w-4 text-[color:var(--posh-fg)]" />;
+  if (direction === "VOLATILE") return <AlertTriangle className="h-4 w-4 text-[color:var(--posh-fg)]" />;
   return <Minus className="h-4 w-4 text-slate-400" />;
 }
 
 // Mono badges: the actionable signal (BUY_NOW) is solid black, the advisory
 // ones are outlined, and "no data" stays a faint chip.
 const TIMING_BADGE: Record<string, string> = {
-  BUY_NOW: "bg-black text-white",
-  WAIT: "border border-black bg-white text-black",
-  MONITOR: "border border-black/20 bg-white text-black",
-  INSUFFICIENT_DATA: "bg-black/[0.04] text-black/50",
+  BUY_NOW: "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)]",
+  WAIT: "border border-[color:var(--posh-primary)] bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)]",
+  MONITOR: "border border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)]",
+  INSUFFICIENT_DATA: "bg-[rgba(240,232,216,0.04)] text-[color:var(--posh-fg-muted)]",
 };
 
 const TIMING_LABEL: Record<string, string> = {
@@ -61,10 +61,10 @@ const TIMING_LABEL: Record<string, string> = {
 
 // Confidence uses black at decreasing opacity/weight instead of colour.
 const CONFIDENCE_COLOR: Record<string, string> = {
-  HIGH: "font-bold text-black",
-  MEDIUM: "font-semibold text-black/70",
-  LOW: "font-medium text-black/50",
-  INSUFFICIENT_DATA: "font-medium text-black/40",
+  HIGH: "font-bold text-[color:var(--posh-fg)]",
+  MEDIUM: "font-semibold text-[color:var(--posh-fg-muted)]",
+  LOW: "font-medium text-[color:var(--posh-fg-muted)]",
+  INSUFFICIENT_DATA: "font-medium text-[color:var(--posh-fg-muted)]",
 };
 
 export default function PriceIntelligenceCard({
@@ -92,7 +92,7 @@ export default function PriceIntelligenceCard({
           <dt className="text-[11px] uppercase tracking-wide text-slate-500">30-day average</dt>
           <dd className="text-sm text-slate-800">{inr(averagePrice)}</dd>
           {vsAveragePct !== null && (
-            <dd className={`text-[11px] font-medium ${vsAveragePct < 0 ? "text-black" : vsAveragePct > 0 ? "text-black" : "text-slate-500"}`}>
+            <dd className={`text-[11px] font-medium ${vsAveragePct < 0 ? "text-[color:var(--posh-fg)]" : vsAveragePct > 0 ? "text-[color:var(--posh-fg)]" : "text-slate-500"}`}>
               {vsAveragePct >= 0 ? "+" : ""}{vsAveragePct.toFixed(1)}% vs avg
             </dd>
           )}

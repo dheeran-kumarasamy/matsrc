@@ -224,7 +224,7 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
       <Composer input={input} setInput={setInput} busy={busy} started={Boolean(stage)} onSend={send} />
 
       {error && (
-        <p className="panel border-black/20 bg-black/[0.04] p-3 text-sm text-black" role="alert">
+        <p className="panel border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] p-3 text-sm text-[color:var(--posh-fg)]" role="alert">
           {error}
         </p>
       )}
@@ -245,7 +245,7 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
             <button
               type="button"
               onClick={startNewSearch}
-              className="flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-black hover:text-black"
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-[color:var(--posh-primary)] hover:text-[color:var(--posh-fg)]"
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
               New search
@@ -259,12 +259,12 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
           )}
 
           {confirmedMessage && (
-            <div className="panel border-black/20 bg-black/[0.04] p-4 space-y-3">
-              <p className="text-sm text-black">{confirmedMessage}</p>
+            <div className="panel border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] p-4 space-y-3">
+              <p className="text-sm text-[color:var(--posh-fg)]">{confirmedMessage}</p>
               <button
                 type="button"
                 onClick={startNewSearch}
-                className="flex items-center gap-1.5 rounded-xl bg-black px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-black/85"
+                className="flex items-center gap-1.5 rounded-xl bg-[color:var(--posh-primary)] px-4 py-2.5 text-sm font-medium text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85"
               >
                 <RotateCcw className="h-4 w-4" aria-hidden="true" />
                 Start a new sourcing request
@@ -356,7 +356,7 @@ function Composer({
       {!started && (
         <>
           <div className="mb-1 flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-black" aria-hidden="true" />
+            <Sparkles className="h-4 w-4 text-[color:var(--posh-fg)]" aria-hidden="true" />
             <h1 className="text-base font-semibold text-slate-900">
               What material are you looking for?
             </h1>
@@ -381,13 +381,13 @@ function Composer({
           placeholder="Describe what you need..."
           maxLength={1000}
           disabled={busy}
-          className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm transition-colors focus:border-black focus:bg-white focus:outline-none focus:ring-2 focus:ring-black disabled:opacity-60"
+          className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm transition-colors focus:border-[color:var(--posh-primary)] focus:bg-[color:var(--posh-bg-card)] focus:outline-none focus:ring-2 focus:ring-[color:var(--posh-primary)] disabled:opacity-60"
           aria-label="Describe the material you need"
         />
         <button
           type="submit"
           disabled={busy || !input.trim()}
-          className="flex items-center gap-1.5 rounded-xl bg-black px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:bg-black/30"
+          className="flex items-center gap-1.5 rounded-xl bg-[color:var(--posh-primary)] px-4 py-2.5 text-sm font-medium text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Send className="h-4 w-4" aria-hidden="true" />
           {busy ? "Working…" : "Send"}
@@ -404,7 +404,7 @@ function Composer({
                 type="button"
                 onClick={() => onSend(example)}
                 disabled={busy}
-                className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition-colors hover:border-black hover:text-black disabled:opacity-50"
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 transition-colors hover:border-[color:var(--posh-primary)] hover:text-[color:var(--posh-fg)] disabled:opacity-50"
               >
                 {example}
               </button>

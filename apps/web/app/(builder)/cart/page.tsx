@@ -55,7 +55,8 @@ function CartPageQuantityInput({
           commit((event.target as HTMLInputElement).value);
         }
       }}
-      className="h-8 w-12 border-x border-black/15 text-center text-sm font-bold text-black focus:outline-none disabled:opacity-40"
+      className="h-8 w-12 border-x text-center text-sm font-bold focus:outline-none disabled:opacity-40"
+      style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)" }}
       aria-label={label}
     />
   );
@@ -208,19 +209,22 @@ export default function CartPage() {
           ) : (
             data.items.map((item) => (
               <div key={item.id} className="posh-card flex gap-4 p-5">
-                <div className="h-16 w-16 shrink-0 rounded-xl border border-black/10 bg-black/[0.04]" />
+                <div className="h-16 w-16 shrink-0 rounded-xl border" style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.06)" }} />
                 <div className="flex-1">
-                  <p className="text-base font-bold tracking-tight text-black">{item.name}</p>
+                  <p className="text-base font-bold tracking-tight" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
                   <p className="posh-label mt-1">Supplier: {item.supplierName}</p>
                   <p className="posh-label mt-0.5">Unit price: INR {item.unitPrice.toLocaleString("en-IN")}</p>
                   <div className="mt-3 flex items-center gap-3">
-                    <div className="flex items-center rounded-full border border-black/15">
+                    <div className="flex items-center rounded-full border" style={{ borderColor: "var(--posh-border)" }}>
                       <button
                         type="button"
                         disabled={updatingId === item.id || item.quantity <= 1}
                         onClick={() => void handleUpdateQuantity(item.productId, item.id, item.quantity - 1)}
                         aria-label={`Decrease quantity for ${item.name}`}
-                        className="flex h-8 w-8 items-center justify-center text-black/60 transition hover:text-black disabled:opacity-40"
+                        className="flex h-8 w-8 items-center justify-center transition disabled:opacity-40"
+                        style={{ color: "var(--posh-fg-muted)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--posh-fg)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--posh-fg-muted)")}
                       >
                         <Minus size={14} />
                       </button>
@@ -236,20 +240,26 @@ export default function CartPage() {
                         disabled={updatingId === item.id}
                         onClick={() => void handleUpdateQuantity(item.productId, item.id, item.quantity + 1)}
                         aria-label={`Increase quantity for ${item.name}`}
-                        className="flex h-8 w-8 items-center justify-center text-black/60 transition hover:text-black disabled:opacity-40"
+                        className="flex h-8 w-8 items-center justify-center transition disabled:opacity-40"
+                        style={{ color: "var(--posh-fg-muted)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--posh-fg)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--posh-fg-muted)")}
                       >
                         <Plus size={14} />
                       </button>
                     </div>
                     <span className="posh-label">{item.unit}</span>
-                    <span className="text-sm font-bold text-black">INR {item.lineTotal.toLocaleString("en-IN")}</span>
+                    <span className="text-sm font-bold" style={{ color: "var(--posh-fg)" }}>INR {item.lineTotal.toLocaleString("en-IN")}</span>
                   </div>
 
                 </div>
                 <button
                   disabled={loadingId === item.id}
                   onClick={() => void handleRemove(item.productId, item.id)}
-                  className="text-black/30 transition-colors hover:text-black disabled:opacity-40"
+                  className="transition-colors disabled:opacity-40"
+                  style={{ color: "var(--posh-fg-muted)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "var(--posh-fg)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "var(--posh-fg-muted)")}
                 >
                   <Trash2 size={16} />
                 </button>
@@ -263,16 +273,16 @@ export default function CartPage() {
           <div className="posh-card sticky top-20 space-y-4 p-6">
             <h2 className="posh-card-title">Order Summary</h2>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between font-semibold text-black/60">
+              <div className="flex justify-between font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
                 <span>Subtotal</span><span>INR {data.summary.subtotal.toLocaleString("en-IN")}</span>
               </div>
-              <div className="flex justify-between font-semibold text-black/60">
+              <div className="flex justify-between font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
                 <span>GST (18%)</span><span>INR {gst.toLocaleString("en-IN")}</span>
               </div>
-              <div className="flex justify-between font-semibold text-black/60">
+              <div className="flex justify-between font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
                 <span>Freight</span><span>—</span>
               </div>
-              <div className="flex justify-between border-t border-black/10 pt-3 text-base font-bold text-black">
+              <div className="flex justify-between border-t pt-3 text-base font-bold" style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)" }}>
                 <span>Total</span><span>INR {total.toLocaleString("en-IN")}</span>
               </div>
             </div>
@@ -286,7 +296,8 @@ export default function CartPage() {
             {data.items.length === 0 ? (
               <span
                 aria-disabled="true"
-                className="block w-full cursor-not-allowed text-center text-[10px] font-bold uppercase tracking-[0.14em] text-black/25"
+                className="block w-full cursor-not-allowed text-center text-[10px] font-bold uppercase tracking-[0.14em]"
+                style={{ color: "var(--posh-fg-muted)", opacity: 0.5 }}
               >
                 Review on checkout page
               </span>
@@ -296,7 +307,7 @@ export default function CartPage() {
               </Link>
             )}
 
-            {submitError ? <p className="text-xs font-bold text-black">{submitError}</p> : null}
+            {submitError ? <p className="text-xs font-bold" style={{ color: "#f87171" }}>{submitError}</p> : null}
           </div>
         </div>
       </div>

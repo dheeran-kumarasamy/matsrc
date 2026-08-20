@@ -46,7 +46,7 @@ export default function ProductCard({ skeleton, product }: Props) {
     // (@modal/(.)products/[slug]) renders the quick-view overlay — spec 5A.
     <Link
       href={`/products/${product.slug}`}
-      className="panel p-5 hover:shadow-lg hover:border-blue-300 transition-all duration-200 block group"
+      className="panel p-5 hover:shadow-lg hover:border-[color:var(--posh-primary)] transition-all duration-200 block group"
     >
       {/* Image / emoji area */}
       <div className="h-36 bg-slate-50 rounded-2xl mb-4 overflow-hidden flex items-center justify-center">

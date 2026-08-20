@@ -80,7 +80,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
 
       {apiError ? (
         <div className="posh-card p-10 text-center">
-          <p className="text-sm font-bold text-black">Could not load orders right now.</p>
+          <p className="text-sm font-bold text-[color:var(--posh-fg)]">Could not load orders right now.</p>
           <p className="posh-muted mt-1 text-xs">Please refresh and try again.</p>
         </div>
       ) : filtered.length === 0 ? (
@@ -91,15 +91,15 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
           </Link>
         </div>
       ) : (
-        <div className="posh-card divide-y divide-black/10">
+        <div className="posh-card divide-y divide-[color:var(--posh-border)]">
           {filtered.map((order) => (
             <div key={order.id} className="flex flex-wrap items-center justify-between gap-3 p-5">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-base font-bold tracking-tight text-black">Order #{order.id.slice(0, 8)}</p>
+                  <p className="text-base font-bold tracking-tight text-[color:var(--posh-fg)]">Order #{order.id.slice(0, 8)}</p>
                   {order.isAggregated ? <span className="posh-status">Group Order</span> : null}
                 </div>
-                <p className="mt-1 text-xs font-semibold text-black/60">
+                <p className="mt-1 text-xs font-semibold text-[color:var(--posh-fg-muted)]">
                   {order.supplierName ? `${order.supplierName} · ` : ""}{order.itemCount} items · INR {order.total.toLocaleString("en-IN")}
                 </p>
               </div>

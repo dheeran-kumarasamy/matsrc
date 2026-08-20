@@ -36,7 +36,7 @@ export function PriceIntelligenceEmptyState({
 }) {
   const copy = EMPTY_REASON_COPY[reason];
   return (
-    <div role="status" className="rounded-xl border border-black/10 bg-black/[0.03] p-5 text-center">
+    <div role="status" className="rounded-xl border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.03)] p-5 text-center">
       <p className="posh-card-title text-base">{copy.title}</p>
       <p className="posh-subtitle mt-1">{copy.description}</p>
       {onRequestQuote ? (
@@ -58,7 +58,7 @@ export function PriceIntelligenceErrorState({
   onRequestQuote?: () => void;
 }) {
   return (
-    <div role="alert" className="rounded-xl border border-black bg-white p-5 text-center">
+    <div role="alert" className="rounded-xl border border-[color:var(--posh-primary)] bg-[color:var(--posh-bg-card)] p-5 text-center">
       <p className="posh-card-title text-base">Couldn&apos;t load market data</p>
       <p className="posh-subtitle mt-1">
         {message || "Something went wrong while fetching price intelligence. Please try again."}

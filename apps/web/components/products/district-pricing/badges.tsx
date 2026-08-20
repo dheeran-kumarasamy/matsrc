@@ -13,8 +13,8 @@ export function MethodBadge({ label }: { label: DistrictPriceMethodLabel }) {
     <span
       className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${
         isObserved
-          ? "border-black bg-black text-white"
-          : "border-black/20 bg-white text-black"
+          ? "border-[color:var(--posh-primary)] bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)]"
+          : "border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)]"
       }`}
       title={isObserved ? "Based on directly observed prices" : "Estimated from nearby market data"}
     >
@@ -26,9 +26,9 @@ export function MethodBadge({ label }: { label: DistrictPriceMethodLabel }) {
 export function ConfidenceBadge({ confidence }: { confidence: "HIGH" | "MEDIUM" | "LOW" }) {
   // Monochrome: confidence steps down from solid black to a faint chip.
   const styles: Record<string, string> = {
-    HIGH: "border-black bg-black text-white",
-    MEDIUM: "border-black bg-white text-black",
-    LOW: "border-black/20 bg-white text-black/50",
+    HIGH: "border-[color:var(--posh-primary)] bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)]",
+    MEDIUM: "border-[color:var(--posh-primary)] bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)]",
+    LOW: "border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg-muted)]",
   };
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${styles[confidence]}`}>
@@ -40,9 +40,9 @@ export function ConfidenceBadge({ confidence }: { confidence: "HIGH" | "MEDIUM" 
 export function FreshnessIndicator({ label, isStale }: { label: string; isStale: boolean }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 text-xs font-medium ${isStale ? "font-bold text-black" : "text-black/55"}`}
+      className={`inline-flex items-center gap-1 text-xs font-medium ${isStale ? "font-bold text-[color:var(--posh-fg)]" : "text-[color:var(--posh-fg-muted)]"}`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${isStale ? "bg-black" : "bg-black/30"}`} aria-hidden />
+      <span className={`h-1.5 w-1.5 rounded-full ${isStale ? "bg-[color:var(--posh-primary)]" : "bg-[rgba(240,232,216,0.12)]"}`} aria-hidden />
       {isStale ? "STALE" : label}
     </span>
   );
@@ -96,9 +96,9 @@ export function MarketPositionBadge({
   if (!marketPosition) return null;
   // Monochrome: "Below market" (the good outcome) is the solid-black chip.
   const styles: Record<string, string> = {
-    BELOW: "border-black bg-black text-white",
-    WITHIN: "border-black bg-white text-black",
-    ABOVE: "border-black/20 bg-white text-black/60",
+    BELOW: "border-[color:var(--posh-primary)] bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)]",
+    WITHIN: "border-[color:var(--posh-primary)] bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)]",
+    ABOVE: "border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg-muted)]",
   };
   const label: Record<string, string> = {
     BELOW: "Below Market",

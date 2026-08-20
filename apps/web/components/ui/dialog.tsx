@@ -44,7 +44,7 @@ const DialogContent = React.forwardRef<
       ref={ref}
       className={cn(
         // Mobile-first: full-screen sheet on small viewports, centered card on larger screens
-        "fixed inset-x-0 bottom-0 z-50 max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-0 shadow-xl outline-none",
+        "fixed inset-x-0 bottom-0 z-50 max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-0 shadow-xl outline-none",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-bottom-4 data-[state=open]:slide-in-from-bottom-4",
         "sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-h-[88vh] sm:w-full sm:max-w-3xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl",
         className
@@ -53,7 +53,7 @@ const DialogContent = React.forwardRef<
     >
       {children}
       {!hideCloseButton ? (
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full bg-white/90 p-1.5 text-slate-500 shadow-sm ring-1 ring-slate-200 transition hover:text-slate-900">
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full bg-[color:var(--posh-bg-card)] p-1.5 text-slate-500 shadow-sm ring-1 ring-slate-200 transition hover:text-slate-900">
           <X size={16} />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>

@@ -121,7 +121,7 @@ export default function BuilderProfilePage() {
         </div>
 
         {/* WhatsApp Preferences */}
-        <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+        <div className="bg-[rgba(240,232,216,0.04)] border border-[color:var(--posh-border)] rounded-lg p-3">
           <label className="flex items-start gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -152,7 +152,7 @@ export default function BuilderProfilePage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-brand-500 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50 hover:bg-brand-600 transition-colors"
+          className="w-full bg-brand-500 text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50 hover:bg-brand-600 transition-colors"
         >
           {loading ? "Updating..." : "Update Contact Information"}
         </button>

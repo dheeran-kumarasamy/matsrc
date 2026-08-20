@@ -43,15 +43,37 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
             key={link.href}
             href={link.href}
             onClick={onNavigate}
-            className={`relative flex min-h-[44px] items-center rounded-xl px-4 text-[13px] tracking-[0.01em] transition-all duration-200 ${
-              active
-                ? "bg-black/[0.06] font-bold text-black shadow-sm ring-1 ring-inset ring-black/10"
-                : "font-semibold text-black/55 hover:bg-black/[0.03] hover:font-bold hover:text-black"
+            className={`relative flex min-h-[44px] items-center rounded-xl border px-4 text-[13px] tracking-[0.01em] transition-all duration-200 ${
+              active ? "font-bold shadow-sm" : "border-transparent font-semibold"
             }`}
+            style={
+              active
+                ? {
+                    background: "rgba(240,232,216,0.08)",
+                    color: "var(--posh-fg)",
+                    borderColor: "var(--posh-border)",
+                  }
+                : { color: "var(--posh-fg-muted)" }
+            }
+            onMouseEnter={(e) => {
+              if (!active) {
+                (e.currentTarget as HTMLElement).style.background = "rgba(240,232,216,0.04)";
+                (e.currentTarget as HTMLElement).style.color = "var(--posh-fg)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!active) {
+                (e.currentTarget as HTMLElement).style.background = "transparent";
+                (e.currentTarget as HTMLElement).style.color = "var(--posh-fg-muted)";
+              }
+            }}
           >
             {/* Posh accent rail on the active item */}
             {active ? (
-              <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-black" />
+              <span
+                className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full"
+                style={{ background: "var(--posh-primary)" }}
+              />
             ) : null}
             {link.label}
           </Link>
@@ -65,7 +87,8 @@ function BrandBlock() {
   return (
     <Link
       href="/"
-      className="relative block h-20 w-full overflow-hidden rounded-xl bg-white p-3 transition hover:opacity-90"
+      className="relative block h-20 w-full overflow-hidden rounded-xl p-3 transition hover:opacity-90"
+      style={{ background: "var(--posh-cream)" }}
     >
       <Image src="/icons/logo-full.png" alt="Buildohub" fill className="object-contain" priority />
     </Link>
@@ -87,15 +110,19 @@ export function BuilderNavMobileTrigger() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open navigation menu"
-        className="flex h-11 w-11 items-center justify-center rounded-lg border border-black/15 bg-white text-black transition hover:border-black lg:hidden"
+        className="flex h-11 w-11 items-center justify-center rounded-lg border transition lg:hidden"
+        style={{ borderColor: "var(--posh-border)", background: "var(--posh-bg-card)", color: "var(--posh-fg)" }}
       >
         <Menu size={20} />
       </button>
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent className="flex flex-col border border-black/10 bg-white p-0">
+        <SheetContent
+          className="flex flex-col border-0 p-0"
+          style={{ background: "var(--posh-bg-card)", color: "var(--posh-fg)" }}
+        >
           <SheetHeader>
-            <SheetTitle className="posh-nav-brandmark text-2xl text-black">Builder Hub</SheetTitle>
+            <SheetTitle className="posh-nav-brandmark text-2xl">Builder Hub</SheetTitle>
           </SheetHeader>
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
             <BrandBlock />

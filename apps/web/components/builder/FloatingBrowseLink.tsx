@@ -21,7 +21,7 @@ export default function FloatingBrowseLink() {
   return (
     <Link
       href="/products"
-      className="fixed bottom-6 right-6 z-40 flex min-h-[44px] items-center gap-2 rounded-full bg-accent-500 px-5 py-3 text-sm font-medium text-white shadow-lg transition-colors hover:bg-accent-600"
+      className="fixed bottom-6 right-6 z-40 flex min-h-[44px] items-center gap-2 rounded-full bg-accent-500 px-5 py-3 text-sm font-medium text-[color:var(--posh-primary-fg)] shadow-lg transition-colors hover:bg-accent-600"
     >
       <Search size={18} />
       <span className="hidden sm:inline">Browse Materials</span>

@@ -57,8 +57,8 @@ export default function PriceExplanationCard({
       <p className="text-sm text-slate-500">{methodExplanation[current.methodLabel] || ""}</p>
 
       {current.anchorDistrictName ? (
-        <p className="text-sm font-semibold text-black/70">
-          Estimated using nearby verified market data from <strong className="text-black">{current.anchorDistrictName}</strong>.
+        <p className="text-sm font-semibold text-[color:var(--posh-fg-muted)]">
+          Estimated using nearby verified market data from <strong className="text-[color:var(--posh-fg)]">{current.anchorDistrictName}</strong>.
         </p>
       ) : null}
 

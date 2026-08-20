@@ -193,22 +193,22 @@ export default function NewDashboardPage() {
     ["Delivered",       String(orders.filter((o) => o.status === "DELIVERED").length), "Successfully delivered"],
   ];
 
-  // ── Monochrome design tokens ───────────────────────────────────────────────
-  // The dashboard used to run the homepage's warm dark palette (--posh-bg /
-  // --posh-primary). It now uses the same black-on-white surface as every
-  // other authenticated page, so these local aliases map to black at varying
-  // opacity instead. Kept as constants so the JSX below needs minimal churn.
-  const FG  = "#000000";                 // primary ink
-  const FM  = "rgba(0,0,0,0.55)";        // muted ink
-  const P   = "#000000";                 // accent (was warm gold)
-  const PFG = "#ffffff";                 // text on accent
-  const B60 = "rgba(0,0,0,0.10)";        // card border
-  const B40 = "rgba(0,0,0,0.08)";        // hairline divider
-  const B12 = "rgba(0,0,0,0.15)";        // control border
-  const CARD = "#ffffff";                // card surface
+  // ── Posh design tokens ─────────────────────────────────────────────────────
+  // Ported to the same warm dark editorial --posh-* palette used by the
+  // marketing homepage and every other authenticated page (posh-web-flair
+  // parity), replacing the previous monochrome black/white aliases. Kept as
+  // constants so the JSX below needs minimal churn.
+  const FG  = "var(--posh-fg)";               // primary ink
+  const FM  = "var(--posh-fg-muted)";         // muted ink
+  const P   = "var(--posh-primary)";          // accent (warm gold)
+  const PFG = "var(--posh-primary-fg)";       // text on accent
+  const B60 = "var(--posh-border)";           // card border
+  const B40 = "var(--posh-border)";           // hairline divider
+  const B12 = "var(--posh-border)";           // control border
+  const CARD = "var(--posh-bg-card)";         // card surface
 
   return (
-    <main className="posh-body relative min-h-screen overflow-hidden bg-white">
+    <main className="posh-body relative min-h-screen overflow-hidden bg-[color:var(--posh-bg-card)]">
       <div className="relative mx-auto flex min-h-screen max-w-[110rem] flex-col px-6 py-6 md:px-10 md:py-8">
 
         {/* ── Header ── */}
@@ -220,7 +220,7 @@ export default function NewDashboardPage() {
           <div className="flex shrink-0 items-center gap-2">
             {/* Cart */}
             <button type="button" onClick={() => openCart("review")} aria-label="Open cart"
-              className="relative flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-black hover:text-black"
+              className="relative flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-[color:var(--posh-primary)] hover:text-[color:var(--posh-fg)]"
               style={{ borderColor: B12, color: FM }}>
               <ShoppingCart size={15} />
               <span className="hidden sm:inline">Cart</span>
@@ -233,12 +233,12 @@ export default function NewDashboardPage() {
             {/* Bell — live alerts dropdown */}
             <div className="relative" ref={bellRef}>
               <button type="button" onClick={() => setNotifsOpen((o) => !o)} aria-label="Alerts"
-                className="relative flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-black hover:text-black"
+                className="relative flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-[color:var(--posh-primary)] hover:text-[color:var(--posh-fg)]"
                 style={{ borderColor: B12, color: FM }}>
                 <Bell size={15} />
                 <span className="hidden sm:inline">Alerts</span>
                 {unreadCount > 0 && (
-                  <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-black px-1 text-[11px] font-bold text-white">
+                  <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[color:var(--posh-primary)] px-1 text-[11px] font-bold text-[color:var(--posh-primary-fg)]">
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
@@ -260,8 +260,8 @@ export default function NewDashboardPage() {
                         {notifs.map((n) => (
                           <li key={n.id}>
                             <button type="button" onClick={() => markRead(n)}
-                              className="flex w-full gap-2.5 border-b px-4 py-3 text-left transition hover:bg-black/[0.03]"
-                              style={{ borderColor: B40, background: !n.read ? "rgba(0,0,0,0.04)" : "transparent" }}>
+                              className="flex w-full gap-2.5 border-b px-4 py-3 text-left transition hover:bg-[rgba(240,232,216,0.03)]"
+                              style={{ borderColor: B40, background: !n.read ? "rgba(240,232,216,0.04)" : "transparent" }}>
                               <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? "opacity-0" : ""}`} style={{ background: P }} />
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-bold" style={{ color: n.read ? FM : FG }}>{n.title}</p>
@@ -280,11 +280,11 @@ export default function NewDashboardPage() {
             <span className="mx-1 hidden opacity-20 sm:block" style={{ color: FG }}>|</span>
             {session?.user ? (
               <>
-                <Link href="/profile" className="hidden rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-black/[0.05] hover:text-black sm:block" style={{ color: FM }}>Account</Link>
-                <button type="button" onClick={() => signOut({ callbackUrl: "/" })} className="hidden rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-black/[0.05] hover:text-black sm:block" style={{ color: FM }}>Sign out</button>
+                <Link href="/profile" className="hidden rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-[rgba(240,232,216,0.05)] hover:text-[color:var(--posh-fg)] sm:block" style={{ color: FM }}>Account</Link>
+                <button type="button" onClick={() => signOut({ callbackUrl: "/" })} className="hidden rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-[rgba(240,232,216,0.05)] hover:text-[color:var(--posh-fg)] sm:block" style={{ color: FM }}>Sign out</button>
               </>
             ) : (
-              <Link href="/auth/login" className="rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-black" style={{ borderColor: B12, color: FG }}>Sign in</Link>
+              <Link href="/auth/login" className="rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-[color:var(--posh-primary)]" style={{ borderColor: B12, color: FG }}>Sign in</Link>
             )}
           </div>
         </header>
@@ -317,7 +317,7 @@ export default function NewDashboardPage() {
                     </div>
                   ) : recentOrders.map((o) => (
                     <Link key={o.id} href={`/orders/${o.id}`}
-                      className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-black/[0.03]">
+                      className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-[rgba(240,232,216,0.03)]">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.items?.[0]?.name ?? `Order #${o.id.slice(0,6)}`}{(o.itemCount??0) > 1 ? ` +${o.itemCount-1}` : ""}</p>
                         <p className="posh-label mt-1">{o.supplierName ?? STATUS_LABELS[o.status] ?? o.status}</p>
@@ -341,7 +341,7 @@ export default function NewDashboardPage() {
                       <div className="shrink-0 text-right">
                         <p className="posh-card-title text-base">{s.move}</p>
                         {/* Direction is carried by weight/opacity, not colour. */}
-                        <p className={`mt-0.5 font-mono text-[10px] font-bold ${s.delta.startsWith("-") ? "text-black" : "text-black/45"}`}>
+                        <p className={`mt-0.5 font-mono text-[10px] font-bold ${s.delta.startsWith("-") ? "text-[color:var(--posh-fg)]" : "text-[color:var(--posh-fg-muted)]"}`}>
                           {s.delta}
                         </p>
                       </div>
@@ -383,9 +383,9 @@ export default function NewDashboardPage() {
                       </thead>
                       <tbody>
                         {activeOrders.map((o) => (
-                          <tr key={o.id} className="transition-colors hover:bg-black/[0.03]">
+                          <tr key={o.id} className="transition-colors hover:bg-[rgba(240,232,216,0.03)]">
                             <td className="border-b py-4 pr-6" style={{ borderColor: B40 }}>
-                              <Link href={`/orders/${o.id}`} className="font-mono text-xs font-bold text-black hover:underline">{o.id.slice(0,8)}</Link>
+                              <Link href={`/orders/${o.id}`} className="font-mono text-xs font-bold text-[color:var(--posh-fg)] hover:underline">{o.id.slice(0,8)}</Link>
                             </td>
                             <td className="border-b py-4 pr-6 font-semibold" style={{ borderColor: B40, color: FG }}>{o.items?.[0]?.name ?? "—"}{(o.itemCount??0)>1?` +${o.itemCount-1}`:""}</td>
                             <td className="border-b py-4 pr-6 font-medium" style={{ borderColor: B40, color: FM }}>{o.supplierName ?? "—"}</td>
@@ -413,7 +413,7 @@ export default function NewDashboardPage() {
                   <div className="grid gap-px overflow-hidden rounded-[2rem] border sm:grid-cols-2"
                     style={{ borderColor: B60, background: B60 }}>
                     {watchlistItems.map((w) => (
-                      <Link key={w.id} href="/watchlist" className="block bg-white p-7 transition-colors hover:bg-black/[0.03]">
+                      <Link key={w.id} href="/watchlist" className="block bg-[color:var(--posh-bg-card)] p-7 transition-colors hover:bg-[rgba(240,232,216,0.03)]">
                         <div className="flex items-baseline justify-between">
                           <h3 className="posh-card-title">{w.name}</h3>
                           <span className="posh-label">{gapLabel(w.priceIntelligence?.gapToTargetPct ?? null)}</span>
@@ -433,7 +433,7 @@ export default function NewDashboardPage() {
                 <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
                   {reportMetrics.map(([label, value, sub]) => (
                     <Link key={label} href="/reports"
-                      className="block rounded-[2rem] border bg-white p-7 transition-colors hover:bg-black/[0.03]"
+                      className="block rounded-[2rem] border bg-[color:var(--posh-bg-card)] p-7 transition-colors hover:bg-[rgba(240,232,216,0.03)]"
                       style={{ borderColor: B60 }}>
                       <p className="posh-eyebrow">{label}</p>
                       <p className="posh-page-title mt-5 text-4xl">{value}</p>
@@ -449,7 +449,7 @@ export default function NewDashboardPage() {
                   style={{ borderColor: B60, background: B60 }}>
                   {browse.map((b) => (
                     <Link key={b[0]} href={`/products?category=${b[2]}`}
-                      className="group block bg-white p-8 text-left transition-colors hover:bg-black/[0.03]">
+                      className="group block bg-[color:var(--posh-bg-card)] p-8 text-left transition-colors hover:bg-[rgba(240,232,216,0.03)]">
                       <h3 className="posh-card-title text-2xl">{b[0]}</h3>
                       <p className="posh-subtitle mt-2">{b[1]}</p>
                       <span className="posh-link mt-6 inline-block no-underline transition-transform duration-500 group-hover:translate-x-1">Browse →</span>

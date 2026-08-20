@@ -27,17 +27,17 @@ const DATA_GAP_LABELS: Record<string, string> = {
 };
 
 function SeverityIcon({ severity }: { severity: "INFO" | "WARNING" | "CRITICAL" }) {
-  if (severity === "CRITICAL") return <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white" />;
-  if (severity === "WARNING") return <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-black" />;
-  return <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-black" />;
+  if (severity === "CRITICAL") return <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--posh-primary-fg)]" />;
+  if (severity === "WARNING") return <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--posh-fg)]" />;
+  return <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--posh-fg)]" />;
 }
 
 // Severity is expressed with contrast and weight, not colour: CRITICAL is a
 // solid black block, WARNING an outlined block, INFO a plain tinted block.
 function severityBg(severity: "INFO" | "WARNING" | "CRITICAL"): string {
-  if (severity === "CRITICAL") return "bg-black font-semibold text-white";
-  if (severity === "WARNING") return "border border-black bg-white font-semibold text-black";
-  return "bg-black/[0.04] text-black";
+  if (severity === "CRITICAL") return "bg-[color:var(--posh-primary)] font-semibold text-[color:var(--posh-primary-fg)]";
+  if (severity === "WARNING") return "border border-[color:var(--posh-primary)] bg-[color:var(--posh-bg-card)] font-semibold text-[color:var(--posh-fg)]";
+  return "bg-[rgba(240,232,216,0.04)] text-[color:var(--posh-fg)]";
 }
 
 export default function RiskPanel({ risks, dataGaps }: Props) {

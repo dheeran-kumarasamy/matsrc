@@ -89,7 +89,7 @@ export default async function PurchaseOrdersPage({
 
       {apiError ? (
         <div className="posh-card p-10 text-center">
-          <p className="text-sm font-bold text-black">Could not load purchase orders right now.</p>
+          <p className="text-sm font-bold text-[color:var(--posh-fg)]">Could not load purchase orders right now.</p>
           <p className="posh-muted mt-1 text-xs">Please refresh and try again.</p>
         </div>
       ) : purchaseOrders.length === 0 ? (
@@ -103,17 +103,17 @@ export default async function PurchaseOrdersPage({
           </Link>
         </div>
       ) : (
-        <div className="posh-card divide-y divide-black/10">
+        <div className="posh-card divide-y divide-[color:var(--posh-border)]">
           {purchaseOrders.map((po) => (
             <div key={po.id} className="flex flex-wrap items-center justify-between gap-3 p-5">
               <div>
-                <p className="text-base font-bold tracking-tight text-black">
+                <p className="text-base font-bold tracking-tight text-[color:var(--posh-fg)]">
                   {po.poNumber}
                   {po.version > 1 ? (
                     <span className="posh-label ml-2 align-middle">v{po.version}</span>
                   ) : null}
                 </p>
-                <p className="mt-1 text-xs font-semibold text-black/60">
+                <p className="mt-1 text-xs font-semibold text-[color:var(--posh-fg-muted)]">
                   {po.supplier.companyName} · {po.lineItems.length} items · INR {po.total.toLocaleString("en-IN")}
                 </p>
               </div>

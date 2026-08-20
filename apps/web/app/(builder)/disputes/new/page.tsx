@@ -112,17 +112,17 @@ function NewDisputeForm() {
         <p className="posh-eyebrow">Resolution desk</p>
         <h1 className="posh-page-title mt-2">Raise a Dispute</h1>
       </header>
-      <div className="rounded-xl border border-black/15 bg-black/[0.03] p-4 text-xs font-medium text-black/70">
-        Disputes are reviewed within <strong className="font-bold text-black">72 hours</strong>. Unresolved tickets escalate automatically to senior admin. (FR-16)
+      <div className="rounded-xl border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.03)] p-4 text-xs font-medium text-[color:var(--posh-fg-muted)]">
+        Disputes are reviewed within <strong className="font-bold text-[color:var(--posh-fg)]">72 hours</strong>. Unresolved tickets escalate automatically to senior admin. (FR-16)
       </div>
 
       {hasNoOrders && (
-        <div className="rounded-xl border border-black/15 bg-black/[0.03] p-4 text-xs font-medium text-black/70">
+        <div className="rounded-xl border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.03)] p-4 text-xs font-medium text-[color:var(--posh-fg-muted)]">
           You don&apos;t have any orders yet, so there&apos;s nothing to raise a dispute against. Place an order first.
         </div>
       )}
       {ordersError && (
-        <div className="rounded-xl border border-black bg-white p-4 text-xs font-bold text-black">{ordersError}</div>
+        <div className="rounded-xl border border-[color:var(--posh-primary)] bg-[color:var(--posh-bg-card)] p-4 text-xs font-bold text-[color:var(--posh-fg)]">{ordersError}</div>
       )}
 
       <form onSubmit={handleSubmit} className="posh-card space-y-4 p-6">
@@ -134,14 +134,14 @@ function NewDisputeForm() {
             onChange={(e) => setOrderQuery(e.target.value)}
             placeholder="Search by order ID or supplier..."
             disabled={ordersLoading || hasNoOrders}
-            className="posh-input mb-2 disabled:bg-black/[0.04] disabled:text-black/40"
+            className="posh-input mb-2 disabled:opacity-60/[0.04] disabled:text-[color:var(--posh-fg-muted)]"
           />
           <select
             value={orderId}
             onChange={(e) => setOrderId(e.target.value)}
             required
             disabled={ordersLoading || hasNoOrders}
-            className="posh-input disabled:bg-black/[0.04] disabled:text-black/40"
+            className="posh-input disabled:opacity-60/[0.04] disabled:text-[color:var(--posh-fg-muted)]"
           >
             <option value="">
               {ordersLoading ? "Loading your orders..." : "Select an order"}
@@ -176,7 +176,7 @@ function NewDisputeForm() {
 
         <div>
           <label className="posh-label mb-1.5 block">Photo Evidence</label>
-          <div className="rounded-xl border-2 border-dashed border-black/20 p-4 text-center">
+          <div className="rounded-xl border-2 border-dashed border-[color:var(--posh-border)] p-4 text-center">
             <input
               type="file"
               accept="image/*"
@@ -191,7 +191,7 @@ function NewDisputeForm() {
           </div>
         </div>
 
-        {error && <p className="text-xs font-bold text-black">{error}</p>}
+        {error && <p className="text-xs font-bold text-[color:var(--posh-fg)]">{error}</p>}
 
         <button
           type="submit"

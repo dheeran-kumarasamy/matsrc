@@ -46,20 +46,20 @@ export default function PriceChart({ priceHistory }: { priceHistory: PriceEntry[
         {/* Black-and-white chart palette — series, axes and grid all render in
             black so charts match the site-wide monochrome design. */}
         <LineChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#00000012" />
-          <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#000000" }} tickLine={false} stroke="#000000" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--posh-border)" />
+          <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--posh-fg-muted)" }} tickLine={false} stroke="var(--posh-primary)" />
           <YAxis
-            tick={{ fontSize: 10, fill: "#000000" }}
+            tick={{ fontSize: 10, fill: "var(--posh-fg-muted)" }}
             tickLine={false}
             axisLine={false}
             tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
           />
           <Tooltip
             formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Price"]}
-            labelStyle={{ color: "#000000" }}
-            itemStyle={{ color: "#000000" }}
+            labelStyle={{ color: "var(--posh-fg-muted)" }}
+            itemStyle={{ color: "var(--posh-fg-muted)" }}
           />
-          <Line type="monotone" dataKey="price" stroke="#000000" strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="price" stroke="var(--posh-primary)" strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
       )}

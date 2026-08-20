@@ -98,7 +98,7 @@ export default function ProductQuickView({ product }: Props) {
                   {product.pricingTiers.slice(0, 3).map((tier) => (
                     <div
                       key={`${tier.minQty}-${tier.maxQty}`}
-                      className="flex items-center justify-between rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs"
+                      className="flex items-center justify-between rounded-lg border border-slate-100 bg-[color:var(--posh-bg-card)] px-3 py-2 text-xs"
                     >
                       <span className="text-slate-600">
                         {tier.minQty} - {tier.maxQty} {product.unit}
@@ -111,7 +111,7 @@ export default function ProductQuickView({ product }: Props) {
                 </div>
               </div>
 
-              <Link href={`/products/${product.id}`} className="inline-block text-xs text-blue-700 hover:underline">
+              <Link href={`/products/${product.id}`} className="inline-block text-xs text-[color:var(--posh-primary)] hover:underline">
                 View full product page →
               </Link>
             </div>

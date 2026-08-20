@@ -205,7 +205,7 @@ export default function SitesPage() {
               className="posh-input"
             />
           </div>
-          {formError ? <p className="text-xs font-bold text-black">{formError}</p> : null}
+          {formError ? <p className="text-xs font-bold text-[color:var(--posh-fg)]">{formError}</p> : null}
           <div className="flex gap-2">
             <button onClick={handleSubmit} disabled={saving} className="posh-btn">
               {saving ? "Saving..." : editingId ? "Save changes" : "Create site"}
@@ -227,17 +227,17 @@ export default function SitesPage() {
       {loading ? (
         <div className="posh-card posh-muted p-10 text-center">Loading sites…</div>
       ) : error ? (
-        <div className="posh-card p-10 text-center text-sm font-bold text-black">{error}</div>
+        <div className="posh-card p-10 text-center text-sm font-bold text-[color:var(--posh-fg)]">{error}</div>
       ) : sites.length === 0 ? (
         <div className="posh-card p-10 text-center">
-          <MapPin className="mx-auto mb-3 text-black/25" size={28} />
+          <MapPin className="mx-auto mb-3 text-[color:var(--posh-fg-muted)]" size={28} />
           <p className="posh-card-title">No sites yet</p>
           <p className="posh-muted mt-2 text-xs">Add your first construction site to start tagging purchases.</p>
         </div>
       ) : (
         <div className="space-y-4">
           {activeSites.length > 0 ? (
-            <div className="posh-card divide-y divide-black/10">
+            <div className="posh-card divide-y divide-[color:var(--posh-border)]">
               {activeSites.map((site) => (
                 <SiteRow
                   key={site.id}
@@ -253,7 +253,7 @@ export default function SitesPage() {
           {archivedSites.length > 0 ? (
             <div>
               <p className="posh-eyebrow mb-2">Archived</p>
-              <div className="posh-card divide-y divide-black/10 opacity-60">
+              <div className="posh-card divide-y divide-[color:var(--posh-border)] opacity-60">
                 {archivedSites.map((site) => (
                   <SiteRow
                     key={site.id}
@@ -286,11 +286,11 @@ function SiteRow({
   return (
     <div className="flex items-center justify-between gap-4 p-5">
       <div className="min-w-0">
-        <p className="truncate text-base font-bold tracking-tight text-black">
+        <p className="truncate text-base font-bold tracking-tight text-[color:var(--posh-fg)]">
           {site.name}
           {site.code ? <span className="posh-label ml-2 align-middle">({site.code})</span> : null}
         </p>
-        <p className="truncate text-xs font-semibold text-black/60">
+        <p className="truncate text-xs font-semibold text-[color:var(--posh-fg-muted)]">
           {[site.addressLine, site.city, site.state, site.pincode].filter(Boolean).join(", ") || "No address on file"}
         </p>
         <p className="posh-label mt-1">{site.orderCount} order(s) tagged</p>
@@ -298,7 +298,7 @@ function SiteRow({
       <div className="flex shrink-0 items-center gap-2">
         <button
           onClick={onEdit}
-          className="rounded-full border border-black/15 p-2 text-black/60 transition-colors hover:border-black hover:text-black"
+          className="rounded-full border border-[color:var(--posh-border)] p-2 text-[color:var(--posh-fg-muted)] transition-colors hover:border-[color:var(--posh-primary)] hover:text-[color:var(--posh-fg)]"
           aria-label={`Edit ${site.name}`}
         >
           <Pencil size={14} />
@@ -306,7 +306,7 @@ function SiteRow({
         <button
           onClick={onToggleArchive}
           disabled={archiving}
-          className="rounded-full border border-black/15 p-2 text-black/60 transition-colors hover:border-black hover:text-black disabled:opacity-40"
+          className="rounded-full border border-[color:var(--posh-border)] p-2 text-[color:var(--posh-fg-muted)] transition-colors hover:border-[color:var(--posh-primary)] hover:text-[color:var(--posh-fg)] disabled:opacity-40"
           aria-label={site.status === "ACTIVE" ? `Archive ${site.name}` : `Restore ${site.name}`}
         >
           {site.status === "ACTIVE" ? <Archive size={14} /> : <RotateCcw size={14} />}

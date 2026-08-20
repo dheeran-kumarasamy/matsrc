@@ -51,8 +51,8 @@ export default function PaymentMethodSelector({ orderId, currentMethod, bankGuar
           disabled={saving}
           className={`rounded-xl border p-4 text-left transition-all disabled:opacity-60 ${
             selected === "BANK_TRANSFER"
-              ? "border-blue-700 bg-blue-50"
-              : "border-slate-200 bg-white hover:border-slate-300"
+              ? "border-[color:var(--posh-primary)] bg-[rgba(240,232,216,0.04)]"
+              : "border-slate-200 bg-[color:var(--posh-bg-card)] hover:border-slate-300"
           }`}
         >
           <div className="text-sm font-semibold text-slate-800">Standard</div>
@@ -65,8 +65,8 @@ export default function PaymentMethodSelector({ orderId, currentMethod, bankGuar
           disabled={saving || !bankGuaranteeAvailable}
           className={`rounded-xl border p-4 text-left transition-all disabled:opacity-50 ${
             selected === "CREDIT"
-              ? "border-blue-700 bg-blue-50"
-              : "border-slate-200 bg-white hover:border-slate-300"
+              ? "border-[color:var(--posh-primary)] bg-[rgba(240,232,216,0.04)]"
+              : "border-slate-200 bg-[color:var(--posh-bg-card)] hover:border-slate-300"
           }`}
         >
           <div className="text-sm font-semibold text-slate-800">Bank Guarantee</div>

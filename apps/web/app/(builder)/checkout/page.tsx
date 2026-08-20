@@ -237,7 +237,7 @@ export default function CheckoutPage() {
                                 Group &amp; Save available for this item
                               </p>
                               {savingsPerUnit > 0 ? (
-                                <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                                <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-[color:var(--posh-primary-fg)]">
                                   Save up to INR {savingsPerUnit.toLocaleString("en-IN")}/unit
                                 </span>
                               ) : null}
@@ -250,7 +250,7 @@ export default function CheckoutPage() {
                                     <th className="px-2 py-1 font-medium">Unit price</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-emerald-100 bg-white/60">
+                                <tbody className="divide-y divide-emerald-100 bg-[color:var(--posh-bg-card)]">
                                   {(item.aggregationPriceTiers ?? [])
                                     .slice()
                                     .sort((a, b) => a.minQty - b.minQty)
@@ -284,7 +284,7 @@ export default function CheckoutPage() {
                               <button
                                 onClick={() => handleOptIn(item)}
                                 disabled={optInLoadingId === item.id}
-                                className="mt-3 w-full rounded-lg border border-emerald-600 bg-white py-2 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-600 hover:text-white disabled:opacity-50"
+                                className="mt-3 w-full rounded-lg border border-emerald-600 bg-[color:var(--posh-bg-card)] py-2 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-600 hover:text-[color:var(--posh-primary-fg)] disabled:opacity-50"
                               >
                                 {optInLoadingId === item.id ? "Joining pool..." : "Wait & Save — Join Group Pool"}
                               </button>
@@ -353,7 +353,7 @@ export default function CheckoutPage() {
         <button
           onClick={handleSubmitEnquiry}
           disabled={loading || cart.items.filter((item) => !poolingItemIds.has(item.id)).length === 0}
-          className="w-full rounded-lg bg-blue-700 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-800 disabled:opacity-50"
+          className="w-full rounded-lg bg-[color:var(--posh-primary)] py-3 text-sm font-medium text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85 disabled:opacity-50"
         >
           {loading ? "Submitting..." : "Submit Enquiry"}
         </button>

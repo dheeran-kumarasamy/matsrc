@@ -90,7 +90,8 @@ function CartQuantityInput({
           commit((event.target as HTMLInputElement).value);
         }
       }}
-      className="h-7 w-10 border-x border-black/15 bg-transparent text-center text-xs text-black focus:outline-none disabled:opacity-40"
+      className="h-7 w-10 border-x bg-transparent text-center text-xs focus:outline-none disabled:opacity-40"
+      style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)" }}
       aria-label={label}
     />
   );
@@ -106,21 +107,25 @@ function StepIndicator({ current }: { current: string }) {
         return (
           <div key={step.key} className="flex items-center gap-2">
             <div
-              className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${
+              className="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold"
+              style={
                 isActive
-                  ? "bg-black text-white"
+                  ? { background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }
                   : isDone
-                  ? "bg-black/10 text-black"
-                  : "bg-black/[0.06] text-black/40"
-              }`}
+                  ? { background: "rgba(240,232,216,0.12)", color: "var(--posh-fg)" }
+                  : { background: "rgba(240,232,216,0.06)", color: "var(--posh-fg-muted)" }
+              }
             >
               {isDone ? <CheckCircle2 size={14} /> : index + 1}
             </div>
-            <span className={`text-xs font-medium ${isActive ? "text-black" : "text-black/50"}`}>
+            <span
+              className="text-xs font-medium"
+              style={{ color: isActive ? "var(--posh-fg)" : "var(--posh-fg-muted)" }}
+            >
               {step.label}
             </span>
             {index < STEP_LABELS.length - 1
-              ? <div className="mx-1 h-px w-4 bg-black/10" />
+              ? <div className="mx-1 h-px w-4" style={{ background: "var(--posh-border)" }} />
               : null}
           </div>
         );
@@ -253,14 +258,17 @@ export default function CartDrawer() {
 
   return (
     <Sheet open={isCartOpen} onOpenChange={handleOpenChange}>
-      <SheetContent className="flex flex-col border-l border-black/10 bg-white p-0 text-black">
-        <SheetHeader className="border-black/10">
+      <SheetContent
+        className="flex flex-col border-l p-0"
+        style={{ borderColor: "var(--posh-border)", background: "var(--posh-bg-card)", color: "var(--posh-fg)" }}
+      >
+        <SheetHeader style={{ borderColor: "var(--posh-border)" }}>
           <div className="flex items-center justify-between">
             <div>
-              <SheetTitle className="text-black">
+              <SheetTitle style={{ color: "var(--posh-fg)" }}>
                 {checkoutStep === "success" ? "Enquiry submitted" : "Your enquiry basket"}
               </SheetTitle>
-              <SheetDescription className="text-black/55">
+              <SheetDescription style={{ color: "var(--posh-fg-muted)" }}>
                 {checkoutStep === "success"
                   ? "Suppliers will confirm and unlock payment links."
                   : "No payment is taken here — this submits a supplier enquiry."}
@@ -278,28 +286,30 @@ export default function CartDrawer() {
           {checkoutStep === "review" ? (
             <div className="space-y-3">
               {items.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-black/20 p-8 text-center">
-                  <p className="text-sm text-black/55">Your enquiry basket is empty.</p>
+                <div className="rounded-2xl border border-dashed p-8 text-center" style={{ borderColor: "var(--posh-border)" }}>
+                  <p className="text-sm" style={{ color: "var(--posh-fg-muted)" }}>Your enquiry basket is empty.</p>
                   <Link href="/products" onClick={() => closeCart()}
-                    className="mt-3 inline-block text-sm text-black transition-opacity hover:opacity-70 underline underline-offset-4">
+                    className="mt-3 inline-block text-sm transition-opacity hover:opacity-70 underline underline-offset-4"
+                    style={{ color: "var(--posh-fg)" }}>
                     Browse materials →
                   </Link>
                 </div>
               ) : (
                 items.map((item) => (
-                  <div key={item.id} className="flex gap-3 rounded-2xl border border-black/10 bg-black/[0.02] p-3">
-                    <div className="h-14 w-14 shrink-0 rounded-xl bg-black/[0.06]" />
+                  <div key={item.id} className="flex gap-3 rounded-2xl border p-3" style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.03)" }}>
+                    <div className="h-14 w-14 shrink-0 rounded-xl" style={{ background: "rgba(240,232,216,0.08)" }} />
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-black">{item.name}</p>
-                      <p className="text-xs text-black/55">{item.supplierName}</p>
-                      <p className="text-xs text-black/55">₹{item.unitPrice.toLocaleString("en-IN")}/unit</p>
+                      <p className="text-sm font-medium" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
+                      <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>{item.supplierName}</p>
+                      <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>₹{item.unitPrice.toLocaleString("en-IN")}/unit</p>
                       <div className="mt-1.5 flex items-center gap-2">
-                        <div className="flex items-center rounded-lg border border-black/15">
+                        <div className="flex items-center rounded-lg border" style={{ borderColor: "var(--posh-border)" }}>
                           <button type="button"
                             disabled={isMutating || item.quantity <= 1}
                             onClick={() => void updateQuantity(item.productId, item.id, item.quantity - 1)}
                             aria-label={`Decrease quantity for ${item.name}`}
-                            className="flex h-7 w-7 items-center justify-center text-black/55 transition disabled:opacity-40">
+                            className="flex h-7 w-7 items-center justify-center transition disabled:opacity-40"
+                            style={{ color: "var(--posh-fg-muted)" }}>
                             <Minus size={12} />
                           </button>
                           <CartQuantityInput quantity={item.quantity} disabled={isMutating}
@@ -308,18 +318,20 @@ export default function CartDrawer() {
                           <button type="button" disabled={isMutating}
                             onClick={() => void updateQuantity(item.productId, item.id, item.quantity + 1)}
                             aria-label={`Increase quantity for ${item.name}`}
-                            className="flex h-7 w-7 items-center justify-center text-black/55 transition disabled:opacity-40">
+                            className="flex h-7 w-7 items-center justify-center transition disabled:opacity-40"
+                            style={{ color: "var(--posh-fg-muted)" }}>
                             <Plus size={12} />
                           </button>
                         </div>
-                        <span className="text-xs text-black/55">{item.unit}</span>
+                        <span className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>{item.unit}</span>
                       </div>
-                      <p className="posh-heading mt-1 text-base text-black">
+                      <p className="posh-heading mt-1 text-base" style={{ color: "var(--posh-fg)" }}>
                         ₹{item.lineTotal.toLocaleString("en-IN")}
                       </p>
                     </div>
                     <button onClick={() => void removeItem(item.productId, item.id)} disabled={isMutating}
-                      className="self-start text-black/30 transition hover:text-red-500 disabled:opacity-40"
+                      className="self-start transition hover:text-red-500 disabled:opacity-40"
+                      style={{ color: "var(--posh-fg-muted)" }}
                       aria-label={`Remove ${item.name}`}>
                       <Trash2 size={16} />
                     </button>
@@ -328,7 +340,7 @@ export default function CartDrawer() {
               )}
 
               {supplierGroups.length > 1 ? (
-                <p className="rounded-xl bg-black/[0.04] px-3 py-2 text-xs text-black/70">
+                <p className="rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(240,232,216,0.06)", color: "var(--posh-fg-muted)" }}>
                   Items span {supplierGroups.length} suppliers — these will be submitted as separate enquiries.
                 </p>
               ) : null}
@@ -351,7 +363,7 @@ export default function CartDrawer() {
                     Location captured ({deliveryLat.toFixed(4)}, {deliveryLng.toFixed(4)})
                   </p>
                 ) : null}
-                {locationError ? <p className="mt-2 text-xs font-bold text-black">{locationError}</p> : null}
+                {locationError ? <p className="mt-2 text-xs font-bold" style={{ color: "#f87171" }}>{locationError}</p> : null}
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium" style={{ color: "var(--posh-fg-muted)" }}>
@@ -368,7 +380,7 @@ export default function CartDrawer() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-[0.18em] text-black/60">Delivery address (optional)</label>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-[0.18em]" style={{ color: "var(--posh-fg-muted)" }}>Delivery address (optional)</label>
 
                 <input
                   placeholder="e.g. Site name, street, area"
@@ -412,7 +424,7 @@ export default function CartDrawer() {
               <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
                 Submitting will send a separate enquiry to each supplier represented in your basket. No payment is collected now.
               </p>
-              {submitError ? <p className="text-xs font-bold text-black">{submitError}</p> : null}
+              {submitError ? <p className="text-xs font-bold" style={{ color: "#f87171" }}>{submitError}</p> : null}
             </div>
           ) : null}
 

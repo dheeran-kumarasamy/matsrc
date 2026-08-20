@@ -40,7 +40,7 @@ export default function DistrictSelector({
         ))}
       </select>
       {isFallback ? (
-        <p className="mt-1 text-xs font-semibold text-black/60">
+        <p className="mt-1 text-xs font-semibold text-[color:var(--posh-fg-muted)]">
           Estimated using nearby verified market data — no data for your project district yet.
         </p>
       ) : null}

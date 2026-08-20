@@ -113,7 +113,7 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
 
 
   return (
-    <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="space-y-4 rounded-2xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Enquiry Basket</p>
@@ -148,7 +148,7 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
             }}
             aria-invalid={quantityError ? true : undefined}
             className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
-              quantityError ? "border-black focus:ring-black" : "border-black/15 focus:ring-black"
+              quantityError ? "border-[color:var(--posh-primary)] focus:ring-[color:var(--posh-primary)]" : "border-[color:var(--posh-border)] focus:ring-[color:var(--posh-primary)]"
             }`}
           />
         </label>
@@ -159,7 +159,7 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
           </p>
         </div>
       </div>
-      {quantityError ? <p className="text-xs font-bold text-black">{quantityError}</p> : null}
+      {quantityError ? <p className="text-xs font-bold text-[color:var(--posh-fg)]">{quantityError}</p> : null}
 
       <div className="rounded-xl border border-dashed border-slate-200 p-3">
         <div className="flex items-center justify-between text-sm text-slate-500">
@@ -172,14 +172,14 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
         onClick={() => void handlePrimaryAction()}
         disabled={loading}
         className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors disabled:opacity-50 ${
-          added ? "border border-black bg-white text-black" : "bg-black text-white hover:bg-black/85"
+          added ? "border border-[color:var(--posh-primary)] bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)]" : "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] hover:opacity-85"
         }`}
       >
         <ShoppingCart size={16} />
         {added ? "Go to Cart" : loading ? "Adding..." : "Add to Enquiry Basket"}
       </button>
 
-      {error ? <p className="text-xs font-bold text-black">{error}</p> : null}
+      {error ? <p className="text-xs font-bold text-[color:var(--posh-fg)]">{error}</p> : null}
       <p className="text-xs text-slate-400">
         This adds the material to your enquiry basket. Checkout will submit a supplier enquiry, not a payment.
       </p>

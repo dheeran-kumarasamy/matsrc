@@ -118,7 +118,7 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
       <div className="grid gap-6 lg:grid-cols-[1.5fr_0.9fr]">
         <section className="space-y-5">
           <div className="posh-card overflow-hidden p-0">
-            <div className="flex h-56 w-full items-center justify-center overflow-hidden bg-black/[0.04]">
+            <div className="flex h-56 w-full items-center justify-center overflow-hidden bg-[rgba(240,232,216,0.04)]">
               {imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
@@ -129,7 +129,7 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
               )}
             </div>
 
-            <div className="bg-white p-6">
+            <div className="bg-[color:var(--posh-bg-card)] p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="posh-eyebrow">Supplier Listing</p>
@@ -155,7 +155,7 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
                 Added a one-line explanation under each so a builder can
                 actually use the distinction when deciding how much to
                 enquire for — no new data introduced. */}
-            <div className="grid gap-4 border-t border-black/10 p-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 border-t border-[color:var(--posh-border)] p-6 sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <p className="posh-label">Base price</p>
                 <p className="posh-card-title mt-1">{product.price}</p>
@@ -179,14 +179,14 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
             <p className="posh-subtitle mt-1">The enquiry value updates automatically as quantity changes.</p>
             <div className="mt-4 grid gap-3">
               {product.pricingTiers.map((tier) => (
-                <div key={`${tier.minQty}-${tier.maxQty}`} className="flex items-center justify-between rounded-xl border border-black/10 bg-black/[0.03] px-4 py-3 text-sm">
+                <div key={`${tier.minQty}-${tier.maxQty}`} className="flex items-center justify-between rounded-xl border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.03)] px-4 py-3 text-sm">
                   <div>
-                    <p className="font-bold text-black">
+                    <p className="font-bold text-[color:var(--posh-fg)]">
                       {tier.minQty} - {tier.maxQty} {product.unit}
                     </p>
                     <p className="posh-label mt-1">Applicable quantity band</p>
                   </div>
-                  <p className="font-bold text-black">₹{parseNumericLabel(tier.price).toLocaleString("en-IN")}</p>
+                  <p className="font-bold text-[color:var(--posh-fg)]">₹{parseNumericLabel(tier.price).toLocaleString("en-IN")}</p>
                 </div>
               ))}
             </div>

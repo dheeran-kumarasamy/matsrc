@@ -82,7 +82,7 @@ export default function OrderRatingForm({ orderId }: Props) {
         type="button"
         onClick={() => void handleSubmit()}
         disabled={loading || saved}
-        className="w-full rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+        className="w-full rounded-lg bg-[color:var(--posh-primary)] px-4 py-2 text-sm font-semibold text-[color:var(--posh-primary-fg)] hover:opacity-85 disabled:opacity-60"
       >
         {saved ? "Rating saved" : loading ? "Saving..." : "Submit rating"}
       </button>

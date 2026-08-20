@@ -90,7 +90,7 @@ export default function NearbyDistrictComparisonTable({
             aria-label="Filter by confidence"
             value={confidenceFilter}
             onChange={(e) => setConfidenceFilter(e.target.value as typeof confidenceFilter)}
-            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600"
+            className="rounded-lg border border-slate-200 bg-[color:var(--posh-bg-card)] px-2 py-1 text-xs text-slate-600"
           >
             <option value="ALL">All confidence</option>
             <option value="HIGH">High</option>
@@ -99,7 +99,7 @@ export default function NearbyDistrictComparisonTable({
           </select>
           <button
             onClick={handleExportCsv}
-            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            className="rounded-lg border border-slate-200 bg-[color:var(--posh-bg-card)] px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
           >
             Export CSV
           </button>
@@ -143,7 +143,7 @@ export default function NearbyDistrictComparisonTable({
                   <MethodBadge label={row.methodLabel} />
                 </td>
                 <td className="py-2 text-slate-500">{row.priceDate}</td>
-                <td className={`py-2 font-bold ${row.diffPct !== null && row.diffPct > 0 ? "text-black" : "text-black/55"}`}>
+                <td className={`py-2 font-bold ${row.diffPct !== null && row.diffPct > 0 ? "text-[color:var(--posh-fg)]" : "text-[color:var(--posh-fg-muted)]"}`}>
                   {row.diffPct !== null ? `${row.diffPct > 0 ? "+" : ""}${row.diffPct.toFixed(1)}%` : "—"}
                 </td>
               </tr>

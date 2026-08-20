@@ -41,7 +41,7 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
       </header>
 
       <div className="posh-card space-y-4 p-6">
-        <div className={`rounded-2xl p-4 text-sm font-medium ${order.status === "CANCELLED" ? "border border-black bg-white text-black" : "border border-black/15 bg-black/[0.03] text-black/70"}`}>
+        <div className={`rounded-2xl p-4 text-sm font-medium ${order.status === "CANCELLED" ? "border border-[color:var(--posh-primary)] bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)]" : "border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.03)] text-[color:var(--posh-fg-muted)]"}`}>
           {order.status === "CANCELLED"
             ? "This enquiry was declined, so payment cannot be completed for this order."
             : order.paymentLinkAvailable
@@ -49,13 +49,13 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
             : "Payment is not yet enabled for this enquiry."}
         </div>
         <div className="grid gap-3 text-sm sm:grid-cols-2">
-          <div className="rounded-xl border border-black/10 bg-black/[0.03] px-4 py-3">
+          <div className="rounded-xl border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.03)] px-4 py-3">
             <p className="posh-label">Payment status</p>
-            <p className="mt-1 font-bold text-black">{order.paymentStatus}</p>
+            <p className="mt-1 font-bold text-[color:var(--posh-fg)]">{order.paymentStatus}</p>
           </div>
-          <div className="rounded-xl border border-black/10 bg-black/[0.03] px-4 py-3">
+          <div className="rounded-xl border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.03)] px-4 py-3">
             <p className="posh-label">Enquiry value</p>
-            <p className="mt-1 font-bold text-black">INR {order.total.toLocaleString("en-IN")}</p>
+            <p className="mt-1 font-bold text-[color:var(--posh-fg)]">INR {order.total.toLocaleString("en-IN")}</p>
           </div>
         </div>
 
@@ -85,10 +85,10 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
           <h2 className="posh-card-title">Purchase Order</h2>
           {order.purchaseOrder ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-black/70">
+              <p className="text-sm font-semibold text-[color:var(--posh-fg-muted)]">
                 {order.purchaseOrder.poNumber}
                 {order.purchaseOrder.version > 1 ? ` (v${order.purchaseOrder.version})` : ""} ·{" "}
-                <span className="font-bold text-black">{order.purchaseOrder.status}</span>
+                <span className="font-bold text-[color:var(--posh-fg)]">{order.purchaseOrder.status}</span>
               </p>
               <Link href={`/purchase-orders/${order.purchaseOrder.id}`} className="posh-btn-ghost">
                 View Purchase Order

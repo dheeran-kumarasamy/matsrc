@@ -50,15 +50,15 @@ export default async function DisputesPage() {
           <p className="posh-muted mt-2 text-xs">Everything you have ordered has been accepted as delivered.</p>
         </div>
       ) : (
-        <div className="posh-card divide-y divide-black/10">
+        <div className="posh-card divide-y divide-[color:var(--posh-border)]">
           {disputes.map((d) => (
             <div key={d.id} className="flex items-start justify-between gap-4 p-5">
               <div>
-                <p className="text-base font-bold tracking-tight text-black">{d.issueType.replace(/_/g, " ")}</p>
+                <p className="text-base font-bold tracking-tight text-[color:var(--posh-fg)]">{d.issueType.replace(/_/g, " ")}</p>
                 <p className="posh-label mt-1">
                   Order #{d.orderId.slice(0, 8)} · {new Date(d.createdAt).toLocaleDateString("en-IN")}
                 </p>
-                <p className="mt-2 line-clamp-2 text-sm font-medium text-black/70">{d.description}</p>
+                <p className="mt-2 line-clamp-2 text-sm font-medium text-[color:var(--posh-fg-muted)]">{d.description}</p>
               </div>
               <span className={`whitespace-nowrap ${statusColors[d.status] ?? "posh-status"}`}>
                 {d.status.replace(/_/g, " ")}

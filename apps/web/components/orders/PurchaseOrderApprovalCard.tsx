@@ -36,10 +36,10 @@ type PurchaseOrderDetail = {
 // Monochrome status treatment — matches the PO list page (site-wide black &
 // white palette); the terminal state is the only solid-black badge.
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: "bg-black/[0.04] text-black/60 border-black/15",
-  ISSUED: "bg-white text-black border-black/20",
-  ACKNOWLEDGED: "bg-white text-black border-black",
-  FULFILLED: "bg-black text-white border-black",
+  DRAFT: "bg-[rgba(240,232,216,0.04)] text-[color:var(--posh-fg-muted)] border-[color:var(--posh-border)]",
+  ISSUED: "bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)] border-[color:var(--posh-border)]",
+  ACKNOWLEDGED: "bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)] border-[color:var(--posh-primary)]",
+  FULFILLED: "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] border-[color:var(--posh-primary)]",
 };
 
 // UF-04/PO: In-app review, edit, digital approval and issuance of a Purchase Order.
@@ -126,7 +126,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
       </div>
 
       {po.approvedAt ? (
-        <div className="panel border-black/20 bg-black/[0.04] p-4 text-sm font-medium text-black">
+        <div className="panel border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] p-4 text-sm font-medium text-[color:var(--posh-fg)]">
           Digitally approved{po.approvedBy ? ` by ${po.approvedBy}` : ""} on{" "}
           {new Date(po.approvedAt).toLocaleString()}. This OTP-based approval is the legal e-signature equivalent —
           no physical signature was required.
@@ -268,7 +268,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                 <button
                   onClick={approve}
                   disabled={approving || otp.length !== 6}
-                  className="flex-1 rounded-md bg-black px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  className="flex-1 rounded-md bg-[color:var(--posh-primary)] px-3 py-2 text-sm font-semibold text-[color:var(--posh-primary-fg)] disabled:opacity-60"
                 >
                   {approving ? "Approving..." : "Confirm & Issue PO"}
                 </button>
@@ -283,7 +283,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
           ) : (
             <button
               onClick={() => setShowOtp(true)}
-              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-black/85"
+              className="rounded-md bg-[color:var(--posh-primary)] px-4 py-2 text-sm font-semibold text-[color:var(--posh-primary-fg)] hover:opacity-85"
             >
               Approve & Issue PO
             </button>

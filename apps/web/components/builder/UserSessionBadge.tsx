@@ -26,7 +26,7 @@ export default function UserSessionBadge() {
       <button
         onClick={() => router.push("/auth/login")}
         aria-label="Sign in"
-        className="flex items-center gap-2 rounded-full border border-black/15 bg-white px-3 py-1.5 text-sm font-bold text-black transition hover:border-black"
+        className="flex items-center gap-2 rounded-full border border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)] px-3 py-1.5 text-sm font-bold text-[color:var(--posh-fg)] transition hover:border-[color:var(--posh-primary)]"
       >
         <LogIn size={16} />
         <span className="hidden sm:inline">Sign in</span>
@@ -43,9 +43,9 @@ export default function UserSessionBadge() {
         onClick={() => setOpen((prev) => !prev)}
         aria-label={`Logged in as ${label}`}
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-full border border-black/15 bg-white px-2.5 py-1.5 text-sm font-bold text-black transition hover:border-black"
+        className="flex items-center gap-2 rounded-full border border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)] px-2.5 py-1.5 text-sm font-bold text-[color:var(--posh-fg)] transition hover:border-[color:var(--posh-primary)]"
       >
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black text-xs font-bold text-white">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[color:var(--posh-primary)] text-xs font-bold text-[color:var(--posh-primary-fg)]">
           {initial}
         </span>
         <span className="hidden max-w-[8rem] truncate sm:inline">{label}</span>
@@ -54,7 +54,7 @@ export default function UserSessionBadge() {
       {open ? (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+          <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-3 shadow-lg">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
               <User size={16} className="text-slate-400" />
               <div className="min-w-0">
@@ -80,7 +80,7 @@ export default function UserSessionBadge() {
                 setOpen(false);
                 void signOut({ callbackUrl: "/auth/login" });
               }}
-              className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-bold text-black transition hover:bg-black/[0.05]"
+              className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-bold text-[color:var(--posh-fg)] transition hover:bg-[rgba(240,232,216,0.05)]"
             >
               <LogOut size={14} />
               Sign out

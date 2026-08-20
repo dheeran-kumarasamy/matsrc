@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { Bell, TrendingDown, Trash2, AlertCircle, Clock } from "lucide-react";
 import { builderApiDelete, builderApiGet } from "@/lib/api";
@@ -42,11 +42,17 @@ type WatchlistItem = {
 
 // Confidence is expressed in monochrome: HIGH is solid black, MEDIUM an
 // outlined chip, LOW a faded chip. No colour is used anywhere in the portal.
-function confidenceBadgeClass(confidence: string | null) {
-  if (confidence === "HIGH") return "bg-black text-white border-black";
-  if (confidence === "MEDIUM") return "bg-white text-black border-black";
-  if (confidence === "LOW") return "bg-white text-black/50 border-black/20";
-  return "bg-white text-black/40 border-black/15";
+function confidenceBadgeStyle(confidence: string | null): CSSProperties {
+  if (confidence === "HIGH") {
+    return { background: "var(--posh-primary)", color: "var(--posh-primary-fg)", borderColor: "var(--posh-primary)" };
+  }
+  if (confidence === "MEDIUM") {
+    return { background: "var(--posh-bg-card)", color: "var(--posh-fg)", borderColor: "var(--posh-border)" };
+  }
+  if (confidence === "LOW") {
+    return { background: "var(--posh-bg-card)", color: "var(--posh-fg-muted)", borderColor: "var(--posh-border)" };
+  }
+  return { background: "var(--posh-bg-card)", color: "var(--posh-fg-muted)", borderColor: "var(--posh-border)" };
 }
 
 // UF-09: Watchlist & Price Alerts — FR-07, FR-31
@@ -100,10 +106,10 @@ export default function WatchlistPage() {
       </header>
 
       <div className="posh-card flex gap-3 p-5">
-        <TrendingDown className="mt-0.5 shrink-0 text-black" size={18} />
+        <TrendingDown className="mt-0.5 shrink-0" style={{ color: "var(--posh-primary)" }} size={18} />
         <div>
           <p className="posh-card-title text-base">How price alerts work</p>
-          <p className="mt-1 text-xs font-medium text-black/60">
+          <p className="mt-1 text-xs font-medium" style={{ color: "var(--posh-fg-muted)" }}>
             Set a target price on any material. Once a verified market price for your area reaches your target, we
             send a WhatsApp alert. We only alert on confident, verified prices — never estimates or low-confidence
             data. (FR-07, FR-31)
@@ -120,15 +126,15 @@ export default function WatchlistPage() {
           </Link>
         </div>
       ) : (
-        <div className="posh-card divide-y divide-black/10">
+        <div className="posh-card divide-y divide-[color:var(--posh-border)]">
           {items.map((item) => {
             const pi = item.priceIntelligence;
             return (
               <div key={item.id} className="space-y-3 p-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-base font-bold tracking-tight text-black">{item.name}</p>
-                    <p className="mt-1 text-xs font-semibold text-black/60">
+                    <p className="text-base font-bold tracking-tight" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
+                    <p className="mt-1 text-xs font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
                       Listing price: INR {item.basePrice.toLocaleString("en-IN")} / {item.unit}
                     </p>
                   </div>
@@ -139,7 +145,10 @@ export default function WatchlistPage() {
                     <button
                       disabled={loadingId === item.id}
                       onClick={() => void handleRemove(item.productId, item.id)}
-                      className="text-black/30 transition-colors hover:text-black disabled:opacity-40"
+                      className="transition-colors disabled:opacity-40"
+                      style={{ color: "var(--posh-fg-muted)" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--posh-fg)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--posh-fg-muted)")}
                       aria-label={`Remove ${item.name} from watchlist`}
                     >
                       <Trash2 size={16} />
@@ -149,32 +158,40 @@ export default function WatchlistPage() {
 
                 {/* Price Intelligence panel */}
                 {pi?.resolved ? (
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-black/10 bg-black/[0.03] p-3 text-xs">
-                    <span className="font-bold text-black">
+                  <div
+                    className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border p-3 text-xs"
+                    style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.04)" }}
+                  >
+                    <span className="font-bold" style={{ color: "var(--posh-fg)" }}>
                       Market price: INR {pi.currentPricePerBaseUnit?.toLocaleString("en-IN")} / {pi.baseUnit}
                     </span>
                     {pi.confidence && (
                       <span
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${confidenceBadgeClass(
-                          pi.confidence
-                        )}`}
+                        className="rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em]"
+                        style={confidenceBadgeStyle(pi.confidence)}
                       >
                         {pi.confidence} confidence
                       </span>
                     )}
                     {pi.methodLabel && (
-                      <span className="rounded-full border border-black/15 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-black/60">
+                      <span
+                        className="rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em]"
+                        style={{ borderColor: "var(--posh-border)", background: "var(--posh-bg-card)", color: "var(--posh-fg-muted)" }}
+                      >
                         {pi.methodLabel}
                       </span>
                     )}
-                    {pi.districtName && <span className="font-semibold text-black/50">{pi.districtName}</span>}
+                    {pi.districtName && <span className="font-semibold" style={{ color: "var(--posh-fg-muted)" }}>{pi.districtName}</span>}
                     {pi.isStale && (
-                      <span className="flex items-center gap-1 font-bold text-black/60">
+                      <span className="flex items-center gap-1 font-bold" style={{ color: "var(--posh-fg-muted)" }}>
                         <Clock size={11} /> Stale
                       </span>
                     )}
                     {typeof pi.gapToTarget === "number" && item.targetPrice && (
-                      <span className={pi.gapToTarget <= 0 ? "font-bold text-black" : "font-semibold text-black/50"}>
+                      <span
+                        className="font-bold"
+                        style={{ color: pi.gapToTarget <= 0 ? "var(--posh-primary)" : "var(--posh-fg-muted)" }}
+                      >
                         {pi.gapToTarget <= 0
                           ? "Target reached"
                           : `INR ${pi.gapToTarget.toLocaleString("en-IN")} above target`}
@@ -182,7 +199,10 @@ export default function WatchlistPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 rounded-xl border border-black/10 bg-black/[0.03] p-3 text-xs font-medium text-black/45">
+                  <div
+                    className="flex items-center gap-2 rounded-xl border p-3 text-xs font-medium"
+                    style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.04)", color: "var(--posh-fg-muted)" }}
+                  >
                     <AlertCircle size={12} />
                     {pi?.emptyReason === "NO_DISTRICT"
                       ? "Add a site with a city to get market price alerts for your area."
@@ -194,11 +214,11 @@ export default function WatchlistPage() {
 
                 {/* Alert history */}
                 {item.recentEvaluations.length > 0 && (
-                  <div className="space-y-0.5 text-[11px] font-medium text-black/45">
+                  <div className="space-y-0.5 text-[11px] font-medium" style={{ color: "var(--posh-fg-muted)" }}>
                     {item.recentEvaluations.slice(0, 3).map((ev, idx) => (
                       <div key={idx} className="flex items-center gap-1.5">
                         <span>{new Date(ev.evaluatedAt).toLocaleDateString("en-IN")}:</span>
-                        <span className={ev.didTrigger ? "font-bold text-black" : "text-black/45"}>
+                        <span style={{ color: ev.didTrigger ? "var(--posh-fg)" : "var(--posh-fg-muted)", fontWeight: ev.didTrigger ? 700 : 500 }}>
                           {ev.didTrigger ? "Alert sent" : ev.suppressedReasonLabel ?? "No alert"}
                         </span>
                       </div>

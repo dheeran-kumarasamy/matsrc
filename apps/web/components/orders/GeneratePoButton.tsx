@@ -29,7 +29,7 @@ export default function GeneratePoButton({ orderId }: { orderId: string }) {
       <button
         onClick={generate}
         disabled={loading}
-        className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+        className="rounded-lg bg-[color:var(--posh-primary)] px-4 py-2 text-sm font-semibold text-[color:var(--posh-primary-fg)] hover:opacity-85 disabled:opacity-60"
       >
         {loading ? "Generating..." : "Generate Purchase Order"}
       </button>

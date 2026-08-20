@@ -95,7 +95,7 @@ export default function RegisterPage() {
           const stepIndex = ["channel", "otp", "role", "contact"].indexOf(step);
           return (
             <div key={label} className="flex items-center gap-2 flex-shrink-0">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i <= stepIndex ? "bg-brand-500 text-white" : "bg-gray-100 text-gray-400"}`}>
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i <= stepIndex ? "bg-brand-500 text-[color:var(--posh-primary-fg)]" : "bg-gray-100 text-gray-400"}`}>
                 {i + 1}
               </div>
               <span className={`text-xs whitespace-nowrap ${i <= stepIndex ? "text-brand-500 font-medium" : "text-gray-400"}`}>{label}</span>
@@ -116,7 +116,7 @@ export default function RegisterPage() {
           </a>
           <div className="relative">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
-            <div className="relative flex justify-center text-xs text-gray-400 bg-white px-2">or</div>
+            <div className="relative flex justify-center text-xs text-gray-400 bg-[color:var(--posh-bg-card)] px-2">or</div>
           </div>
 
           <input
@@ -129,8 +129,8 @@ export default function RegisterPage() {
           />
 
           <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-            <button type="button" onClick={() => setChannel("phone")} className={`flex-1 py-2 text-sm font-medium ${channel === "phone" ? "bg-brand-500 text-white" : "text-gray-500 hover:bg-gray-50"}`}>Phone</button>
-            <button type="button" onClick={() => setChannel("email")} className={`flex-1 py-2 text-sm font-medium ${channel === "email" ? "bg-brand-500 text-white" : "text-gray-500 hover:bg-gray-50"}`}>Email</button>
+            <button type="button" onClick={() => setChannel("phone")} className={`flex-1 py-2 text-sm font-medium ${channel === "phone" ? "bg-brand-500 text-[color:var(--posh-primary-fg)]" : "text-gray-500 hover:bg-gray-50"}`}>Phone</button>
+            <button type="button" onClick={() => setChannel("email")} className={`flex-1 py-2 text-sm font-medium ${channel === "email" ? "bg-brand-500 text-[color:var(--posh-primary-fg)]" : "text-gray-500 hover:bg-gray-50"}`}>Email</button>
           </div>
 
           <input
@@ -142,7 +142,7 @@ export default function RegisterPage() {
             className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           {error && <p className="text-red-500 text-xs">{error}</p>}
-          <button type="submit" disabled={loading} className="w-full min-h-[44px] bg-brand-500 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
+          <button type="submit" disabled={loading} className="w-full min-h-[44px] bg-brand-500 text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
             {loading ? "Sending..." : "Send OTP"}
           </button>
         </form>
@@ -162,7 +162,7 @@ export default function RegisterPage() {
             className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-base text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           {error && <p className="text-red-500 text-xs">{error}</p>}
-          <button type="submit" disabled={loading || otp.length < 6} className="w-full bg-brand-500 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
+          <button type="submit" disabled={loading || otp.length < 6} className="w-full bg-brand-500 text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
             {loading ? "Verifying..." : "Verify OTP"}
           </button>
         </form>
@@ -186,7 +186,7 @@ export default function RegisterPage() {
             ))}
           </div>
           {error && <p className="text-red-500 text-xs">{error}</p>}
-          <button type="submit" disabled={loading || !role} className="w-full bg-brand-500 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
+          <button type="submit" disabled={loading || !role} className="w-full bg-brand-500 text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
             {loading ? "Saving..." : "Continue →"}
           </button>
         </form>
@@ -206,7 +206,7 @@ export default function RegisterPage() {
             />
           </div>
 
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 space-y-2">
+          <div className="bg-[rgba(240,232,216,0.04)] border border-[color:var(--posh-border)] rounded-lg p-3 space-y-2">
             <label className="flex items-start gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -222,7 +222,7 @@ export default function RegisterPage() {
           </div>
 
           {error && <p className="text-red-500 text-xs">{error}</p>}
-          <button type="submit" disabled={loading} className="w-full bg-brand-500 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
+          <button type="submit" disabled={loading} className="w-full bg-brand-500 text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
             {loading ? "Saving..." : "Continue to KYC →"}
           </button>
         </form>

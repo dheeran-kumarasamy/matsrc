@@ -18,7 +18,7 @@ export default function ReportDownloadButtons({ reportId }: { reportId: string }
     <div className="mt-3 flex flex-wrap gap-2">
       <a
         href={exportUrl("xlsx")}
-        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+        className="rounded-full border border-slate-200 bg-[color:var(--posh-bg-card)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
       >
         Download XLSX
       </a>
@@ -26,7 +26,7 @@ export default function ReportDownloadButtons({ reportId }: { reportId: string }
         href={exportUrl("pdf")}
         target="_blank"
         rel="noreferrer"
-        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+        className="rounded-full border border-slate-200 bg-[color:var(--posh-bg-card)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
       >
         Download PDF
       </a>

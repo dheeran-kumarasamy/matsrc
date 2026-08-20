@@ -94,7 +94,7 @@ export default function CreditPage() {
               <button
                 key={title}
                 onClick={() => setStep("consent")}
-                className="panel p-5 text-left hover:shadow-md hover:border-blue-700 transition-all"
+                className="panel p-5 text-left hover:shadow-md hover:border-[color:var(--posh-primary)] transition-all"
               >
                 <div className="text-2xl mb-2">{icon}</div>
                 <div className="font-semibold text-sm text-slate-800">{title}</div>
@@ -105,7 +105,7 @@ export default function CreditPage() {
             {/* REQ-09: Bank Guarantee registration, part of builder onboarding */}
             <button
               onClick={() => setStep("bankGuarantee")}
-              className="panel p-5 text-left hover:shadow-md hover:border-blue-700 transition-all"
+              className="panel p-5 text-left hover:shadow-md hover:border-[color:var(--posh-primary)] transition-all"
             >
               <div className="text-2xl mb-2">🏦</div>
               <div className="font-semibold text-sm text-slate-800">Bank Guarantee</div>
@@ -182,7 +182,7 @@ export default function CreditPage() {
             <button
               onClick={submitBankGuarantee}
               disabled={bgSubmitting}
-              className="flex-1 bg-blue-700 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-60"
+              className="flex-1 bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-60"
             >
               {bgSubmitting ? "Submitting..." : "Submit for Verification"}
             </button>
@@ -202,7 +202,7 @@ export default function CreditPage() {
           </ul>
           <div className="flex gap-3">
             <button onClick={() => setStep("options")} className="flex-1 border border-slate-200 text-slate-600 rounded-lg py-2.5 text-sm">Cancel</button>
-            <button onClick={() => setStep("scoring")} className="flex-1 bg-blue-700 text-white rounded-lg py-2.5 text-sm font-medium">I Authorise Data Access</button>
+            <button onClick={() => setStep("scoring")} className="flex-1 bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium">I Authorise Data Access</button>
           </div>
         </div>
       )}
@@ -210,11 +210,11 @@ export default function CreditPage() {
       {/* Step: scoring in progress */}
       {step === "scoring" && (
         <div className="panel p-10 text-center space-y-4">
-          <div className="w-12 h-12 border-4 border-blue-700 border-t-transparent rounded-full animate-spin mx-auto" />
+          <div className="w-12 h-12 border-4 border-[color:var(--posh-primary)] border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="font-medium text-slate-800">Running credit assessment...</p>
           <p className="text-sm text-slate-400">Evaluating GST + ITR data via NBFC model. This takes ~30 seconds.</p>
           {/* Simulate completion */}
-          <button onClick={() => setStep("kfs")} className="text-xs text-blue-700 hover:underline">
+          <button onClick={() => setStep("kfs")} className="text-xs text-[color:var(--posh-primary)] hover:underline">
             (Demo: Continue to KFS →)
           </button>
         </div>
@@ -224,7 +224,7 @@ export default function CreditPage() {
       {step === "kfs" && (
         <div className="panel p-6 space-y-4">
           <div className="flex items-center gap-2">
-            <span className="bg-blue-50 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded">RBI Mandated</span>
+            <span className="bg-[rgba(240,232,216,0.04)] text-[color:var(--posh-primary)] text-xs font-semibold px-2 py-0.5 rounded">RBI Mandated</span>
             <h2 className="font-semibold text-slate-800">Key Fact Statement (KFS)</h2>
           </div>
           <div className="bg-slate-50 rounded-lg p-4 text-xs text-slate-600 space-y-2 max-h-48 overflow-y-auto">
@@ -238,10 +238,10 @@ export default function CreditPage() {
             <p><strong>Grievance Officer:</strong> grievance@buildohub.in</p>
           </div>
           <label className="flex items-start gap-3 cursor-pointer">
-            <input type="checkbox" className="mt-0.5 accent-blue-700" />
+            <input type="checkbox" className="mt-0.5 accent-[color:var(--posh-primary)]" />
             <span className="text-xs text-slate-500">I have read and accept the Key Fact Statement. I consent to the terms of this credit product.</span>
           </label>
-          <button onClick={() => setStep("approved")} className="w-full bg-blue-700 text-white rounded-lg py-2.5 text-sm font-medium">
+          <button onClick={() => setStep("approved")} className="w-full bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium">
             Confirm with OTP & Activate Credit
           </button>
         </div>

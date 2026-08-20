@@ -116,7 +116,7 @@ export default function DistrictPriceIntelligencePanel({
         aria-expanded={expanded}
         aria-controls="district-price-intelligence-content"
         onClick={() => setExpanded((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-3 p-5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+        className="flex w-full items-center justify-between gap-3 p-5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--posh-primary)]"
       >
         <div>
           <h2 className="text-lg font-semibold text-slate-900">District Price Intelligence</h2>

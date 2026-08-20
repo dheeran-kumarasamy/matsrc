@@ -37,7 +37,7 @@ export default function HistoricalPriceContext({
         </div>
         <div>
           <p className="text-xs text-slate-400">Change</p>
-          <p className={`font-bold ${isIncrease ? "text-black" : "text-black/55"}`}>
+          <p className={`font-bold ${isIncrease ? "text-[color:var(--posh-fg)]" : "text-[color:var(--posh-fg-muted)]"}`}>
             {diffAmount !== null ? `${diffAmount > 0 ? "+" : ""}₹${diffAmount.toLocaleString("en-IN")}` : "—"}
             {diffPct !== null ? ` (${diffPct > 0 ? "+" : ""}${diffPct.toFixed(1)}%)` : ""}
           </p>

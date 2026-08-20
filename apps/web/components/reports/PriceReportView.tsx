@@ -165,7 +165,7 @@ function MarketBenchmarkModule({ benchmark }: { benchmark?: MarketBenchmark }) {
 
   if (!benchmark.available) {
     return (
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
+      <section className="rounded-2xl bg-[color:var(--posh-bg-card)] p-5 shadow-sm">
         <h3 className="text-base font-semibold text-deskInk">How does this compare?</h3>
         <p className="mt-2 text-sm text-deskInk/50">
           No comparable market reference is currently available for this product and location.
@@ -196,7 +196,7 @@ function MarketBenchmarkModule({ benchmark }: { benchmark?: MarketBenchmark }) {
       : "text-deskInk/70";
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-[color:var(--posh-bg-card)] p-5 shadow-sm">
       <h3 className="text-base font-semibold text-deskInk">How does this compare?</h3>
       <div className="mt-3 grid gap-4 sm:grid-cols-2">
         <div>
@@ -251,7 +251,7 @@ function PriceHistoryModule({ history }: { history: ReportHistoryEntry[] }) {
   }));
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-[color:var(--posh-bg-card)] p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-base font-semibold text-deskInk">Price history</h3>
         <div className="flex items-center gap-2">
@@ -261,7 +261,7 @@ function PriceHistoryModule({ history }: { history: ReportHistoryEntry[] }) {
                 key={key}
                 onClick={() => setRange(key)}
                 className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                  range === key ? "bg-deskSteel text-white" : "text-deskInk/60 hover:text-deskSteel"
+                  range === key ? "bg-deskSteel text-[color:var(--posh-primary-fg)]" : "text-deskInk/60 hover:text-deskSteel"
                 }`}
               >
                 {key}
@@ -271,13 +271,13 @@ function PriceHistoryModule({ history }: { history: ReportHistoryEntry[] }) {
           <div className="flex gap-1 rounded-full bg-deskBg p-1">
             <button
               onClick={() => setView("chart")}
-              className={`rounded-full px-2.5 py-1 text-xs font-medium ${view === "chart" ? "bg-deskSteel text-white" : "text-deskInk/60"}`}
+              className={`rounded-full px-2.5 py-1 text-xs font-medium ${view === "chart" ? "bg-deskSteel text-[color:var(--posh-primary-fg)]" : "text-deskInk/60"}`}
             >
               Chart
             </button>
             <button
               onClick={() => setView("table")}
-              className={`rounded-full px-2.5 py-1 text-xs font-medium ${view === "table" ? "bg-deskSteel text-white" : "text-deskInk/60"}`}
+              className={`rounded-full px-2.5 py-1 text-xs font-medium ${view === "table" ? "bg-deskSteel text-[color:var(--posh-primary-fg)]" : "text-deskInk/60"}`}
             >
               Table
             </button>
@@ -293,16 +293,16 @@ function PriceHistoryModule({ history }: { history: ReportHistoryEntry[] }) {
         <div className="mt-4">
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#00000010" />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#000000" }} tickLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--posh-border)" />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--posh-fg-muted)" }} tickLine={false} />
               <YAxis
-                tick={{ fontSize: 10, fill: "#000000" }}
+                tick={{ fontSize: 10, fill: "var(--posh-fg-muted)" }}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
               />
               <Tooltip formatter={(v: number) => [money(v), "Price"]} />
-              <Line type="monotone" dataKey="price" stroke="#000000" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="price" stroke="var(--posh-primary)" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -345,7 +345,7 @@ function ForecastModule({ forecast }: { forecast: PriceReportResponse["forecast"
   }));
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-[color:var(--posh-bg-card)] p-5 shadow-sm">
       <h3 className="text-base font-semibold text-deskInk">Price forecast</h3>
       <p className="mt-1 text-xs text-deskInk/50">{forecast.method}</p>
 
@@ -357,17 +357,17 @@ function ForecastModule({ forecast }: { forecast: PriceReportResponse["forecast"
         <div className="mt-4">
           <ResponsiveContainer width="100%" height={200}>
             <ComposedChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#00000010" />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#000000" }} tickLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--posh-border)" />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--posh-fg-muted)" }} tickLine={false} />
               <YAxis
-                tick={{ fontSize: 10, fill: "#000000" }}
+                tick={{ fontSize: 10, fill: "var(--posh-fg-muted)" }}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
               />
               <Tooltip formatter={(v: number) => [money(v), "Projected"]} />
-              <Area dataKey="band" stroke="none" fill="#000000" fillOpacity={0.12} />
-              <Line type="monotone" dataKey="price" stroke="#000000" strokeWidth={2} strokeDasharray="4 3" dot={false} />
+              <Area dataKey="band" stroke="none" fill="var(--posh-primary)" fillOpacity={0.12} />
+              <Line type="monotone" dataKey="price" stroke="var(--posh-primary)" strokeWidth={2} strokeDasharray="4 3" dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -382,7 +382,7 @@ function BestPriceModule({ offers }: { offers: BestPriceOffer[] }) {
 
   if (offers.length === 0) {
     return (
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
+      <section className="rounded-2xl bg-[color:var(--posh-bg-card)] p-5 shadow-sm">
         <h3 className="text-base font-semibold text-deskInk">Best price finder</h3>
         <p className="mt-3 text-sm text-deskInk/40">No active supplier offers found for this product.</p>
       </section>
@@ -390,7 +390,7 @@ function BestPriceModule({ offers }: { offers: BestPriceOffer[] }) {
   }
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-[color:var(--posh-bg-card)] p-5 shadow-sm">
       <h3 className="text-base font-semibold text-deskInk">Best price finder</h3>
       <p className="mt-1 text-xs text-deskInk/50">
         Ranked by estimated landed cost (base price + known freight + GST). Freight shown as "Not available" when the
@@ -408,7 +408,7 @@ function BestPriceModule({ offers }: { offers: BestPriceOffer[] }) {
               >
                 <div className="flex items-center gap-3">
                   {idx === 0 ? (
-                    <span className="rounded-full bg-deskSteel px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                    <span className="rounded-full bg-deskSteel px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--posh-primary-fg)]">
                       Lowest
                     </span>
                   ) : null}
@@ -456,7 +456,7 @@ function BestPriceModule({ offers }: { offers: BestPriceOffer[] }) {
 function RegionalModule({ regional }: { regional: PriceReportResponse["regional"] }) {
   if (!regional.hasEnoughData) {
     return (
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
+      <section className="rounded-2xl bg-[color:var(--posh-bg-card)] p-5 shadow-sm">
         <h3 className="text-base font-semibold text-deskInk">Regional price variation</h3>
         <p className="mt-3 text-sm text-deskInk/40">
           Not enough regional data yet to compare {regional.builderRegion ? `${regional.builderRegion} against other regions` : "regions"}.
@@ -468,7 +468,7 @@ function RegionalModule({ regional }: { regional: PriceReportResponse["regional"
   const maxAvg = Math.max(...regional.regions.map((r) => r.averagePrice), 1);
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-[color:var(--posh-bg-card)] p-5 shadow-sm">
       <h3 className="text-base font-semibold text-deskInk">Regional price variation</h3>
       <div className="mt-4 space-y-2.5">
         {regional.regions.map((r) => {
@@ -529,7 +529,7 @@ function MarketInsightModule({
 
   if (!insight) {
     return (
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
+      <section className="rounded-2xl bg-[color:var(--posh-bg-card)] p-5 shadow-sm">
         <h3 className="text-base font-semibold text-deskInk">Live market intelligence</h3>
         <p className="mt-3 text-sm text-deskInk/40">Market intelligence isn't available for this category/region yet.</p>
       </section>
@@ -537,7 +537,7 @@ function MarketInsightModule({
   }
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-[color:var(--posh-bg-card)] p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold text-deskInk">Live market intelligence</h3>
         <div className="flex items-center gap-2 text-xs text-deskInk/40">
@@ -593,7 +593,7 @@ function PriceAlertModule({ offers }: { offers: BestPriceOffer[] }) {
   if (!cheapest) return null;
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-[color:var(--posh-bg-card)] p-5 shadow-sm">
       <h3 className="text-base font-semibold text-deskInk">Price alert</h3>
       <p className="mt-1 text-xs text-deskInk/50">
         Get notified when the price drops below your target — uses your existing watchlist.

@@ -32,7 +32,7 @@ const VISIBLE_REPORTS: ReportDefinition[] = REPORT_DEFINITIONS.filter(
 );
 
 const DATA_SOURCE_STYLES: Record<string, string> = {
-  "Account data": "border-blue-200 bg-blue-50 text-blue-700",
+  "Account data": "border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] text-[color:var(--posh-primary)]",
   "Live feed": "border-emerald-200 bg-emerald-50 text-emerald-700",
   "Historical data": "border-amber-200 bg-amber-50 text-amber-700",
   "AI insight": "border-purple-200 bg-purple-50 text-purple-700",
@@ -101,7 +101,7 @@ export default function ReportsExplorer() {
             key={report.id}
             type="button"
             onClick={() => setOpenId(report.id)}
-            className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg"
+            className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[color:var(--posh-primary)] hover:shadow-lg"
           >
             <div className="flex items-start justify-between gap-3">
               <h2 className="report-display text-xl text-slate-900">{report.title}</h2>
@@ -122,15 +122,15 @@ export default function ReportsExplorer() {
         <button
           type="button"
           onClick={() => router.push("/reports/site-wise")}
-          className="flex flex-col gap-3 rounded-3xl border border-blue-300 bg-blue-50 p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-blue-100 hover:shadow-lg"
+          className="flex flex-col gap-3 rounded-3xl border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-[rgba(240,232,216,0.08)] hover:shadow-lg"
         >
           <div className="flex items-start justify-between gap-3">
-            <h2 className="report-display text-xl text-blue-900">Site-wise Report</h2>
-            <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-blue-700">
+            <h2 className="report-display text-xl text-[color:var(--posh-fg)]">Site-wise Report</h2>
+            <span className="shrink-0 rounded-full border border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--posh-primary)]">
               Account data
             </span>
           </div>
-          <p className="text-xs font-medium leading-relaxed text-blue-700">
+          <p className="text-xs font-medium leading-relaxed text-[color:var(--posh-primary)]">
             Everything purchased through Buildohub, broken down by construction site — with CSV/XLSX/PDF
             export and Tally XML export for your accountant.
           </p>
@@ -147,7 +147,7 @@ export default function ReportsExplorer() {
         >
           <section
             onClick={(event) => event.stopPropagation()}
-            className="report-body w-full max-w-4xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl md:p-10"
+            className="report-body w-full max-w-4xl rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-6 shadow-xl md:p-10"
           >
             <div className="flex items-start justify-between gap-6">
               <div>

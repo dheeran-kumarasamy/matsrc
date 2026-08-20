@@ -82,12 +82,12 @@ export default function PriceHistoryChart({
             the whole surface is black & white. */}
         <div className="posh-label flex items-center gap-3">
           <span className="flex items-center gap-1">
-            <span className="h-2 w-4 rounded-sm bg-black" />
+            <span className="h-2 w-4 rounded-sm bg-[color:var(--posh-primary)]" />
             Observed
           </span>
           {hasForecast && (
             <span className="flex items-center gap-1">
-              <span className="h-2 w-4 rounded-sm border border-black bg-white" />
+              <span className="h-2 w-4 rounded-sm border border-[color:var(--posh-primary)] bg-[color:var(--posh-bg-card)]" />
               Forecast
             </span>
           )}
@@ -96,16 +96,16 @@ export default function PriceHistoryChart({
 
       <ResponsiveContainer width="100%" height={180}>
         <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#00000012" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--posh-border)" />
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 10, fill: "#000000" }}
+            tick={{ fontSize: 10, fill: "var(--posh-fg-muted)" }}
             tickLine={false}
-            stroke="#000000"
+            stroke="var(--posh-primary)"
             interval="preserveStartEnd"
           />
           <YAxis
-            tick={{ fontSize: 10, fill: "#000000" }}
+            tick={{ fontSize: 10, fill: "var(--posh-fg-muted)" }}
             tickLine={false}
             tickFormatter={(v) => `₹${Math.round(v / 1000)}k`}
             width={44}
@@ -115,24 +115,24 @@ export default function PriceHistoryChart({
               formatInr(value),
               name === "price" ? "Observed" : "Forecast",
             ]}
-            labelStyle={{ fontSize: 11, color: "#000000" }}
-            itemStyle={{ color: "#000000" }}
+            labelStyle={{ fontSize: 11, color: "var(--posh-fg-muted)" }}
+            itemStyle={{ color: "var(--posh-fg-muted)" }}
             contentStyle={{ fontSize: 11 }}
           />
           {averagePrice !== null && (
             <ReferenceLine
               y={averagePrice}
-              stroke="#000000"
+              stroke="var(--posh-primary)"
               strokeDasharray="4 3"
-              label={{ value: "Avg", position: "right", fontSize: 10, fill: "#000000" }}
+              label={{ value: "Avg", position: "right", fontSize: 10, fill: "var(--posh-fg-muted)" }}
             />
           )}
           {/* Historical — solid black line with a light black wash. */}
           <Area
             type="monotone"
             dataKey="price"
-            stroke="#000000"
-            fill="#00000012"
+            stroke="var(--posh-primary)"
+            fill="var(--posh-border)"
             strokeWidth={1.5}
             dot={false}
             connectNulls
@@ -143,8 +143,8 @@ export default function PriceHistoryChart({
             <Area
               type="monotone"
               dataKey="forecastPrice"
-              stroke="#000000"
-              fill="#00000006"
+              stroke="var(--posh-primary)"
+              fill="rgba(240,232,216,0.06)"
               strokeWidth={1.5}
               strokeDasharray="5 3"
               dot={false}
@@ -155,7 +155,7 @@ export default function PriceHistoryChart({
       </ResponsiveContainer>
 
       {hasForecast && (
-        <p className="mt-2 text-[11px] font-medium text-black/45">
+        <p className="mt-2 text-[11px] font-medium text-[color:var(--posh-fg-muted)]">
           Forecast: {method} · Not a guaranteed future price.
         </p>
       )}

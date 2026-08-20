@@ -179,7 +179,7 @@ export default function ProductFilters({
           value={category}
           onChange={(e) => handleCategoryChange(e.target.value)}
           disabled={categoriesLoading}
-          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
+          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[color:var(--posh-primary)]"
         >
           <option value="">All Categories</option>
           {categoryOptions.map((c) => {
@@ -201,7 +201,7 @@ export default function ProductFilters({
           value={brand}
           onChange={(e) => handleBrandChange(e.target.value)}
           disabled={brandsLoading}
-          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
+          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[color:var(--posh-primary)]"
         >
           <option value="">All Brands</option>
           {brandOptions.map((b) => {
@@ -223,7 +223,7 @@ export default function ProductFilters({
           name="minPrice"
           defaultValue={minPrice}
           placeholder="Min"
-          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
+          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[color:var(--posh-primary)]"
         />
       </div>
       <div className="min-w-[100px]">
@@ -233,7 +233,7 @@ export default function ProductFilters({
           name="maxPrice"
           defaultValue={maxPrice}
           placeholder="Max"
-          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
+          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[color:var(--posh-primary)]"
         />
       </div>
 
@@ -243,7 +243,7 @@ export default function ProductFilters({
         <select
           name="sort"
           defaultValue={sort}
-          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-700"
+          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[color:var(--posh-primary)]"
         >
           <option value="price_asc">Price: Low to High</option>
           <option value="price_desc">Price: High to Low</option>
@@ -255,7 +255,7 @@ export default function ProductFilters({
       <div className="flex items-center gap-2">
         <button
           type="submit"
-          className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-800"
+          className="rounded-lg bg-[color:var(--posh-primary)] px-4 py-2 text-xs font-medium text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85"
         >
           Apply Filters
         </button>

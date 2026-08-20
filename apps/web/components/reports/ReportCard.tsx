@@ -6,7 +6,7 @@ import type { ReportDefinition } from "@/lib/reports-types";
 import ReportResult from "@/components/reports/ReportResult";
 
 const DATA_SOURCE_STYLES: Record<string, string> = {
-  "Account data": "border-blue-200 bg-blue-50 text-blue-700",
+  "Account data": "border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] text-[color:var(--posh-primary)]",
   "Live feed": "border-emerald-200 bg-emerald-50 text-emerald-700",
   "Historical data": "border-amber-200 bg-amber-50 text-amber-700",
   "AI insight": "border-purple-200 bg-purple-50 text-purple-700",
@@ -59,7 +59,7 @@ export default function ReportCard({ report }: Props) {
           type="button"
           onClick={handleGenerate}
           disabled={loading}
-          className="mt-1 rounded-lg bg-blue-700 px-3 py-2 text-center text-sm font-bold text-white transition-colors hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-1 rounded-lg bg-[color:var(--posh-primary)] px-3 py-2 text-center text-sm font-bold text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? "Generating..." : "Generate"}
         </button>
@@ -73,7 +73,7 @@ export default function ReportCard({ report }: Props) {
           >
             Generate
           </button>
-          <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-500">
+          <span className="shrink-0 rounded-full border border-slate-200 bg-[color:var(--posh-bg-card)] px-2 py-1 text-[10px] font-semibold text-slate-500">
             Coming soon
           </span>
         </div>

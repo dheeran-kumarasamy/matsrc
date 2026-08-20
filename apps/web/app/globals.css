@@ -42,6 +42,13 @@
     font-weight: 400;
     letter-spacing: 0.01em;
     -webkit-font-smoothing: antialiased;
+    /* posh-web-flair parity: the whole product (not just the marketing
+       homepage) now sits on the same warm dark editorial base surface, so
+       there is no visible seam between the home page and the authenticated
+       builder portal. Individual pages/components may still layer their
+       own --posh-* backgrounds on top (cards, panels, cream CTA band, …). */
+    background: var(--posh-bg);
+    color: var(--posh-fg);
   }
 
   /* Headings default to the editorial display face everywhere. */
@@ -53,10 +60,16 @@
 }
 
 @layer components {
-  /* ── Builder portal panels (mono surface) ──
-     Black-and-white only: white card, black hairline border, no colour. */
+  /* ── Builder portal panels ──
+     Ported to the posh-web-flair warm dark editorial surface (previously a
+     black-and-white mono card) so every authenticated page reads as part of
+     the same design system as the marketing homepage. Uses the shared
+     --posh-* tokens, not new colours, to keep a single source of truth. */
   .panel {
-    @apply rounded-2xl border border-black/10 bg-white shadow-sm;
+    @apply rounded-2xl border shadow-sm;
+    border-color: var(--posh-border);
+    background: var(--posh-bg-card);
+    color: var(--posh-fg);
   }
 
   /* ── Posh editorial section wrapper ── */
@@ -77,13 +90,15 @@
      The global `body` rule sets font-weight: 300, so nav weights must be
      declared explicitly for the panel to read boldly on every screen. */
   .posh-nav-eyebrow {
-    @apply text-[10px] font-bold uppercase tracking-[0.25em] text-black/50;
+    @apply text-[10px] font-bold uppercase tracking-[0.25em];
+    color: var(--posh-fg-muted);
   }
 
   .posh-nav-brandmark {
     font-family: 'Instrument Serif', Georgia, serif;
     font-weight: 600;
     letter-spacing: -0.01em;
+    color: var(--posh-fg);
   }
 
   /* ── Posh pill button (nav CTA) ── */
@@ -103,49 +118,56 @@
      The reports pages use the editorial display face for every heading and
      headline number, plus a wide-tracked uppercase "eyebrow" for labels —
      exactly like src/routes/reports.tsx in
-     github.com/dheeran-kumarasamy/posh-web-flair. Weights are pushed up a
-     step (semibold → bold) so the light builder surface reads as boldly as
-     the dark reference design. */
+     github.com/dheeran-kumarasamy/posh-web-flair. Now themed on the shared
+     warm dark --posh-* surface (previously a light mono surface) so the
+     reports pages match the rest of the portal and the marketing homepage. */
   .report-display {
     font-family: 'Instrument Serif', Georgia, serif;
     font-weight: 600;
     letter-spacing: -0.02em;
     line-height: 1.05;
+    color: var(--posh-fg);
   }
 
   .report-eyebrow {
-    @apply text-[10px] font-bold uppercase tracking-[0.25em] text-black/50;
+    @apply text-[10px] font-bold uppercase tracking-[0.25em];
+    color: var(--posh-fg-muted);
   }
 
   .report-label {
-    @apply text-[10px] font-bold uppercase tracking-[0.18em] text-black/60;
+    @apply text-[10px] font-bold uppercase tracking-[0.18em];
+    color: var(--posh-fg-muted);
   }
 
   /* Report body copy — Work Sans at a readable, non-light weight. */
   .report-body {
     font-family: 'Work Sans', ui-sans-serif, system-ui, sans-serif;
     font-weight: 500;
+    color: var(--posh-fg);
   }
 
   /* Table headers inside report surfaces. */
   .report-th {
-    @apply border-b border-black/10 pb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-black/60;
+    @apply border-b pb-3 text-[10px] font-bold uppercase tracking-[0.18em];
+    border-color: var(--posh-border);
+    color: var(--posh-fg-muted);
   }
 
-  /* ── Shared monochrome "posh" surface kit ──────────────────────────────
+  /* ── Shared "posh" surface kit ─────────────────────────────────────────
      Used by every authenticated page (purchase orders, sites, disputes,
-     cart, watchlist, sourcing, reports, …) so the portal reads as ONE
-     design: white paper, black ink, editorial display headings and
-     wide-tracked uppercase labels. The marketing homepage keeps its own
-     warm palette (--posh-* tokens) and is deliberately not affected. */
+     cart, watchlist, sourcing, reports, …) so the whole portal reads as ONE
+     design system with the marketing homepage: warm dark paper, cream ink,
+     editorial display headings and wide-tracked uppercase labels, driven by
+     the shared --posh-* tokens (single source of truth, no new colours). */
 
-  /* Page title — big editorial serif, always black. */
+  /* Page title — big editorial serif. */
   .posh-page-title {
     font-family: 'Instrument Serif', Georgia, serif;
     font-weight: 600;
     letter-spacing: -0.02em;
     line-height: 1.05;
-    @apply text-3xl text-black md:text-4xl;
+    @apply text-3xl md:text-4xl;
+    color: var(--posh-fg);
   }
 
   /* Section / card title — one step down from the page title. */
@@ -153,83 +175,130 @@
     font-family: 'Instrument Serif', Georgia, serif;
     font-weight: 600;
     letter-spacing: -0.015em;
-    @apply text-xl text-black;
+    @apply text-xl;
+    color: var(--posh-fg);
   }
 
   /* Wide-tracked uppercase eyebrow above a title. */
   .posh-eyebrow {
-    @apply text-[10px] font-bold uppercase tracking-[0.25em] text-black/50;
+    @apply text-[10px] font-bold uppercase tracking-[0.25em];
+    color: var(--posh-fg-muted);
   }
 
   /* Field / stat label. */
   .posh-label {
-    @apply text-[10px] font-bold uppercase tracking-[0.18em] text-black/60;
+    @apply text-[10px] font-bold uppercase tracking-[0.18em];
+    color: var(--posh-fg-muted);
   }
 
   /* Standfirst / supporting copy under a title. */
   .posh-subtitle {
-    @apply text-sm font-medium text-black/60;
+    @apply text-sm font-medium;
+    color: var(--posh-fg-muted);
   }
 
-  /* Body copy inside mono surfaces — solid, never light. */
+  /* Body copy inside posh surfaces — solid, never light. */
   .posh-body {
     font-family: 'Work Sans', ui-sans-serif, system-ui, sans-serif;
     font-weight: 500;
-    @apply text-black;
+    color: var(--posh-fg);
   }
 
   /* Card surface. */
   .posh-card {
-    @apply rounded-2xl border border-black/10 bg-white shadow-sm;
+    @apply rounded-2xl border shadow-sm;
+    border-color: var(--posh-border);
+    background: var(--posh-bg-card);
+    color: var(--posh-fg);
   }
 
   /* Filter / status pill — inactive. */
   .posh-chip {
-    @apply rounded-full border border-black/15 bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-black/60 transition-colors hover:border-black hover:text-black;
+    @apply rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] transition-colors;
+    border-color: var(--posh-border);
+    background: var(--posh-bg-card);
+    color: var(--posh-fg-muted);
+  }
+  .posh-chip:hover {
+    border-color: var(--posh-primary);
+    color: var(--posh-fg);
   }
 
   /* Filter pill — active/selected. */
   .posh-chip-active {
-    @apply rounded-full border border-black bg-black px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-white;
+    @apply rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-[0.12em];
+    border-color: var(--posh-primary);
+    background: var(--posh-primary);
+    color: var(--posh-primary-fg);
   }
 
-  /* Status badge (mono — meaning carried by the label, not colour). */
+  /* Status badge (meaning carried by the label, not colour). */
   .posh-status {
-    @apply rounded-full border border-black/20 bg-black/[0.04] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-black;
+    @apply rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em];
+    border-color: var(--posh-border);
+    background: rgba(240,232,216,0.06);
+    color: var(--posh-fg);
   }
 
   .posh-status-strong {
-    @apply rounded-full border border-black bg-black px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white;
+    @apply rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em];
+    border-color: var(--posh-primary);
+    background: var(--posh-primary);
+    color: var(--posh-primary-fg);
   }
 
   /* Primary action. */
   .posh-btn {
-    @apply rounded-full bg-black px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-black/85 disabled:opacity-40;
+    @apply rounded-full px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition-colors disabled:opacity-40;
+    background: var(--posh-primary);
+    color: var(--posh-primary-fg);
+  }
+  .posh-btn:hover {
+    opacity: 0.85;
   }
 
   /* Secondary action. */
   .posh-btn-ghost {
-    @apply rounded-full border border-black/20 bg-white px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-black transition-colors hover:border-black disabled:opacity-40;
+    @apply rounded-full border px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition-colors disabled:opacity-40;
+    border-color: var(--posh-border);
+    background: rgba(240,232,216,0.06);
+    color: var(--posh-fg);
+  }
+  .posh-btn-ghost:hover {
+    border-color: var(--posh-primary);
   }
 
   /* Inline text link. */
   .posh-link {
-    @apply text-xs font-bold uppercase tracking-[0.14em] text-black underline underline-offset-4 hover:opacity-70;
+    @apply text-xs font-bold uppercase tracking-[0.14em] underline underline-offset-4 hover:opacity-70;
+    color: var(--posh-fg);
   }
 
   /* Form control. */
   .posh-input {
-    @apply w-full rounded-xl border border-black/15 bg-white px-3 py-2.5 text-sm font-medium text-black placeholder:text-black/35 focus:border-black focus:outline-none focus:ring-1 focus:ring-black;
+    @apply w-full rounded-xl border px-3 py-2.5 text-sm font-medium outline-none focus:ring-1;
+    border-color: var(--posh-border);
+    background: rgba(240,232,216,0.06);
+    color: var(--posh-fg);
+  }
+  .posh-input::placeholder {
+    color: var(--posh-fg-muted);
+  }
+  .posh-input:focus {
+    border-color: var(--posh-primary);
   }
 
   /* Table header cell. */
   .posh-th {
-    @apply border-b border-black/10 pb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-black/60;
+    @apply border-b pb-3 text-[10px] font-bold uppercase tracking-[0.18em];
+    border-color: var(--posh-border);
+    color: var(--posh-fg-muted);
   }
 
   /* Muted note / empty-state copy. */
   .posh-muted {
-    @apply text-sm font-medium text-black/45;
+    @apply text-sm font-medium;
+    color: var(--posh-fg-muted);
   }
 
   /* ── Posh frosted nav ── */

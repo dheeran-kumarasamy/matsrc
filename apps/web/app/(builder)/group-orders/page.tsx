@@ -108,7 +108,7 @@ export default function GroupOrdersPage() {
             Track your active Group &amp; Save pools, savings so far, and time left before prices lock.
           </p>
         </div>
-        <Link href="/orders" className="text-xs font-semibold text-blue-700 hover:underline">
+        <Link href="/orders" className="text-xs font-semibold text-[color:var(--posh-primary)] hover:underline">
           ← Back to My Orders
         </Link>
       </div>
@@ -120,7 +120,7 @@ export default function GroupOrdersPage() {
       ) : pools.length === 0 ? (
         <div className="panel p-10 text-center">
           <p className="text-sm text-slate-400">You haven&apos;t joined any Group &amp; Save pools yet.</p>
-          <Link href="/checkout" className="mt-3 inline-block text-sm text-blue-700 hover:underline">
+          <Link href="/checkout" className="mt-3 inline-block text-sm text-[color:var(--posh-primary)] hover:underline">
             Go to checkout to join a pool →
           </Link>
         </div>
@@ -144,7 +144,7 @@ export default function GroupOrdersPage() {
                   <span
                     className={`rounded-full px-3 py-1 text-xs font-semibold ${
                       isLocked
-                        ? "bg-blue-100 text-blue-700"
+                        ? "bg-[rgba(240,232,216,0.08)] text-[color:var(--posh-primary)]"
                         : "bg-emerald-100 text-emerald-700"
                     }`}
                   >
@@ -189,7 +189,7 @@ export default function GroupOrdersPage() {
                 ) : null}
 
                 {isLocked ? (
-                  <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                  <p className="rounded-lg border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] px-3 py-2 text-xs text-[color:var(--posh-fg)]">
                     This pool has been locked and can no longer be modified. Your order will now proceed through
                     standard fulfilment.
                   </p>
@@ -197,7 +197,7 @@ export default function GroupOrdersPage() {
                   <button
                     onClick={() => handleOptOut(pool.id)}
                     disabled={optOutLoadingId === pool.id}
-                    className="w-full rounded-lg border border-rose-200 bg-white py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-50 disabled:opacity-50"
+                    className="w-full rounded-lg border border-rose-200 bg-[color:var(--posh-bg-card)] py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-50 disabled:opacity-50"
                   >
                     {optOutLoadingId === pool.id ? "Opting out..." : "Opt out of this pool"}
                   </button>

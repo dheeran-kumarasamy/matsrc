@@ -4,12 +4,12 @@ type Status = "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DEL
 // is expressed with contrast rather than hue: early states are faint chips,
 // in-transit states are outlined, and terminal states are solid black.
 const colours: Record<Status, string> = {
-  PLACED: "bg-black/[0.04] text-black/60 border-black/15",
-  PROCESSING: "bg-white text-black border-black/25",
-  DISPATCHED: "bg-white text-black border-black/50",
-  OUT_FOR_DELIVERY: "bg-white text-black border-black",
-  DELIVERED: "bg-black text-white border-black",
-  CANCELLED: "bg-white text-black/50 border-black/20 line-through",
+  PLACED: "bg-[rgba(240,232,216,0.04)] text-[color:var(--posh-fg-muted)] border-[color:var(--posh-border)]",
+  PROCESSING: "bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)] border-[color:var(--posh-border)]",
+  DISPATCHED: "bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)] border-[color:var(--posh-border)]",
+  OUT_FOR_DELIVERY: "bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)] border-[color:var(--posh-primary)]",
+  DELIVERED: "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] border-[color:var(--posh-primary)]",
+  CANCELLED: "bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg-muted)] border-[color:var(--posh-border)] line-through",
 };
 
 const labels: Record<Status, string> = {

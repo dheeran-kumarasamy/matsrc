@@ -37,7 +37,7 @@ export default function AddToCartButton({ productId }: { productId: string }) {
       <button
         onClick={() => void handleAdd()}
         disabled={loading}
-        className={`w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-all ${added ? "bg-green-500 text-white" : "bg-blue-700 hover:bg-blue-800 text-white"} disabled:opacity-50`}
+        className={`w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-all ${added ? "bg-green-500 text-[color:var(--posh-primary-fg)]" : "bg-[color:var(--posh-primary)] hover:opacity-85 text-[color:var(--posh-primary-fg)]"} disabled:opacity-50`}
       >
         <ShoppingCart size={16} />
         {added ? "Added to Cart ✓" : loading ? "Adding..." : "Add to Cart"}

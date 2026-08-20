@@ -112,7 +112,7 @@ export default function PoshMaterialConsumptionConsole() {
     // Fills the remaining viewport below the builder sticky header.
     // calc: top-4 padding (1rem) + ~68px sticky header + ~16px gap + bottom padding ≈ 7.5rem
     <div
-      className="report-body flex overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+      className="report-body flex overflow-hidden rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] shadow-sm"
       style={{ height: "calc(100vh - 7.5rem)" }}
     >
       <ReportSidebar />
@@ -148,7 +148,7 @@ type MainPanelProps = {
 function MainPanel({ loading, error, rows, totalOrders, lastOrdered, chartRows, maxQty, topCategories, staleCount }: MainPanelProps) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-slate-50">
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
+      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-[color:var(--posh-bg-card)] px-6 py-4">
         <div>
           <p className="report-eyebrow">Account Data · Material Consumption</p>
           <h1 className="report-display mt-1 text-3xl text-slate-900">Material Consumption Report</h1>
@@ -193,7 +193,7 @@ function MainPanel({ loading, error, rows, totalOrders, lastOrdered, chartRows, 
 
 function DataTable({ rows }: { rows: MaterialConsumptionRow[] }) {
   return (
-    <section className="overflow-hidden rounded border border-slate-200 bg-white">
+    <section className="overflow-hidden rounded border border-slate-200 bg-[color:var(--posh-bg-card)]">
       <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
         <h2 className="report-eyebrow">Consumption Log</h2>
         <span className="font-mono text-[9px] font-semibold text-slate-400">{rows.length}&nbsp;material{rows.length !== 1 ? "s" : ""}</span>
@@ -203,7 +203,7 @@ function DataTable({ rows }: { rows: MaterialConsumptionRow[] }) {
       ) : (
         <div className="max-h-[calc(100vh-28rem)] overflow-x-auto overflow-y-auto">
           <table className="w-full text-left">
-            <thead className="sticky top-0 bg-white">
+            <thead className="sticky top-0 bg-[color:var(--posh-bg-card)]">
               <tr className="border-b border-slate-100">
                 {["Material", "Category", "Qty Ordered", "Orders", "Last Ordered"].map((h) => (
                   <th key={h} className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{h}</th>
@@ -253,7 +253,7 @@ function RightPanel({ chartRows, maxQty, topCategories, staleCount }: {
   return (
     <div className="flex flex-col gap-4">
       {/* CSS-only bar chart */}
-      <section className="rounded border border-slate-200 bg-white p-5">
+      <section className="rounded border border-slate-200 bg-[color:var(--posh-bg-card)] p-5">
         <div className="mb-4 flex items-end justify-between">
           <div>
             <p className="report-eyebrow">Volume Distribution</p>
@@ -283,7 +283,7 @@ function RightPanel({ chartRows, maxQty, topCategories, staleCount }: {
         )}
       </section>
       {/* Dark insights panel — mirrors "Active Alerts" from reference design */}
-      <section className="rounded bg-slate-900 p-5 text-white">
+      <section className="rounded bg-slate-900 p-5 text-[color:var(--posh-primary-fg)]">
         <div className="mb-4 flex items-center gap-2.5">
           <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
           <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-300">Consumption Insights</h2>
@@ -293,7 +293,7 @@ function RightPanel({ chartRows, maxQty, topCategories, staleCount }: {
             <p className="text-[10px] text-slate-500">Place your first order to see insights here.</p>
           ) : (
             topCategories.map(([cat, { count, qty }]) => (
-              <div key={cat} className="border-l border-white/20 pl-4">
+              <div key={cat} className="border-l border-[color:var(--posh-border)] pl-4">
                 <p className="text-sm font-bold text-slate-100">{cat}</p>
                 <p className="mt-0.5 font-mono text-[10px] text-slate-400">
                   {count}&nbsp;material{count !== 1 ? "s" : ""}&nbsp;·&nbsp;{qty.toLocaleString("en-IN")}&nbsp;units total
@@ -323,10 +323,10 @@ function ReportSidebar() {
       {/* Sidebar header */}
       <div className="flex h-14 shrink-0 items-center border-b border-slate-800 px-5">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-5 w-5 items-center justify-center rounded bg-white">
+          <span className="flex h-5 w-5 items-center justify-center rounded bg-[color:var(--posh-bg-card)]">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
           </span>
-          <span className="report-display text-xl text-white">Reports</span>
+          <span className="report-display text-xl text-[color:var(--posh-primary-fg)]">Reports</span>
         </div>
       </div>
 
@@ -344,7 +344,7 @@ function ReportSidebar() {
                   <button
                     key={item.id}
                     aria-current="page"
-                    className="flex w-full items-center gap-3 rounded-lg bg-slate-800 px-3 py-2.5 text-[13px] font-bold tracking-[0.01em] text-white ring-1 ring-inset ring-slate-700"
+                    className="flex w-full items-center gap-3 rounded-lg bg-slate-800 px-3 py-2.5 text-[13px] font-bold tracking-[0.01em] text-[color:var(--posh-primary-fg)] ring-1 ring-inset ring-slate-700"
                   >
                     <span className="h-3 w-3 shrink-0 rounded-sm bg-amber-400" />
                     {item.label}
@@ -355,7 +355,7 @@ function ReportSidebar() {
                 <Link
                   key={item.id}
                   href={item.href!}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-semibold tracking-[0.01em] text-slate-400 transition-colors hover:bg-slate-800/60 hover:font-bold hover:text-white"
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-semibold tracking-[0.01em] text-slate-400 transition-colors hover:bg-slate-800/60 hover:font-bold hover:text-[color:var(--posh-primary-fg)]"
                 >
                   <span className="h-3 w-3 shrink-0 rounded-sm border border-slate-700" />
                   {item.label}
@@ -370,7 +370,7 @@ function ReportSidebar() {
       <div className="shrink-0 border-t border-slate-800 p-4">
         <Link
           href="/reports"
-          className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400 transition-colors hover:text-white"
+          className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400 transition-colors hover:text-[color:var(--posh-primary-fg)]"
         >
           ← All Reports
         </Link>
@@ -402,7 +402,7 @@ function KpiCard({
       : "text-slate-400";
 
   return (
-    <div className="rounded border border-slate-200 bg-white p-4">
+    <div className="rounded border border-slate-200 bg-[color:var(--posh-bg-card)] p-4">
       <p className="report-eyebrow">
         {label}
       </p>

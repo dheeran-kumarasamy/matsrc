@@ -209,7 +209,7 @@ export default function SiteSelector({
             <button
               type="button"
               onClick={handleUseMyLocation}
-              className="mb-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              className="mb-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-[color:var(--posh-bg-card)] px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
             >
               <MapPin size={12} /> Use my current location
             </button>
@@ -231,7 +231,7 @@ export default function SiteSelector({
             type="button"
             onClick={() => void handleCreateSite()}
             disabled={saving}
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-700 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[color:var(--posh-primary)] py-2 text-xs font-semibold text-[color:var(--posh-primary-fg)] hover:opacity-85 disabled:opacity-50"
           >
             <Plus size={14} /> {saving ? "Creating…" : "Create site & tag order"}
           </button>

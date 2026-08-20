@@ -109,7 +109,10 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       </header>
 
       {order.status === "PROCESSING" ? (
-        <div className="rounded-2xl border border-black/15 bg-black/[0.03] px-4 py-3 text-sm font-medium text-black/70">
+        <div
+          className="rounded-2xl border px-4 py-3 text-sm font-medium"
+          style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.04)", color: "var(--posh-fg-muted)" }}
+        >
           Supplier confirmed this enquiry. WhatsApp and in-app updates will continue as the order moves forward.
         </div>
       ) : null}
@@ -123,21 +126,27 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       ) : null}
 
       {order.status === "CANCELLED" ? (
-        <div className="rounded-2xl border border-black bg-white px-4 py-3 text-sm font-bold text-black">
+        <div
+          className="rounded-2xl border px-4 py-3 text-sm font-bold"
+          style={{ borderColor: "var(--posh-primary)", background: "var(--posh-bg-card)", color: "var(--posh-fg)" }}
+        >
           Supplier declined this enquiry. You can review the details and place a fresh order if needed.
         </div>
       ) : null}
 
       {order.isAggregated ? (
-        <div className="rounded-2xl border border-black/15 bg-black/[0.03] px-4 py-3 text-sm text-black">
+        <div
+          className="rounded-2xl border px-4 py-3 text-sm"
+          style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.04)", color: "var(--posh-fg)" }}
+        >
           <p className="posh-card-title text-base">This is a Group &amp; Save order</p>
-          <p className="mt-1 font-medium text-black/70">
+          <p className="mt-1 font-medium" style={{ color: "var(--posh-fg-muted)" }}>
             {order.poolLocked
               ? `Pool locked${order.priceAfterAggregation ? ` at INR ${order.priceAfterAggregation.toLocaleString("en-IN")}/unit` : ""}. This order will now proceed through the standard fulfilment stages below.`
               : "This order is still pooling with other builders to unlock a better price. It will convert once the pool locks."}
           </p>
           {order.priceBeforeAggregation && order.priceAfterAggregation && order.priceBeforeAggregation > order.priceAfterAggregation ? (
-            <p className="mt-2 text-xs font-bold text-black">
+            <p className="mt-2 text-xs font-bold" style={{ color: "var(--posh-primary)" }}>
               You saved INR {(order.priceBeforeAggregation - order.priceAfterAggregation).toLocaleString("en-IN")}/unit
             </p>
           ) : null}
@@ -151,10 +160,10 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           <h2 className="posh-card-title">Purchase Order</h2>
           {order.purchaseOrder ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-black/70">
+              <p className="text-sm font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
                 {order.purchaseOrder.poNumber}
                 {order.purchaseOrder.version > 1 ? ` (v${order.purchaseOrder.version})` : ""} ·{" "}
-                <span className="font-bold text-black">{order.purchaseOrder.status}</span>
+                <span className="font-bold" style={{ color: "var(--posh-fg)" }}>{order.purchaseOrder.status}</span>
               </p>
               <Link href={`/purchase-orders/${order.purchaseOrder.id}`} className="posh-btn-ghost">
                 View Purchase Order
@@ -172,22 +181,25 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             <h2 className="posh-card-title">Enquiry items</h2>
             <p className="posh-subtitle mt-1">This order starts as a supplier enquiry and becomes payable after supplier confirmation.</p>
           </div>
-          <div className="divide-y divide-black/10 rounded-xl border border-black/10">
+          <div className="divide-y divide-[color:var(--posh-border)] rounded-xl border" style={{ borderColor: "var(--posh-border)" }}>
             {order.items.map((item) => (
               <div key={item.id} className="flex items-center justify-between px-4 py-3 text-sm">
                 <div>
-                  <p className="font-bold text-black">{item.name}</p>
+                  <p className="font-bold" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
                   <p className="posh-label mt-1">
                     {item.quantity} {item.unit} · INR {item.unitPrice.toLocaleString("en-IN")}/unit
                   </p>
                 </div>
-                <p className="font-bold text-black">INR {(item.quantity * item.unitPrice).toLocaleString("en-IN")}</p>
+                <p className="font-bold" style={{ color: "var(--posh-fg)" }}>INR {(item.quantity * item.unitPrice).toLocaleString("en-IN")}</p>
               </div>
             ))}
           </div>
-          <div className="flex items-center justify-between rounded-xl border border-black/10 bg-black/[0.03] px-4 py-3 text-sm">
+          <div
+            className="flex items-center justify-between rounded-xl border px-4 py-3 text-sm"
+            style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.04)" }}
+          >
             <span className="posh-label">Total</span>
-            <span className="text-base font-bold text-black">INR {order.total.toLocaleString("en-IN")}</span>
+            <span className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>INR {order.total.toLocaleString("en-IN")}</span>
           </div>
         </section>
 
@@ -209,8 +221,11 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                 ? "Supplier has confirmed this enquiry. The payment link is now enabled."
                 : "Waiting for supplier confirmation before payment becomes available."}
             </p>
-            <div className="rounded-xl border border-black/10 bg-black/[0.03] px-4 py-3 text-sm font-medium text-black/70">
-              Payment status: <span className="font-bold text-black">{order.paymentStatus}</span>
+            <div
+              className="rounded-xl border px-4 py-3 text-sm font-medium"
+              style={{ borderColor: "var(--posh-border)", background: "rgba(240,232,216,0.04)", color: "var(--posh-fg-muted)" }}
+            >
+              Payment status: <span className="font-bold" style={{ color: "var(--posh-fg)" }}>{order.paymentStatus}</span>
             </div>
             {order.paymentLinkAvailable ? (
               <Link href={order.paymentLink} className="posh-btn block text-center">

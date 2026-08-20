@@ -43,7 +43,7 @@ export default function BuilderLayout({
               type="search"
               name="q"
               placeholder="Search TMT bars, cement, bricks..."
-              className="w-full rounded-xl border border-black/15 bg-black/[0.03] px-4 py-2.5 text-sm font-medium text-black transition-colors placeholder:text-black/40 focus:border-black focus:bg-white focus:outline-none focus:ring-1 focus:ring-black"
+              className="posh-input"
             />
           </form>
           <div className="flex items-center gap-2 sm:gap-3">

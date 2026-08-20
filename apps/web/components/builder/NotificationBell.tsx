@@ -122,12 +122,12 @@ export default function NotificationBell() {
         onClick={() => setOpen((prev) => !prev)}
         aria-label="Notifications"
         aria-expanded={open}
-        className="relative flex items-center gap-2 rounded-full border border-black/15 bg-white px-3 py-1.5 text-sm font-bold text-black transition hover:border-black"
+        className="relative flex items-center gap-2 rounded-full border border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)] px-3 py-1.5 text-sm font-bold text-[color:var(--posh-fg)] transition hover:border-[color:var(--posh-primary)]"
       >
         <Bell size={16} />
         <span className="hidden sm:inline">Alerts</span>
         {unreadCount > 0 ? (
-          <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-black px-1 text-[11px] font-bold text-white">
+          <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-[color:var(--posh-primary)] px-1 text-[11px] font-bold text-[color:var(--posh-primary-fg)]">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         ) : null}
@@ -136,14 +136,14 @@ export default function NotificationBell() {
       {open ? (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[90vw] rounded-xl border border-slate-200 bg-white shadow-lg">
+          <div className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[90vw] rounded-xl border border-slate-200 bg-[color:var(--posh-bg-card)] shadow-lg">
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
               <p className="text-sm font-bold text-slate-900">Alerts</p>
               {unreadCount > 0 ? (
                 <button
                   type="button"
                   onClick={handleMarkAllRead}
-                  className="text-xs font-bold text-black hover:underline"
+                  className="text-xs font-bold text-[color:var(--posh-fg)] hover:underline"
                 >
                   Mark all as read
                 </button>
@@ -154,7 +154,7 @@ export default function NotificationBell() {
               {loading ? (
                 <p className="px-4 py-6 text-center text-xs text-slate-400">Loading alerts…</p>
               ) : error ? (
-                <p className="px-4 py-6 text-center text-xs font-bold text-black">Could not load alerts.</p>
+                <p className="px-4 py-6 text-center text-xs font-bold text-[color:var(--posh-fg)]">Could not load alerts.</p>
               ) : items.length === 0 ? (
                 <div className="px-4 py-8 text-center">
                   <p className="text-sm text-slate-500">You&apos;re all caught up.</p>
@@ -170,13 +170,13 @@ export default function NotificationBell() {
                         type="button"
                         onClick={() => handleItemClick(item)}
                         className={`flex w-full gap-2.5 px-4 py-3 text-left transition hover:bg-slate-50 ${
-                          !item.read ? "bg-black/[0.04]" : ""
+                          !item.read ? "bg-[rgba(240,232,216,0.04)]" : ""
                         }`}
                       >
                         {/* Unread/read marker */}
                         <span
                           className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${
-                            item.read ? "bg-transparent" : "bg-black"
+                            item.read ? "bg-transparent" : "bg-[color:var(--posh-primary)]"
                           }`}
                           aria-hidden="true"
                         />

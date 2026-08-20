@@ -128,7 +128,7 @@ export default function TallySettingsPage() {
 
   return (
     <div className="report-body mx-auto max-w-3xl px-4 py-8">
-      <Link href="/reports/site-wise" className="text-[10px] font-bold uppercase tracking-[0.25em] text-blue-600 hover:underline">
+      <Link href="/reports/site-wise" className="text-[10px] font-bold uppercase tracking-[0.25em] text-[color:var(--posh-primary)] hover:underline">
         ← Back to Site-wise Report
       </Link>
       <h1 className="report-display mt-2 text-4xl text-slate-900 md:text-5xl">Tally Export</h1>
@@ -139,7 +139,7 @@ export default function TallySettingsPage() {
       </p>
 
       {/* Ledger mapping settings */}
-      <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mt-6 rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-6 shadow-sm">
         <h2 className="report-display mb-4 text-xl text-slate-900">Ledger Mapping</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -215,7 +215,7 @@ export default function TallySettingsPage() {
           <button
             onClick={handleSaveSettings}
             disabled={saving}
-            className="rounded-full bg-blue-700 px-5 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white transition-colors hover:bg-blue-800 disabled:opacity-50"
+            className="rounded-full bg-[color:var(--posh-primary)] px-5 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85 disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save Settings"}
           </button>
@@ -224,7 +224,7 @@ export default function TallySettingsPage() {
       </div>
 
       {/* Export */}
-      <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mt-6 rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-6 shadow-sm">
         <h2 className="report-display mb-4 text-xl text-slate-900">Generate Export</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
@@ -271,14 +271,14 @@ export default function TallySettingsPage() {
           <button
             onClick={handleCheck}
             disabled={checking}
-            className="rounded-full border border-slate-200 bg-white px-5 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-full border border-slate-200 bg-[color:var(--posh-bg-card)] px-5 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
           >
             {checking ? "Checking…" : "Validate Export"}
           </button>
           <button
             onClick={handleDownload}
             disabled={!dryRun || dryRun.blockers.length > 0 || dryRun.voucherCount === 0}
-            className="rounded-full bg-blue-700 px-5 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white transition-colors hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full bg-[color:var(--posh-primary)] px-5 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Download Tally XML
           </button>
@@ -310,7 +310,7 @@ export default function TallySettingsPage() {
         ) : null}
       </div>
 
-      <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-500">
+      <div className="mt-6 rounded-xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-4 text-xs text-slate-500">
         <h2 className="mb-2 text-sm font-semibold text-slate-900">How to import into TallyPrime</h2>
         <ol className="list-inside list-decimal space-y-1">
           <li>Open TallyPrime and load your company.</li>

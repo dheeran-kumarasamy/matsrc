@@ -93,7 +93,7 @@ export default function SiteWiseReportPage() {
         <div>
           <Link
             href="/reports"
-            className="text-[10px] font-bold uppercase tracking-[0.25em] text-blue-600 hover:underline"
+            className="text-[10px] font-bold uppercase tracking-[0.25em] text-[color:var(--posh-primary)] hover:underline"
           >
             ← Back to Reports
           </Link>
@@ -108,7 +108,7 @@ export default function SiteWiseReportPage() {
       </div>
 
       {/* Filter bar */}
-      <div className="mb-6 grid grid-cols-2 gap-3 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-3 lg:grid-cols-6">
+      <div className="mb-6 grid grid-cols-2 gap-3 rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-5 shadow-sm sm:grid-cols-3 lg:grid-cols-6">
         <div>
           <label className="report-label mb-1.5 block">Site</label>
           <select
@@ -213,13 +213,13 @@ export default function SiteWiseReportPage() {
       <div className="mb-6 flex flex-wrap gap-2">
         <a
           href={exportUrl("csv")}
-          className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+          className="rounded-full border border-slate-200 bg-[color:var(--posh-bg-card)] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
         >
           Export CSV
         </a>
         <a
           href={exportUrl("xlsx")}
-          className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+          className="rounded-full border border-slate-200 bg-[color:var(--posh-bg-card)] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
         >
           Export XLSX
         </a>
@@ -227,20 +227,20 @@ export default function SiteWiseReportPage() {
           href={exportUrl("pdf")}
           target="_blank"
           rel="noreferrer"
-          className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+          className="rounded-full border border-slate-200 bg-[color:var(--posh-bg-card)] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
         >
           Export PDF
         </a>
         <Link
           href="/reports/site-wise/tally"
-          className="rounded-full border border-blue-300 bg-blue-50 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-700 transition-colors hover:bg-blue-100"
+          className="rounded-full border border-[color:var(--posh-border)] bg-[rgba(240,232,216,0.04)] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--posh-primary)] transition-colors hover:bg-[rgba(240,232,216,0.08)]"
         >
           Export to Tally
         </Link>
       </div>
 
       {loading ? (
-        <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-500 shadow-sm">
+        <div className="rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-10 text-center text-sm font-semibold text-slate-500 shadow-sm">
           Loading report…
         </div>
       ) : error ? (
@@ -248,24 +248,24 @@ export default function SiteWiseReportPage() {
           {error}
         </div>
       ) : !summary || summary.itemCount === 0 ? (
-        <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-500 shadow-sm">
+        <div className="rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-10 text-center text-sm font-semibold text-slate-500 shadow-sm">
           No purchases found for the selected filters.
         </div>
       ) : (
         <>
           {/* KPI cards */}
           <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-6 shadow-sm">
               <div className="report-eyebrow">Total Spend</div>
               <div className="report-display mt-3 text-3xl text-slate-900">
                 {formatCurrency(summary.totalSpend)}
               </div>
             </div>
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-6 shadow-sm">
               <div className="report-eyebrow">Orders</div>
               <div className="report-display mt-3 text-3xl text-slate-900">{summary.orderCount}</div>
             </div>
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-6 shadow-sm">
               <div className="report-eyebrow">Line Items</div>
               <div className="report-display mt-3 text-3xl text-slate-900">{summary.itemCount}</div>
             </div>
@@ -273,7 +273,7 @@ export default function SiteWiseReportPage() {
 
           {/* Per-site subtotals, only meaningful for "all sites" view */}
           {siteId === "all" && summary.spendBySite.length > 0 ? (
-            <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-6 rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-6 shadow-sm">
               <h2 className="report-display mb-4 text-xl text-slate-900">Spend by Site</h2>
               <div className="space-y-2.5">
                 {summary.spendBySite.map((s) => (
@@ -294,52 +294,52 @@ export default function SiteWiseReportPage() {
 
           {/* Charts */}
           <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-6 shadow-sm">
               <h2 className="report-display mb-4 text-xl text-slate-900">Spend by Supplier</h2>
               <ResponsiveContainer width="100%" height={240}>
                 {/* Monochrome chart palette — bars, lines, axes and ticks are
                     all black to match the site-wide black & white design. */}
                 <BarChart data={summary.spendBySupplier.slice(0, 8)}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#00000012" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--posh-border)" />
                   <XAxis
                     dataKey="supplierName"
-                    tick={{ fontSize: 10, fill: "#000000" }}
-                    stroke="#000000"
+                    tick={{ fontSize: 10, fill: "var(--posh-fg-muted)" }}
+                    stroke="var(--posh-primary)"
                     interval={0}
                     angle={-20}
                     textAnchor="end"
                     height={60}
                   />
-                  <YAxis tick={{ fontSize: 10, fill: "#000000" }} stroke="#000000" />
+                  <YAxis tick={{ fontSize: 10, fill: "var(--posh-fg-muted)" }} stroke="var(--posh-primary)" />
                   <Tooltip
                     formatter={(v: number) => formatCurrency(v)}
-                    labelStyle={{ color: "#000000" }}
-                    itemStyle={{ color: "#000000" }}
+                    labelStyle={{ color: "var(--posh-fg-muted)" }}
+                    itemStyle={{ color: "var(--posh-fg-muted)" }}
                   />
-                  <Bar dataKey="spend" fill="#000000" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="spend" fill="var(--posh-primary)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-6 shadow-sm">
               <h2 className="report-display mb-4 text-xl text-slate-900">Spend Over Time</h2>
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={summary.spendOverTime}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#00000012" />
-                  <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#000000" }} stroke="#000000" />
-                  <YAxis tick={{ fontSize: 10, fill: "#000000" }} stroke="#000000" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--posh-border)" />
+                  <XAxis dataKey="month" tick={{ fontSize: 10, fill: "var(--posh-fg-muted)" }} stroke="var(--posh-primary)" />
+                  <YAxis tick={{ fontSize: 10, fill: "var(--posh-fg-muted)" }} stroke="var(--posh-primary)" />
                   <Tooltip
                     formatter={(v: number) => formatCurrency(v)}
-                    labelStyle={{ color: "#000000" }}
-                    itemStyle={{ color: "#000000" }}
+                    labelStyle={{ color: "var(--posh-fg-muted)" }}
+                    itemStyle={{ color: "var(--posh-fg-muted)" }}
                   />
-                  <Line type="monotone" dataKey="spend" stroke="#000000" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="spend" stroke="var(--posh-primary)" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           </div>
 
           {/* Detail table */}
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-3xl border border-slate-200 bg-[color:var(--posh-bg-card)] p-6 shadow-sm">
             <h2 className="report-display mb-4 text-xl text-slate-900">Purchase Detail</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -367,7 +367,7 @@ export default function SiteWiseReportPage() {
                       <td className="py-3 pr-3">
                         <Link
                           href={`/orders/${row.orderId}`}
-                          className="font-semibold text-blue-600 hover:underline"
+                          className="font-semibold text-[color:var(--posh-primary)] hover:underline"
                         >
                           {row.orderId.slice(0, 8)}
                         </Link>

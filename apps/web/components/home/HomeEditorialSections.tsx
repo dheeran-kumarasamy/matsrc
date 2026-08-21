@@ -1,22 +1,5 @@
 import Link from "next/link";
-
-const CHAPTERS = [
-  {
-    n: "01",
-    title: "Discover",
-    body: "A living index of material prices, updated through the day from suppliers who actually deliver.",
-  },
-  {
-    n: "02",
-    title: "Decide",
-    body: "Compare landed cost, lead time and grade side by side. No calls, no chasing, no guesswork.",
-  },
-  {
-    n: "03",
-    title: "Deliver",
-    body: "Place the order and follow it to site — dispatch, weighbridge, gate entry, all in one thread.",
-  },
-];
+import WhyChooseUs from "@/components/home/WhyChooseUs";
 
 const STATS: [string, string][] = [
   ["1,200+", "Verified suppliers"],
@@ -29,39 +12,10 @@ const STATS: [string, string][] = [
 export default function HomeEditorialSections() {
   return (
     <>
-      {/* ── Three editorial chapters ── */}
-      <section className="border-y" style={{ borderColor: "var(--posh-border)" }}>
-        <div className="mx-auto max-w-7xl">
-          <div
-            className="grid divide-y md:grid-cols-3 md:divide-x md:divide-y-0"
-            style={{ borderColor: "var(--posh-border)" }}
-          >
-            {CHAPTERS.map((c) => (
-              <article
-                key={c.n}
-                className="group p-10 transition-colors duration-500 hover:bg-[var(--posh-bg-card)] md:p-12"
-                style={{ background: "var(--posh-bg)" }}
-              >
-                <span
-                  className="text-xs tracking-[0.3em] uppercase"
-                  style={{ color: "var(--posh-primary)" }}
-                >
-                  {c.n}
-                </span>
-                <h3
-                  className="posh-heading mt-8 text-3xl"
-                  style={{ color: "var(--posh-fg)" }}
-                >
-                  {c.title}
-                </h3>
-                <p className="mt-4 leading-relaxed" style={{ color: "var(--posh-fg-muted)" }}>
-                  {c.body}
-                </p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* ── Why choose us (Buyer/Supplier toggle) ── replaces the previous
+          static "Discover / Decide / Deliver" three-chapter section. See
+          WhyChooseUs.tsx for the client-side role toggle. */}
+      <WhyChooseUs />
 
       {/* ── Editorial split — stats ── */}
       <section className="mx-auto max-w-7xl px-6 py-28 md:px-10 md:py-40">

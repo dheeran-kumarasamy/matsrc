@@ -1,4 +1,3 @@
-import PriceTicker from "@/components/home/PriceTicker";
 import SiteHeader from "@/components/home/SiteHeader";
 import HeroSection from "@/components/home/HeroSection";
 import TrustBanner from "@/components/home/TrustBanner";
@@ -15,22 +14,18 @@ export default function HomePage() {
       className="theme-home overflow-x-hidden"
       style={{ background: "var(--posh-bg)", color: "var(--posh-fg)" }}
     >
-      {/* Fixed frosted nav — overlays the hero */}
+      {/* Fixed frosted nav — overlays the hero. The Live Price Scroller now
+          lives here (beside the logo, see SiteHeader.tsx), replacing the
+          old full-width price ticker band that used to sit below the hero —
+          it is intentionally not duplicated in both places. */}
       <SiteHeader />
 
-      {/* Minimalist centered hero with search + high-contrast CTA */}
+      {/* Minimalist centered hero with search + Browse Material action */}
       <HeroSection />
 
       {/* B2B trust banner — Verified Suppliers / Real-time Pricing / Secure
           B2B Transactions, directly below the hero. */}
       <TrustBanner />
-
-      {/* FR-24: Live price ticker for top 10 materials.
-          Positioned per the Lovable design: a static, full-bleed band
-          directly BELOW the hero/trust banner and ABOVE the rest of the
-          page content (previously it sat above the header, which did not
-          match). */}
-      <PriceTicker />
 
       {/* Categories from real API data */}
       <CategoryGrid />

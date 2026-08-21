@@ -23,6 +23,7 @@ import { builderApiGet } from "@/lib/api";
 import { REPORT_DEFINITIONS } from "@/lib/reports-definitions";
 import type { ReportDefinition } from "@/lib/reports-types";
 import ReportResult from "@/components/reports/ReportResult";
+import { recordReportUsage } from "@/lib/report-usage";
 
 // Report ids that have no backing data source / are intentionally not shown.
 const EXCLUDED_REPORT_IDS = new Set(["ai-buy-recommendation"]);
@@ -64,9 +65,12 @@ export default function ReportsExplorer() {
     return () => window.removeEventListener("keydown", onKey);
   }, [openId, close]);
 
-  // Fetch the report's real data whenever an overlay is opened.
+  // Fetch the report's real data whenever an overlay is opened. Also
+  // records this as a real "report opened" event (see lib/report-usage.ts)
+  // so the dashboard's Frequently Used Reports panel reflects actual usage.
   useEffect(() => {
     if (!openId) return;
+    recordReportUsage(openId);
     let cancelled = false;
     setLoading(true);
     setError(false);

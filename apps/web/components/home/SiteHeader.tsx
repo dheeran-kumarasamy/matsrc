@@ -17,6 +17,7 @@ import {
   SheetTitle,
   SheetClose,
 } from "@/components/ui/sheet";
+import LivePriceScroller from "@/components/home/LivePriceScroller";
 
 const NAV_LINKS = [{ href: "/products", label: "Browse Materials" }];
 
@@ -44,51 +45,15 @@ export default function SiteHeader() {
           Buildohub
         </Link>
 
-        {/* Desktop search — ports the Lovable reference design's header
-            search bar (previously missing here). Submits a plain GET form
-            to the existing /products?q= search, the same deep-link pattern
-            already used by the builder portal's persistent header search
-            (see app/(builder)/layout.tsx), so no new search API is needed. */}
-        <form
-          action="/products"
-          method="GET"
-          role="search"
-          className="relative hidden flex-1 md:block"
-        >
-          <Search
-            aria-hidden
-            className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2"
-            style={{ color: "var(--posh-fg-muted)" }}
-          />
-          <input
-            type="search"
-            name="q"
-            aria-label="Search materials, suppliers or grades"
-            placeholder="Search cement, TMT bars, aggregates, suppliers…"
-            className="w-full rounded-full border py-2.5 pl-11 pr-4 text-sm outline-none backdrop-blur-md transition-colors"
-            style={{
-              borderColor: "var(--posh-border)",
-              background: "rgba(var(--posh-wash-rgb),0.06)",
-              color: "var(--posh-fg)",
-            }}
-          />
-        </form>
+        {/* Live Price Scroller — replaces the old header search bar and
+            Browse Materials link in this position (see LivePriceScroller.tsx).
+            The search bar and Browse Material action now live in the hero
+            below instead, so they are not duplicated here. */}
+        <LivePriceScroller />
 
-        {/* Desktop nav */}
+        {/* Desktop nav — session-aware CTA only; Browse Materials moved
+            into the hero (search row) so it isn't duplicated in the header. */}
         <nav className="ml-auto hidden items-center gap-6 md:flex">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-sm transition-colors"
-              style={{ color: "var(--posh-fg-muted)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--posh-fg)")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--posh-fg-muted)")}
-            >
-              {link.label}
-            </Link>
-          ))}
-
           {isLoading ? (
             <div
               className="h-9 w-32 animate-pulse rounded-full"

@@ -5,13 +5,16 @@ export const dynamic = "force-dynamic";
 const NO_STORE_CACHE_CONTROL = "no-store, no-cache, must-revalidate, proxy-revalidate";
 
 // P0 fix (Phase 9): the homepage's "live price ticker" previously rendered a
-// fully hardcoded array of 10 fake material names/prices/% changes
-// (components/home/PriceTicker.tsx) — none of it backed by real data. This
-// route exposes real, currently-active listing prices (the same source of
-// truth the /products catalogue uses, via getSupplierListings()) so the
-// ticker shows truthful "From ₹…" prices instead. There is no day-over-day
-// price history feed wired into this app, so no `change`/`% today` figure is
-// fabricated here — the ticker intentionally omits that field now.
+// fully hardcoded array of 10 fake material names/prices/% changes — none of
+// it backed by real data. This route exposes real, currently-active listing
+// prices (the same source of truth the /products catalogue uses, via
+// getSupplierListings()) so the ticker shows truthful prices instead. There
+// is no day-over-day price history feed wired into this app, so no
+// `change`/`% today` figure is fabricated here — it's intentionally omitted.
+//
+// Now consumed by the header's Live Price Scroller
+// (components/home/LivePriceScroller.tsx), which sits beside the Buildohub
+// logo and replaced the old full-width ticker band below the hero.
 export async function GET() {
   try {
     const listings = await getSupplierListings();

@@ -59,6 +59,15 @@
     --posh-warning: #d97706;
     --posh-error:   #dc2626;
 
+    /* Olive green — Home hero accent (headline emphasis, Live Price
+       Scroller highlight, secondary "Browse Material" affordance).
+       Pairs with charcoal (--posh-fg) and white to form the Home page's
+       Charcoal / Olive / White palette, kept scoped to Home-specific
+       surfaces rather than replacing the app-wide orange brand accent. */
+    --posh-olive:      #5f7136;
+    --posh-olive-fg:   #ffffff;
+    --posh-olive-soft: rgba(95,113,54,0.10);
+
     /* Soft, multi-layered depth shadow — used by cards/panels/CTA in place
        of harsh solid borders (see .panel / .posh-card below). */
     --posh-shadow-soft: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
@@ -442,6 +451,23 @@
 
   .animate-rise-delay-2 {
     animation: rise 1s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+  }
+
+  /* Header live-price scroller — slower, calmer than the old full-width
+     ticker band so it reads as a refined market-information strip rather
+     than an advertising ticker. */
+  .animate-marquee-header {
+    animation: marquee-posh 90s linear infinite;
+  }
+}
+
+/* Respect reduced-motion preferences: freeze marquee animations instead of
+   forcing continuous motion on users who have asked the OS/browser to
+   minimise it. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee-posh,
+  .animate-marquee-header {
+    animation: none;
   }
 }
 

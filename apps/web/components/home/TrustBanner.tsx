@@ -4,8 +4,10 @@ import { BadgeCheck, LineChart, ShieldCheck } from "lucide-react";
 // the platform's core credibility pillars. Purely presentational (no data
 // fetch), matching the same trio already substantiated elsewhere on the
 // site: verified suppliers (CategoryGrid/ProductCard supplier badges),
-// live/real-time pricing (PriceTicker, price intelligence), and secure B2B
-// transactions (auth + order flow). No fabricated stats — copy only.
+// live/real-time pricing (Live Price Scroller, price intelligence), and
+// secure B2B transactions (auth + order flow). No fabricated stats — copy
+// only. Top padding is intentionally tight so this bar reads as part of the
+// same interaction zone as the hero's search row directly above it.
 const BADGES = [
   { icon: BadgeCheck, label: "Verified Suppliers" },
   { icon: LineChart, label: "Real-time Pricing" },
@@ -15,7 +17,7 @@ const BADGES = [
 export default function TrustBanner() {
   return (
     <section
-      className="border-y py-8"
+      className="border-y pb-8 pt-5 md:pt-6"
       style={{ borderColor: "var(--posh-border)", background: "var(--posh-cream)" }}
     >
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-6 sm:grid-cols-3 md:px-10">

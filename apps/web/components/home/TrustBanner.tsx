@@ -17,7 +17,7 @@ const BADGES = [
 export default function TrustBanner() {
   return (
     <section
-      className="border-y pb-8 pt-5 md:pt-6"
+      className="border-y pb-4 pt-4 md:pb-5 md:pt-5"
       style={{ borderColor: "var(--posh-border)", background: "var(--posh-cream)" }}
     >
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-6 sm:grid-cols-3 md:px-10">

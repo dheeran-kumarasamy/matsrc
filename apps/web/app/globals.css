@@ -425,6 +425,56 @@
     -webkit-backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--posh-border);
   }
+
+  /* ── Global button hover inversion ─────────────────────────────────────
+     Applied to every Home CTA/button that should swap its background/text
+     colours on hover (search, "Get started for Free", "Browse materials",
+     the closing CTA band, etc). Each consumer sets two custom properties
+     for its *resting* colours...
+       --posh-hover-bg    → background to switch TO on hover
+       --posh-hover-color → text colour to switch TO on hover
+     ...which, for a solid button (background: X, text: white), should be
+     (white, X) — a true inversion — and for an outline/ghost button
+     (transparent background, text: X, border: X) should be (X, white).
+     Defaults fall back to the filled-button inversion (white bg / charcoal
+     text) if a consumer doesn't set them. Border colour is left to the
+     consumer's own resting `border-color` so it stays visually anchored in
+     both states. Keyboard focus keeps its own visible outline (never
+     hover-only), so accessibility isn't dependent on :hover. */
+  .posh-invert-hover {
+    transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+  }
+  .posh-invert-hover:hover,
+  .posh-invert-hover:focus-visible {
+    background: var(--posh-hover-bg, var(--posh-bg-card));
+    color: var(--posh-hover-color, var(--posh-fg));
+  }
+  .posh-invert-hover:focus-visible {
+    outline: 2px solid var(--posh-hover-bg, var(--posh-fg));
+    outline-offset: 2px;
+  }
+
+  /* ── Shop by Category tile ── charcoal at rest, olive green on hover/
+     focus (explicit design requirement — takes priority over the generic
+     .posh-invert-hover white-swap for this one tile type). Text stays white
+     in both states since white has sufficient contrast against both
+     charcoal and olive. */
+  .posh-category-tile {
+    background: var(--posh-fg);
+    border: 1px solid var(--posh-fg);
+    color: #ffffff;
+    transition: background-color 200ms ease, border-color 200ms ease;
+  }
+  .posh-category-tile:hover,
+  .posh-category-tile:focus-visible {
+    background: var(--posh-olive);
+    border-color: var(--posh-olive);
+    color: #ffffff;
+  }
+  .posh-category-tile:focus-visible {
+    outline: 2px solid var(--posh-olive);
+    outline-offset: 2px;
+  }
 }
 
 @layer utilities {

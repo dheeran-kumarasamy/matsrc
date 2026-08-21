@@ -36,13 +36,16 @@ export default function SiteHeader() {
     <header className="posh-nav fixed inset-x-0 top-0 z-50">
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-5 md:gap-8 md:px-10">
 
-        {/* Wordmark */}
+        {/* Wordmark — plain text mark (no image logo): "BuildOHub" as one
+            continuous word, 20px, with only the "O" in the olive accent
+            colour used across the Home hero (--posh-olive); "Build"/"Hub"
+            stay charcoal (--posh-fg), matching the rest of the brand ink. */}
         <Link
           href="/"
-          className="posh-heading text-2xl tracking-tight"
-          style={{ color: "var(--posh-fg)" }}
+          className="posh-heading shrink-0"
+          style={{ color: "var(--posh-fg)", fontSize: "20px", letterSpacing: "-0.01em" }}
         >
-          Buildohub
+          Build<span style={{ color: "var(--posh-olive)" }}>O</span>Hub
         </Link>
 
         {/* Live Price Scroller — replaces the old header search bar and
@@ -93,10 +96,10 @@ export default function SiteHeader() {
         >
           <SheetHeader className="border-b px-6 py-5" style={{ borderColor: "var(--posh-border)" }}>
             <SheetTitle
-              className="posh-heading text-xl text-left"
-              style={{ color: "var(--posh-fg)" }}
+              className="posh-heading text-left"
+              style={{ color: "var(--posh-fg)", fontSize: "20px" }}
             >
-              Buildohub
+              Build<span style={{ color: "var(--posh-olive)" }}>O</span>Hub
             </SheetTitle>
           </SheetHeader>
           <div className="flex-1 space-y-2 p-6">

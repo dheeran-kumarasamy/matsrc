@@ -72,7 +72,13 @@ export default function HomeEditorialSections() {
               object-cover + a fixed responsive height preserves the crop
               without overflow at any breakpoint. Matches Lovable's ordering:
               image first (left), copy + stats second (right). */}
-          <div className="overflow-hidden rounded-3xl">
+          {/* Displayed at 50% of its previous rendered size (each height
+              breakpoint halved: 26rem/32rem/40rem → 13rem/16rem/20rem) via
+              CSS only — the source image and its aspect ratio/object-fit
+              are untouched, so it scales down without stretching or
+              distortion. Wrapped so it doesn't force the grid column wider
+              than the smaller image needs. */}
+          <div className="mx-auto w-full max-w-sm overflow-hidden rounded-3xl md:mx-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/images/materials.jpg"
@@ -80,7 +86,7 @@ export default function HomeEditorialSections() {
               width={1200}
               height={1504}
               loading="lazy"
-              className="h-[26rem] w-full object-cover transition-transform duration-[1200ms] hover:scale-105 sm:h-[32rem] md:h-[40rem]"
+              className="h-[13rem] w-full object-cover transition-transform duration-[1200ms] hover:scale-105 sm:h-[16rem] md:h-[20rem]"
             />
           </div>
 
@@ -88,9 +94,9 @@ export default function HomeEditorialSections() {
           <div>
             <h2
               className="posh-heading"
-              style={{ fontSize: "clamp(2rem,4vw,3.25rem)", color: "var(--posh-fg)" }}
+              style={{ fontSize: "clamp(1.2rem,2.4vw,1.95rem)", color: "var(--posh-fg)" }}
             >
-              Every grade, every load, accounted for.
+              Quality and Quantity Assurance
             </h2>
             <p className="mt-6 max-w-md leading-relaxed" style={{ color: "var(--posh-fg-muted)" }}>
               Cement, TMT, aggregates, blocks, formwork and finishes — sourced from suppliers we
@@ -127,15 +133,26 @@ export default function HomeEditorialSections() {
           <div className="mx-auto mt-12 flex max-w-xl flex-col gap-4 sm:flex-row sm:justify-center">
             <Link
               href="/newdashboard"
-              className="flex min-h-[52px] items-center justify-center rounded-full px-10 py-4 text-sm font-medium transition-opacity hover:opacity-85"
-              style={{ background: "var(--posh-cream-fg)", color: "var(--posh-cream)" }}
+              className="posh-invert-hover flex min-h-[52px] items-center justify-center rounded-full border px-10 py-4 text-sm font-medium duration-200"
+              style={{
+                background: "var(--posh-cream-fg)",
+                color: "var(--posh-cream)",
+                borderColor: "var(--posh-cream-fg)",
+                "--posh-hover-bg": "var(--posh-cream)",
+                "--posh-hover-color": "var(--posh-cream-fg)",
+              } as React.CSSProperties}
             >
               Get started free
             </Link>
             <Link
               href="/products"
-              className="flex min-h-[52px] items-center justify-center rounded-full border px-10 py-4 text-sm font-medium transition-opacity hover:opacity-70"
-              style={{ borderColor: "rgba(28,24,16,0.2)", color: "var(--posh-cream-fg)" }}
+              className="posh-invert-hover flex min-h-[52px] items-center justify-center rounded-full border px-10 py-4 text-sm font-medium duration-200"
+              style={{
+                borderColor: "rgba(28,24,16,0.2)",
+                color: "var(--posh-cream-fg)",
+                "--posh-hover-bg": "var(--posh-cream-fg)",
+                "--posh-hover-color": "var(--posh-cream)",
+              } as React.CSSProperties}
             >
               Browse materials
             </Link>

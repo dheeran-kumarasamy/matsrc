@@ -1,16 +1,21 @@
 import Link from "next/link";
 
 // Hero — Charcoal / Olive / White redesign:
-// - Single-line headline "Procurement, Made Easy." (charcoal + olive italic)
+// - Single-line headline "Procurement made easy" (charcoal + olive italic
+//   lowercase "made easy"), sized down + wider letter spacing per the latest
+//   design pass
 // - Background photograph at ~50% less overlay strength than before, so the
 //   image reads as a real visual element instead of a faded backdrop
-// - "Get a Bulk Quote" removed; "Browse Material" now sits directly beside
-//   the search bar as a secondary action, both on one row on desktop
-// - Reduced spacing to the Verified Suppliers trust bar immediately below
+// - "Get started for Free" (olive) + "Browse materials" (charcoal) now sit
+//   as a compact button row directly below the search bar
+// - min-h-[80vh] removed in favour of content-driven padding so the large
+//   empty gap below the CTAs/trust bar (previously caused by vertically
+//   centering short content inside an 80vh box) is eliminated instead of
+//   masked with negative margins
 export default function HeroSection() {
   return (
     <section
-      className="relative flex min-h-[80vh] items-center overflow-hidden"
+      className="relative flex items-center overflow-hidden"
       style={{ background: "var(--posh-bg)" }}
     >
       {/* Hero background photograph. Previous opacity (0.25) reduced by
@@ -39,10 +44,9 @@ export default function HeroSection() {
       />
 
       {/* Content — centered, tighter vertical rhythm. Bottom padding is
-          deliberately smaller than the top so the search row sits close to
-          the Verified Suppliers trust bar immediately below, making the
-          two feel like one interaction zone rather than separate sections. */}
-      <div className="relative mx-auto flex w-full max-w-4xl flex-col items-center px-6 pb-8 pt-16 text-center md:px-10 md:pb-10">
+          deliberately small so the CTAs sit close to the Verified Suppliers
+          trust bar immediately below (see whitespace-reduction note above). */}
+      <div className="relative mx-auto flex w-full max-w-4xl flex-col items-center px-6 pb-6 pt-16 text-center md:px-10 md:pb-8">
         {/* Eyebrow */}
         <p
           className="mb-6 text-xs font-bold uppercase tracking-[0.35em]"
@@ -51,13 +55,20 @@ export default function HeroSection() {
           Materials · India
         </p>
 
-        {/* Main headline — one line on desktop: charcoal "Procurement," +
-            olive italic "Made Easy." Wrapping is only allowed on narrow
-            mobile widths where it's required to avoid overflow (both
-            spans keep their colour/italic styling if that happens). */}
-        <h1 className="max-w-full whitespace-normal text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl md:whitespace-nowrap md:text-6xl">
-          <span style={{ color: "var(--posh-fg)" }}>Procurement, </span>
-          <span className="italic" style={{ color: "var(--posh-olive)" }}>Made Easy.</span>
+        {/* Main headline — "Procurement made easy" on one line on desktop:
+            charcoal "Procurement" + lowercase italic olive "made easy".
+            Sized to ~60% of the previous rendered size (was
+            text-4xl/5xl/6xl → 2.25/3/3.75rem; now 1.35/1.8/2.25rem) with
+            letter-spacing opened up to read clearly at the smaller size
+            (~1.2x more open than the previous tracking-tight treatment).
+            Wrapping is only allowed on narrow mobile widths where it's
+            required to avoid overflow. */}
+        <h1
+          className="max-w-full whitespace-normal font-extrabold leading-[1.15] md:whitespace-nowrap"
+          style={{ fontSize: "clamp(1.35rem, 1.05rem + 1.4vw, 2.25rem)", letterSpacing: "0.012em" }}
+        >
+          <span style={{ color: "var(--posh-fg)" }}>Procurement </span>
+          <span className="italic lowercase" style={{ color: "var(--posh-olive)" }}>made easy</span>
         </h1>
 
         <p
@@ -68,46 +79,66 @@ export default function HeroSection() {
           to procure cement, steel, and aggregates across India.
         </p>
 
-        {/* Search bar + Browse Material — one row on desktop, search is the
-            dominant element and Browse Material is a compact secondary
-            action immediately to its right. */}
-        <div className="mt-8 flex w-full max-w-2xl flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-          <form
-            action="/products"
-            method="GET"
-            role="search"
-            className="flex flex-1 items-center gap-2 rounded-2xl border bg-white p-2"
-            style={{ borderColor: "var(--posh-border)", boxShadow: "var(--posh-shadow-elevated)" }}
+        {/* Search bar */}
+        <form
+          action="/products"
+          method="GET"
+          role="search"
+          className="mt-8 flex w-full max-w-2xl items-center gap-2 rounded-2xl border bg-white p-2"
+          style={{ borderColor: "var(--posh-border)", boxShadow: "var(--posh-shadow-elevated)" }}
+        >
+          <input
+            type="search"
+            name="q"
+            aria-label="Search materials, suppliers or grades"
+            placeholder="Search cement, TMT bars, aggregates…"
+            className="min-h-[48px] flex-1 rounded-xl border-0 bg-transparent px-4 text-sm outline-none"
+            style={{ color: "var(--posh-fg)" }}
+          />
+          <button
+            type="submit"
+            className="posh-invert-hover flex min-h-[48px] shrink-0 items-center justify-center rounded-xl border px-6 text-sm font-bold transition-colors duration-200"
+            style={{
+              background: "var(--posh-olive)",
+              color: "var(--posh-olive-fg)",
+              borderColor: "var(--posh-olive)",
+              "--posh-hover-bg": "var(--posh-olive-fg)",
+              "--posh-hover-color": "var(--posh-olive)",
+            } as React.CSSProperties}
           >
-            <input
-              type="search"
-              name="q"
-              aria-label="Search materials, suppliers or grades"
-              placeholder="Search cement, TMT bars, aggregates…"
-              className="min-h-[48px] flex-1 rounded-xl border-0 bg-transparent px-4 text-sm outline-none"
-              style={{ color: "var(--posh-fg)" }}
-            />
-            <button
-              type="submit"
-              className="flex min-h-[48px] shrink-0 items-center justify-center rounded-xl px-6 text-sm font-bold transition-colors hover:opacity-90"
-              style={{ background: "var(--posh-olive)", color: "var(--posh-olive-fg)" }}
-            >
-              Search
-            </button>
-          </form>
+            Search
+          </button>
+        </form>
 
-          {/* Secondary action — compact, vertically aligned with the search
-              bar, deliberately less prominent than the search function. */}
+        {/* CTA row — "Get started for Free" (olive) + "Browse materials"
+            (charcoal), directly below the search bar, sized to fit their
+            text rather than stretching full-width. */}
+        <div className="mt-4 flex w-full max-w-2xl flex-wrap items-center justify-center gap-3">
+          <Link
+            href="/auth/register"
+            className="posh-invert-hover inline-flex items-center justify-center rounded-md border px-5 py-2.5 text-sm font-semibold transition-colors duration-200"
+            style={{
+              background: "var(--posh-olive)",
+              color: "var(--posh-olive-fg)",
+              borderColor: "var(--posh-olive)",
+              "--posh-hover-bg": "var(--posh-olive-fg)",
+              "--posh-hover-color": "var(--posh-olive)",
+            } as React.CSSProperties}
+          >
+            Get started for Free
+          </Link>
           <Link
             href="/products"
-            className="flex min-h-[48px] shrink-0 items-center justify-center rounded-2xl border px-6 text-sm font-semibold transition-colors hover:bg-white"
+            className="posh-invert-hover inline-flex items-center justify-center rounded-md border px-5 py-2.5 text-sm font-semibold transition-colors duration-200"
             style={{
-              borderColor: "var(--posh-border)",
-              color: "var(--posh-fg)",
-              background: "rgba(var(--posh-wash-rgb),0.03)",
-            }}
+              background: "var(--posh-fg)",
+              color: "#ffffff",
+              borderColor: "var(--posh-fg)",
+              "--posh-hover-bg": "#ffffff",
+              "--posh-hover-color": "var(--posh-fg)",
+            } as React.CSSProperties}
           >
-            Browse Material
+            Browse materials
           </Link>
         </div>
       </div>

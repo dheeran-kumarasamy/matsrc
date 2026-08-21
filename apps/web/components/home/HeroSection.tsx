@@ -97,14 +97,7 @@ export default function HeroSection() {
           />
           <button
             type="submit"
-            className="posh-invert-hover flex min-h-[48px] shrink-0 items-center justify-center rounded-xl border px-6 text-sm font-bold transition-colors duration-200"
-            style={{
-              background: "var(--posh-olive)",
-              color: "var(--posh-olive-fg)",
-              borderColor: "var(--posh-olive)",
-              "--posh-hover-bg": "var(--posh-olive-fg)",
-              "--posh-hover-color": "var(--posh-olive)",
-            } as React.CSSProperties}
+            className="posh-btn-olive flex min-h-[48px] shrink-0 items-center justify-center rounded-xl px-6 text-sm font-bold"
           >
             Search
           </button>
@@ -116,27 +109,13 @@ export default function HeroSection() {
         <div className="mt-4 flex w-full max-w-2xl flex-wrap items-center justify-center gap-3">
           <Link
             href="/auth/register"
-            className="posh-invert-hover inline-flex items-center justify-center rounded-md border px-5 py-2.5 text-sm font-semibold transition-colors duration-200"
-            style={{
-              background: "var(--posh-olive)",
-              color: "var(--posh-olive-fg)",
-              borderColor: "var(--posh-olive)",
-              "--posh-hover-bg": "var(--posh-olive-fg)",
-              "--posh-hover-color": "var(--posh-olive)",
-            } as React.CSSProperties}
+            className="posh-btn-olive inline-flex items-center justify-center rounded-md px-5 py-2.5 text-sm font-semibold"
           >
             Get started for Free
           </Link>
           <Link
             href="/products"
-            className="posh-invert-hover inline-flex items-center justify-center rounded-md border px-5 py-2.5 text-sm font-semibold transition-colors duration-200"
-            style={{
-              background: "var(--posh-fg)",
-              color: "#ffffff",
-              borderColor: "var(--posh-fg)",
-              "--posh-hover-bg": "#ffffff",
-              "--posh-hover-color": "var(--posh-fg)",
-            } as React.CSSProperties}
+            className="posh-btn-charcoal inline-flex items-center justify-center rounded-md px-5 py-2.5 text-sm font-semibold"
           >
             Browse materials
           </Link>

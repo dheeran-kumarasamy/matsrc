@@ -92,7 +92,11 @@ export default function WhyChooseUs() {
             </h2>
           </div>
 
-          {/* Buyer / Supplier pill toggle */}
+          {/* Buyer / Supplier pill toggle — the active pill is a charcoal
+              button that flips to olive on hover/focus (same site-wide
+              charcoal<->olive hover rule as every other button), via
+              .posh-btn-charcoal. The inactive pill stays transparent/muted
+              until it becomes active. */}
           <div
             className="flex rounded-full border p-1"
             style={{ borderColor: "var(--posh-border)", background: "var(--posh-bg-card)" }}
@@ -105,11 +109,12 @@ export default function WhyChooseUs() {
                   type="button"
                   onClick={() => setRole(r)}
                   aria-pressed={active}
-                  className="rounded-full px-6 py-2.5 text-sm font-medium capitalize transition-colors duration-200"
-                  style={{
-                    background: active ? "var(--posh-olive)" : "transparent",
-                    color: active ? "var(--posh-olive-fg)" : "var(--posh-fg-muted)",
-                  }}
+                  className={
+                    active
+                      ? "posh-btn-charcoal rounded-full px-6 py-2.5 text-sm font-medium capitalize"
+                      : "rounded-full px-6 py-2.5 text-sm font-medium capitalize transition-colors duration-200"
+                  }
+                  style={active ? undefined : { background: "transparent", color: "var(--posh-fg-muted)" }}
                 >
                   {r}
                 </button>

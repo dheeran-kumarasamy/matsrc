@@ -64,9 +64,9 @@
        Pairs with charcoal (--posh-fg) and white to form the Home page's
        Charcoal / Olive / White palette, kept scoped to Home-specific
        surfaces rather than replacing the app-wide orange brand accent. */
-    --posh-olive:      #5f7136;
+    --posh-olive:      #A8AE8A;
     --posh-olive-fg:   #ffffff;
-    --posh-olive-soft: rgba(95,113,54,0.10);
+    --posh-olive-soft: rgba(168,174,138,0.10);
 
     /* Soft, multi-layered depth shadow — used by cards/panels/CTA in place
        of harsh solid borders (see .panel / .posh-card below). */

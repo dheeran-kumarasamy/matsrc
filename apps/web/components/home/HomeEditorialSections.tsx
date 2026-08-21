@@ -1,4 +1,3 @@
-import Link from "next/link";
 import WhyChooseUs from "@/components/home/WhyChooseUs";
 
 const STATS: [string, string][] = [
@@ -69,48 +68,6 @@ export default function HomeEditorialSections() {
             </dl>
           </div>
 
-        </div>
-      </section>
-
-      {/* ── Cream closing CTA ── */}
-      <section
-        id="enquire"
-        style={{ background: "var(--posh-cream)", color: "var(--posh-cream-fg)" }}
-      >
-        <div className="mx-auto max-w-7xl px-6 py-28 text-center md:px-10 md:py-40">
-          <h2
-            className="posh-heading mx-auto max-w-3xl"
-            style={{ fontSize: "clamp(2.25rem,5.5vw,4.5rem)", color: "var(--posh-cream-fg)" }}
-          >
-            Tell us what your site needs this week.
-          </h2>
-          <div className="mx-auto mt-12 flex max-w-xl flex-col gap-4 sm:flex-row sm:justify-center">
-            <Link
-              href="/newdashboard"
-              className="posh-invert-hover flex min-h-[52px] items-center justify-center rounded-full border px-10 py-4 text-sm font-medium duration-200"
-              style={{
-                background: "var(--posh-cream-fg)",
-                color: "var(--posh-cream)",
-                borderColor: "var(--posh-cream-fg)",
-                "--posh-hover-bg": "var(--posh-cream)",
-                "--posh-hover-color": "var(--posh-cream-fg)",
-              } as React.CSSProperties}
-            >
-              Get started free
-            </Link>
-            <Link
-              href="/products"
-              className="posh-invert-hover flex min-h-[52px] items-center justify-center rounded-full border px-10 py-4 text-sm font-medium duration-200"
-              style={{
-                borderColor: "rgba(28,24,16,0.2)",
-                color: "var(--posh-cream-fg)",
-                "--posh-hover-bg": "var(--posh-cream-fg)",
-                "--posh-hover-color": "var(--posh-cream)",
-              } as React.CSSProperties}
-            >
-              Browse materials
-            </Link>
-          </div>
         </div>
       </section>
 

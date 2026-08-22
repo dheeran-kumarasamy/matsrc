@@ -5,6 +5,11 @@ import CategoryGrid from "@/components/home/CategoryGrid";
 import QuickRequestForm from "@/components/cart/QuickRequestForm";
 import HomeEditorialSections from "@/components/home/HomeEditorialSections";
 
+// FR-32: Floating Quick Request Form — hidden on the homepage per request,
+// without removing the feature. Flip this flag back to `true` any time to
+// re-enable it; the component/route/API behind it are untouched.
+const SHOW_QUICK_REQUEST_FORM = false;
+
 export default function HomePage() {
   return (
     <main
@@ -33,8 +38,9 @@ export default function HomePage() {
       {/* Editorial chapters, stats, CTA, footer */}
       <HomeEditorialSections />
 
-      {/* FR-32: Floating Quick Request Form */}
-      <QuickRequestForm floating />
+      {/* FR-32: Floating Quick Request Form — currently hidden via
+          SHOW_QUICK_REQUEST_FORM above; set it to `true` to bring it back. */}
+      {SHOW_QUICK_REQUEST_FORM ? <QuickRequestForm floating /> : null}
     </main>
   );
 }

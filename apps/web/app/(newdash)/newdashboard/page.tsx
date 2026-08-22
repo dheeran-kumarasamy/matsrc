@@ -3,10 +3,11 @@
 import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
-import { Bell, ShoppingCart } from "lucide-react";
+import { Bell, LogOut, ShoppingCart, User } from "lucide-react";
 import { builderApiGet, builderApiPatch } from "@/lib/api";
 import { useCartStore } from "@/lib/store/cart-store";
 import { useOverlayStore } from "@/lib/store/overlay-store";
+import BuildOHubLogo from "@/components/shared/BuildOHubLogo";
 
 // ── Live-data types ───────────────────────────────────────────────────────────
 type Order = {
@@ -113,6 +114,11 @@ export default function NewDashboardPage() {
   const [notifsLoaded, setNotifsLoaded] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
 
+  // Profile-name dropdown — the only way to reach "Sign out" (no standalone
+  // Account/Sign out links in the header any more).
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
   // Cart (Zustand store — shared with CartDrawer)
   const cartCount = useCartStore((s) => s.summary.itemCount);
   const hasLoaded = useCartStore((s) => s.hasLoaded);
@@ -156,6 +162,16 @@ export default function NewDashboardPage() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [notifsOpen]);
+
+  // Close profile dropdown on outside click
+  useEffect(() => {
+    if (!profileOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [profileOpen]);
 
   // Mark single notification as read
   const markRead = async (item: NotificationItem) => {
@@ -220,7 +236,7 @@ export default function NewDashboardPage() {
         {/* ── Header ── */}
         <header className="flex items-center justify-between gap-4">
           <div className="flex shrink-0 items-center gap-3">
-            <Link href="/" className="posh-nav-brandmark text-2xl tracking-tight" style={{ color: FG }}>Buildohub</Link>
+            <BuildOHubLogo size="lg" />
             <span className="posh-eyebrow hidden sm:block">Procurement Desk</span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -285,10 +301,52 @@ export default function NewDashboardPage() {
             </div>
             <span className="mx-1 hidden opacity-20 sm:block" style={{ color: FG }}>|</span>
             {session?.user ? (
-              <>
-                <Link href="/profile" className="hidden rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.05)] hover:text-[color:var(--posh-fg)] sm:block" style={{ color: FM }}>Account</Link>
-                <button type="button" onClick={() => signOut({ callbackUrl: "/" })} className="hidden rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.05)] hover:text-[color:var(--posh-fg)] sm:block" style={{ color: FM }}>Sign out</button>
-              </>
+              <div className="relative" ref={profileRef}>
+                {/* Profile name — the only entry point to "Sign out", revealed
+                    in a small dropdown on click. There is no separate
+                    standalone "Account" or "Sign out" link in the header. */}
+                <button
+                  type="button"
+                  onClick={() => setProfileOpen((prev) => !prev)}
+                  aria-haspopup="menu"
+                  aria-expanded={profileOpen}
+                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.05)] hover:text-[color:var(--posh-fg)]"
+                  style={{ color: FM }}
+                >
+                  <span className="max-w-[9rem] truncate">
+                    {session.user.name || session.user.email || "Profile"}
+                  </span>
+                </button>
+                {profileOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-2xl border shadow-2xl"
+                    style={{ background: CARD, borderColor: B60 }}
+                  >
+                    <Link
+                      href="/profile"
+                      onClick={() => setProfileOpen(false)}
+                      className="flex items-center gap-2 px-4 py-3 text-sm font-semibold transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.05)]"
+                      style={{ color: FG }}
+                    >
+                      <User size={14} />
+                      View profile
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileOpen(false);
+                        void signOut({ callbackUrl: "/" });
+                      }}
+                      className="flex w-full items-center gap-2 border-t px-4 py-3 text-left text-sm font-semibold transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.05)]"
+                      style={{ color: FG, borderColor: B40 }}
+                    >
+                      <LogOut size={14} />
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <Link href="/auth/login" className="rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-[color:var(--posh-primary)]" style={{ borderColor: B12, color: FG }}>Sign in</Link>
             )}

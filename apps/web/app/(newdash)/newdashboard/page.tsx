@@ -2,6 +2,7 @@
 
 import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { Bell, LogOut, ShoppingCart, User } from "lucide-react";
 import { builderApiGet, builderApiPatch } from "@/lib/api";
@@ -50,22 +51,10 @@ const suggestions = [
   { item: "Curing Compound",     why: "Watchlist supplier cut price",        move: "₹210/L",     delta: "-3.4%" },
 ];
 
-const browse = [
-  ["Cement",          "18 grades", "cement"    ],
-  ["Steel & TMT",     "42 SKUs",   "steel"     ],
-  ["Aggregates",      "11 grades", "aggregates"],
-  ["Blocks & Bricks", "26 SKUs",   "bricks"    ],
-  ["Formwork",        "14 SKUs",   "formwork"  ],
-  ["Finishes",        "60+ SKUs",  "finishes"  ],
-];
-
 const STATUS_LABELS: Record<string, string> = {
   PLACED: "Enquiry", PROCESSING: "Processing", DISPATCHED: "Dispatched",
   OUT_FOR_DELIVERY: "Out for Delivery", DELIVERED: "Delivered", CANCELLED: "Cancelled",
 };
-
-const views = ["Outstanding", "Watchlist", "Reports", "Browse"] as const;
-type View = (typeof views)[number];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function timeAgo(dateString: string): string {
@@ -91,13 +80,16 @@ function gapLabel(pct: number | null): string {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function NewDashboardPage() {
   const { data: session } = useSession();
+  const router = useRouter();
 
-  // Left-column panel — user-controlled only (see `panels`/`PanelKind`
-  // below): only "AI Suggestions" and "Recent Orders" are shown, and the
+  // Segmented AI Suggestions / Recent Orders menu — user-controlled only
+  // (see `panels`/`PanelKind` below): only these two options exist, and the
   // user manually clicks between them. There is no automatic rotation/timer
-  // — the panel only changes when the user clicks a tab.
+  // — the panel only changes when the user clicks a tab. This is a purely
+  // client-side content swap: both panels' data is already loaded (orders
+  // fetched on mount below; suggestions are static), so switching tabs never
+  // triggers a refetch.
   const [panelIndex, setPanelIndex] = useState(0);
-  const [view,  setView]  = useState<View>("Outstanding");
 
   // Live orders
   const [orders,      setOrders]      = useState<Order[]>([]);
@@ -192,14 +184,55 @@ export default function NewDashboardPage() {
     } catch { /* best-effort */ }
   };
 
-  // Derived data for tabs
-  const recentOrders  = orders.slice(0, 5);
-  const activeOrders  = orders.filter((o) => !["DELIVERED", "CANCELLED"].includes(o.status));
-  const reportMetrics = [
-    ["Active Orders",   String(activeOrders.length),     "Orders in progress"      ],
-    ["Cart Items",      String(cartCount),                "Items ready to enquire"  ],
-    ["Watchlist",       String(watchlistItems.length),    "Materials being tracked"  ],
-    ["Delivered",       String(orders.filter((o) => o.status === "DELIVERED").length), "Successfully delivered"],
+  // Derived data — reused by both the segmented panel and the stat cards
+  // below (no duplicate fetch/calculation: same `orders`/`watchlistItems`/
+  // `cartCount` state populated once above).
+  const recentOrders = orders.slice(0, 5);
+
+  // "Active Orders" = every order NOT Cancelled, Closed, or Delivered.
+  // "Closed" is not currently a distinct OrderStatus in the data model
+  // (only PLACED/PROCESSING/DISPATCHED/OUT_FOR_DELIVERY/DELIVERED/CANCELLED
+  // exist -- see packages/db/prisma/schema.prisma), so this checks for it
+  // defensively without assuming/inventing a status the backend doesn't
+  // emit yet.
+  const activeOrders = orders.filter((o) => !["CANCELLED", "CLOSED", "DELIVERED"].includes(o.status));
+  // "Delivered Orders" = Delivered or Closed.
+  const deliveredOrClosedOrders = orders.filter((o) => ["DELIVERED", "CLOSED"].includes(o.status));
+
+  // Reports/statistics -- the same metrics previously shown only behind the
+  // "Reports" tab, now surfaced directly on the dashboard. Each card
+  // reuses the app's existing navigation/overlay mechanisms rather than
+  // duplicating any business logic:
+  //  - Active Orders / Delivered Orders -> /orders with a status filter
+  //    that reuses the existing orders list + client-side filtering.
+  //  - Watchlist -> the existing /watchlist route.
+  //  - Cart Items -> the existing shared live cart drawer (Zustand overlay
+  //    store), not a separate/fake cart preview.
+  const statCards = [
+    {
+      label: "Active Orders",
+      value: String(activeOrders.length),
+      sub: "Orders in progress",
+      onClick: () => router.push("/orders?status=ACTIVE"),
+    },
+    {
+      label: "Delivered Orders",
+      value: String(deliveredOrClosedOrders.length),
+      sub: "Delivered or closed",
+      onClick: () => router.push("/orders?status=DELIVERED_CLOSED"),
+    },
+    {
+      label: "Watchlist",
+      value: String(watchlistItems.length),
+      sub: "Materials being tracked",
+      onClick: () => router.push("/watchlist"),
+    },
+    {
+      label: "Cart Items",
+      value: String(cartCount),
+      sub: "Items ready to enquire",
+      onClick: () => openCart("review"),
+    },
   ];
 
   // ── Left-column panel — exactly two user-selectable options ─────────────────
@@ -237,7 +270,6 @@ export default function NewDashboardPage() {
         <header className="flex items-center justify-between gap-4">
           <div className="flex shrink-0 items-center gap-3">
             <BuildOHubLogo size="lg" />
-            <span className="posh-eyebrow hidden sm:block">Procurement Desk</span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {/* Cart */}
@@ -353,6 +385,36 @@ export default function NewDashboardPage() {
           </div>
         </header>
 
+        {/* ── Welcome heading ── */}
+        <div className="mt-8">
+          <p className="posh-eyebrow">Procurement Desk</p>
+          <h1 className="posh-page-title mt-2 text-3xl">
+            Welcome back{session?.user?.name ? `, ${session.user.name.split(" ")[0]}` : ""}
+          </h1>
+        </div>
+
+        {/* ── Dashboard statistics — the same live metrics previously shown
+            only behind the "Reports" tab, now surfaced directly on the
+            dashboard (spec section 3). Active Orders / Delivered Orders /
+            Watchlist / Cart Items are all clickable (spec sections 7–10),
+            each reusing an existing route/overlay rather than duplicating
+            data-fetching or business logic. */}
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {statCards.map((card) => (
+            <button
+              key={card.label}
+              type="button"
+              onClick={card.onClick}
+              className="block rounded-[2rem] border p-7 text-left transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
+              style={{ background: CARD, borderColor: B60 }}
+            >
+              <p className="posh-eyebrow">{card.label}</p>
+              <p className="posh-page-title mt-5 text-4xl">{card.value}</p>
+              <p className="posh-subtitle mt-2">{card.sub}</p>
+            </button>
+          ))}
+        </div>
+
         {/* ── Two-column body ── */}
         <div className="mt-8 flex flex-1 flex-col gap-6 lg:flex-row">
 
@@ -361,28 +423,32 @@ export default function NewDashboardPage() {
               changes when the user clicks one of the two tabs below. */}
           <aside className="flex w-full flex-col rounded-[2rem] border p-7 shadow-sm lg:w-[340px] lg:shrink-0"
             style={{ background: CARD, borderColor: B60 }}>
-            <div className="mb-5 flex items-center justify-between gap-3">
-              {/* Manual toggle — clicking a tab is the only way the panel
-                  changes; there is no auto-advance of any kind. */}
-              <div className="flex gap-2">
-                {panels.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPanelIndex(panels.indexOf(p))}
-                    aria-pressed={activePanel === p}
-                    className={activePanel === p ? "posh-chip-active" : "posh-chip"}
-                  >
-                    {PANEL_LABELS[p]}
-                  </button>
-                ))}
-              </div>
-              {activePanel === "orders" && <Link href="/orders" className="posh-link hidden sm:inline-block">View all →</Link>}
-              {activePanel === "suggestions" && <Link href="/sourcing" className="posh-link hidden sm:inline-block">Open AI sourcing →</Link>}
+            {/* Swappable segmented menu — AI Suggestions / Recent Orders.
+                This reads as one segmented control, not two unrelated CTA
+                buttons: the selected option is olive (hovering to
+                charcoal) and the unselected option is charcoal (hovering
+                to olive), so the pair visually swaps colour on hover
+                (see .posh-tab-selected / .posh-tab-unselected in
+                globals.css). Manual toggle only — clicking a tab is the
+                only way the panel changes; there is no auto-advance. */}
+            <div role="tablist" aria-label="Dashboard panel" className="mb-5 flex gap-2">
+              {panels.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  role="tab"
+                  aria-selected={activePanel === p}
+                  onClick={() => setPanelIndex(panels.indexOf(p))}
+                  className={activePanel === p ? "posh-tab-selected" : "posh-tab-unselected"}
+                >
+                  {PANEL_LABELS[p]}
+                </button>
+              ))}
             </div>
             <div className="flex-1">
               {activePanel === "orders" && (
-                /* Live orders — last 5 */
+                /* Live orders — last 5, with "View All" moved to the
+                   bottom of the list (spec section 6). */
                 !ordersReady ? (
                   <p className="posh-muted py-8 text-center text-xs">Loading…</p>
                 ) : recentOrders.length === 0 ? (
@@ -391,148 +457,95 @@ export default function NewDashboardPage() {
                     <Link href="/products" className="posh-link mt-3 inline-block">Browse materials →</Link>
                   </div>
                 ) : (
-                  <div className="divide-y" style={{ borderColor: B40 }}>
-                    {recentOrders.map((o) => (
-                      <Link key={o.id} href={`/orders/${o.id}`}
-                        className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.items?.[0]?.name ?? `Order #${o.id.slice(0,6)}`}{(o.itemCount??0) > 1 ? ` +${o.itemCount-1}` : ""}</p>
-                          <p className="posh-label mt-1">{o.supplierName ?? STATUS_LABELS[o.status] ?? o.status}</p>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className="posh-card-title text-base">{fmtInr(o.total)}</p>
-                          <p className="posh-label mt-1">{STATUS_LABELS[o.status]}</p>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
+                  <>
+                    <div className="divide-y" style={{ borderColor: B40 }}>
+                      {recentOrders.map((o) => (
+                        <Link key={o.id} href={`/orders/${o.id}`}
+                          className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.items?.[0]?.name ?? `Order #${o.id.slice(0,6)}`}{(o.itemCount??0) > 1 ? ` +${o.itemCount-1}` : ""}</p>
+                            <p className="posh-label mt-1">{o.supplierName ?? STATUS_LABELS[o.status] ?? o.status}</p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="posh-card-title text-base">{fmtInr(o.total)}</p>
+                            <p className="posh-label mt-1">{STATUS_LABELS[o.status]}</p>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                    <Link
+                      href="/orders"
+                      className="posh-btn-solid mt-5 flex items-center justify-center rounded-full py-2.5 text-sm font-bold"
+                    >
+                      View All
+                    </Link>
+                  </>
                 )
               )}
 
               {activePanel === "suggestions" && (
-                /* Static AI suggestions */
-                <div className="divide-y" style={{ borderColor: B40 }}>
-                  {suggestions.map((s) => (
-                    <div key={s.item} className="flex items-start justify-between gap-3 py-4">
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold" style={{ color: FG }}>{s.item}</p>
-                        <p className="mt-1 text-xs font-medium leading-relaxed" style={{ color: FM }}>{s.why}</p>
+                /* Static AI suggestions, with "Open AI Sourcing" moved to
+                   the bottom of the list (spec section 5). */
+                <>
+                  <div className="divide-y" style={{ borderColor: B40 }}>
+                    {suggestions.map((s) => (
+                      <div key={s.item} className="flex items-start justify-between gap-3 py-4">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold" style={{ color: FG }}>{s.item}</p>
+                          <p className="mt-1 text-xs font-medium leading-relaxed" style={{ color: FM }}>{s.why}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="posh-card-title text-base">{s.move}</p>
+                          {/* Direction is carried by weight/opacity, not colour. */}
+                          <p className={`mt-0.5 font-mono text-[10px] font-bold ${s.delta.startsWith("-") ? "text-[color:var(--posh-fg)]" : "text-[color:var(--posh-fg-muted)]"}`}>
+                            {s.delta}
+                          </p>
+                        </div>
                       </div>
-                      <div className="shrink-0 text-right">
-                        <p className="posh-card-title text-base">{s.move}</p>
-                        {/* Direction is carried by weight/opacity, not colour. */}
-                        <p className={`mt-0.5 font-mono text-[10px] font-bold ${s.delta.startsWith("-") ? "text-[color:var(--posh-fg)]" : "text-[color:var(--posh-fg-muted)]"}`}>
-                          {s.delta}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                  <Link
+                    href="/sourcing"
+                    className="posh-btn-solid mt-5 flex items-center justify-center rounded-full py-2.5 text-sm font-bold"
+                  >
+                    Open AI Sourcing
+                  </Link>
+                </>
               )}
             </div>
           </aside>
 
-          {/* RIGHT — tabs */}
+          {/* RIGHT — Watchlist preview, reusing the live watchlist data
+              already fetched above. Clicking through goes to the full
+              /watchlist page (spec section 9); the standalone "Watchlist"
+              action button has been removed. */}
           <section className="flex flex-1 flex-col rounded-[2rem] border p-7 shadow-sm md:p-10"
             style={{ background: CARD, borderColor: B60 }}>
-            <nav className="flex flex-wrap gap-2">
-              {views.map((v) => (
-                <button key={v} type="button" onClick={() => setView(v)}
-                  className={view === v ? "posh-chip-active px-5 py-2" : "posh-chip px-5 py-2"}>
-                  {v}
-                </button>
-              ))}
-            </nav>
-            <div key={view} className="animate-rise mt-8 flex-1">
-
-              {/* Outstanding — live orders */}
-              {view === "Outstanding" && (
-                <div className="overflow-x-auto">
-                  {!ordersReady ? <p className="posh-muted py-8 text-center text-xs">Loading…</p> :
-                  activeOrders.length === 0 ? (
-                    <div className="py-12 text-center">
-                      <p className="posh-card-title">No outstanding orders</p>
-                      <Link href="/products" className="posh-link mt-3 inline-block">Browse materials →</Link>
-                    </div>
-                  ) : (
-                    <table className="w-full text-left text-sm">
-                      <thead>
-                        <tr>{["Order","Material","Supplier","Total","Status"].map((h) => (
-                          <th key={h} className="posh-th pr-6">{h}</th>
-                        ))}</tr>
-                      </thead>
-                      <tbody>
-                        {activeOrders.map((o) => (
-                          <tr key={o.id} className="transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
-                            <td className="border-b py-4 pr-6" style={{ borderColor: B40 }}>
-                              <Link href={`/orders/${o.id}`} className="font-mono text-xs font-bold text-[color:var(--posh-fg)] hover:underline">{o.id.slice(0,8)}</Link>
-                            </td>
-                            <td className="border-b py-4 pr-6 font-semibold" style={{ borderColor: B40, color: FG }}>{o.items?.[0]?.name ?? "—"}{(o.itemCount??0)>1?` +${o.itemCount-1}`:""}</td>
-                            <td className="border-b py-4 pr-6 font-medium" style={{ borderColor: B40, color: FM }}>{o.supplierName ?? "—"}</td>
-                            <td className="posh-card-title border-b py-4 pr-6 text-lg" style={{ borderColor: B40 }}>{fmtInr(o.total)}</td>
-                            <td className="border-b py-4" style={{ borderColor: B40 }}>
-                              <span className="posh-status">{STATUS_LABELS[o.status]}</span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="posh-card-title text-xl">Watchlist</h2>
+              <Link href="/watchlist" className="posh-link hidden sm:inline-block">View all →</Link>
+            </div>
+            <div className="mt-6 flex-1">
+              {!watchlistReady ? (
+                <p className="posh-muted py-8 text-center text-xs">Loading…</p>
+              ) : watchlistItems.length === 0 ? (
+                <div className="py-12 text-center">
+                  <p className="posh-card-title">No items in watchlist</p>
+                  <Link href="/products" className="posh-link mt-3 inline-block">Browse &amp; watchlist materials →</Link>
                 </div>
-              )}
-
-              {/* Watchlist — live */}
-              {view === "Watchlist" && (
-                !watchlistReady ? <p className="posh-muted py-8 text-center text-xs">Loading…</p> :
-                watchlistItems.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <p className="posh-card-title">No items in watchlist</p>
-                    <Link href="/products" className="posh-link mt-3 inline-block">Browse &amp; watchlist materials →</Link>
-                  </div>
-                ) : (
-                  <div className="grid gap-px overflow-hidden rounded-[2rem] border sm:grid-cols-2"
-                    style={{ borderColor: B60, background: B60 }}>
-                    {watchlistItems.map((w) => (
-                      <Link key={w.id} href="/watchlist" className="block bg-[color:var(--posh-bg-card)] p-7 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
-                        <div className="flex items-baseline justify-between">
-                          <h3 className="posh-card-title">{w.name}</h3>
-                          <span className="posh-label">{gapLabel(w.priceIntelligence?.gapToTargetPct ?? null)}</span>
-                        </div>
-                        <p className="posh-page-title mt-3">
-                          {w.priceIntelligence?.currentPricePerBaseUnit ? fmtInr(w.priceIntelligence.currentPricePerBaseUnit) : fmtInr(w.basePrice)} / {w.unit}
-                        </p>
-                        <p className="posh-subtitle mt-2">{w.targetPrice ? `Target: ${fmtInr(w.targetPrice)}` : "No target set"}</p>
-                      </Link>
-                    ))}
-                  </div>
-                )
-              )}
-
-              {/* Reports — live metrics */}
-              {view === "Reports" && (
-                <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
-                  {reportMetrics.map(([label, value, sub]) => (
-                    <Link key={label} href="/reports"
-                      className="block rounded-[2rem] border bg-[color:var(--posh-bg-card)] p-7 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
-                      style={{ borderColor: B60 }}>
-                      <p className="posh-eyebrow">{label}</p>
-                      <p className="posh-page-title mt-5 text-4xl">{value}</p>
-                      <p className="posh-subtitle mt-2">{sub}</p>
-                    </Link>
-                  ))}
-                </div>
-              )}
-
-              {/* Browse — category tiles */}
-              {view === "Browse" && (
-                <div className="grid gap-px overflow-hidden rounded-[2rem] border sm:grid-cols-2 xl:grid-cols-3"
+              ) : (
+                <div className="grid gap-px overflow-hidden rounded-[2rem] border sm:grid-cols-2"
                   style={{ borderColor: B60, background: B60 }}>
-                  {browse.map((b) => (
-                    <Link key={b[0]} href={`/products?category=${b[2]}`}
-                      className="group block bg-[color:var(--posh-bg-card)] p-8 text-left transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
-                      <h3 className="posh-card-title text-2xl">{b[0]}</h3>
-                      <p className="posh-subtitle mt-2">{b[1]}</p>
-                      <span className="posh-link mt-6 inline-block no-underline transition-transform duration-500 group-hover:translate-x-1">Browse →</span>
+                  {watchlistItems.map((w) => (
+                    <Link key={w.id} href="/watchlist" className="block bg-[color:var(--posh-bg-card)] p-7 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
+                      <div className="flex items-baseline justify-between">
+                        <h3 className="posh-card-title">{w.name}</h3>
+                        <span className="posh-label">{gapLabel(w.priceIntelligence?.gapToTargetPct ?? null)}</span>
+                      </div>
+                      <p className="posh-page-title mt-3">
+                        {w.priceIntelligence?.currentPricePerBaseUnit ? fmtInr(w.priceIntelligence.currentPricePerBaseUnit) : fmtInr(w.basePrice)} / {w.unit}
+                      </p>
+                      <p className="posh-subtitle mt-2">{w.targetPrice ? `Target: ${fmtInr(w.targetPrice)}` : "No target set"}</p>
                     </Link>
                   ))}
                 </div>

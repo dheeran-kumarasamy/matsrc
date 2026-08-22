@@ -204,7 +204,7 @@
   }
 
   /* ── Posh pill button (nav CTA) ── olive/white brand button (same default
-     olive-bg/white-text + hover-inversion system as every other standard
+     olive-bg/white-text + hover-to-charcoal system as every other standard
      action button site-wide). */
   .posh-btn-pill {
     @apply rounded-full border px-5 py-2 text-sm backdrop-blur-md transition-colors;
@@ -214,9 +214,9 @@
   }
   .posh-btn-pill:hover,
   .posh-btn-pill:focus-visible {
-    background: #ffffff;
-    color: var(--posh-olive);
-    border-color: var(--posh-olive);
+    background: var(--posh-fg);
+    color: #ffffff;
+    border-color: var(--posh-fg);
   }
 
   /* ── Reports surface typography ──────────────────────────────────────
@@ -353,9 +353,9 @@
     color: var(--posh-primary-fg);
   }
 
-  /* Primary action — BuildOHub olive/white system: olive background + white
-     text/icons by default, inverting to a white background with olive
-     text/icon/border on hover/focus (site-wide standard action button
+  /* Primary action — BuildOHub olive/charcoal system: olive background +
+     white text/icons by default, inverting to a charcoal background (still
+     white text/icons) on hover/focus (site-wide standard action button
      language, matching the homepage's "Get started for Free" button). */
   .posh-btn {
     @apply rounded-full px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition-colors disabled:cursor-not-allowed disabled:opacity-40;
@@ -365,17 +365,17 @@
   }
   .posh-btn:hover:not(:disabled),
   .posh-btn:focus-visible:not(:disabled) {
-    background: #ffffff;
-    color: var(--posh-olive);
-    border-color: var(--posh-olive);
+    background: var(--posh-fg);
+    color: #ffffff;
+    border-color: var(--posh-fg);
   }
 
-  /* ── Shared solid button utility ── the same olive/white default + white/
-     olive hover-inversion system as .posh-btn, without the pill shape/
-     uppercase tracking so it can be dropped into existing buttons that keep
-     their own rounded corners, padding and text sizing. This is the single
-     reusable primary-action utility used across non-Home application pages
-     (checkout, cart, orders, sourcing, reports, credit, auth, …). */
+  /* ── Shared solid button utility ── the same olive/charcoal default +
+     hover system as .posh-btn, without the pill shape/uppercase tracking so
+     it can be dropped into existing buttons that keep their own rounded
+     corners, padding and text sizing. This is the single reusable
+     primary-action utility used across non-Home application pages
+     (checkout, cart, orders, sourcing, reports, credit, auth, newdashboard, …). */
   .posh-btn-solid {
     background: var(--posh-olive);
     border: 1px solid var(--posh-olive);
@@ -384,9 +384,9 @@
   }
   .posh-btn-solid:hover:not(:disabled),
   .posh-btn-solid:focus-visible:not(:disabled) {
-    background: #ffffff;
-    color: var(--posh-olive);
-    border-color: var(--posh-olive);
+    background: var(--posh-fg);
+    color: #ffffff;
+    border-color: var(--posh-fg);
   }
   .posh-btn-solid:disabled,
   .posh-btn-solid[aria-disabled="true"] {
@@ -410,6 +410,44 @@
   .posh-btn-ghost:hover {
     border-color: var(--posh-olive);
     color: var(--posh-olive);
+  }
+
+  /* ── Segmented two-way tab menu (e.g. /newdashboard "AI Suggestions" /
+     "Recent Orders" swap) ── an intentional exception to the standard
+     olive-default/charcoal-hover button language: the SELECTED tab is olive
+     (hovering to charcoal) while the UNSELECTED tab is charcoal (hovering to
+     olive), so the two options visually swap colours on hover instead of
+     both moving toward the same hover colour. Text/icons stay white in
+     every state. Not to be used for ordinary CTAs — only for a two (or
+     more)-way exclusive segmented control. */
+  .posh-tab-selected {
+    @apply rounded-full px-4 py-2 text-sm font-bold transition-colors;
+    background: var(--posh-olive);
+    color: #ffffff;
+  }
+  .posh-tab-selected:hover,
+  .posh-tab-selected:focus-visible {
+    background: var(--posh-fg);
+    color: #ffffff;
+  }
+  .posh-tab-selected:focus-visible {
+    outline: 2px solid var(--posh-fg);
+    outline-offset: 2px;
+  }
+
+  .posh-tab-unselected {
+    @apply rounded-full px-4 py-2 text-sm font-bold transition-colors;
+    background: var(--posh-fg);
+    color: #ffffff;
+  }
+  .posh-tab-unselected:hover,
+  .posh-tab-unselected:focus-visible {
+    background: var(--posh-olive);
+    color: #ffffff;
+  }
+  .posh-tab-unselected:focus-visible {
+    outline: 2px solid var(--posh-olive);
+    outline-offset: 2px;
   }
 
   /* Inline text link. */
@@ -506,12 +544,12 @@
   }
   .posh-btn-olive:hover,
   .posh-btn-olive:focus-visible {
-    background: #ffffff;
-    border-color: var(--posh-olive);
-    color: var(--posh-olive);
+    background: var(--posh-fg);
+    border-color: var(--posh-fg);
+    color: #ffffff;
   }
   .posh-btn-olive:focus-visible {
-    outline: 2px solid var(--posh-olive);
+    outline: 2px solid var(--posh-fg);
     outline-offset: 2px;
   }
   .posh-btn-olive:disabled,

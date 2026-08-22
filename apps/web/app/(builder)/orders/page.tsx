@@ -31,12 +31,28 @@ const FILTER_LABELS: Record<string, string> = {
 };
 
 // UF-04: Order Tracking list — FR-13
+//
+// In addition to the single-status chip filters above, this page also
+// recognises two "virtual" multi-status filters used by the /newdashboard
+// Active Orders / Delivered Orders stat cards (dashboard "Active Orders" =
+// not Cancelled/Closed/Delivered; "Delivered Orders" = Delivered or Closed).
+// These reuse the exact same already-fetched `orders` list and client-side
+// filtering as every other status chip here — no new API endpoint, no
+// duplicated business logic, no schema change. There is currently no
+// separate "Closed" OrderStatus value in the data model (only Aggregation
+// Pool / Purchase Order statuses have one), so filtering also checks for a
+// literal "CLOSED" string defensively in case that ever changes.
+const ACTIVE_STATUS_FILTER = "ACTIVE";
+const DELIVERED_OR_CLOSED_STATUS_FILTER = "DELIVERED_CLOSED";
+
 export default async function OrdersPage({ searchParams }: { searchParams: { status?: string | string[] } }) {
   let orders: OrderItem[] = [];
   let apiError = false;
 
   const rawStatus = Array.isArray(searchParams.status) ? searchParams.status[0] : searchParams.status;
   const normalized = rawStatus?.toUpperCase() ?? "All";
+  const isActiveFilter = normalized === ACTIVE_STATUS_FILTER;
+  const isDeliveredOrClosedFilter = normalized === DELIVERED_OR_CLOSED_STATUS_FILTER;
   const activeFilter: StatusFilter = (STATUS_FILTERS as readonly string[]).includes(normalized)
     ? (normalized as StatusFilter)
     : "All";
@@ -48,7 +64,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
     apiError = true;
   }
 
-  const filtered = activeFilter === "All" ? orders : orders.filter((o) => o.status === activeFilter);
+  const filtered = isActiveFilter
+    ? orders.filter((o) => !["CANCELLED", "CLOSED", "DELIVERED"].includes(o.status))
+    : isDeliveredOrClosedFilter
+    ? orders.filter((o) => ["DELIVERED", "CLOSED"].includes(o.status))
+    : activeFilter === "All"
+    ? orders
+    : orders.filter((o) => o.status === activeFilter);
 
   return (
     <div className="posh-body space-y-5">
@@ -71,11 +93,20 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
           <Link
             key={s}
             href={s === "All" ? "/orders" : `/orders?status=${s}`}
-            className={activeFilter === s ? "posh-chip-active" : "posh-chip"}
+            className={!isActiveFilter && !isDeliveredOrClosedFilter && activeFilter === s ? "posh-chip-active" : "posh-chip"}
           >
             {FILTER_LABELS[s]}
           </Link>
         ))}
+        {/* Virtual multi-status chips — reached from the /newdashboard
+            Active Orders / Delivered Orders stat cards (see comment above);
+            also directly usable here to jump back into either grouping. */}
+        <Link href={`/orders?status=${ACTIVE_STATUS_FILTER}`} className={isActiveFilter ? "posh-chip-active" : "posh-chip"}>
+          Active
+        </Link>
+        <Link href={`/orders?status=${DELIVERED_OR_CLOSED_STATUS_FILTER}`} className={isDeliveredOrClosedFilter ? "posh-chip-active" : "posh-chip"}>
+          Delivered / Closed
+        </Link>
       </div>
 
       {apiError ? (

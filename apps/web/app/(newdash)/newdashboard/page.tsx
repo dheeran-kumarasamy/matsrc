@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
 import { Bell, ShoppingCart } from "lucide-react";
 import { builderApiGet, builderApiPatch } from "@/lib/api";
 import { useCartStore } from "@/lib/store/cart-store";
 import { useOverlayStore } from "@/lib/store/overlay-store";
-import { getFrequentReports, type FrequentReport } from "@/lib/report-usage";
 
 // ── Live-data types ───────────────────────────────────────────────────────────
 type Order = {
@@ -92,21 +91,12 @@ function gapLabel(pct: number | null): string {
 export default function NewDashboardPage() {
   const { data: session } = useSession();
 
-  // Panel rotation (left column). The panel list is built dynamically below
-  // from real data — "Recent Orders" and "Unread Alerts" are skipped
-  // entirely for a user with no orders / no unread messages, so only
-  // sections that actually have data ever appear.
+  // Left-column panel — user-controlled only (see `panels`/`PanelKind`
+  // below): only "AI Suggestions" and "Recent Orders" are shown, and the
+  // user manually clicks between them. There is no automatic rotation/timer
+  // — the panel only changes when the user clicks a tab.
   const [panelIndex, setPanelIndex] = useState(0);
-  const [fade,  setFade]  = useState(true);
   const [view,  setView]  = useState<View>("Outstanding");
-
-  // Frequently used reports — real, locally-tracked usage (see
-  // lib/report-usage.ts). Loaded once on mount; empty until the builder has
-  // actually opened a report at least once.
-  const [frequentReports, setFrequentReports] = useState<FrequentReport[]>([]);
-  useEffect(() => {
-    setFrequentReports(getFrequentReports(5));
-  }, []);
 
   // Live orders
   const [orders,      setOrders]      = useState<Order[]>([]);
@@ -189,7 +179,6 @@ export default function NewDashboardPage() {
   // Derived data for tabs
   const recentOrders  = orders.slice(0, 5);
   const activeOrders  = orders.filter((o) => !["DELIVERED", "CANCELLED"].includes(o.status));
-  const unreadNotifs  = notifs.filter((n) => !n.read).slice(0, 5);
   const reportMetrics = [
     ["Active Orders",   String(activeOrders.length),     "Orders in progress"      ],
     ["Cart Items",      String(cartCount),                "Items ready to enquire"  ],
@@ -197,46 +186,18 @@ export default function NewDashboardPage() {
     ["Delivered",       String(orders.filter((o) => o.status === "DELIVERED").length), "Successfully delivered"],
   ];
 
-  // ── Left-column panels — built dynamically from real data ──────────────────
-  // "Recent Orders" is skipped entirely when the builder has never placed an
-  // order, and "Unread Alerts" is skipped when there are no unread messages,
-  // so only sections that actually have data are ever shown/rotated through.
-  // "AI Suggestions" is illustrative guidance and always available;
-  // "Frequently Used Reports" is skipped until the builder has actually
-  // opened a report at least once (see lib/report-usage.ts).
-  type PanelKind = "orders" | "suggestions" | "reports" | "alerts";
+  // ── Left-column panel — exactly two user-selectable options ─────────────────
+  // Only "AI Suggestions" and "Recent Orders" are shown. There is no
+  // automatic rotation/timer of any kind — the panel changes only when the
+  // user clicks one of the two tabs below (manual control only).
+  type PanelKind = "suggestions" | "orders";
   const PANEL_LABELS: Record<PanelKind, string> = {
-    orders: "Recent Orders",
     suggestions: "AI Suggestions",
-    reports: "Frequently Used Reports",
-    alerts: "Unread Alerts",
+    orders: "Recent Orders",
   };
-  const panels = useMemo<PanelKind[]>(() => {
-    const list: PanelKind[] = [];
-    if (ordersReady && recentOrders.length > 0) list.push("orders");
-    list.push("suggestions");
-    if (frequentReports.length > 0) list.push("reports");
-    if (notifsLoaded && unreadNotifs.length > 0) list.push("alerts");
-    return list;
-  }, [ordersReady, recentOrders.length, frequentReports.length, notifsLoaded, unreadNotifs.length]);
+  const panels = useMemo<PanelKind[]>(() => ["suggestions", "orders"], []);
 
-  // Keep the active index in range as the available panel set changes (e.g.
-  // once orders/alerts finish loading and get added to/removed from the list).
-  useEffect(() => {
-    if (panelIndex >= panels.length) setPanelIndex(0);
-  }, [panels.length, panelIndex]);
-
-  const activePanel: PanelKind | undefined = panels[panelIndex];
-
-  // ── Auto-rotate left panel every 7 s (only when there's more than one) ─────
-  useEffect(() => {
-    if (panels.length <= 1) return;
-    const t = setInterval(() => {
-      setFade(false);
-      setTimeout(() => { setPanelIndex((p) => (p + 1) % panels.length); setFade(true); }, 420);
-    }, 7000);
-    return () => clearInterval(t);
-  }, [panels.length]);
+  const activePanel: PanelKind = panels[panelIndex] ?? "suggestions";
 
   // ── Posh design tokens ─────────────────────────────────────────────────────
   // Ported to the same warm dark editorial --posh-* palette used by the
@@ -337,40 +298,57 @@ export default function NewDashboardPage() {
         {/* ── Two-column body ── */}
         <div className="mt-8 flex flex-1 flex-col gap-6 lg:flex-row">
 
-          {/* LEFT — rotating panel: only real, non-empty sections appear.
-              Recent Orders / Unread Alerts are omitted entirely for a user
-              with no orders / no unread messages (see `panels` above);
-              Frequently Used Reports is omitted until a report has actually
-              been opened at least once. */}
+          {/* LEFT — exactly two user-selectable panels: "AI Suggestions" and
+              "Recent Orders". No automatic rotation/timer — the panel only
+              changes when the user clicks one of the two tabs below. */}
           <aside className="flex w-full flex-col rounded-[2rem] border p-7 shadow-sm lg:w-[340px] lg:shrink-0"
             style={{ background: CARD, borderColor: B60 }}>
-            <div className="mb-5 flex items-center justify-between">
-              <p className="posh-eyebrow">
-                {activePanel ? PANEL_LABELS[activePanel] : "AI Suggestions"}
-              </p>
-              {activePanel === "orders" && <Link href="/orders" className="posh-link">View all →</Link>}
-              {activePanel === "suggestions" && <Link href="/sourcing" className="posh-link">Open AI sourcing →</Link>}
-              {activePanel === "reports" && <Link href="/reports" className="posh-link">All reports →</Link>}
-              {activePanel === "alerts" && <button type="button" onClick={() => setNotifsOpen(true)} className="posh-link">View all →</button>}
+            <div className="mb-5 flex items-center justify-between gap-3">
+              {/* Manual toggle — clicking a tab is the only way the panel
+                  changes; there is no auto-advance of any kind. */}
+              <div className="flex gap-2">
+                {panels.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPanelIndex(panels.indexOf(p))}
+                    aria-pressed={activePanel === p}
+                    className={activePanel === p ? "posh-chip-active" : "posh-chip"}
+                  >
+                    {PANEL_LABELS[p]}
+                  </button>
+                ))}
+              </div>
+              {activePanel === "orders" && <Link href="/orders" className="posh-link hidden sm:inline-block">View all →</Link>}
+              {activePanel === "suggestions" && <Link href="/sourcing" className="posh-link hidden sm:inline-block">Open AI sourcing →</Link>}
             </div>
-            <div className="flex-1" style={{ opacity: fade ? 1 : 0, transition: "opacity 420ms ease" }}>
+            <div className="flex-1">
               {activePanel === "orders" && (
                 /* Live orders — last 5 */
-                <div className="divide-y" style={{ borderColor: B40 }}>
-                  {recentOrders.map((o) => (
-                    <Link key={o.id} href={`/orders/${o.id}`}
-                      className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.items?.[0]?.name ?? `Order #${o.id.slice(0,6)}`}{(o.itemCount??0) > 1 ? ` +${o.itemCount-1}` : ""}</p>
-                        <p className="posh-label mt-1">{o.supplierName ?? STATUS_LABELS[o.status] ?? o.status}</p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="posh-card-title text-base">{fmtInr(o.total)}</p>
-                        <p className="posh-label mt-1">{STATUS_LABELS[o.status]}</p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
+                !ordersReady ? (
+                  <p className="posh-muted py-8 text-center text-xs">Loading…</p>
+                ) : recentOrders.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <p className="posh-card-title">No recent orders</p>
+                    <Link href="/products" className="posh-link mt-3 inline-block">Browse materials →</Link>
+                  </div>
+                ) : (
+                  <div className="divide-y" style={{ borderColor: B40 }}>
+                    {recentOrders.map((o) => (
+                      <Link key={o.id} href={`/orders/${o.id}`}
+                        className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.items?.[0]?.name ?? `Order #${o.id.slice(0,6)}`}{(o.itemCount??0) > 1 ? ` +${o.itemCount-1}` : ""}</p>
+                          <p className="posh-label mt-1">{o.supplierName ?? STATUS_LABELS[o.status] ?? o.status}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="posh-card-title text-base">{fmtInr(o.total)}</p>
+                          <p className="posh-label mt-1">{STATUS_LABELS[o.status]}</p>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )
               )}
 
               {activePanel === "suggestions" && (
@@ -390,43 +368,6 @@ export default function NewDashboardPage() {
                         </p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-
-              {activePanel === "reports" && (
-                /* Real, locally-tracked "frequently used reports" — highest
-                   open count first (see lib/report-usage.ts). */
-                <div className="divide-y" style={{ borderColor: B40 }}>
-                  {frequentReports.map((r) => (
-                    <Link key={r.id} href="/reports"
-                      className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold" style={{ color: FG }}>{r.title}</p>
-                        <p className="posh-label mt-1">{r.dataSource}</p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="posh-card-title text-base">{r.count}×</p>
-                        <p className="posh-label mt-1">opened</p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-
-              {activePanel === "alerts" && (
-                /* Last 5 unread notifications */
-                <div className="divide-y" style={{ borderColor: B40 }}>
-                  {unreadNotifs.map((n) => (
-                    <button key={n.id} type="button" onClick={() => markRead(n)}
-                      className="flex w-full items-start gap-3 py-4 text-left transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
-                      <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: P }} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold" style={{ color: FG }}>{n.title}</p>
-                        <p className="mt-0.5 line-clamp-2 text-xs" style={{ color: FM }}>{n.body}</p>
-                        <p className="posh-label mt-1">{timeAgo(n.createdAt)}</p>
-                      </div>
-                    </button>
                   ))}
                 </div>
               )}

@@ -59,7 +59,7 @@ export default function ApprovalBar({
           type="button"
           onClick={onProceed}
           disabled={submitting || !hasVerifiedCost}
-          className="rounded-xl bg-[color:var(--posh-primary)] px-4 py-2 text-sm font-medium text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
+          className="posh-btn-solid rounded-xl px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
         >
           {submitting ? "Submitting…" : "Proceed"}
         </button>

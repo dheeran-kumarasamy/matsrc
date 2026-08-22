@@ -203,17 +203,20 @@
     color: var(--posh-fg);
   }
 
-  /* ── Posh pill button (nav CTA) ── */
+  /* ── Posh pill button (nav CTA) ── olive/white brand button (same default
+     olive-bg/white-text + hover-inversion system as every other standard
+     action button site-wide). */
   .posh-btn-pill {
     @apply rounded-full border px-5 py-2 text-sm backdrop-blur-md transition-colors;
-    border-color: var(--posh-border);
-    background: rgba(var(--posh-wash-rgb),0.04);
-    color: var(--posh-fg);
+    border-color: var(--posh-olive);
+    background: var(--posh-olive);
+    color: #ffffff;
   }
-  .posh-btn-pill:hover {
-    background: var(--posh-primary);
-    color: var(--posh-primary-fg);
-    border-color: var(--posh-primary);
+  .posh-btn-pill:hover,
+  .posh-btn-pill:focus-visible {
+    background: #ffffff;
+    color: var(--posh-olive);
+    border-color: var(--posh-olive);
   }
 
   /* ── Reports surface typography ──────────────────────────────────────
@@ -350,14 +353,51 @@
     color: var(--posh-primary-fg);
   }
 
-  /* Primary action. */
+  /* Primary action — BuildOHub olive/white system: olive background + white
+     text/icons by default, inverting to a white background with olive
+     text/icon/border on hover/focus (site-wide standard action button
+     language, matching the homepage's "Get started for Free" button). */
   .posh-btn {
-    @apply rounded-full px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition-colors disabled:opacity-40;
-    background: var(--posh-primary);
-    color: var(--posh-primary-fg);
+    @apply rounded-full px-5 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition-colors disabled:cursor-not-allowed disabled:opacity-40;
+    background: var(--posh-olive);
+    border: 1px solid var(--posh-olive);
+    color: #ffffff;
   }
-  .posh-btn:hover {
-    opacity: 0.85;
+  .posh-btn:hover:not(:disabled),
+  .posh-btn:focus-visible:not(:disabled) {
+    background: #ffffff;
+    color: var(--posh-olive);
+    border-color: var(--posh-olive);
+  }
+
+  /* ── Shared solid button utility ── the same olive/white default + white/
+     olive hover-inversion system as .posh-btn, without the pill shape/
+     uppercase tracking so it can be dropped into existing buttons that keep
+     their own rounded corners, padding and text sizing. This is the single
+     reusable primary-action utility used across non-Home application pages
+     (checkout, cart, orders, sourcing, reports, credit, auth, …). */
+  .posh-btn-solid {
+    background: var(--posh-olive);
+    border: 1px solid var(--posh-olive);
+    color: #ffffff;
+    transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+  }
+  .posh-btn-solid:hover:not(:disabled),
+  .posh-btn-solid:focus-visible:not(:disabled) {
+    background: #ffffff;
+    color: var(--posh-olive);
+    border-color: var(--posh-olive);
+  }
+  .posh-btn-solid:disabled,
+  .posh-btn-solid[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.5;
+    background: var(--posh-olive);
+    color: #ffffff;
+    border-color: var(--posh-olive);
+  }
+  .posh-btn-solid svg {
+    color: inherit;
   }
 
   /* Secondary action. */
@@ -368,7 +408,8 @@
     color: var(--posh-fg);
   }
   .posh-btn-ghost:hover {
-    border-color: var(--posh-primary);
+    border-color: var(--posh-olive);
+    color: var(--posh-olive);
   }
 
   /* Inline text link. */
@@ -461,17 +502,29 @@
     background: var(--posh-olive);
     border: 1px solid var(--posh-olive);
     color: #ffffff;
-    transition: background-color 200ms ease, border-color 200ms ease;
+    transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
   }
   .posh-btn-olive:hover,
   .posh-btn-olive:focus-visible {
-    background: var(--posh-fg);
-    border-color: var(--posh-fg);
-    color: #ffffff;
+    background: #ffffff;
+    border-color: var(--posh-olive);
+    color: var(--posh-olive);
   }
   .posh-btn-olive:focus-visible {
-    outline: 2px solid var(--posh-fg);
+    outline: 2px solid var(--posh-olive);
     outline-offset: 2px;
+  }
+  .posh-btn-olive:disabled,
+  .posh-btn-olive[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.5;
+    background: var(--posh-olive) !important;
+    color: #ffffff !important;
+    border-color: var(--posh-olive) !important;
+  }
+  .posh-btn-olive > svg,
+  .posh-btn-olive .posh-btn-icon {
+    color: inherit;
   }
 
   .posh-btn-charcoal {

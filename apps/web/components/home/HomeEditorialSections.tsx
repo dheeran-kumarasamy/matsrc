@@ -1,4 +1,5 @@
 import WhyChooseUs from "@/components/home/WhyChooseUs";
+import BuildOHubLogo from "@/components/shared/BuildOHubLogo";
 
 const STATS: [string, string][] = [
   ["1,200+", "Verified suppliers"],
@@ -76,8 +77,8 @@ export default function HomeEditorialSections() {
         className="mx-auto flex max-w-7xl flex-col justify-between gap-4 px-6 py-10 text-sm md:flex-row md:px-10"
         style={{ color: "var(--posh-fg-muted)", borderTop: "1px solid var(--posh-border)" }}
       >
-        <span className="posh-heading text-lg" style={{ color: "var(--posh-fg)" }}>Buildohub</span>
-        <span>© {new Date().getFullYear()} Buildohub · Coimbatore, India</span>
+        <BuildOHubLogo href={null} className="text-lg" />
+        <span>© {new Date().getFullYear()} BuildOHub · Coimbatore, India</span>
       </footer>
     </>
   );

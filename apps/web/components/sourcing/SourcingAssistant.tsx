@@ -245,7 +245,7 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
             <button
               type="button"
               onClick={startNewSearch}
-              className="flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-[color:var(--posh-primary)] hover:text-[color:var(--posh-fg)]"
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-[color:var(--posh-olive)] hover:text-[color:var(--posh-olive)]"
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
               New search
@@ -264,7 +264,7 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
               <button
                 type="button"
                 onClick={startNewSearch}
-                className="flex items-center gap-1.5 rounded-xl bg-[color:var(--posh-primary)] px-4 py-2.5 text-sm font-medium text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85"
+                className="posh-btn-solid flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium"
               >
                 <RotateCcw className="h-4 w-4" aria-hidden="true" />
                 Start a new sourcing request
@@ -387,7 +387,7 @@ function Composer({
         <button
           type="submit"
           disabled={busy || !input.trim()}
-          className="flex items-center gap-1.5 rounded-xl bg-[color:var(--posh-primary)] px-4 py-2.5 text-sm font-medium text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
+          className="posh-btn-solid flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Send className="h-4 w-4" aria-hidden="true" />
           {busy ? "Working…" : "Send"}

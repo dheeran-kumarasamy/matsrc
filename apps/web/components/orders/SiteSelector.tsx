@@ -231,7 +231,7 @@ export default function SiteSelector({
             type="button"
             onClick={() => void handleCreateSite()}
             disabled={saving}
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[color:var(--posh-primary)] py-2 text-xs font-semibold text-[color:var(--posh-primary-fg)] hover:opacity-85 disabled:opacity-50"
+            className="posh-btn-solid flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold disabled:opacity-50"
           >
             <Plus size={14} /> {saving ? "Creating…" : "Create site & tag order"}
           </button>

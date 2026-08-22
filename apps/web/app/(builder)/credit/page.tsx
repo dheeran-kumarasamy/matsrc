@@ -182,7 +182,7 @@ export default function CreditPage() {
             <button
               onClick={submitBankGuarantee}
               disabled={bgSubmitting}
-              className="flex-1 bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-60"
+              className="posh-btn-solid flex-1 rounded-lg py-2.5 text-sm font-medium disabled:opacity-60"
             >
               {bgSubmitting ? "Submitting..." : "Submit for Verification"}
             </button>
@@ -202,7 +202,7 @@ export default function CreditPage() {
           </ul>
           <div className="flex gap-3">
             <button onClick={() => setStep("options")} className="flex-1 border border-slate-200 text-slate-600 rounded-lg py-2.5 text-sm">Cancel</button>
-            <button onClick={() => setStep("scoring")} className="flex-1 bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium">I Authorise Data Access</button>
+            <button onClick={() => setStep("scoring")} className="posh-btn-solid flex-1 rounded-lg py-2.5 text-sm font-medium">I Authorise Data Access</button>
           </div>
         </div>
       )}
@@ -241,7 +241,7 @@ export default function CreditPage() {
             <input type="checkbox" className="mt-0.5 accent-[color:var(--posh-primary)]" />
             <span className="text-xs text-slate-500">I have read and accept the Key Fact Statement. I consent to the terms of this credit product.</span>
           </label>
-          <button onClick={() => setStep("approved")} className="w-full bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium">
+          <button onClick={() => setStep("approved")} className="posh-btn-solid w-full rounded-lg py-2.5 text-sm font-medium">
             Confirm with OTP & Activate Credit
           </button>
         </div>

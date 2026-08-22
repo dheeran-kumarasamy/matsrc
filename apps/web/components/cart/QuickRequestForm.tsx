@@ -214,7 +214,7 @@ export default function QuickRequestForm({ floating }: Props) {
   if (floating) {
     return (
       <>
-        <button onClick={() => setOpen(true)} className="fixed bottom-6 right-6 z-40 flex min-h-[44px] items-center gap-2 rounded-full bg-accent-500 px-5 py-3 text-sm font-medium text-[color:var(--posh-primary-fg)] shadow-lg transition-colors hover:bg-accent-600">
+        <button onClick={() => setOpen(true)} className="posh-btn-solid fixed bottom-6 right-6 z-40 flex min-h-[44px] items-center gap-2 rounded-full px-5 py-3 text-sm font-medium shadow-lg">
           <MessageSquarePlus size={18} />
           <span className="hidden sm:inline">Quick Request</span>
         </button>
@@ -307,7 +307,7 @@ export default function QuickRequestForm({ floating }: Props) {
                   <input required placeholder="Delivery pincode" maxLength={6} value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-[color:var(--posh-primary)]" />
 
                   {error && <p className="text-xs text-red-600">{error}</p>}
-                  <button type="submit" disabled={loading} className="w-full bg-accent-500 hover:bg-accent-600 text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
+                  <button type="submit" disabled={loading} className="posh-btn-solid w-full rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
                     {loading ? "Submitting..." : "Get Quotes from Suppliers"}
                   </button>
                   <p className="text-xs text-slate-400 text-center">Takes less than 30 seconds</p>

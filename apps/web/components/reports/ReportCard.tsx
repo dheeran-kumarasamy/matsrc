@@ -59,7 +59,7 @@ export default function ReportCard({ report }: Props) {
           type="button"
           onClick={handleGenerate}
           disabled={loading}
-          className="mt-1 rounded-lg bg-[color:var(--posh-primary)] px-3 py-2 text-center text-sm font-bold text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-60"
+          className="posh-btn-solid mt-1 rounded-lg px-3 py-2 text-center text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? "Generating..." : "Generate"}
         </button>

@@ -353,7 +353,7 @@ export default function CheckoutPage() {
         <button
           onClick={handleSubmitEnquiry}
           disabled={loading || cart.items.filter((item) => !poolingItemIds.has(item.id)).length === 0}
-          className="w-full rounded-lg bg-[color:var(--posh-primary)] py-3 text-sm font-medium text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85 disabled:opacity-50"
+          className="posh-btn-solid w-full rounded-lg py-3 text-sm font-medium disabled:opacity-50"
         >
           {loading ? "Submitting..." : "Submit Enquiry"}
         </button>

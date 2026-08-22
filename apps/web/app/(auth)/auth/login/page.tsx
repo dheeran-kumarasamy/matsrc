@@ -155,8 +155,7 @@ function LoginPageInner() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full min-h-[44px] rounded-xl py-2.5 text-sm font-medium transition-opacity disabled:opacity-50 hover:opacity-85"
-            style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}
+            className="posh-btn-solid w-full min-h-[44px] rounded-xl py-2.5 text-sm font-medium disabled:opacity-50"
           >
             {loading ? "Sending..." : "Send OTP"}
           </button>
@@ -182,8 +181,7 @@ function LoginPageInner() {
           <button
             type="submit"
             disabled={loading || otp.length < 6}
-            className="w-full rounded-xl py-2.5 text-sm font-medium transition-opacity disabled:opacity-50 hover:opacity-85"
-            style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}
+            className="posh-btn-solid w-full rounded-xl py-2.5 text-sm font-medium disabled:opacity-50"
           >
             {loading ? "Verifying..." : "Verify OTP"}
           </button>

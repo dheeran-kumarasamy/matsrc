@@ -13,12 +13,12 @@ import { auth } from "@/auth";
 // title/description/canonical/robots per-route via Next's metadata merging;
 // this stays the site-wide default/fallback and homepage copy.
 export const metadata: Metadata = {
-  title: { default: "Buildohub.in", template: "%s | Buildohub.in" },
+  title: { default: "BuildOHub", template: "%s | BuildOHub" },
   description:
-    "Buildohub — India's B2B construction material procurement marketplace. Compare live prices from verified suppliers for cement, TMT bars, and more.",
+    "BuildOHub — India's B2B construction material procurement marketplace. Compare live prices from verified suppliers for cement, TMT bars, and more.",
   manifest: "/manifest.json",
   themeColor: "#1a4f8a",
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "Buildohub.in" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "BuildOHub" },
   other: { "mobile-web-app-capable": "yes" },
 };
 

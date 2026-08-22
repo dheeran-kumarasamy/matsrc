@@ -115,7 +115,7 @@ export default function HeroSection() {
           </Link>
           <Link
             href="/products"
-            className="posh-btn-charcoal inline-flex items-center justify-center rounded-md px-5 py-2.5 text-sm font-semibold"
+            className="posh-btn-olive inline-flex items-center justify-center rounded-md px-5 py-2.5 text-sm font-semibold"
           >
             Browse materials
           </Link>

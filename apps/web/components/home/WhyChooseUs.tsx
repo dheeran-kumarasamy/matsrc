@@ -82,7 +82,7 @@ export default function WhyChooseUs() {
               className="text-xs font-bold uppercase tracking-[0.35em]"
               style={{ color: "var(--posh-olive)" }}
             >
-              Why Buildohub
+              Why BuildOHub
             </p>
             <h2
               className="posh-heading mt-4 max-w-2xl text-2xl md:text-3xl"

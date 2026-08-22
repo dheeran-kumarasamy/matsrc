@@ -47,7 +47,7 @@ export default function MfaVerification({ onVerified }: { onVerified: () => void
             className="w-full border border-slate-200 rounded-lg px-4 py-3 text-center text-xl tracking-widest focus:outline-none focus:ring-2 focus:ring-[color:var(--posh-primary)]"
           />
           {error && <p className="text-red-500 text-xs">{error}</p>}
-          <button type="submit" disabled={loading || otp.length < 6} className="w-full bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] rounded-lg py-3 text-sm font-medium disabled:opacity-50">
+          <button type="submit" disabled={loading || otp.length < 6} className="posh-btn-solid w-full rounded-lg py-3 text-sm font-medium disabled:opacity-50">
             {loading ? "Verifying..." : "Confirm & Place Order"}
           </button>
         </form>

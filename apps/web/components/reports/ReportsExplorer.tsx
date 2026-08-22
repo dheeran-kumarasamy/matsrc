@@ -135,7 +135,7 @@ export default function ReportsExplorer() {
             </span>
           </div>
           <p className="text-xs font-medium leading-relaxed text-[color:var(--posh-primary)]">
-            Everything purchased through Buildohub, broken down by construction site — with CSV/XLSX/PDF
+            Everything purchased through BuildOHub, broken down by construction site — with CSV/XLSX/PDF
             export and Tally XML export for your accountant.
           </p>
         </button>

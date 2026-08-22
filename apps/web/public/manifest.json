@@ -1,6 +1,6 @@
 {
-  "name": "Buildohub.in",
-  "short_name": "Buildohub.in",
+  "name": "BuildOHub",
+  "short_name": "BuildOHub",
   "description": "B2B construction material procurement marketplace",
   "start_url": "/",
   "display": "standalone",

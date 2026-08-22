@@ -172,7 +172,7 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
         onClick={() => void handlePrimaryAction()}
         disabled={loading}
         className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors disabled:opacity-50 ${
-          added ? "border border-[color:var(--posh-primary)] bg-[color:var(--posh-bg-card)] text-[color:var(--posh-fg)]" : "bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)] hover:opacity-85"
+          added ? "border border-[color:var(--posh-olive)] bg-[color:var(--posh-bg-card)] text-[color:var(--posh-olive)]" : "posh-btn-solid"
         }`}
       >
         <ShoppingCart size={16} />

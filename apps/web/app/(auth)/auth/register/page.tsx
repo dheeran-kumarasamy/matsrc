@@ -151,8 +151,7 @@ export default function RegisterPage() {
             style={{ borderColor: "var(--posh-border)", background: "transparent", color: "var(--posh-fg)" }}
           />
           {error && <p className="text-red-400 text-xs">{error}</p>}
-          <button type="submit" disabled={loading} className="w-full min-h-[44px] rounded-lg py-2.5 text-sm font-medium transition-opacity disabled:opacity-50 hover:opacity-85"
-            style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
+          <button type="submit" disabled={loading} className="posh-btn-solid w-full min-h-[44px] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
             {loading ? "Sending..." : "Send OTP"}
           </button>
         </form>
@@ -173,8 +172,7 @@ export default function RegisterPage() {
             style={{ borderColor: "var(--posh-border)", background: "transparent", color: "var(--posh-fg)" }}
           />
           {error && <p className="text-red-400 text-xs">{error}</p>}
-          <button type="submit" disabled={loading || otp.length < 6} className="w-full rounded-lg py-2.5 text-sm font-medium transition-opacity disabled:opacity-50 hover:opacity-85"
-            style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
+          <button type="submit" disabled={loading || otp.length < 6} className="posh-btn-solid w-full rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
             {loading ? "Verifying..." : "Verify OTP"}
           </button>
         </form>
@@ -201,8 +199,7 @@ export default function RegisterPage() {
             ))}
           </div>
           {error && <p className="text-red-400 text-xs">{error}</p>}
-          <button type="submit" disabled={loading || !role} className="w-full rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
-            style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
+          <button type="submit" disabled={loading || !role} className="posh-btn-solid w-full rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
             {loading ? "Saving..." : "Continue →"}
           </button>
         </form>
@@ -239,8 +236,7 @@ export default function RegisterPage() {
           </div>
 
           {error && <p className="text-red-400 text-xs">{error}</p>}
-          <button type="submit" disabled={loading} className="w-full rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
-            style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
+          <button type="submit" disabled={loading} className="posh-btn-solid w-full rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
             {loading ? "Saving..." : "Continue to KYC →"}
           </button>
         </form>

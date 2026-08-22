@@ -1,4 +1,4 @@
-import Link from "next/link";
+import BuildOHubLogo from "@/components/shared/BuildOHubLogo";
 
 // Auth layout — Posh editorial design: dark warm background,
 // centred card with cream tones. All form logic/routes unchanged.
@@ -9,11 +9,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       style={{ background: "var(--posh-bg)" }}
     >
       <div className="w-full max-w-md">
-        {/* Wordmark */}
+        {/* Wordmark — shared BuildOHubLogo component */}
         <div className="mb-10 text-center">
-          <Link href="/" className="posh-heading inline-block text-3xl" style={{ color: "var(--posh-fg)" }}>
-            Buildohub
-          </Link>
+          <BuildOHubLogo size="lg" className="inline-block" />
           <p className="mt-2 text-sm" style={{ color: "var(--posh-fg-muted)" }}>
             B2B Construction Material Marketplace
           </p>

@@ -152,7 +152,7 @@ export default function BuilderProfilePage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-brand-500 text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50 hover:bg-brand-600 transition-colors"
+          className="posh-btn-solid w-full rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
         >
           {loading ? "Updating..." : "Update Contact Information"}
         </button>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -13,6 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import BuildOHubLogo from "@/components/shared/BuildOHubLogo";
 
 
 // Grouped by mental model (Overview / Procurement / Intelligence /
@@ -109,10 +109,10 @@ function BrandBlock() {
   return (
     <Link
       href="/"
-      className="relative block h-20 w-full overflow-hidden rounded-xl p-3 transition hover:opacity-90"
+      className="flex h-20 w-full items-center justify-center overflow-hidden rounded-xl p-3 transition hover:opacity-90"
       style={{ background: "var(--posh-cream)" }}
     >
-      <Image src="/icons/logo-full.png" alt="Buildohub" fill className="object-contain" priority />
+      <BuildOHubLogo href={null} size="lg" />
     </Link>
   );
 }
@@ -144,7 +144,9 @@ export function BuilderNavMobileTrigger() {
           style={{ background: "var(--posh-bg-card)", color: "var(--posh-fg)" }}
         >
           <SheetHeader>
-            <SheetTitle className="posh-nav-brandmark text-2xl">Builder Hub</SheetTitle>
+            <SheetTitle>
+              <BuildOHubLogo href={null} size="lg" />
+            </SheetTitle>
           </SheetHeader>
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
             <BrandBlock />

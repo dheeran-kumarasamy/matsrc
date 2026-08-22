@@ -283,7 +283,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
           ) : (
             <button
               onClick={() => setShowOtp(true)}
-              className="rounded-md bg-[color:var(--posh-primary)] px-4 py-2 text-sm font-semibold text-[color:var(--posh-primary-fg)] hover:opacity-85"
+              className="posh-btn-solid rounded-md px-4 py-2 text-sm font-semibold"
             >
               Approve & Issue PO
             </button>

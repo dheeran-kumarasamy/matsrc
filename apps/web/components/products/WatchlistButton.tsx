@@ -50,7 +50,7 @@ export default function WatchlistButton({ productId, initialWatching = false }: 
       <button
         onClick={handleWatchlist}
         disabled={saving}
-        className={`flex w-full items-center justify-center gap-2 rounded-full border-2 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-50 ${watching ? "border-[color:var(--posh-primary)] bg-[color:var(--posh-primary)] text-[color:var(--posh-primary-fg)]" : "border-[color:var(--posh-border)] text-[color:var(--posh-fg-muted)] hover:border-[color:var(--posh-primary)] hover:text-[color:var(--posh-fg)]"}`}
+        className={`flex w-full items-center justify-center gap-2 rounded-full border-2 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-50 ${watching ? "posh-btn-solid" : "border-[color:var(--posh-border)] text-[color:var(--posh-fg-muted)] hover:border-[color:var(--posh-olive)] hover:text-[color:var(--posh-olive)]"}`}
       >
         {watching ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
         {watching ? "Watching — Price Alert Set" : "Add to Watchlist"}
@@ -65,7 +65,7 @@ export default function WatchlistButton({ productId, initialWatching = false }: 
             onChange={(e) => setTargetPrice(e.target.value)}
             className="flex-1 rounded-xl border border-[color:var(--posh-border)] px-3 py-2 text-xs font-medium text-[color:var(--posh-fg)] focus:border-[color:var(--posh-primary)] focus:outline-none focus:ring-1 focus:ring-[color:var(--posh-primary)]"
           />
-          <button onClick={saveWatchlist} disabled={saving} className="rounded-full bg-[color:var(--posh-primary)] px-4 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--posh-primary-fg)] disabled:opacity-50">{saving ? "..." : "Save"}</button>
+          <button onClick={saveWatchlist} disabled={saving} className="posh-btn-solid rounded-full px-4 text-xs font-bold uppercase tracking-[0.14em] disabled:opacity-50">{saving ? "..." : "Save"}</button>
         </div>
       )}
       {error && <p className="mt-1 text-xs font-bold text-[color:var(--posh-fg)]">{error}</p>}

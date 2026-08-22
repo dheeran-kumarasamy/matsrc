@@ -215,7 +215,7 @@ export default function TallySettingsPage() {
           <button
             onClick={handleSaveSettings}
             disabled={saving}
-            className="rounded-full bg-[color:var(--posh-primary)] px-5 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85 disabled:opacity-50"
+            className="posh-btn-solid rounded-full px-5 py-2 text-[10px] font-bold uppercase tracking-[0.18em] disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save Settings"}
           </button>
@@ -278,7 +278,7 @@ export default function TallySettingsPage() {
           <button
             onClick={handleDownload}
             disabled={!dryRun || dryRun.blockers.length > 0 || dryRun.voucherCount === 0}
-            className="rounded-full bg-[color:var(--posh-primary)] px-5 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
+            className="posh-btn-solid rounded-full px-5 py-2 text-[10px] font-bold uppercase tracking-[0.18em] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Download Tally XML
           </button>

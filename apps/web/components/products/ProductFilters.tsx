@@ -255,7 +255,7 @@ export default function ProductFilters({
       <div className="flex items-center gap-2">
         <button
           type="submit"
-          className="rounded-lg bg-[color:var(--posh-primary)] px-4 py-2 text-xs font-medium text-[color:var(--posh-primary-fg)] transition-colors hover:opacity-85"
+          className="posh-btn-solid rounded-lg px-4 py-2 text-xs font-medium"
         >
           Apply Filters
         </button>

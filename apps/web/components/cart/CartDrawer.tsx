@@ -444,8 +444,7 @@ export default function CartDrawer() {
         <SheetFooter className="space-y-3" style={{ borderColor: "rgba(var(--posh-wash-rgb),0.10)" }}>
           {checkoutStep === "review" ? (
             <button onClick={() => setCheckoutStep("delivery")} disabled={items.length === 0}
-              className="w-full rounded-2xl py-2.5 text-sm font-semibold transition disabled:opacity-50"
-              style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
+              className="posh-btn-solid w-full rounded-2xl py-2.5 text-sm font-semibold disabled:opacity-50">
               Continue to delivery
             </button>
           ) : null}
@@ -458,8 +457,7 @@ export default function CartDrawer() {
                 <ChevronLeft size={14} /> Back
               </button>
               <button onClick={goToNextStep}
-                className="flex-1 rounded-2xl py-2.5 text-sm font-semibold transition"
-                style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
+                className="posh-btn-solid flex-1 rounded-2xl py-2.5 text-sm font-semibold">
                 Continue to confirm
               </button>
             </div>
@@ -473,8 +471,7 @@ export default function CartDrawer() {
                 <ChevronLeft size={14} /> Back
               </button>
               <button onClick={() => void handleSubmitEnquiry()} disabled={submitting || items.length === 0}
-                className="flex-1 rounded-2xl py-2.5 text-sm font-semibold transition disabled:opacity-50"
-                style={{ background: "#4ade80", color: "#1c1810" }}>
+                className="posh-btn-solid flex-1 rounded-2xl py-2.5 text-sm font-semibold disabled:opacity-50">
                 {submitting ? "Submitting..." : "Submit Enquiry"}
               </button>
             </div>
@@ -482,8 +479,7 @@ export default function CartDrawer() {
 
           {checkoutStep === "success" ? (
             <button onClick={handleViewOrders}
-              className="w-full rounded-2xl py-2.5 text-sm font-semibold transition"
-              style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}>
+              className="posh-btn-solid w-full rounded-2xl py-2.5 text-sm font-semibold">
               View My Orders
             </button>
           ) : null}

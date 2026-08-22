@@ -91,7 +91,7 @@ export function OrderDetailErrorOverlay({ orderId }: { orderId: string }) {
           <p className="text-sm text-slate-500">Please try again in a moment.</p>
           <Link
             href={`/orders/${orderId}`}
-            className="inline-block rounded-lg bg-[color:var(--posh-primary)] px-4 py-2 text-sm font-semibold text-[color:var(--posh-primary-fg)] hover:opacity-85"
+            className="posh-btn-solid inline-block rounded-lg px-4 py-2 text-sm font-semibold"
           >
             Retry
           </Link>
@@ -268,7 +268,7 @@ export default function OrderDetailOverlay({ order }: Props) {
                 {order.paymentLinkAvailable ? (
                   <Link
                     href={order.paymentLink}
-                    className="block rounded-lg bg-[color:var(--posh-primary)] px-4 py-3 text-center text-sm font-semibold text-[color:var(--posh-primary-fg)] hover:opacity-85"
+                    className="posh-btn-solid block rounded-lg px-4 py-3 text-center text-sm font-semibold"
                   >
                     Open payment link
                   </Link>

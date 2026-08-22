@@ -78,7 +78,7 @@ export default function KycPage() {
         <button
           type="submit"
           disabled={loading || !allUploaded}
-          className="w-full bg-brand-500 text-[color:var(--posh-primary-fg)] rounded-lg py-2.5 text-sm font-medium disabled:opacity-50 transition-colors"
+          className="posh-btn-solid w-full rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
         >
           {loading ? "Uploading..." : "Submit for Verification"}
         </button>

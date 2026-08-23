@@ -189,22 +189,23 @@ export default function NewDashboardPage() {
   // `cartCount` state populated once above).
   const recentOrders = orders.slice(0, 5);
 
-  // "Active Orders" = every order NOT Cancelled, Closed, or Delivered.
-  // "Closed" is not currently a distinct OrderStatus in the data model
-  // (only PLACED/PROCESSING/DISPATCHED/OUT_FOR_DELIVERY/DELIVERED/CANCELLED
-  // exist -- see packages/db/prisma/schema.prisma), so this checks for it
-  // defensively without assuming/inventing a status the backend doesn't
-  // emit yet.
-  const activeOrders = orders.filter((o) => !["CANCELLED", "CLOSED", "DELIVERED"].includes(o.status));
-  // "Delivered Orders" = Delivered or Closed.
-  const deliveredOrClosedOrders = orders.filter((o) => ["DELIVERED", "CLOSED"].includes(o.status));
+  // "Active Orders" = every order NOT Cancelled or Delivered. "Closed" is
+  // not currently a distinct OrderStatus in the data model (only
+  // PLACED/PROCESSING/DISPATCHED/OUT_FOR_DELIVERY/DELIVERED/CANCELLED
+  // exist -- see packages/db/prisma/schema.prisma). This mirrors the exact
+  // same translation applied server-side in
+  // apps/web/app/api/builder/orders/route.ts for `?status=ACTIVE`.
+  const activeOrders = orders.filter((o) => !["CANCELLED", "DELIVERED"].includes(o.status));
+  // "Delivered Orders" = Delivered only (see apps/web/app/(builder)/orders/page.tsx).
+  const deliveredOrders = orders.filter((o) => o.status === "DELIVERED");
 
   // Reports/statistics -- the same metrics previously shown only behind the
   // "Reports" tab, now surfaced directly on the dashboard. Each card
   // reuses the app's existing navigation/overlay mechanisms rather than
   // duplicating any business logic:
   //  - Active Orders / Delivered Orders -> /orders with a status filter
-  //    that reuses the existing orders list + client-side filtering.
+  //    that the API route (apps/web/app/api/builder/orders/route.ts)
+  //    translates into the correct Prisma `status` condition.
   //  - Watchlist -> the existing /watchlist route.
   //  - Cart Items -> the existing shared live cart drawer (Zustand overlay
   //    store), not a separate/fake cart preview.
@@ -217,9 +218,9 @@ export default function NewDashboardPage() {
     },
     {
       label: "Delivered Orders",
-      value: String(deliveredOrClosedOrders.length),
-      sub: "Delivered or closed",
-      onClick: () => router.push("/orders?status=DELIVERED_CLOSED"),
+      value: String(deliveredOrders.length),
+      sub: "Delivered",
+      onClick: () => router.push("/orders?status=DELIVERED"),
     },
     {
       label: "Watchlist",

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { OrderStatus, PaymentStatus } from "@matsrc/db";
+import { OrderStatus, PaymentStatus, Prisma } from "@matsrc/db";
 import {
   prisma,
   formatCurrency,
@@ -10,13 +10,56 @@ import { createOrdersFromCart } from "@/lib/order-checkout";
 
 export const dynamic = "force-dynamic";
 
+// The "/orders" list (and the /newdashboard Active Orders / Delivered
+// Orders stat cards) is filtered by a `?status=` query param. Alongside
+// the real `OrderStatus` enum values (PLACED/PROCESSING/DISPATCHED/
+// OUT_FOR_DELIVERY/DELIVERED/CANCELLED), two virtual/composite filter
+// values are supported and translated into real enum conditions here —
+// they must never be passed straight through to Prisma's `status` enum
+// filter since they are not actual OrderStatus values:
+//
+//   ACTIVE           -> status NOT IN (CANCELLED, DELIVERED)
+//                       ("Closed" is not a distinct OrderStatus in the
+//                       current schema — see packages/db/prisma/schema.prisma
+//                       — so there is nothing further to exclude for it yet.)
+//   DELIVERED_CLOSED -> status = DELIVERED (kept only for backward
+//                       compatibility with old dashboard links; behaves
+//                       identically to `status=DELIVERED`, not
+//                       Delivered+Closed, per current product requirement)
+const ACTIVE_STATUS_FILTER = "ACTIVE";
+const DELIVERED_OR_CLOSED_STATUS_FILTER = "DELIVERED_CLOSED";
+const NON_ACTIVE_STATUSES: OrderStatus[] = [OrderStatus.CANCELLED, OrderStatus.DELIVERED];
+
+function resolveStatusWhere(rawStatus: string | null): Prisma.OrderWhereInput["status"] | undefined {
+  if (!rawStatus) return undefined;
+  const normalized = rawStatus.toUpperCase();
+
+  if (normalized === ACTIVE_STATUS_FILTER) {
+    return { notIn: NON_ACTIVE_STATUSES };
+  }
+  if (normalized === DELIVERED_OR_CLOSED_STATUS_FILTER) {
+    return OrderStatus.DELIVERED;
+  }
+  if ((Object.values(OrderStatus) as string[]).includes(normalized)) {
+    return normalized as OrderStatus;
+  }
+  // Unknown/invalid value: don't filter (safely falls back to "All").
+  return undefined;
+}
+
 export async function GET(request: Request) {
   try {
     const ctx = getUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
+    const url = new URL(request.url);
+    const statusWhere = resolveStatusWhere(url.searchParams.get("status"));
+
     const orders = await prisma.order.findMany({
-      where: { userId: user.id },
+      where: {
+        userId: user.id,
+        ...(statusWhere !== undefined ? { status: statusWhere } : {}),
+      },
       select: {
         id: true,
         status: true,

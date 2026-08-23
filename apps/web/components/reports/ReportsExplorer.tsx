@@ -33,7 +33,7 @@ const VISIBLE_REPORTS: ReportDefinition[] = REPORT_DEFINITIONS.filter(
 );
 
 const DATA_SOURCE_STYLES: Record<string, string> = {
-  "Account data": "border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] text-[color:var(--posh-primary)]",
+  "Account data": "border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] text-[color:var(--posh-fg)]",
   "Live feed": "border-emerald-200 bg-emerald-50 text-emerald-700",
   "Historical data": "border-amber-200 bg-amber-50 text-amber-700",
   "AI insight": "border-purple-200 bg-purple-50 text-purple-700",
@@ -130,11 +130,11 @@ export default function ReportsExplorer() {
         >
           <div className="flex items-start justify-between gap-3">
             <h2 className="report-display text-xl text-[color:var(--posh-fg)]">Site-wise Report</h2>
-            <span className="shrink-0 rounded-full border border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--posh-primary)]">
+            <span className="shrink-0 rounded-full border border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--posh-fg)]">
               Account data
             </span>
           </div>
-          <p className="text-xs font-medium leading-relaxed text-[color:var(--posh-primary)]">
+          <p className="text-xs font-medium leading-relaxed text-[color:var(--posh-fg-muted)]">
             Everything purchased through BuildOHub, broken down by construction site — with CSV/XLSX/PDF
             export and Tally XML export for your accountant.
           </p>

@@ -77,7 +77,7 @@ export default function OrdersListOverlay({ orders, apiError }: Props) {
           ) : orders.length === 0 ? (
             <div className="panel p-10 text-center">
               <p className="text-sm text-slate-400">No orders found.</p>
-              <Link href="/products" className="mt-3 inline-block text-sm text-[color:var(--posh-primary)] hover:underline">
+              <Link href="/products" className="mt-3 inline-block text-sm text-[color:var(--posh-fg)] hover:underline">
                 Place your first order →
               </Link>
             </div>
@@ -109,7 +109,7 @@ export default function OrdersListOverlay({ orders, apiError }: Props) {
                         Payment link enabled
                       </Link>
                     ) : null}
-                    <Link href={`/orders/${order.id}`} className="text-xs text-[color:var(--posh-primary)] hover:underline">
+                    <Link href={`/orders/${order.id}`} className="text-xs text-[color:var(--posh-fg)] hover:underline">
                       View
                     </Link>
                   </div>

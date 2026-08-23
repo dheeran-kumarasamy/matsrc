@@ -214,7 +214,7 @@ export default function CreditPage() {
           <p className="font-medium text-slate-800">Running credit assessment...</p>
           <p className="text-sm text-slate-400">Evaluating GST + ITR data via NBFC model. This takes ~30 seconds.</p>
           {/* Simulate completion */}
-          <button onClick={() => setStep("kfs")} className="text-xs text-[color:var(--posh-primary)] hover:underline">
+          <button onClick={() => setStep("kfs")} className="text-xs text-[color:var(--posh-fg)] hover:underline">
             (Demo: Continue to KFS →)
           </button>
         </div>
@@ -224,7 +224,7 @@ export default function CreditPage() {
       {step === "kfs" && (
         <div className="panel p-6 space-y-4">
           <div className="flex items-center gap-2">
-            <span className="bg-[rgba(var(--posh-wash-rgb),0.04)] text-[color:var(--posh-primary)] text-xs font-semibold px-2 py-0.5 rounded">RBI Mandated</span>
+            <span className="bg-[rgba(var(--posh-wash-rgb),0.04)] text-[color:var(--posh-fg)] text-xs font-semibold px-2 py-0.5 rounded">RBI Mandated</span>
             <h2 className="font-semibold text-slate-800">Key Fact Statement (KFS)</h2>
           </div>
           <div className="bg-slate-50 rounded-lg p-4 text-xs text-slate-600 space-y-2 max-h-48 overflow-y-auto">

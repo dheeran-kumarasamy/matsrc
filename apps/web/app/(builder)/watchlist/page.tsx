@@ -106,7 +106,7 @@ export default function WatchlistPage() {
       </header>
 
       <div className="posh-card flex gap-3 p-5">
-        <TrendingDown className="mt-0.5 shrink-0" style={{ color: "var(--posh-primary)" }} size={18} />
+        <TrendingDown className="mt-0.5 shrink-0" style={{ color: "var(--posh-fg)" }} size={18} />
         <div>
           <p className="posh-card-title text-base">How price alerts work</p>
           <p className="mt-1 text-xs font-medium" style={{ color: "var(--posh-fg-muted)" }}>
@@ -190,7 +190,7 @@ export default function WatchlistPage() {
                     {typeof pi.gapToTarget === "number" && item.targetPrice && (
                       <span
                         className="font-bold"
-                        style={{ color: pi.gapToTarget <= 0 ? "var(--posh-primary)" : "var(--posh-fg-muted)" }}
+                        style={{ color: pi.gapToTarget <= 0 ? "var(--posh-fg)" : "var(--posh-fg-muted)" }}
                       >
                         {pi.gapToTarget <= 0
                           ? "Target reached"

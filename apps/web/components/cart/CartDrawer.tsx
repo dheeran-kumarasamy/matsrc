@@ -400,7 +400,7 @@ export default function CartDrawer() {
 
           {checkoutStep === "confirm" ? (
             <div className="space-y-4">
-              <div className="rounded-2xl border p-4" style={{ borderColor: "rgba(var(--posh-wash-rgb),0.12)", background: "rgba(36,31,22,0.50)" }}>
+              <div className="rounded-2xl border p-4 shadow-sm" style={{ borderColor: "var(--posh-border)", background: "var(--posh-bg-card)" }}>
                 <h3 className="text-sm font-semibold" style={{ color: "var(--posh-fg)" }}>Order summary</h3>
                 <div className="mt-3 space-y-2 text-sm">
                   <div className="flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
@@ -409,9 +409,9 @@ export default function CartDrawer() {
                   <div className="flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
                     <span>GST (18%)</span><span>₹{gst.toLocaleString("en-IN")}</span>
                   </div>
-                  <div className="flex justify-between border-t pt-2" style={{ borderColor: "rgba(var(--posh-wash-rgb),0.12)" }}>
+                  <div className="flex justify-between border-t pt-2" style={{ borderColor: "var(--posh-border)" }}>
                     <span className="font-bold" style={{ color: "var(--posh-fg)" }}>Estimated total</span>
-                    <span className="posh-heading text-lg" style={{ color: "var(--posh-primary)" }}>₹{total.toLocaleString("en-IN")}</span>
+                    <span className="posh-heading text-lg" style={{ color: "var(--posh-fg)" }}>₹{total.toLocaleString("en-IN")}</span>
                   </div>
                 </div>
               </div>

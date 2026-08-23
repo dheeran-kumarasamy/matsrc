@@ -205,7 +205,7 @@ export default function OrderDetailOverlay({ order }: Props) {
                   </p>
                   <Link
                     href={`/purchase-orders/${order.purchaseOrder.id}`}
-                    className="rounded-lg border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] px-4 py-2 text-xs font-semibold text-[color:var(--posh-primary)] hover:bg-[rgba(var(--posh-wash-rgb),0.08)]"
+                    className="rounded-lg border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] px-4 py-2 text-xs font-semibold text-[color:var(--posh-fg)] hover:bg-[rgba(var(--posh-wash-rgb),0.08)]"
                   >
                     View Purchase Order
                   </Link>

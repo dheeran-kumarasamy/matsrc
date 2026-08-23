@@ -106,8 +106,7 @@ export default function ProductCard({ skeleton, product }: Props) {
           pointer devices; stays visible on touch (no hover state) so it's
           always reachable on mobile. */}
       <span
-        className="mt-4 flex min-h-[40px] w-full items-center justify-center rounded-lg text-xs font-bold uppercase tracking-wide opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100"
-        style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}
+        className="posh-btn-solid mt-4 flex min-h-[40px] w-full items-center justify-center rounded-lg text-xs font-bold uppercase tracking-wide opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100"
       >
         Request Quote
       </span>

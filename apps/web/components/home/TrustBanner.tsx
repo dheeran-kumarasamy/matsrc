@@ -23,7 +23,7 @@ export default function TrustBanner() {
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-6 sm:grid-cols-3 md:px-10">
         {BADGES.map(({ icon: Icon, label }) => (
           <div key={label} className="flex items-center justify-center gap-3 sm:justify-start">
-            <Icon size={20} style={{ color: "var(--posh-primary)" }} aria-hidden />
+            <Icon size={20} style={{ color: "var(--posh-fg)" }} aria-hidden />
             <span className="text-sm font-semibold" style={{ color: "var(--posh-cream-fg)" }}>
               {label}
             </span>

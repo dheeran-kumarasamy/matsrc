@@ -93,7 +93,7 @@ export default function SiteWiseReportPage() {
         <div>
           <Link
             href="/reports"
-            className="text-[10px] font-bold uppercase tracking-[0.25em] text-[color:var(--posh-primary)] hover:underline"
+            className="text-[10px] font-bold uppercase tracking-[0.25em] text-[color:var(--posh-fg)] hover:underline"
           >
             ← Back to Reports
           </Link>
@@ -233,7 +233,7 @@ export default function SiteWiseReportPage() {
         </a>
         <Link
           href="/reports/site-wise/tally"
-          className="rounded-full border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--posh-primary)] transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.08)]"
+          className="rounded-full border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--posh-fg)] transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.08)]"
         >
           Export to Tally
         </Link>
@@ -367,7 +367,7 @@ export default function SiteWiseReportPage() {
                       <td className="py-3 pr-3">
                         <Link
                           href={`/orders/${row.orderId}`}
-                          className="font-semibold text-[color:var(--posh-primary)] hover:underline"
+                          className="font-semibold text-[color:var(--posh-fg)] hover:underline"
                         >
                           {row.orderId.slice(0, 8)}
                         </Link>

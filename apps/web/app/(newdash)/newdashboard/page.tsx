@@ -156,7 +156,10 @@ export default function NewDashboardPage() {
       id: "ACTIVE" as const,
       label: "Active Orders",
       value: String(activeOrders.length),
-      sub: "Orders in progress",
+      // Rendered as "{count} Orders in Progress" on one line (see the card
+      // markup below) rather than a separate value/sub pair, so the count
+      // and description never wrap onto two lines.
+      sub: "Orders in Progress",
       onClick: () => toggleStat("ACTIVE"),
     },
     {
@@ -287,8 +290,25 @@ export default function NewDashboardPage() {
                 }}
               >
                 <p className="posh-eyebrow">{card.label}</p>
-                <p className="posh-page-title mt-2 text-2xl">{card.value}</p>
-                <p className="posh-subtitle mt-1">{card.sub}</p>
+                {card.id === "ACTIVE" ? (
+                  // "{count} Orders in Progress" on a single line — dynamic
+                  // count + description share one nowrap flex row instead
+                  // of the separate value/sub lines the other cards use.
+                  // `whitespace-nowrap` + `overflow-visible` (no clipping)
+                  // plus a smaller, responsive font size (vs. the other
+                  // cards' text-2xl) keeps the combined string on one line
+                  // at the card's available width instead of wrapping into
+                  // "22 Orders in" / "Progress".
+                  <p className="posh-page-title mt-2 flex flex-nowrap items-baseline gap-x-1.5 overflow-visible whitespace-nowrap text-base leading-tight sm:text-lg lg:text-xl">
+                    <span>{card.value}</span>
+                    <span>{card.sub}</span>
+                  </p>
+                ) : (
+                  <>
+                    <p className="posh-page-title mt-2 text-2xl">{card.value}</p>
+                    <p className="posh-subtitle mt-1">{card.sub}</p>
+                  </>
+                )}
               </button>
             );
           })}
@@ -506,29 +526,6 @@ export default function NewDashboardPage() {
               )}
             </div>
           </section>
-        </div>
-
-        {/* Browse Materials / Open AI Agent — moved here (bottom-right of
-            the dashboard content, below the two-column body) from the
-            welcome-heading area above. This is the SAME existing
-            button/link pair repositioned, not a duplicate: identical
-            hrefs (/products, /sourcing) and identical posh-btn-solid /
-            posh-btn-ghost classes as before, just relocated and
-            right-aligned (`justify-end`) so both buttons sit together on
-            one row toward the bottom-right of the screen. */}
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-          <Link
-            href="/products"
-            className="posh-btn-solid inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-bold"
-          >
-            Browse Materials
-          </Link>
-          <Link
-            href="/sourcing"
-            className="posh-btn-ghost inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-bold"
-          >
-            Open AI Agent
-          </Link>
         </div>
       </div>
     </main>

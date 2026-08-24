@@ -206,6 +206,11 @@ export default function NewDashboardPage() {
     DELIVERED: "/orders?status=DELIVERED",
     WATCHLIST: "/watchlist",
   };
+  // The single reusable details panel (below) defaults to showing the
+  // Watchlist (its original, always-on content) until the user clicks a
+  // previewable stat card; from then on it always reflects whichever stat
+  // was last clicked. No separate/duplicate panel is ever rendered.
+  const activeStat: StatPreviewKind = selectedStat ?? "WATCHLIST";
 
   // ── Left-column panel — exactly two user-selectable options ─────────────────
   // Only "AI Suggestions" and "Recent Orders" are shown. There is no
@@ -307,136 +312,20 @@ export default function NewDashboardPage() {
             );
           })}
         </div>
-        {/* ── Inline stat preview — expands directly on /newdashboard when a
-            previewable stat card (Active Orders / Delivered Orders /
-            Watchlist) is clicked, without navigating away (spec sections
-            1–7). Reuses the exact same `orders`/`watchlistItems` state
-            already fetched above; "View All"/"View All Orders" is the only
-            control that navigates, to the exact URLs the spec requires. */}
-        {selectedStat && (
-          <section
-            className="mt-4 rounded-2xl border p-5 shadow-sm md:p-6"
-            style={{ background: CARD, borderColor: B60 }}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="posh-eyebrow">Previewing</p>
-                <h2 className="posh-card-title mt-1 text-xl">{PREVIEW_TITLES[selectedStat]}</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedStat(null)}
-                className="posh-link text-xs"
-                aria-label="Close preview"
-              >
-                Close ✕
-              </button>
-            </div>
-
-            <div className="mt-6">
-              {(selectedStat === "ACTIVE" || selectedStat === "DELIVERED") && (
-                !ordersReady ? (
-                  <p className="posh-muted py-8 text-center text-xs">Loading…</p>
-                ) : (() => {
-                    const list = selectedStat === "ACTIVE" ? activeOrdersPreview : deliveredOrdersPreview;
-                    if (list.length === 0) {
-                      return (
-                        <div className="py-12 text-center">
-                          <p className="posh-card-title">
-                            {selectedStat === "ACTIVE" ? "No active orders" : "No delivered orders"}
-                          </p>
-                          <Link href="/products" className="posh-link mt-3 inline-block">
-                            Browse materials →
-                          </Link>
-                        </div>
-                      );
-                    }
-                    return (
-                      <>
-                        {/* Same required column order as the Recent Orders
-                            list above: Site Name, Order Number, Date, Total
-                            Amount. */}
-                        <div className="divide-y" style={{ borderColor: B40 }}>
-                          {list.map((o) => (
-                            <Link
-                              key={o.id}
-                              href={`/orders/${o.id}`}
-                              className="flex items-start justify-between gap-3 py-2.5 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
-                            >
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.siteName ?? "Unassigned"}</p>
-                                <p className="posh-label mt-0.5">#{o.id.slice(0, 8)} · {fmtOrderDate(o.createdAt)}</p>
-                              </div>
-                              <div className="shrink-0 text-right">
-                                <p className="posh-card-title text-base">{fmtInr(o.total)}</p>
-                                <p className="posh-label mt-0.5">{STATUS_LABELS[o.status]}</p>
-                              </div>
-                            </Link>
-                          ))}
-                        </div>
-                        <Link
-                          href={PREVIEW_VIEW_ALL_HREF[selectedStat]}
-                          className="posh-btn-solid mt-5 flex items-center justify-center rounded-full py-2.5 text-sm font-bold"
-                        >
-                          View All Orders
-                        </Link>
-                      </>
-                    );
-                  })()
-              )}
-
-              {selectedStat === "WATCHLIST" && (
-                !watchlistReady ? (
-                  <p className="posh-muted py-8 text-center text-xs">Loading…</p>
-                ) : watchlistPreview.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <p className="posh-card-title">No items in watchlist</p>
-                    <Link href="/products" className="posh-link mt-3 inline-block">
-                      Browse &amp; watchlist materials →
-                    </Link>
-                  </div>
-                ) : (
-                  <>
-                    <div
-                      className="grid gap-px overflow-hidden rounded-[2rem] border sm:grid-cols-2"
-                      style={{ borderColor: B60, background: B60 }}
-                    >
-                      {watchlistPreview.map((w) => (
-                        <Link
-                          key={w.id}
-                          href="/watchlist"
-                          className="block bg-[color:var(--posh-bg-card)] p-7 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
-                        >
-                          <div className="flex items-baseline justify-between">
-                            <h3 className="posh-card-title">{w.name}</h3>
-                            <span className="posh-label">{gapLabel(w.priceIntelligence?.gapToTargetPct ?? null)}</span>
-                          </div>
-                          <p className="posh-page-title mt-3">
-                            {w.priceIntelligence?.currentPricePerBaseUnit
-                              ? fmtInr(w.priceIntelligence.currentPricePerBaseUnit)
-                              : fmtInr(w.basePrice)}{" "}
-                            / {w.unit}
-                          </p>
-                          <p className="posh-subtitle mt-2">
-                            {w.targetPrice ? `Target: ${fmtInr(w.targetPrice)}` : "No target set"}
-                          </p>
-                        </Link>
-                      ))}
-                    </div>
-                    <Link
-                      href={PREVIEW_VIEW_ALL_HREF.WATCHLIST}
-                      className="posh-btn-solid mt-5 flex items-center justify-center rounded-full py-2.5 text-sm font-bold"
-                    >
-                      View All
-                    </Link>
-                  </>
-                )
-              )}
-            </div>
-          </section>
-        )}
+        {/* Duplicate inline stat-preview section removed from here — its
+            content now renders inside the existing RIGHT-column panel
+            below (previously the Watchlist-only box), which dynamically
+            swaps content based on `selectedStat`, per the single-panel
+            requirement. See the RIGHT panel further down for the
+            ACTIVE/DELIVERED/WATCHLIST render branches. */}
 
         {/* ── Two-column body ── */}
+        {/* Mobile ordering: the RIGHT stat-details panel renders first
+            (`order-1`) immediately below the stats grid, then the LEFT AI
+            Suggestions/Recent Orders panel (`order-2`) — matching
+            "stats -> selected stat details -> remaining content". At `lg:`
+            and up both panels revert to their normal left/right positions
+            via `lg:order-none`, so desktop layout is unchanged. */}
         <div className="mt-6 flex flex-1 flex-col gap-4 lg:flex-row">
 
           {/* LEFT — exactly two user-selectable panels: "AI Suggestions" and
@@ -446,7 +335,7 @@ export default function NewDashboardPage() {
               mb-3) plus each line item below reduced from py-4 to py-2.5 —
               together this lets roughly 5 line items occupy the vertical
               space the previous 4 items needed. */}
-          <aside className="flex w-full flex-col rounded-2xl border p-5 shadow-sm lg:w-[340px] lg:shrink-0"
+          <aside className="order-2 flex w-full flex-col rounded-2xl border p-5 shadow-sm lg:order-none lg:w-[340px] lg:shrink-0"
             style={{ background: CARD, borderColor: B60 }}>
             {/* Swappable segmented menu — AI Suggestions / Recent Orders.
                 This reads as one segmented control, not two unrelated CTA
@@ -546,49 +435,93 @@ export default function NewDashboardPage() {
             </div>
           </aside>
 
-          {/* RIGHT — Watchlist preview, reusing the live watchlist data
-              already fetched above. Clicking through goes to the full
-              /watchlist page (spec section 9); the standalone "Watchlist"
-              action button has been removed. */}
-          {/* Container padding trimmed (p-7/p-10 → p-5/p-6) as part of the
-              overall page-scroll reduction; each watchlist tile's own
-              padding also reduced (p-7 → p-5). */}
-          <section className="flex flex-1 flex-col rounded-2xl border p-5 shadow-sm md:p-6"
+          {/* RIGHT — the ONE reusable stat-details panel. Defaults to
+              Watchlist (its original always-on content) and dynamically
+              swaps to Active Orders / Delivered Orders content when the
+              corresponding stat card above is clicked — same container,
+              same styling (rounded-2xl border p-5 shadow-sm md:p-6),
+              never a second/duplicate box. Heading + "View all" href both
+              follow `activeStat` via the existing PREVIEW_TITLES /
+              PREVIEW_VIEW_ALL_HREF maps. On mobile this panel sits in
+              `order-1` (immediately below the stats grid); at `lg:` it
+              reverts to its normal right-column position. */}
+          <section className="order-1 flex flex-1 flex-col rounded-2xl border p-5 shadow-sm md:p-6 lg:order-none"
             style={{ background: CARD, borderColor: B60 }}>
             <div className="flex items-center justify-between gap-3">
-              <h2 className="posh-card-title text-xl">Watchlist</h2>
-              <Link href="/watchlist" className="posh-link hidden sm:inline-block">View all →</Link>
+              <h2 className="posh-card-title text-xl">{PREVIEW_TITLES[activeStat]}</h2>
+              <Link href={PREVIEW_VIEW_ALL_HREF[activeStat]} className="posh-link hidden sm:inline-block">View all →</Link>
             </div>
             <div className="mt-4 flex-1">
-              {!watchlistReady ? (
-                <p className="posh-muted py-8 text-center text-xs">Loading…</p>
-              ) : watchlistItems.length === 0 ? (
-                <div className="py-12 text-center">
-                  <p className="posh-card-title">No items in watchlist</p>
-                  <Link href="/products" className="posh-link mt-3 inline-block">Browse &amp; watchlist materials →</Link>
-                </div>
+              {activeStat === "WATCHLIST" ? (
+                !watchlistReady ? (
+                  <p className="posh-muted py-8 text-center text-xs">Loading…</p>
+                ) : watchlistPreview.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <p className="posh-card-title">No items in watchlist</p>
+                    <Link href="/products" className="posh-link mt-3 inline-block">Browse &amp; watchlist materials →</Link>
+                  </div>
+                ) : (
+                  <div className="grid gap-px overflow-hidden rounded-2xl border sm:grid-cols-2"
+                    style={{ borderColor: B60, background: B60 }}>
+                    {watchlistPreview.map((w) => (
+                      <Link key={w.id} href="/watchlist" className="block bg-[color:var(--posh-bg-card)] p-5 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
+                        <div className="flex items-baseline justify-between">
+                          <h3 className="posh-card-title">{w.name}</h3>
+                          <span className="posh-label">{gapLabel(w.priceIntelligence?.gapToTargetPct ?? null)}</span>
+                        </div>
+                        {/* Watchlist price — scoped to this dashboard preview
+                            only (not the shared .posh-page-title style, so
+                            other pages using that class are unaffected):
+                            Orange (var(--posh-primary)) and ~75% of the
+                            previous font size (posh-page-title's text-3xl/
+                            md:text-4xl → text-xl/md:text-2xl here). */}
+                        <p className="mt-3 text-xl font-extrabold leading-[1.1] tracking-[-0.02em] md:text-2xl" style={{ color: "var(--posh-primary)" }}>
+                          {w.priceIntelligence?.currentPricePerBaseUnit ? fmtInr(w.priceIntelligence.currentPricePerBaseUnit) : fmtInr(w.basePrice)} / {w.unit}
+                        </p>
+                        <p className="posh-subtitle mt-2">{w.targetPrice ? `Target: ${fmtInr(w.targetPrice)}` : "No target set"}</p>
+                      </Link>
+                    ))}
+                  </div>
+                )
               ) : (
-                <div className="grid gap-px overflow-hidden rounded-2xl border sm:grid-cols-2"
-                  style={{ borderColor: B60, background: B60 }}>
-                  {watchlistItems.map((w) => (
-                    <Link key={w.id} href="/watchlist" className="block bg-[color:var(--posh-bg-card)] p-5 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
-                      <div className="flex items-baseline justify-between">
-                        <h3 className="posh-card-title">{w.name}</h3>
-                        <span className="posh-label">{gapLabel(w.priceIntelligence?.gapToTargetPct ?? null)}</span>
+                /* ACTIVE / DELIVERED — same 5-item list, same required
+                   column order (Site Name, Order Number, Date, Total
+                   Amount) as the other order lists on this page. */
+                !ordersReady ? (
+                  <p className="posh-muted py-8 text-center text-xs">Loading…</p>
+                ) : (() => {
+                    const list = activeStat === "ACTIVE" ? activeOrdersPreview : deliveredOrdersPreview;
+                    if (list.length === 0) {
+                      return (
+                        <div className="py-12 text-center">
+                          <p className="posh-card-title">
+                            {activeStat === "ACTIVE" ? "No active orders" : "No delivered orders"}
+                          </p>
+                          <Link href="/products" className="posh-link mt-3 inline-block">Browse materials →</Link>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="divide-y" style={{ borderColor: B40 }}>
+                        {list.map((o) => (
+                          <Link
+                            key={o.id}
+                            href={`/orders/${o.id}`}
+                            className="flex items-start justify-between gap-3 py-2.5 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.siteName ?? "Unassigned"}</p>
+                              <p className="posh-label mt-0.5">#{o.id.slice(0, 8)} · {fmtOrderDate(o.createdAt)}</p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="posh-card-title text-base">{fmtInr(o.total)}</p>
+                              <p className="posh-label mt-0.5">{STATUS_LABELS[o.status]}</p>
+                            </div>
+                          </Link>
+                        ))}
                       </div>
-                      {/* Watchlist price — scoped to this dashboard preview
-                          only (not the shared .posh-page-title style, so
-                          other pages using that class are unaffected):
-                          Orange (var(--posh-primary)) and ~75% of the
-                          previous font size (posh-page-title's text-3xl/
-                          md:text-4xl → text-xl/md:text-2xl here). */}
-                      <p className="mt-3 text-xl font-extrabold leading-[1.1] tracking-[-0.02em] md:text-2xl" style={{ color: "var(--posh-primary)" }}>
-                        {w.priceIntelligence?.currentPricePerBaseUnit ? fmtInr(w.priceIntelligence.currentPricePerBaseUnit) : fmtInr(w.basePrice)} / {w.unit}
-                      </p>
-                      <p className="posh-subtitle mt-2">{w.targetPrice ? `Target: ${fmtInr(w.targetPrice)}` : "No target set"}</p>
-                    </Link>
-                  ))}
-                </div>
+                    );
+                  })()
               )}
             </div>
           </section>

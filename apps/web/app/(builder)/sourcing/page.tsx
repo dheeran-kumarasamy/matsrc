@@ -34,8 +34,7 @@ export default async function SourcingPage() {
   // rendered at all for a signed-out visitor — not hidden, not present in
   // the response and toggled with CSS. Show a polished sign-in prompt
   // instead, consistent with the design system used elsewhere (see e.g.
-  // UserSessionBadge's "Sign in" state and the watchlist/orders empty
-  // states).
+  // ProfileMenu's "Sign in" state and the watchlist/orders empty states).
   if (!isSignedIn) {
     return (
       <div className="posh-body flex min-h-[60vh] items-center justify-center">

@@ -1,11 +1,6 @@
-import { FileBarChart } from "lucide-react";
-
 import { BuilderNav, BuilderNavMobileTrigger } from "@/components/builder/BuilderNav";
-import CartLauncher from "@/components/cart/CartLauncher";
 import CartDrawer from "@/components/cart/CartDrawer";
-import HeaderIconLink from "@/components/builder/HeaderIconLink";
-import NotificationBell from "@/components/builder/NotificationBell";
-import UserSessionBadge from "@/components/builder/UserSessionBadge";
+import AppHeader from "@/components/shared/AppHeader";
 import FloatingBrowseLink from "@/components/builder/FloatingBrowseLink";
 import { WatchlistProvider } from "@/lib/watchlist-store";
 
@@ -31,38 +26,14 @@ export default function BuilderLayout({
       <BuilderNav />
       <main className="space-y-4">
         {/* REQ-03/04/05: "Builder Portal" title removed. This header row is
-            now the persistent search-bar row — the search input flex-grows,
-            and Cart → Bell (notifications) → Reports sit at the far right,
-            in that order, on every builder page. No global search API is
-            wired here yet, so the input just deep-links into the existing
-            products-page search form via its `q` query param on submit. */}
-
-        <header className="panel sticky top-4 z-30 flex items-center gap-3 px-4 py-3">
-
-          <BuilderNavMobileTrigger />
-          <form action="/products" method="GET" className="flex-1">
-            <input
-              type="search"
-              name="q"
-              placeholder="Search TMT bars, cement, bricks..."
-              className="posh-input"
-            />
-          </form>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <CartLauncher />
-            {/* Alerts: overlay dropdown from the bell icon (not a separate
-                page) — see NotificationBell.tsx. Every order status change
-                already creates a Notification row via apps/api's
-                NotificationService; this surfaces them here with an unread
-                badge + read/unread markers inside the dropdown. */}
-            <NotificationBell />
-            {/* "Reports" entry point: opens the Reports catalogue overlay
-                (Material Consumption, Best Supplier Pricing, etc). */}
-            <HeaderIconLink href="/reports" label="Reports" icon={FileBarChart} ariaLabel="View reports" />
-            <UserSessionBadge />
-          </div>
-
-        </header>
+            now the persistent search-bar row, standardized on the shared
+            AppHeader used app-wide (search -> Cart -> Alerts -> Reports ->
+            Profile, in that order) — see components/shared/AppHeader.tsx,
+            the single source of truth also used by /newdashboard. */}
+        <AppHeader
+          className="panel sticky top-4 z-30 flex items-center gap-3 px-4 py-3"
+          leftAccessory={<BuilderNavMobileTrigger />}
+        />
         {children}
       </main>
 

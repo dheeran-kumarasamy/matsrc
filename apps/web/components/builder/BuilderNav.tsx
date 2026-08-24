@@ -25,9 +25,13 @@ const linkGroups: { heading: string; links: { href: string; label: string }[] }[
     links: [{ href: "/newdashboard", label: "Dashboard" }],
   },
   {
+    // "Browse Materials" removed from here — it's always reachable via the
+    // floating bottom-right shortcut on every page (see
+    // components/builder/FloatingBrowseLink.tsx, now also mounted on
+    // /newdashboard), so keeping it in the sidebar too was a duplicate
+    // entry point to the same page.
     heading: "Procurement",
     links: [
-      { href: "/products", label: "Browse Materials" },
       { href: "/sourcing", label: "AI Sourcing Assistant" },
       { href: "/sites", label: "Sites" },
     ],

@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useCallback, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
-import { Bell, LogOut, ShoppingCart, User } from "lucide-react";
-import { builderApiGet, builderApiPatch } from "@/lib/api";
+import { useSession } from "next-auth/react";
+import { builderApiGet } from "@/lib/api";
 import { useCartStore } from "@/lib/store/cart-store";
 import { useOverlayStore } from "@/lib/store/overlay-store";
-import BuildOHubLogo from "@/components/shared/BuildOHubLogo";
+import AppHeader from "@/components/shared/AppHeader";
+import { getFirstName } from "@/lib/user-display";
 
 // ── Live-data types ───────────────────────────────────────────────────────────
 type Order = {
@@ -33,15 +33,6 @@ type WatchlistItem = {
   } | null;
 };
 
-type NotificationItem = {
-  id: string;
-  title: string;
-  body: string;
-  read: boolean;
-  createdAt: string;
-  orderId?: string | null;
-};
-
 // ── Static data (posh-web-flair suggestions + browse categories) ──────────────
 const suggestions = [
   { item: "Binding Wire 18G",    why: "Reordered every 3 weeks · due now", move: "₹72,000/T",  delta: "+2.1%" },
@@ -57,17 +48,6 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function timeAgo(dateString: string): string {
-  const diffMs = Date.now() - new Date(dateString).getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  return diffDay < 7 ? `${diffDay}d ago` : new Date(dateString).toLocaleDateString("en-IN");
-}
-
 function fmtInr(n: number) {
   return `₹${n.toLocaleString("en-IN")}`;
 }
@@ -81,6 +61,12 @@ function gapLabel(pct: number | null): string {
 export default function NewDashboardPage() {
   const { data: session } = useSession();
   const router = useRouter();
+
+  // First-name-only greeting text ("Dheeran Kumarasamy" -> "Dheeran"),
+  // derived dynamically from the authenticated profile via the same shared
+  // helper the top-navigation ProfileMenu uses (lib/user-display.ts) — so
+  // the welcome heading and the header profile control never disagree.
+  const firstName = session?.user ? getFirstName(session.user.name, session.user.email, "") : "";
 
   // Segmented AI Suggestions / Recent Orders menu — user-controlled only
   // (see `panels`/`PanelKind` below): only these two options exist, and the
@@ -99,18 +85,6 @@ export default function NewDashboardPage() {
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
   const [watchlistReady, setWatchlistReady] = useState(false);
 
-  // Live notifications (alerts)
-  const [notifs,       setNotifs]       = useState<NotificationItem[]>([]);
-  const [unreadCount,  setUnreadCount]  = useState(0);
-  const [notifsOpen,   setNotifsOpen]   = useState(false);
-  const [notifsLoaded, setNotifsLoaded] = useState(false);
-  const bellRef = useRef<HTMLDivElement>(null);
-
-  // Profile-name dropdown — the only way to reach "Sign out" (no standalone
-  // Account/Sign out links in the header any more).
-  const [profileOpen, setProfileOpen] = useState(false);
-  const profileRef = useRef<HTMLDivElement>(null);
-
   // Cart (Zustand store — shared with CartDrawer)
   const cartCount = useCartStore((s) => s.summary.itemCount);
   const hasLoaded = useCartStore((s) => s.hasLoaded);
@@ -118,6 +92,10 @@ export default function NewDashboardPage() {
   const openCart  = useOverlayStore((s) => s.openCart);
 
   // ── Boot: fetch cart + orders + watchlist in parallel ──────────────────────
+  // Notifications/alerts and the profile menu are no longer fetched/managed
+  // here — both now live in the shared AppHeader (NotificationBell.tsx /
+  // ProfileMenu.tsx), the same components every other page uses, so there is
+  // a single implementation instead of a /newdashboard-only duplicate.
   useEffect(() => {
     if (!hasLoaded) void fetchCart();
 
@@ -129,60 +107,6 @@ export default function NewDashboardPage() {
       .then((d) => { setWatchlistItems(d); setWatchlistReady(true); })
       .catch(() => setWatchlistReady(true));
   }, [hasLoaded, fetchCart]);
-
-  // ── Notifications: fetch + 30 s poll ───────────────────────────────────────
-  const fetchNotifs = useCallback(() => {
-    builderApiGet<{ items: NotificationItem[]; unreadCount: number }>("/notifications")
-      .then((d) => { setNotifs(d.items ?? []); setUnreadCount(d.unreadCount ?? 0); setNotifsLoaded(true); })
-      .catch(() => setNotifsLoaded(true));
-  }, []);
-
-  useEffect(() => {
-    fetchNotifs();
-    const id = setInterval(fetchNotifs, 30_000);
-    return () => clearInterval(id);
-  }, [fetchNotifs]);
-
-  useEffect(() => { if (notifsOpen) fetchNotifs(); }, [notifsOpen, fetchNotifs]);
-
-  // Close bell dropdown on outside click
-  useEffect(() => {
-    if (!notifsOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (bellRef.current && !bellRef.current.contains(e.target as Node)) setNotifsOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [notifsOpen]);
-
-  // Close profile dropdown on outside click
-  useEffect(() => {
-    if (!profileOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [profileOpen]);
-
-  // Mark single notification as read
-  const markRead = async (item: NotificationItem) => {
-    if (item.read) return;
-    setNotifs((prev) => prev.map((n) => n.id === item.id ? { ...n, read: true } : n));
-    setUnreadCount((c) => Math.max(0, c - 1));
-    try { await builderApiPatch(`/notifications/${item.id}`, { read: true }); } catch { /* best-effort */ }
-  };
-
-  // Mark all notifications as read
-  const markAllRead = async () => {
-    setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
-    setUnreadCount(0);
-    try {
-      await Promise.all(
-        notifs.filter((n) => !n.read).map((n) => builderApiPatch(`/notifications/${n.id}`, { read: true }))
-      );
-    } catch { /* best-effort */ }
-  };
 
   // Derived data — reused by both the segmented panel and the stat cards
   // below (no duplicate fetch/calculation: same `orders`/`watchlistItems`/
@@ -256,141 +180,30 @@ export default function NewDashboardPage() {
   // constants so the JSX below needs minimal churn.
   const FG  = "var(--posh-fg)";               // primary ink
   const FM  = "var(--posh-fg-muted)";         // muted ink
-  const P   = "var(--posh-primary)";          // accent (warm gold)
-  const PFG = "var(--posh-primary-fg)";       // text on accent
   const B60 = "var(--posh-border)";           // card border
   const B40 = "var(--posh-border)";           // hairline divider
-  const B12 = "var(--posh-border)";           // control border
   const CARD = "var(--posh-bg-card)";         // card surface
 
   return (
     <main className="posh-body relative min-h-screen overflow-hidden bg-[color:var(--posh-bg-card)]">
       <div className="relative mx-auto flex min-h-screen max-w-[110rem] flex-col px-6 py-6 md:px-10 md:py-8">
 
-        {/* ── Header ── */}
-        <header className="flex items-center justify-between gap-4">
-          <div className="flex shrink-0 items-center gap-3">
-            <BuildOHubLogo size="lg" />
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {/* Cart */}
-            <button type="button" onClick={() => openCart("review")} aria-label="Open cart"
-              className="relative flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-[color:var(--posh-primary)] hover:text-[color:var(--posh-fg)]"
-              style={{ borderColor: B12, color: FM }}>
-              <ShoppingCart size={15} />
-              <span className="hidden sm:inline">Cart</span>
-              {cartCount > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[11px] font-bold" style={{ background: P, color: PFG }}>
-                  {cartCount}
-                </span>
-              )}
-            </button>
-            {/* Bell — live alerts dropdown */}
-            <div className="relative" ref={bellRef}>
-              <button type="button" onClick={() => setNotifsOpen((o) => !o)} aria-label="Alerts"
-                className="relative flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-[color:var(--posh-primary)] hover:text-[color:var(--posh-fg)]"
-                style={{ borderColor: B12, color: FM }}>
-                <Bell size={15} />
-                <span className="hidden sm:inline">Alerts</span>
-                {unreadCount > 0 && (
-                  <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[color:var(--posh-primary)] px-1 text-[11px] font-bold text-[color:var(--posh-primary-fg)]">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
-                )}
-              </button>
-              {notifsOpen && (
-                <div className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[90vw] overflow-hidden rounded-2xl border shadow-2xl"
-                  style={{ background: CARD, borderColor: B60 }}>
-                  <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: B40 }}>
-                    <p className="posh-card-title text-base">Alerts</p>
-                    {unreadCount > 0 && <button type="button" onClick={markAllRead} className="text-xs font-bold transition-opacity hover:opacity-70" style={{ color: P }}>Mark all read</button>}
-                  </div>
-                  <div className="max-h-80 overflow-y-auto">
-                    {!notifsLoaded ? (
-                      <p className="px-4 py-6 text-center text-xs" style={{ color: FM }}>Loading…</p>
-                    ) : notifs.length === 0 ? (
-                      <div className="px-4 py-8 text-center"><p className="text-sm" style={{ color: FM }}>You&apos;re all caught up.</p></div>
-                    ) : (
-                      <ul>
-                        {notifs.map((n) => (
-                          <li key={n.id}>
-                            <button type="button" onClick={() => markRead(n)}
-                              className="flex w-full gap-2.5 border-b px-4 py-3 text-left transition hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
-                              style={{ borderColor: B40, background: !n.read ? "rgba(var(--posh-wash-rgb),0.04)" : "transparent" }}>
-                              <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? "opacity-0" : ""}`} style={{ background: P }} />
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-bold" style={{ color: n.read ? FM : FG }}>{n.title}</p>
-                                <p className="mt-0.5 line-clamp-2 text-xs" style={{ color: FM }}>{n.body}</p>
-                                <p className="mt-1 text-[11px]" style={{ color: FM }}>{timeAgo(n.createdAt)}</p>
-                              </div>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            <span className="mx-1 hidden opacity-20 sm:block" style={{ color: FG }}>|</span>
-            {session?.user ? (
-              <div className="relative" ref={profileRef}>
-                {/* Profile name — the only entry point to "Sign out", revealed
-                    in a small dropdown on click. There is no separate
-                    standalone "Account" or "Sign out" link in the header. */}
-                <button
-                  type="button"
-                  onClick={() => setProfileOpen((prev) => !prev)}
-                  aria-haspopup="menu"
-                  aria-expanded={profileOpen}
-                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.05)] hover:text-[color:var(--posh-fg)]"
-                  style={{ color: FM }}
-                >
-                  <span className="max-w-[9rem] truncate">
-                    {session.user.name || session.user.email || "Profile"}
-                  </span>
-                </button>
-                {profileOpen && (
-                  <div
-                    role="menu"
-                    className="absolute right-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-2xl border shadow-2xl"
-                    style={{ background: CARD, borderColor: B60 }}
-                  >
-                    <Link
-                      href="/profile"
-                      onClick={() => setProfileOpen(false)}
-                      className="flex items-center gap-2 px-4 py-3 text-sm font-semibold transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.05)]"
-                      style={{ color: FG }}
-                    >
-                      <User size={14} />
-                      View profile
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setProfileOpen(false);
-                        void signOut({ callbackUrl: "/" });
-                      }}
-                      className="flex w-full items-center gap-2 border-t px-4 py-3 text-left text-sm font-semibold transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.05)]"
-                      style={{ color: FG, borderColor: B40 }}
-                    >
-                      <LogOut size={14} />
-                      Sign out
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <Link href="/auth/login" className="rounded-full border px-3 py-1.5 text-sm font-bold transition-colors hover:border-[color:var(--posh-primary)]" style={{ borderColor: B12, color: FG }}>Sign in</Link>
-            )}
-          </div>
-        </header>
+        {/* ── Header ── standardized on the shared AppHeader (search ->
+            Cart -> Alerts -> Reports -> Profile), the same single-source-
+            of-truth component used by every other page's top navigation
+            (see app/(builder)/layout.tsx). /newdashboard has no persistent
+            sidebar to carry the wordmark, so it renders the logo inline
+            via `showLogo`. */}
+        <AppHeader className="flex items-center justify-between gap-4" showLogo />
 
-        {/* ── Welcome heading ── */}
+        {/* ── Welcome heading ── first-name-only, dynamically derived from
+            the authenticated profile via the same lib/user-display.ts
+            helper the shared ProfileMenu uses (single source of truth —
+            see `firstName` above). */}
         <div className="mt-8">
           <p className="posh-eyebrow">Procurement Desk</p>
           <h1 className="posh-page-title mt-2 text-3xl">
-            Welcome back{session?.user?.name ? `, ${session.user.name.split(" ")[0]}` : ""}
+            Welcome back{firstName ? `, ${firstName}` : ""}
           </h1>
         </div>
 

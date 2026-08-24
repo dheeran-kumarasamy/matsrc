@@ -257,25 +257,6 @@ export default function NewDashboardPage() {
           <h1 className="posh-page-title mt-2 text-3xl">
             Welcome back{firstName ? `, ${firstName}` : ""}
           </h1>
-          {/* Browse Materials / Open AI Agent — same row, horizontally
-              aligned, wrapping gracefully on narrow screens. Both are plain
-              links to existing routes (/products, /sourcing) — no new
-              functionality, reusing the same posh-btn-* button styles used
-              elsewhere on this page. */}
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Link
-              href="/products"
-              className="posh-btn-solid inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-bold"
-            >
-              Browse Materials
-            </Link>
-            <Link
-              href="/sourcing"
-              className="posh-btn-ghost inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-bold"
-            >
-              Open AI Agent
-            </Link>
-          </div>
         </div>
 
         {/* ── Dashboard statistics — the same live metrics previously shown
@@ -525,6 +506,29 @@ export default function NewDashboardPage() {
               )}
             </div>
           </section>
+        </div>
+
+        {/* Browse Materials / Open AI Agent — moved here (bottom-right of
+            the dashboard content, below the two-column body) from the
+            welcome-heading area above. This is the SAME existing
+            button/link pair repositioned, not a duplicate: identical
+            hrefs (/products, /sourcing) and identical posh-btn-solid /
+            posh-btn-ghost classes as before, just relocated and
+            right-aligned (`justify-end`) so both buttons sit together on
+            one row toward the bottom-right of the screen. */}
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+          <Link
+            href="/products"
+            className="posh-btn-solid inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-bold"
+          >
+            Browse Materials
+          </Link>
+          <Link
+            href="/sourcing"
+            className="posh-btn-ghost inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-bold"
+          >
+            Open AI Agent
+          </Link>
         </div>
       </div>
     </main>

@@ -273,7 +273,11 @@ export default function NewDashboardPage() {
             Now rounded-2xl p-4 with a tight mt-2 before a smaller text-2xl
             value; still fully readable and the whole card remains a large
             click target. */}
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {/* Card height now fits its two text lines exactly (no forced
+            min-height/aspect ratio) — `items-start` on the grid + each
+            card left as a plain `p-4` block means every card is only as
+            tall as its label + value/description lines require. */}
+        <div className="mt-4 grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {statCards.map((card) => {
             const isPreviewable = card.id !== "CART";
             const isSelected = isPreviewable && selectedStat === card.id;
@@ -289,26 +293,22 @@ export default function NewDashboardPage() {
                   borderColor: isSelected ? "var(--posh-primary)" : B60,
                 }}
               >
-                <p className="posh-eyebrow">{card.label}</p>
-                {card.id === "ACTIVE" ? (
-                  // "{count} Orders in Progress" on a single line — dynamic
-                  // count + description share one nowrap flex row instead
-                  // of the separate value/sub lines the other cards use.
-                  // `whitespace-nowrap` + `overflow-visible` (no clipping)
-                  // plus a smaller, responsive font size (vs. the other
-                  // cards' text-2xl) keeps the combined string on one line
-                  // at the card's available width instead of wrapping into
-                  // "22 Orders in" / "Progress".
-                  <p className="posh-page-title mt-2 flex flex-nowrap items-baseline gap-x-1.5 overflow-visible whitespace-nowrap text-base leading-tight sm:text-lg lg:text-xl">
-                    <span>{card.value}</span>
-                    <span>{card.sub}</span>
-                  </p>
-                ) : (
-                  <>
-                    <p className="posh-page-title mt-2 text-2xl">{card.value}</p>
-                    <p className="posh-subtitle mt-1">{card.sub}</p>
-                  </>
-                )}
+                {/* Line 1: label in ALL CAPS, normal (non-bold) weight —
+                    same treatment for every stat card. */}
+                <p className="text-[11px] font-normal uppercase tracking-[0.14em]" style={{ color: FM }}>
+                  {card.label}
+                </p>
+                {/* Line 2: "{count} {description}" on one line for every
+                    card — dynamic count in bold, description in normal
+                    weight, same pattern across Active Orders, Delivered
+                    Orders, Watchlist and Cart Items. `whitespace-nowrap` +
+                    `overflow-visible` (no clipping) with a size that scales
+                    down at narrower breakpoints keeps it on one line
+                    instead of wrapping (e.g. "22 Orders in" / "Progress"). */}
+                <p className="mt-1 flex flex-nowrap items-baseline gap-x-1.5 overflow-visible whitespace-nowrap text-base leading-tight sm:text-lg lg:text-xl">
+                  <span className="font-bold" style={{ color: FG }}>{card.value}</span>
+                  <span className="font-normal" style={{ color: FM }}>{card.sub}</span>
+                </p>
               </button>
             );
           })}

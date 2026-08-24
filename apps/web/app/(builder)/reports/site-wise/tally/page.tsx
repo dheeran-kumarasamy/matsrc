@@ -128,7 +128,7 @@ export default function TallySettingsPage() {
 
   return (
     <div className="report-body mx-auto max-w-3xl px-4 py-8">
-      <Link href="/reports/site-wise" className="text-[10px] font-bold uppercase tracking-[0.25em] text-[color:var(--posh-fg)] hover:underline">
+      <Link href="/reports/site-wise" className="text-[10px] font-bold uppercase tracking-[0.25em] text-[color:var(--posh-primary)] hover:underline">
         ← Back to Site-wise Report
       </Link>
       <h1 className="report-display mt-2 text-4xl text-slate-900 md:text-5xl">Tally Export</h1>

@@ -230,7 +230,7 @@ export default function QuickRequestForm({ floating }: Props) {
                   <div className="text-4xl mb-2">✅</div>
                   <p className="font-medium text-slate-800">Request Submitted!</p>
                   <p className="text-sm text-slate-400 mt-1">Suppliers will respond with quotes shortly.</p>
-                  <button onClick={() => router.push("/orders")} className="mt-4 block w-full text-xs text-[color:var(--posh-fg)] hover:underline">View my orders</button>
+                  <button onClick={() => router.push("/orders")} className="mt-4 block w-full text-xs text-[color:var(--posh-primary)] hover:underline">View my orders</button>
                   <button onClick={reset} className="mt-2 text-xs text-slate-400 hover:underline">Submit another</button>
                 </div>
               ) : noMatchMessage ? (
@@ -238,7 +238,7 @@ export default function QuickRequestForm({ floating }: Props) {
                   <div className="text-4xl mb-2">🔍</div>
                   <p className="font-medium text-slate-800">No close match found</p>
                   <p className="text-sm text-slate-400 mt-1">{noMatchMessage}</p>
-                  <button onClick={() => { setOpen(false); router.push("/products"); }} className="mt-4 block w-full text-xs text-[color:var(--posh-fg)] hover:underline">Browse categories</button>
+                  <button onClick={() => { setOpen(false); router.push("/products"); }} className="mt-4 block w-full text-xs text-[color:var(--posh-primary)] hover:underline">Browse categories</button>
                   <button onClick={() => setNoMatchMessage(null)} className="mt-2 text-xs text-slate-400 hover:underline">Try again</button>
                 </div>
               ) : (

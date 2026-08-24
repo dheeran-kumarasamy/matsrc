@@ -201,7 +201,7 @@ function LoginPageInner() {
         <Link
           href="/auth/register"
           className="font-medium hover:underline"
-          style={{ color: "var(--posh-fg)" }}
+          style={{ color: "var(--posh-primary)" }}
         >
           Create account
         </Link>

@@ -111,7 +111,7 @@ export default function ProductQuickView({ product }: Props) {
                 </div>
               </div>
 
-              <Link href={`/products/${product.id}`} className="inline-block text-xs text-[color:var(--posh-fg)] hover:underline">
+              <Link href={`/products/${product.id}`} className="inline-block text-xs text-[color:var(--posh-primary)] hover:underline">
                 View full product page →
               </Link>
             </div>

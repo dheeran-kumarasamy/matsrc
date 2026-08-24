@@ -190,7 +190,7 @@ export default function WatchlistPage() {
                     {typeof pi.gapToTarget === "number" && item.targetPrice && (
                       <span
                         className="font-bold"
-                        style={{ color: pi.gapToTarget <= 0 ? "var(--posh-fg)" : "var(--posh-fg-muted)" }}
+                        style={{ color: pi.gapToTarget <= 0 ? "var(--posh-primary)" : "var(--posh-fg-muted)" }}
                       >
                         {pi.gapToTarget <= 0
                           ? "Target reached"

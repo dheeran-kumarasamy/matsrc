@@ -146,7 +146,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
               : "This order is still pooling with other builders to unlock a better price. It will convert once the pool locks."}
           </p>
           {order.priceBeforeAggregation && order.priceAfterAggregation && order.priceBeforeAggregation > order.priceAfterAggregation ? (
-            <p className="mt-2 text-xs font-bold" style={{ color: "var(--posh-fg)" }}>
+            <p className="mt-2 text-xs font-bold" style={{ color: "var(--posh-primary)" }}>
               You saved ₹{(order.priceBeforeAggregation - order.priceAfterAggregation).toLocaleString("en-IN")}/unit
             </p>
           ) : null}

@@ -411,7 +411,7 @@ export default function CartDrawer() {
                   </div>
                   <div className="flex justify-between border-t pt-2" style={{ borderColor: "var(--posh-border)" }}>
                     <span className="font-bold" style={{ color: "var(--posh-fg)" }}>Estimated total</span>
-                    <span className="posh-heading text-lg" style={{ color: "var(--posh-fg)" }}>₹{total.toLocaleString("en-IN")}</span>
+                    <span className="posh-heading text-lg" style={{ color: "var(--posh-primary)" }}>₹{total.toLocaleString("en-IN")}</span>
                   </div>
                 </div>
               </div>

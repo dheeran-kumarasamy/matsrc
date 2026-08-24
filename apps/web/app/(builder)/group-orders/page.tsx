@@ -108,7 +108,7 @@ export default function GroupOrdersPage() {
             Track your active Group &amp; Save pools, savings so far, and time left before prices lock.
           </p>
         </div>
-        <Link href="/orders" className="text-xs font-semibold text-[color:var(--posh-fg)] hover:underline">
+        <Link href="/orders" className="text-xs font-semibold text-[color:var(--posh-primary)] hover:underline">
           ← Back to My Orders
         </Link>
       </div>
@@ -120,7 +120,7 @@ export default function GroupOrdersPage() {
       ) : pools.length === 0 ? (
         <div className="panel p-10 text-center">
           <p className="text-sm text-slate-400">You haven&apos;t joined any Group &amp; Save pools yet.</p>
-          <Link href="/checkout" className="mt-3 inline-block text-sm text-[color:var(--posh-fg)] hover:underline">
+          <Link href="/checkout" className="mt-3 inline-block text-sm text-[color:var(--posh-primary)] hover:underline">
             Go to checkout to join a pool →
           </Link>
         </div>

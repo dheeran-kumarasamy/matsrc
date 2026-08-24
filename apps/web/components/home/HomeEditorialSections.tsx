@@ -62,7 +62,7 @@ export default function HomeEditorialSections() {
             >
               {STATS.map(([k, v]) => (
                 <div key={v}>
-                  <dt className="posh-heading text-3xl" style={{ color: "var(--posh-fg)" }}>{k}</dt>
+                  <dt className="posh-heading text-3xl" style={{ color: "var(--posh-primary)" }}>{k}</dt>
                   <dd className="mt-2 text-sm" style={{ color: "var(--posh-fg-muted)" }}>{v}</dd>
                 </div>
               ))}

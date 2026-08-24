@@ -248,7 +248,7 @@ export default function RegisterPage() {
 
       <p className="text-center text-xs mt-6" style={{ color: "var(--posh-fg-muted)" }}>
         Already have an account?{" "}
-        <Link href="/auth/login" className="font-medium hover:underline" style={{ color: "var(--posh-fg)" }}>Sign in</Link>
+        <Link href="/auth/login" className="font-medium hover:underline" style={{ color: "var(--posh-primary)" }}>Sign in</Link>
       </p>
     </>
   );

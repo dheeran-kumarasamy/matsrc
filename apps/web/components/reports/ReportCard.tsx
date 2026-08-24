@@ -6,7 +6,7 @@ import type { ReportDefinition } from "@/lib/reports-types";
 import ReportResult from "@/components/reports/ReportResult";
 
 const DATA_SOURCE_STYLES: Record<string, string> = {
-  "Account data": "border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] text-[color:var(--posh-fg)]",
+  "Account data": "border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] text-[color:var(--posh-primary)]",
   "Live feed": "border-emerald-200 bg-emerald-50 text-emerald-700",
   "Historical data": "border-amber-200 bg-amber-50 text-amber-700",
   "AI insight": "border-purple-200 bg-purple-50 text-purple-700",

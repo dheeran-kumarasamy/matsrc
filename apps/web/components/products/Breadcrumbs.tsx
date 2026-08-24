@@ -25,7 +25,7 @@ export default function Breadcrumbs({ items }: { items: Breadcrumb[] }) {
                 </span>
               ) : null}
               {item.href && !isLast ? (
-                <Link href={item.href} className="hover:text-[color:var(--posh-fg)] hover:underline">
+                <Link href={item.href} className="hover:text-[color:var(--posh-primary)] hover:underline">
                   {item.label}
                 </Link>
               ) : (

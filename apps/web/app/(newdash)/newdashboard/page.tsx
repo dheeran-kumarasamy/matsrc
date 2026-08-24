@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { builderApiGet } from "@/lib/api";
 import { useCartStore } from "@/lib/store/cart-store";
@@ -60,7 +59,6 @@ function gapLabel(pct: number | null): string {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function NewDashboardPage() {
   const { data: session } = useSession();
-  const router = useRouter();
 
   // First-name-only greeting text ("Dheeran Kumarasamy" -> "Dheeran"),
   // derived dynamically from the authenticated profile via the same shared
@@ -123,42 +121,86 @@ export default function NewDashboardPage() {
   // "Delivered Orders" = Delivered only (see apps/web/app/(builder)/orders/page.tsx).
   const deliveredOrders = orders.filter((o) => o.status === "DELIVERED");
 
+  // Which stat's preview (if any) is currently expanded inline on the
+  // dashboard. Clicking a stat card toggles this instead of navigating
+  // away immediately — the actual "View All" link inside the preview is
+  // the only thing that navigates to /orders?status=... or /watchlist.
+  // Clicking the same card again collapses the preview.
+  type StatPreviewKind = "ACTIVE" | "DELIVERED" | "WATCHLIST";
+  const [selectedStat, setSelectedStat] = useState<StatPreviewKind | null>(null);
+
+  function toggleStat(kind: StatPreviewKind) {
+    setSelectedStat((prev) => (prev === kind ? null : kind));
+  }
+
   // Reports/statistics -- the same metrics previously shown only behind the
   // "Reports" tab, now surfaced directly on the dashboard. Each card
   // reuses the app's existing navigation/overlay mechanisms rather than
   // duplicating any business logic:
-  //  - Active Orders / Delivered Orders -> /orders with a status filter
-  //    that the API route (apps/web/app/api/builder/orders/route.ts)
-  //    translates into the correct Prisma `status` condition.
-  //  - Watchlist -> the existing /watchlist route.
+  //  - Active Orders / Delivered Orders -> reveal an inline preview (below)
+  //    of the same `orders` data already fetched above, using the exact
+  //    same ACTIVE/DELIVERED criteria as apps/web/app/api/builder/orders/route.ts.
+  //    "View All Orders" inside the preview navigates to /orders?status=...
+  //  - Watchlist -> reveals an inline preview of the same live
+  //    `watchlistItems` state already fetched above; "View All" navigates
+  //    to the existing /watchlist route.
   //  - Cart Items -> the existing shared live cart drawer (Zustand overlay
   //    store), not a separate/fake cart preview.
   const statCards = [
     {
+      id: "ACTIVE" as const,
       label: "Active Orders",
       value: String(activeOrders.length),
       sub: "Orders in progress",
-      onClick: () => router.push("/orders?status=ACTIVE"),
+      onClick: () => toggleStat("ACTIVE"),
     },
     {
+      id: "DELIVERED" as const,
       label: "Delivered Orders",
       value: String(deliveredOrders.length),
       sub: "Delivered",
-      onClick: () => router.push("/orders?status=DELIVERED"),
+      onClick: () => toggleStat("DELIVERED"),
     },
     {
+      id: "WATCHLIST" as const,
       label: "Watchlist",
       value: String(watchlistItems.length),
       sub: "Materials being tracked",
-      onClick: () => router.push("/watchlist"),
+      onClick: () => toggleStat("WATCHLIST"),
     },
     {
+      id: "CART" as const,
       label: "Cart Items",
       value: String(cartCount),
       sub: "Items ready to enquire",
       onClick: () => openCart("review"),
     },
   ];
+
+  // Inline preview data — reuses the exact same `activeOrders` /
+  // `deliveredOrders` / `watchlistItems` derived above (no duplicate
+  // fetch/filter logic), sliced to the latest 5. `orders` is already
+  // sorted most-recent-first by the API (orderBy: createdAt desc — see
+  // apps/web/app/api/builder/orders/route.ts), matching the same
+  // "most recent" logic used by the Recent Orders panel's `recentOrders`.
+  const activeOrdersPreview = activeOrders.slice(0, 5);
+  const deliveredOrdersPreview = deliveredOrders.slice(0, 5);
+  const watchlistPreview = watchlistItems.slice(0, 5);
+
+  const PREVIEW_TITLES: Record<StatPreviewKind, string> = {
+    ACTIVE: "Active Orders",
+    DELIVERED: "Delivered Orders",
+    WATCHLIST: "Watchlist",
+  };
+  // Exact destination URLs required by spec — same status query the
+  // /orders page and its API route already understand (see
+  // apps/web/app/(builder)/orders/page.tsx and
+  // apps/web/app/api/builder/orders/route.ts's resolveStatusWhere()).
+  const PREVIEW_VIEW_ALL_HREF: Record<StatPreviewKind, string> = {
+    ACTIVE: "/orders?status=ACTIVE",
+    DELIVERED: "/orders?status=DELIVERED",
+    WATCHLIST: "/watchlist",
+  };
 
   // ── Left-column panel — exactly two user-selectable options ─────────────────
   // Only "AI Suggestions" and "Recent Orders" are shown. There is no
@@ -214,20 +256,156 @@ export default function NewDashboardPage() {
             each reusing an existing route/overlay rather than duplicating
             data-fetching or business logic. */}
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {statCards.map((card) => (
-            <button
-              key={card.label}
-              type="button"
-              onClick={card.onClick}
-              className="block rounded-[2rem] border p-7 text-left transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
-              style={{ background: CARD, borderColor: B60 }}
-            >
-              <p className="posh-eyebrow">{card.label}</p>
-              <p className="posh-page-title mt-5 text-4xl">{card.value}</p>
-              <p className="posh-subtitle mt-2">{card.sub}</p>
-            </button>
-          ))}
+          {statCards.map((card) => {
+            const isPreviewable = card.id !== "CART";
+            const isSelected = isPreviewable && selectedStat === card.id;
+            return (
+              <button
+                key={card.label}
+                type="button"
+                aria-pressed={isPreviewable ? isSelected : undefined}
+                onClick={card.onClick}
+                className="block rounded-[2rem] border p-7 text-left transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
+                style={{
+                  background: isSelected ? "rgba(var(--posh-wash-rgb),0.06)" : CARD,
+                  borderColor: isSelected ? "var(--posh-primary)" : B60,
+                }}
+              >
+                <p className="posh-eyebrow">{card.label}</p>
+                <p className="posh-page-title mt-5 text-4xl">{card.value}</p>
+                <p className="posh-subtitle mt-2">{card.sub}</p>
+              </button>
+            );
+          })}
         </div>
+        {/* ── Inline stat preview — expands directly on /newdashboard when a
+            previewable stat card (Active Orders / Delivered Orders /
+            Watchlist) is clicked, without navigating away (spec sections
+            1–7). Reuses the exact same `orders`/`watchlistItems` state
+            already fetched above; "View All"/"View All Orders" is the only
+            control that navigates, to the exact URLs the spec requires. */}
+        {selectedStat && (
+          <section
+            className="mt-4 rounded-[2rem] border p-7 shadow-sm md:p-10"
+            style={{ background: CARD, borderColor: B60 }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="posh-eyebrow">Previewing</p>
+                <h2 className="posh-card-title mt-1 text-xl">{PREVIEW_TITLES[selectedStat]}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedStat(null)}
+                className="posh-link text-xs"
+                aria-label="Close preview"
+              >
+                Close ✕
+              </button>
+            </div>
+
+            <div className="mt-6">
+              {(selectedStat === "ACTIVE" || selectedStat === "DELIVERED") && (
+                !ordersReady ? (
+                  <p className="posh-muted py-8 text-center text-xs">Loading…</p>
+                ) : (() => {
+                    const list = selectedStat === "ACTIVE" ? activeOrdersPreview : deliveredOrdersPreview;
+                    if (list.length === 0) {
+                      return (
+                        <div className="py-12 text-center">
+                          <p className="posh-card-title">
+                            {selectedStat === "ACTIVE" ? "No active orders" : "No delivered orders"}
+                          </p>
+                          <Link href="/products" className="posh-link mt-3 inline-block">
+                            Browse materials →
+                          </Link>
+                        </div>
+                      );
+                    }
+                    return (
+                      <>
+                        <div className="divide-y" style={{ borderColor: B40 }}>
+                          {list.map((o) => (
+                            <Link
+                              key={o.id}
+                              href={`/orders/${o.id}`}
+                              className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-bold" style={{ color: FG }}>
+                                  {o.items?.[0]?.name ?? `Order #${o.id.slice(0, 6)}`}
+                                  {(o.itemCount ?? 0) > 1 ? ` +${o.itemCount - 1}` : ""}
+                                </p>
+                                <p className="posh-label mt-1">{o.supplierName ?? STATUS_LABELS[o.status] ?? o.status}</p>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <p className="posh-card-title text-base">{fmtInr(o.total)}</p>
+                                <p className="posh-label mt-1">{STATUS_LABELS[o.status]}</p>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                        <Link
+                          href={PREVIEW_VIEW_ALL_HREF[selectedStat]}
+                          className="posh-btn-solid mt-5 flex items-center justify-center rounded-full py-2.5 text-sm font-bold"
+                        >
+                          View All Orders
+                        </Link>
+                      </>
+                    );
+                  })()
+              )}
+
+              {selectedStat === "WATCHLIST" && (
+                !watchlistReady ? (
+                  <p className="posh-muted py-8 text-center text-xs">Loading…</p>
+                ) : watchlistPreview.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <p className="posh-card-title">No items in watchlist</p>
+                    <Link href="/products" className="posh-link mt-3 inline-block">
+                      Browse &amp; watchlist materials →
+                    </Link>
+                  </div>
+                ) : (
+                  <>
+                    <div
+                      className="grid gap-px overflow-hidden rounded-[2rem] border sm:grid-cols-2"
+                      style={{ borderColor: B60, background: B60 }}
+                    >
+                      {watchlistPreview.map((w) => (
+                        <Link
+                          key={w.id}
+                          href="/watchlist"
+                          className="block bg-[color:var(--posh-bg-card)] p-7 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
+                        >
+                          <div className="flex items-baseline justify-between">
+                            <h3 className="posh-card-title">{w.name}</h3>
+                            <span className="posh-label">{gapLabel(w.priceIntelligence?.gapToTargetPct ?? null)}</span>
+                          </div>
+                          <p className="posh-page-title mt-3">
+                            {w.priceIntelligence?.currentPricePerBaseUnit
+                              ? fmtInr(w.priceIntelligence.currentPricePerBaseUnit)
+                              : fmtInr(w.basePrice)}{" "}
+                            / {w.unit}
+                          </p>
+                          <p className="posh-subtitle mt-2">
+                            {w.targetPrice ? `Target: ${fmtInr(w.targetPrice)}` : "No target set"}
+                          </p>
+                        </Link>
+                      ))}
+                    </div>
+                    <Link
+                      href={PREVIEW_VIEW_ALL_HREF.WATCHLIST}
+                      className="posh-btn-solid mt-5 flex items-center justify-center rounded-full py-2.5 text-sm font-bold"
+                    >
+                      View All
+                    </Link>
+                  </>
+                )
+              )}
+            </div>
+          </section>
+        )}
 
         {/* ── Two-column body ── */}
         <div className="mt-8 flex flex-1 flex-col gap-6 lg:flex-row">

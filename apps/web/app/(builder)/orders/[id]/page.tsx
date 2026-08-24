@@ -142,12 +142,12 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           <p className="posh-card-title text-base">This is a Group &amp; Save order</p>
           <p className="mt-1 font-medium" style={{ color: "var(--posh-fg-muted)" }}>
             {order.poolLocked
-              ? `Pool locked${order.priceAfterAggregation ? ` at INR ${order.priceAfterAggregation.toLocaleString("en-IN")}/unit` : ""}. This order will now proceed through the standard fulfilment stages below.`
+              ? `Pool locked${order.priceAfterAggregation ? ` at ₹${order.priceAfterAggregation.toLocaleString("en-IN")}/unit` : ""}. This order will now proceed through the standard fulfilment stages below.`
               : "This order is still pooling with other builders to unlock a better price. It will convert once the pool locks."}
           </p>
           {order.priceBeforeAggregation && order.priceAfterAggregation && order.priceBeforeAggregation > order.priceAfterAggregation ? (
             <p className="mt-2 text-xs font-bold" style={{ color: "var(--posh-fg)" }}>
-              You saved INR {(order.priceBeforeAggregation - order.priceAfterAggregation).toLocaleString("en-IN")}/unit
+              You saved ₹{(order.priceBeforeAggregation - order.priceAfterAggregation).toLocaleString("en-IN")}/unit
             </p>
           ) : null}
         </div>
@@ -187,10 +187,10 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                 <div>
                   <p className="font-bold" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
                   <p className="posh-label mt-1">
-                    {item.quantity} {item.unit} · INR {item.unitPrice.toLocaleString("en-IN")}/unit
+                    {item.quantity} {item.unit} · ₹{item.unitPrice.toLocaleString("en-IN")}/unit
                   </p>
                 </div>
-                <p className="font-bold" style={{ color: "var(--posh-fg)" }}>INR {(item.quantity * item.unitPrice).toLocaleString("en-IN")}</p>
+                <p className="font-bold" style={{ color: "var(--posh-fg)" }}>₹{(item.quantity * item.unitPrice).toLocaleString("en-IN")}</p>
               </div>
             ))}
           </div>
@@ -199,7 +199,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)" }}
           >
             <span className="posh-label">Total</span>
-            <span className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>INR {order.total.toLocaleString("en-IN")}</span>
+            <span className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>₹{order.total.toLocaleString("en-IN")}</span>
           </div>
         </section>
 

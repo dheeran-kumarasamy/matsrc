@@ -172,7 +172,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-slate-700">INR {li.unitPrice.toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-2 text-slate-700">₹{li.unitPrice.toLocaleString("en-IN")}</td>
                   <td className="px-4 py-2">
                     {isDraft ? (
                       <input
@@ -188,7 +188,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                     )}
                   </td>
                   <td className="px-4 py-2 font-semibold text-slate-800">
-                    INR {(li.unitPrice * li.quantity + li.tax).toLocaleString("en-IN")}
+                    ₹{(li.unitPrice * li.quantity + li.tax).toLocaleString("en-IN")}
                   </td>
                 </tr>
               ))}
@@ -197,7 +197,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
         </div>
         <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
           <span className="text-sm text-slate-500">Total</span>
-          <span className="text-lg font-extrabold text-slate-900">INR {po.total.toLocaleString("en-IN")}</span>
+          <span className="text-lg font-extrabold text-slate-900">₹{po.total.toLocaleString("en-IN")}</span>
         </div>
       </div>
 

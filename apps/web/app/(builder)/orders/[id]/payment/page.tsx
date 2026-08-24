@@ -55,7 +55,7 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
           </div>
           <div className="rounded-xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.03)] px-4 py-3">
             <p className="posh-label">Enquiry value</p>
-            <p className="mt-1 font-bold text-[color:var(--posh-fg)]">INR {order.total.toLocaleString("en-IN")}</p>
+            <p className="mt-1 font-bold text-[color:var(--posh-fg)]">₹{order.total.toLocaleString("en-IN")}</p>
           </div>
         </div>
 

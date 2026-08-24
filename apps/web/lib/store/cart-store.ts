@@ -37,7 +37,7 @@ type CartResponse = {
 
 const EMPTY_CART: CartResponse = {
   items: [],
-  summary: { itemCount: 0, subtotal: 0, subtotalLabel: "INR 0" },
+  summary: { itemCount: 0, subtotal: 0, subtotalLabel: "₹0" },
 };
 
 function recomputeSummary(items: CartItem[]): CartSummary {
@@ -45,7 +45,7 @@ function recomputeSummary(items: CartItem[]): CartSummary {
   return {
     itemCount: items.length,
     subtotal,
-    subtotalLabel: `INR ${subtotal.toLocaleString("en-IN")}`,
+    subtotalLabel: `₹${subtotal.toLocaleString("en-IN")}`,
   };
 }
 

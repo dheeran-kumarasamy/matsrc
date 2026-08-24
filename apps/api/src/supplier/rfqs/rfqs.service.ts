@@ -152,7 +152,7 @@ export class RfqsService {
     const bestPriceResult = await this.bestPriceSelectionService.selectAndFinalizeIfEligible(enquiryId);
     if (bestPriceResult?.finalized) {
       const lineItemSummary = bestPriceResult.lineItems
-        .map((line) => `${line.materialName}: INR ${line.unitPrice.toLocaleString("en-IN")}/${line.quantity}`)
+        .map((line) => `${line.materialName}: ₹${line.unitPrice.toLocaleString("en-IN")}/${line.quantity}`)
         .join(", ");
 
       void this.notificationService

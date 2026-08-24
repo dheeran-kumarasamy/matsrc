@@ -472,7 +472,7 @@ export class AggregationService {
             data: {
               orderId: participant.orderId,
               status: OrderStatus.PLACED,
-              note: `Aggregation pool locked at INR ${lockedUnitPrice.toFixed(2)}/unit`,
+              note: `Aggregation pool locked at ₹${lockedUnitPrice.toFixed(2)}/unit`,
             },
           });
         }

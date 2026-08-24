@@ -182,12 +182,12 @@ export default function OrderDetailOverlay({ order }: Props) {
               <p className="font-semibold">This is a Group &amp; Save order</p>
               <p className="mt-1 text-emerald-700">
                 {order.poolLocked
-                  ? `Pool locked${order.priceAfterAggregation ? ` at INR ${order.priceAfterAggregation.toLocaleString("en-IN")}/unit` : ""}. This order will now proceed through the standard fulfilment stages below.`
+                  ? `Pool locked${order.priceAfterAggregation ? ` at ₹${order.priceAfterAggregation.toLocaleString("en-IN")}/unit` : ""}. This order will now proceed through the standard fulfilment stages below.`
                   : "This order is still pooling with other builders to unlock a better price. It will convert once the pool locks."}
               </p>
               {order.priceBeforeAggregation && order.priceAfterAggregation && order.priceBeforeAggregation > order.priceAfterAggregation ? (
                 <p className="mt-1 text-xs font-semibold text-emerald-800">
-                  You saved INR {(order.priceBeforeAggregation - order.priceAfterAggregation).toLocaleString("en-IN")}/unit
+                  You saved ₹{(order.priceBeforeAggregation - order.priceAfterAggregation).toLocaleString("en-IN")}/unit
                 </p>
               ) : null}
             </div>
@@ -230,18 +230,18 @@ export default function OrderDetailOverlay({ order }: Props) {
                     <div>
                       <p className="font-medium text-slate-800">{item.name}</p>
                       <p className="text-xs text-slate-400">
-                        {item.quantity} {item.unit} · INR {item.unitPrice.toLocaleString("en-IN")}/unit
+                        {item.quantity} {item.unit} · ₹{item.unitPrice.toLocaleString("en-IN")}/unit
                       </p>
                     </div>
                     <p className="font-semibold text-slate-900">
-                      INR {(item.quantity * item.unitPrice).toLocaleString("en-IN")}
+                      ₹{(item.quantity * item.unitPrice).toLocaleString("en-IN")}
                     </p>
                   </div>
                 ))}
               </div>
               <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm">
                 <span className="font-medium text-slate-600">Total</span>
-                <span className="font-bold text-slate-900">INR {order.total.toLocaleString("en-IN")}</span>
+                <span className="font-bold text-slate-900">₹{order.total.toLocaleString("en-IN")}</span>
               </div>
             </section>
 

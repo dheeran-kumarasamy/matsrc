@@ -107,7 +107,7 @@ export class NotificationService {
       },
       content: {
         title: "Price alert — target reached",
-        body: `${params.productName} has reached your target price of INR ${params.targetPrice} (current: INR ${params.currentPrice}) in ${params.districtName}. View it here: ${deepLink}`,
+        body: `${params.productName} has reached your target price of ₹${params.targetPrice} (current: ₹${params.currentPrice}) in ${params.districtName}. View it here: ${deepLink}`,
       },
       idempotencyKey: params.idempotencyKey,
     };
@@ -154,7 +154,7 @@ export class NotificationService {
       },
       content: {
         title: "You're in — Group & Save",
-        body: `Joined the group order for ${params.productName} (qty ${params.quantity}). Current price: INR ${params.currentUnitPrice}/unit, estimated savings so far: INR ${savingsLabel}. Track it here: ${deepLink}`,
+        body: `Joined the group order for ${params.productName} (qty ${params.quantity}). Current price: ₹${params.currentUnitPrice}/unit, estimated savings so far: ₹${savingsLabel}. Track it here: ${deepLink}`,
       },
       idempotencyKey: `aggregation-opt-in:${params.poolId}:${params.builderId}:${params.quantity}`,
     };
@@ -196,7 +196,7 @@ export class NotificationService {
       },
       content: {
         title: "Your price just dropped!",
-        body: `Great news — more builders joined your group order for ${params.productName}. Price dropped from INR ${params.previousUnitPrice} to INR ${params.currentUnitPrice}/unit. View details: ${deepLink}`,
+        body: `Great news — more builders joined your group order for ${params.productName}. Price dropped from ₹${params.previousUnitPrice} to ₹${params.currentUnitPrice}/unit. View details: ${deepLink}`,
       },
     };
 
@@ -233,7 +233,7 @@ export class NotificationService {
       },
       content: {
         title: "Group order closing soon",
-        body: `Your group order for ${params.productName} closes in ~${params.hoursRemaining}h at INR ${params.currentUnitPrice}/unit. Invite others to join and unlock a better price: ${deepLink}`,
+        body: `Your group order for ${params.productName} closes in ~${params.hoursRemaining}h at ₹${params.currentUnitPrice}/unit. Invite others to join and unlock a better price: ${deepLink}`,
       },
       idempotencyKey: `aggregation-window-closing:${params.poolId}:${params.builderId}`,
     };
@@ -274,7 +274,7 @@ export class NotificationService {
       },
       content: {
         title: "Price locked — order confirmed!",
-        body: `Your group order for ${params.productName} (qty ${params.quantity}) is locked in at INR ${params.lockedUnitPrice}/unit and confirmed as an order. Track it here: ${deepLink}`,
+        body: `Your group order for ${params.productName} (qty ${params.quantity}) is locked in at ₹${params.lockedUnitPrice}/unit and confirmed as an order. Track it here: ${deepLink}`,
       },
       idempotencyKey: `aggregation-locked:${params.poolId}:${params.builderId}`,
     };
@@ -599,7 +599,7 @@ export class NotificationService {
       },
       content: {
         title: "Best quote ready",
-        body: `Enquiry ${order.id.slice(0, 8)} accepted. Best price: INR ${bestPriceLabel}. Tentative delivery: ${tentativeDeliveryDate}. Details: ${deepLink}`,
+        body: `Enquiry ${order.id.slice(0, 8)} accepted. Best price: ₹${bestPriceLabel}. Tentative delivery: ${tentativeDeliveryDate}. Details: ${deepLink}`,
       },
       idempotencyKey: `builder-best-price:${order.id}`,
     };

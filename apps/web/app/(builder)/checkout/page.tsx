@@ -75,7 +75,7 @@ export default function CheckoutPage() {
   const [pincode, setPincode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [cart, setCart] = useState<CartResponse>({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: "INR 0" } });
+  const [cart, setCart] = useState<CartResponse>({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: "₹0" } });
   const [poolingItemIds, setPoolingItemIds] = useState<Set<string>>(new Set());
   const [optInLoadingId, setOptInLoadingId] = useState<string | null>(null);
   const [optInError, setOptInError] = useState<string | null>(null);
@@ -92,7 +92,7 @@ export default function CheckoutPage() {
         setCart(payload);
       } catch {
         if (!active) return;
-        setCart({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: "INR 0" } });
+        setCart({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: "₹0" } });
       }
     }
 
@@ -212,7 +212,7 @@ export default function CheckoutPage() {
                     <p className="text-sm font-semibold text-slate-800">{group.supplierName}</p>
                     <p className="text-xs text-slate-400">{group.items.length} line item(s) will be sent as one enquiry</p>
                   </div>
-                  <p className="text-sm font-bold text-slate-900">INR {group.total.toLocaleString("en-IN")}</p>
+                  <p className="text-sm font-bold text-slate-900">₹{group.total.toLocaleString("en-IN")}</p>
                 </div>
                 <div className="mt-3 space-y-3">
                   {group.items.map((item) => {
@@ -227,7 +227,7 @@ export default function CheckoutPage() {
                           <span>
                             {item.name} ({item.quantity} {item.unit})
                           </span>
-                          <span className="font-semibold">INR {item.lineTotal.toLocaleString("en-IN")}</span>
+                          <span className="font-semibold">₹{item.lineTotal.toLocaleString("en-IN")}</span>
                         </div>
 
                         {eligible ? (
@@ -238,7 +238,7 @@ export default function CheckoutPage() {
                               </p>
                               {savingsPerUnit > 0 ? (
                                 <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-[color:var(--posh-primary-fg)]">
-                                  Save up to INR {savingsPerUnit.toLocaleString("en-IN")}/unit
+                                  Save up to ₹{savingsPerUnit.toLocaleString("en-IN")}/unit
                                 </span>
                               ) : null}
                             </div>
@@ -258,7 +258,7 @@ export default function CheckoutPage() {
                                       <tr key={tier.minQty}>
                                         <td className="px-2 py-1 text-slate-700">{tier.minQty}+</td>
                                         <td className="px-2 py-1 text-slate-700">
-                                          INR {tier.unitPrice.toLocaleString("en-IN")}
+                                          ₹{tier.unitPrice.toLocaleString("en-IN")}
                                         </td>
                                       </tr>
                                     ))}
@@ -268,7 +268,7 @@ export default function CheckoutPage() {
                             {next ? (
                               <p className="mt-2 text-[11px] text-emerald-700">
                                 Only {Math.max(0, next.minQty - item.quantity)} more unit(s) from other builders needed to unlock
-                                INR {next.unitPrice.toLocaleString("en-IN")}/unit.
+                                ₹{next.unitPrice.toLocaleString("en-IN")}/unit.
                               </p>
                             ) : (
                               <p className="mt-2 text-[11px] text-emerald-700">
@@ -340,15 +340,15 @@ export default function CheckoutPage() {
       <div className="panel p-5 space-y-3">
         <div className="flex justify-between text-sm text-slate-500">
           <span>Subtotal</span>
-          <span>INR {cart.summary.subtotal.toLocaleString("en-IN")}</span>
+          <span>₹{cart.summary.subtotal.toLocaleString("en-IN")}</span>
         </div>
         <div className="flex justify-between text-sm text-slate-500">
           <span>GST estimate</span>
-          <span>INR {gst.toLocaleString("en-IN")}</span>
+          <span>₹{gst.toLocaleString("en-IN")}</span>
         </div>
         <div className="flex justify-between border-t border-slate-100 pt-3 font-bold text-slate-800">
           <span>Estimated enquiry value</span>
-          <span>INR {total.toLocaleString("en-IN")}</span>
+          <span>₹{total.toLocaleString("en-IN")}</span>
         </div>
         <button
           onClick={handleSubmitEnquiry}

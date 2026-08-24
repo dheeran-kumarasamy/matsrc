@@ -135,12 +135,12 @@ export default function WatchlistPage() {
                   <div>
                     <p className="text-base font-bold tracking-tight" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
                     <p className="mt-1 text-xs font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
-                      Listing price: INR {item.basePrice.toLocaleString("en-IN")} / {item.unit}
+                      Listing price: ₹{item.basePrice.toLocaleString("en-IN")} / {item.unit}
                     </p>
                   </div>
                   <div className="flex items-center gap-4">
                     <p className="posh-label">
-                      Target: {item.targetPrice ? `INR ${item.targetPrice.toLocaleString("en-IN")}` : "Not set"}
+                      Target: {item.targetPrice ? `₹${item.targetPrice.toLocaleString("en-IN")}` : "Not set"}
                     </p>
                     <button
                       disabled={loadingId === item.id}
@@ -163,7 +163,7 @@ export default function WatchlistPage() {
                     style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)" }}
                   >
                     <span className="font-bold" style={{ color: "var(--posh-fg)" }}>
-                      Market price: INR {pi.currentPricePerBaseUnit?.toLocaleString("en-IN")} / {pi.baseUnit}
+                      Market price: ₹{pi.currentPricePerBaseUnit?.toLocaleString("en-IN")} / {pi.baseUnit}
                     </span>
                     {pi.confidence && (
                       <span
@@ -194,7 +194,7 @@ export default function WatchlistPage() {
                       >
                         {pi.gapToTarget <= 0
                           ? "Target reached"
-                          : `INR ${pi.gapToTarget.toLocaleString("en-IN")} above target`}
+                          : `₹${pi.gapToTarget.toLocaleString("en-IN")} above target`}
                       </span>
                     )}
                   </div>

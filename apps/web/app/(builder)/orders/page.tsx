@@ -146,7 +146,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
                   {order.isAggregated ? <span className="posh-status">Group Order</span> : null}
                 </div>
                 <p className="mt-1 text-xs font-semibold text-[color:var(--posh-fg-muted)]">
-                  {order.supplierName ? `${order.supplierName} · ` : ""}{order.itemCount} items · INR {order.total.toLocaleString("en-IN")}
+                  {order.supplierName ? `${order.supplierName} · ` : ""}{order.itemCount} items · ₹{order.total.toLocaleString("en-IN")}
                 </p>
               </div>
               <div className="flex items-center gap-4">

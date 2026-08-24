@@ -79,7 +79,7 @@ export default function CreditPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-5">
       <h1 className="text-xl font-bold text-slate-900">Credit & BNPL</h1>
-      <p className="text-sm text-slate-500">Status: <span className="font-semibold text-slate-700">{creditStatus}</span> · Available: <span className="font-semibold text-slate-700">INR {availableLimit.toLocaleString("en-IN")}</span></p>
+      <p className="text-sm text-slate-500">Status: <span className="font-semibold text-slate-700">{creditStatus}</span> · Available: <span className="font-semibold text-slate-700">₹{availableLimit.toLocaleString("en-IN")}</span></p>
 
       {/* Step: select credit type */}
       {step === "options" && (
@@ -149,7 +149,7 @@ export default function CreditPage() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-600">Guarantee Amount (INR)</label>
+              <label className="text-xs font-medium text-slate-600">Guarantee Amount (₹)</label>
               <input
                 type="number"
                 min={1}

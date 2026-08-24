@@ -66,8 +66,8 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
                   <td className="px-4 py-2 text-slate-700">
                     {li.quantity} {li.unit}
                   </td>
-                  <td className="px-4 py-2 text-slate-700">INR {li.unitPrice.toLocaleString("en-IN")}</td>
-                  <td className="px-4 py-2 text-slate-700">INR {li.tax.toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-2 text-slate-700">₹{li.unitPrice.toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-2 text-slate-700">₹{li.tax.toLocaleString("en-IN")}</td>
                   <td className="px-4 py-2 text-slate-700">
                     {li.deliveryDate ? new Date(li.deliveryDate).toLocaleDateString() : "—"}
                   </td>
@@ -75,7 +75,7 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
                     {li.fulfilledQuantity}/{li.quantity}
                   </td>
                   <td className="px-4 py-2 font-semibold text-slate-800">
-                    INR {li.lineTotal.toLocaleString("en-IN")}
+                    ₹{li.lineTotal.toLocaleString("en-IN")}
                   </td>
                 </tr>
               ))}
@@ -84,7 +84,7 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
         </div>
         <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
           <span className="text-sm text-slate-500">Total</span>
-          <span className="text-lg font-extrabold text-slate-900">INR {po.total.toLocaleString("en-IN")}</span>
+          <span className="text-lg font-extrabold text-slate-900">₹{po.total.toLocaleString("en-IN")}</span>
         </div>
       </div>
 

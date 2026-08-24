@@ -181,20 +181,24 @@ export default function RegisterPage() {
       {step === "role" && (
         <form onSubmit={handleRoleSelect} className="space-y-4">
           <p className="text-sm mb-4" style={{ color: "var(--posh-fg-muted)" }}>How will you use Buildohub.in?</p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
             {(["BUILDER", "SUPPLIER"] as const).map((r) => (
               <button
                 key={r}
                 type="button"
                 onClick={() => setRole(r)}
-                className="rounded-xl border-2 p-4 text-left transition-all"
+                className="rounded-xl border-2 p-3 text-left transition-all sm:p-4"
                 style={role === r
                   ? { borderColor: "var(--posh-primary)", background: "rgba(196,145,90,0.10)" }
                   : { borderColor: "var(--posh-border)" }}
               >
-                <div className="text-2xl mb-1">{r === "BUILDER" ? "🏗️" : "🏭"}</div>
-                <div className="font-semibold text-sm" style={{ color: "var(--posh-fg)" }}>{r === "BUILDER" ? "Builder" : "Supplier"}</div>
-                <div className="text-xs mt-1" style={{ color: "var(--posh-fg-muted)" }}>{r === "BUILDER" ? "Buy construction materials" : "Sell construction materials"}</div>
+                {/* Icon + heading share one row on all breakpoints (mobile
+                    included) — icon no longer stacks above the label. */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xl leading-none sm:text-2xl">{r === "BUILDER" ? "🏗️" : "🏭"}</span>
+                  <span className="font-semibold text-sm" style={{ color: "var(--posh-fg)" }}>{r === "BUILDER" ? "Builder" : "Supplier"}</span>
+                </div>
+                <div className="mt-1 text-xs" style={{ color: "var(--posh-fg-muted)" }}>{r === "BUILDER" ? "Buy construction materials" : "Sell construction materials"}</div>
               </button>
             ))}
           </div>

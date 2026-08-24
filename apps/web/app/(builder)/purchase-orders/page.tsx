@@ -114,7 +114,7 @@ export default async function PurchaseOrdersPage({
                   ) : null}
                 </p>
                 <p className="mt-1 text-xs font-semibold text-[color:var(--posh-fg-muted)]">
-                  {po.supplier.companyName} · {po.lineItems.length} items · INR {po.total.toLocaleString("en-IN")}
+                  {po.supplier.companyName} · {po.lineItems.length} items · ₹{po.total.toLocaleString("en-IN")}
                 </p>
               </div>
               <div className="flex items-center gap-4">

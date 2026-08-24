@@ -196,11 +196,11 @@ export async function GET(request: Request) {
           <td>${escapeHtml(row.supplierName)}</td>
           <td>${escapeHtml(row.productName)}</td>
           <td style="text-align:right">${row.quantity} ${escapeHtml(row.unit)}</td>
-          <td style="text-align:right">INR ${row.unitPrice.toLocaleString("en-IN")}</td>
-          <td style="text-align:right">INR ${row.taxableValue.toLocaleString("en-IN")}</td>
+          <td style="text-align:right">₹${row.unitPrice.toLocaleString("en-IN")}</td>
+          <td style="text-align:right">₹${row.taxableValue.toLocaleString("en-IN")}</td>
           <td style="text-align:right">${row.taxRatePercent}%</td>
-          <td style="text-align:right">INR ${row.gstAmount.toLocaleString("en-IN")}</td>
-          <td style="text-align:right">INR ${row.total.toLocaleString("en-IN")}</td>
+          <td style="text-align:right">₹${row.gstAmount.toLocaleString("en-IN")}</td>
+          <td style="text-align:right">₹${row.total.toLocaleString("en-IN")}</td>
         </tr>`
         )
         .join("");
@@ -224,7 +224,7 @@ export async function GET(request: Request) {
   <h1>Site-wise Purchase Report</h1>
   <p class="meta">Generated ${new Date(generatedAt).toLocaleString("en-IN")}</p>
   <p class="meta">
-    Total Spend: INR ${summary.totalSpend.toLocaleString("en-IN")} ·
+    Total Spend: ₹${summary.totalSpend.toLocaleString("en-IN")} ·
     Orders: ${summary.orderCount} · Items: ${summary.itemCount}
   </p>
   <table>
@@ -236,7 +236,7 @@ export async function GET(request: Request) {
     </thead>
     <tbody>${rows}</tbody>
   </table>
-  <p class="total">Total: INR ${summary.totalSpend.toLocaleString("en-IN")}</p>
+  <p class="total">Total: ₹${summary.totalSpend.toLocaleString("en-IN")}</p>
 </body>
 </html>`;
 

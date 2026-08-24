@@ -454,7 +454,7 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
         </label>
 
         <label className="space-y-1 text-sm text-slate-700">
-          <span>Base Price (INR)</span>
+          <span>Base Price (₹)</span>
           <input
             required
             value={form.price}
@@ -592,7 +592,7 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
                 />
               </label>
               <label className="space-y-1 text-sm text-slate-700">
-                <span>Tier Price (INR)</span>
+                <span>Tier Price (₹)</span>
                 <input
                   value={tier.price}
                   onChange={(e) => updateTier(index, "price", e.target.value)}
@@ -670,7 +670,7 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
                     />
                   </label>
                   <label className="space-y-1 text-sm text-slate-700">
-                    <span>Unit Price at this Tier (INR)</span>
+                    <span>Unit Price at this Tier (₹)</span>
                     <input
                       value={tier.unitPrice}
                       onChange={(e) => updateAggregationTier(index, "unitPrice", e.target.value)}

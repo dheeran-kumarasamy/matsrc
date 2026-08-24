@@ -60,10 +60,10 @@ function renderPoHtml(po: any): string {
       <tr>
         <td>${escapeHtml(li.productName)}</td>
         <td style="text-align:right">${li.quantity} ${escapeHtml(li.unit ?? "")}</td>
-        <td style="text-align:right">INR ${Number(li.unitPrice).toLocaleString("en-IN")}</td>
-        <td style="text-align:right">INR ${Number(li.tax).toLocaleString("en-IN")}</td>
+        <td style="text-align:right">₹${Number(li.unitPrice).toLocaleString("en-IN")}</td>
+        <td style="text-align:right">₹${Number(li.tax).toLocaleString("en-IN")}</td>
         <td>${li.deliveryDate ? new Date(li.deliveryDate).toLocaleDateString("en-IN") : "TBD"}</td>
-        <td style="text-align:right">INR ${Number(li.lineTotal).toLocaleString("en-IN")}</td>
+        <td style="text-align:right">₹${Number(li.lineTotal).toLocaleString("en-IN")}</td>
       </tr>`
     )
     .join("");
@@ -102,7 +102,7 @@ function renderPoHtml(po: any): string {
     </thead>
     <tbody>${rows}</tbody>
   </table>
-  <p class="total">Total: INR ${Number(po.total).toLocaleString("en-IN")}</p>
+  <p class="total">Total: ₹${Number(po.total).toLocaleString("en-IN")}</p>
   ${po.notes ? `<p class="meta">Notes: ${escapeHtml(po.notes)}</p>` : ""}
 </body>
 </html>`;

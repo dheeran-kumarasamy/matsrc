@@ -160,13 +160,13 @@ export default function GroupOrdersPage() {
                   <div>
                     <p className="text-xs text-slate-400">Current price</p>
                     <p className="font-semibold text-slate-800">
-                      INR {(pool.lockedUnitPrice ?? pool.currentUnitPrice).toLocaleString("en-IN")}
+                      ₹{(pool.lockedUnitPrice ?? pool.currentUnitPrice).toLocaleString("en-IN")}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-slate-400">Savings/unit</p>
                     <p className="font-semibold text-emerald-700">
-                      {savingsPerUnit > 0 ? `INR ${savingsPerUnit.toLocaleString("en-IN")}` : "—"}
+                      {savingsPerUnit > 0 ? `₹${savingsPerUnit.toLocaleString("en-IN")}` : "—"}
                     </p>
                   </div>
                   <div>

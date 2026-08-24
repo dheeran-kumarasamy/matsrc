@@ -109,10 +109,12 @@ export default function WhyChooseUs() {
                   type="button"
                   onClick={() => setRole(r)}
                   aria-pressed={active}
+                  // Compact pill sized to the short "buyer"/"supplier" label
+                  // instead of oversized fixed padding.
                   className={
                     active
-                      ? "posh-btn-charcoal rounded-full px-6 py-2.5 text-sm font-medium capitalize"
-                      : "rounded-full px-6 py-2.5 text-sm font-medium capitalize transition-colors duration-200"
+                      ? "posh-btn-charcoal rounded-full px-4 py-1.5 text-sm font-medium capitalize"
+                      : "rounded-full px-4 py-1.5 text-sm font-medium capitalize transition-colors duration-200"
                   }
                   style={active ? undefined : { background: "transparent", color: "var(--posh-fg-muted)" }}
                 >
@@ -123,27 +125,34 @@ export default function WhyChooseUs() {
           </div>
         </div>
 
-        <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        {/* Two-in-a-row on mobile (grid-cols-2) instead of the previous
+            full-width single column — compact, content-sized cards: icon +
+            heading share one row (no more large icon-circle-then-big-gap
+            pattern), padding tightened on mobile/tablet while desktop
+            (lg:) keeps its original breathing room. */}
+        <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 md:mt-10 lg:grid-cols-4 lg:gap-6">
           {activeCards.map(({ icon: Icon, title, body }) => (
             <article
               key={title}
-              className="group rounded-3xl border p-8 transition-all duration-300 hover:-translate-y-1"
+              className="group rounded-2xl border p-4 transition-all duration-300 hover:-translate-y-1 sm:p-5 lg:rounded-3xl lg:p-8"
               style={{ borderColor: "var(--posh-border)", background: "var(--posh-bg-card)" }}
             >
-              <div
-                className="flex h-14 w-14 items-center justify-center rounded-full border transition-colors duration-300"
-                style={{ borderColor: "var(--posh-border)" }}
-              >
-                <Icon
-                  className="h-6 w-6 transition-colors duration-300"
-                  style={{ color: "var(--posh-olive)" }}
-                  aria-hidden
-                />
+              <div className="flex items-center gap-2 lg:block">
+                <div
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors duration-300 lg:h-14 lg:w-14"
+                  style={{ borderColor: "var(--posh-border)" }}
+                >
+                  <Icon
+                    className="h-4 w-4 transition-colors duration-300 lg:h-6 lg:w-6"
+                    style={{ color: "var(--posh-olive)" }}
+                    aria-hidden
+                  />
+                </div>
+                <h3 className="posh-heading text-sm leading-snug lg:mt-8 lg:text-xl" style={{ color: "var(--posh-fg)" }}>
+                  {title}
+                </h3>
               </div>
-              <h3 className="posh-heading mt-8 text-xl" style={{ color: "var(--posh-fg)" }}>
-                {title}
-              </h3>
-              <p className="mt-3 leading-relaxed" style={{ color: "var(--posh-fg-muted)" }}>
+              <p className="mt-2 text-xs leading-relaxed lg:mt-3 lg:text-base" style={{ color: "var(--posh-fg-muted)" }}>
                 {body}
               </p>
             </article>

@@ -187,18 +187,20 @@ export default function RegisterPage() {
                 key={r}
                 type="button"
                 onClick={() => setRole(r)}
-                className="rounded-xl border-2 p-3 text-left transition-all sm:p-4"
+                // Compact, content-sized card — no min-height; padding/gaps
+                // tightened so the button is only as tall as its two lines of
+                // text need. Icon + heading stay inline on one row at every
+                // breakpoint (mobile included), never stacked.
+                className="rounded-xl border-2 p-2.5 text-left transition-all sm:p-3"
                 style={role === r
                   ? { borderColor: "var(--posh-primary)", background: "rgba(196,145,90,0.10)" }
                   : { borderColor: "var(--posh-border)" }}
               >
-                {/* Icon + heading share one row on all breakpoints (mobile
-                    included) — icon no longer stacks above the label. */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xl leading-none sm:text-2xl">{r === "BUILDER" ? "🏗️" : "🏭"}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-lg leading-none sm:text-xl">{r === "BUILDER" ? "🏗️" : "🏭"}</span>
                   <span className="font-semibold text-sm" style={{ color: "var(--posh-fg)" }}>{r === "BUILDER" ? "Builder" : "Supplier"}</span>
                 </div>
-                <div className="mt-1 text-xs" style={{ color: "var(--posh-fg-muted)" }}>{r === "BUILDER" ? "Buy construction materials" : "Sell construction materials"}</div>
+                <div className="mt-0.5 text-xs" style={{ color: "var(--posh-fg-muted)" }}>{r === "BUILDER" ? "Buy construction materials" : "Sell construction materials"}</div>
               </button>
             ))}
           </div>

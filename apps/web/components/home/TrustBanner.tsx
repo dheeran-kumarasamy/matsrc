@@ -16,9 +16,12 @@ const BADGES = [
 
 export default function TrustBanner() {
   return (
+    /* Divider borders removed — background colour (posh-cream) alone now
+       distinguishes this banner from the hero/category sections above and
+       below, for a fluid, continuous homepage flow without hard lines. */
     <section
-      className="border-y pb-4 pt-4 md:pb-5 md:pt-5"
-      style={{ borderColor: "var(--posh-border)", background: "var(--posh-cream)" }}
+      className="pb-4 pt-4 md:pb-5 md:pt-5"
+      style={{ background: "var(--posh-cream)" }}
     >
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-6 sm:grid-cols-3 md:px-10">
         {BADGES.map(({ icon: Icon, label }) => (

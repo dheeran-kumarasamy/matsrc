@@ -86,8 +86,11 @@ export default function CategoryGrid() {
   }
 
   return (
+    /* Bottom padding reduced (was pb-16/20 — the main source of the large
+       gap before "Why BuildOHub" below) so the two sections flow into each
+       other with only enough space to stay visually distinct. */
     <section
-      className="pb-16 pt-6 md:pb-20 md:pt-8"
+      className="pb-8 pt-6 md:pb-10 md:pt-8"
       style={{ background: "var(--posh-bg)" }}
     >
       <div className="mx-auto max-w-7xl px-6 md:px-10">

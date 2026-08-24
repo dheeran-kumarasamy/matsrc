@@ -74,8 +74,11 @@ export default function WhyChooseUs() {
   const activeCards = WHY_CHOOSE_US[role];
 
   return (
-    <section className="border-y" style={{ borderColor: "var(--posh-border)", background: "var(--posh-bg)" }}>
-      <div className="mx-auto max-w-7xl px-6 py-16 md:px-10 md:py-20">
+    /* Section separator border removed — visual hierarchy now comes from
+       spacing/typography/background alone, for a fluid, continuous flow
+       between homepage sections instead of a hard divider line. */
+    <section style={{ background: "var(--posh-bg)" }}>
+      <div className="mx-auto max-w-7xl px-6 pb-12 pt-10 md:px-10 md:pb-16 md:pt-12">
         <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-end">
           <div>
             <p
@@ -125,34 +128,35 @@ export default function WhyChooseUs() {
           </div>
         </div>
 
-        {/* Two-in-a-row on mobile (grid-cols-2) instead of the previous
-            full-width single column — compact, content-sized cards: icon +
-            heading share one row (no more large icon-circle-then-big-gap
-            pattern), padding tightened on mobile/tablet while desktop
-            (lg:) keeps its original breathing room. */}
-        <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 md:mt-10 lg:grid-cols-4 lg:gap-6">
+        {/* Compact, content-sized cards on every breakpoint — icon + heading
+            share one row (no icon-circle-then-large-gap stack), padding/gaps
+            tightened throughout instead of only on mobile/tablet, and no
+            fixed/min-height anywhere so each card is only as tall as its
+            title + body text require. Two-in-a-row on mobile/tablet
+            (grid-cols-2), four-in-a-row from lg: up. */}
+        <div className="mt-6 grid grid-cols-2 gap-3 md:mt-8 md:gap-4 lg:grid-cols-4">
           {activeCards.map(({ icon: Icon, title, body }) => (
             <article
               key={title}
-              className="group rounded-2xl border p-4 transition-all duration-300 hover:-translate-y-1 sm:p-5 lg:rounded-3xl lg:p-8"
+              className="group rounded-2xl border p-4 transition-all duration-300 hover:-translate-y-1"
               style={{ borderColor: "var(--posh-border)", background: "var(--posh-bg-card)" }}
             >
-              <div className="flex items-center gap-2 lg:block">
+              <div className="flex items-center gap-2.5">
                 <div
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors duration-300 lg:h-14 lg:w-14"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors duration-300"
                   style={{ borderColor: "var(--posh-border)" }}
                 >
                   <Icon
-                    className="h-4 w-4 transition-colors duration-300 lg:h-6 lg:w-6"
+                    className="h-4 w-4 transition-colors duration-300"
                     style={{ color: "var(--posh-olive)" }}
                     aria-hidden
                   />
                 </div>
-                <h3 className="posh-heading text-sm leading-snug lg:mt-8 lg:text-xl" style={{ color: "var(--posh-fg)" }}>
+                <h3 className="posh-heading text-sm leading-snug md:text-base" style={{ color: "var(--posh-fg)" }}>
                   {title}
                 </h3>
               </div>
-              <p className="mt-2 text-xs leading-relaxed lg:mt-3 lg:text-base" style={{ color: "var(--posh-fg-muted)" }}>
+              <p className="mt-2 text-xs leading-relaxed md:text-sm" style={{ color: "var(--posh-fg-muted)" }}>
                 {body}
               </p>
             </article>

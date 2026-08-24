@@ -18,7 +18,12 @@ export default function HomeEditorialSections() {
       <WhyChooseUs />
 
       {/* ── Editorial split — stats ── */}
-      <section className="mx-auto max-w-7xl px-6 py-28 md:px-10 md:py-40">
+      {/* Vertical whitespace above/below this section reduced ~60%
+          (py-28/40 → py-12/16, roughly a 55-60% cut at both breakpoints) —
+          the excess was pure section padding, not content, so this keeps
+          the image/copy/stats untouched while removing the oversized gap
+          before and after "Quality and Quantity Assurance". */}
+      <section className="mx-auto max-w-7xl px-6 py-12 md:px-10 md:py-16">
         <div className="grid items-center gap-12 md:grid-cols-2 md:gap-20">
           {/* Left: editorial material photograph — the same asset used by
               the Lovable design (src/assets/materials.jpg → copied to
@@ -73,9 +78,12 @@ export default function HomeEditorialSections() {
       </section>
 
       {/* ── Footer ── */}
+      {/* Top border removed — was acting as a section-separator divider
+          line; spacing (py-10) alone now marks the footer boundary for a
+          more fluid, continuous homepage flow. */}
       <footer
         className="mx-auto flex max-w-7xl flex-col justify-between gap-4 px-6 py-10 text-sm md:flex-row md:px-10"
-        style={{ color: "var(--posh-fg-muted)", borderTop: "1px solid var(--posh-border)" }}
+        style={{ color: "var(--posh-fg-muted)" }}
       >
         <BuildOHubLogo href={null} className="text-lg" />
         <span>© {new Date().getFullYear()} BuildOHub · Coimbatore, India</span>

@@ -15,39 +15,24 @@ import {
 import BuildOHubLogo from "@/components/shared/BuildOHubLogo";
 
 
-// Grouped by mental model (Overview / Procurement / Intelligence /
-// Operations) rather than one flat list, so the nav communicates what the
-// user can do at a glance. Routes/labels are unchanged — only the grouping
-// and section headings are new.
-const linkGroups: { heading: string; links: { href: string; label: string }[] }[] = [
-  {
-    heading: "Overview",
-    links: [{ href: "/newdashboard", label: "Dashboard" }],
-  },
-  {
-    // "Browse Materials" removed from here — it's always reachable via the
-    // floating bottom-right shortcut on every page (see
-    // components/builder/FloatingBrowseLink.tsx, now also mounted on
-    // /newdashboard), so keeping it in the sidebar too was a duplicate
-    // entry point to the same page.
-    heading: "Procurement",
-    links: [
-      { href: "/sourcing", label: "AI Sourcing Assistant" },
-      { href: "/sites", label: "Sites" },
-    ],
-  },
-  {
-    heading: "Intelligence",
-    links: [{ href: "/watchlist", label: "Watchlist" }],
-  },
-  {
-    heading: "Operations",
-    links: [
-      { href: "/orders", label: "My Orders" },
-      { href: "/purchase-orders", label: "Purchase Orders" },
-      { href: "/disputes", label: "Disputes" },
-    ],
-  },
+// Flat list of nav links — previously grouped under "Overview" /
+// "Procurement" / "Intelligence" / "Operations" section headings, which
+// have been removed per request (redundant given how few links exist per
+// group). All routes/labels/ordering are unchanged; only the group
+// headings themselves are gone.
+const links: { href: string; label: string }[] = [
+  { href: "/newdashboard", label: "Dashboard" },
+  // "Browse Materials" intentionally not listed here — it's always
+  // reachable via the floating bottom-right shortcut on every page (see
+  // components/builder/FloatingBrowseLink.tsx, now also mounted on
+  // /newdashboard), so keeping it in the sidebar too was a duplicate
+  // entry point to the same page.
+  { href: "/sourcing", label: "AI Sourcing Assistant" },
+  { href: "/sites", label: "Sites" },
+  { href: "/watchlist", label: "Watchlist" },
+  { href: "/orders", label: "My Orders" },
+  { href: "/purchase-orders", label: "Purchase Orders" },
+  { href: "/disputes", label: "Disputes" },
 ];
 
 // Shared by BOTH the desktop sidebar (BuilderNav) and the mobile Sheet drawer
@@ -56,65 +41,69 @@ const linkGroups: { heading: string; links: { href: string; label: string }[] }[
 // globals.css is `font-weight: 300` — without them the nav renders thin.
 function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
   return (
-    <nav className="space-y-4">
-      {linkGroups.map((group) => (
-        <div key={group.heading} className="space-y-1">
-          <p className="posh-nav-eyebrow px-4 pb-1.5 pt-1">{group.heading}</p>
-          {group.links.map((link) => {
-            const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={onNavigate}
-                className={`relative flex min-h-[44px] items-center rounded-xl border px-4 text-[13px] tracking-[0.01em] transition-all duration-200 ${
-                  active ? "font-bold shadow-sm" : "border-transparent font-semibold"
-                }`}
-                style={
-                  active
-                    ? {
-                        background: "rgba(var(--posh-wash-rgb),0.08)",
-                        color: "var(--posh-fg)",
-                        borderColor: "var(--posh-border)",
-                      }
-                    : { color: "var(--posh-fg-muted)" }
-                }
-                onMouseEnter={(e) => {
-                  if (!active) {
-                    (e.currentTarget as HTMLElement).style.background = "rgba(var(--posh-wash-rgb),0.04)";
-                    (e.currentTarget as HTMLElement).style.color = "var(--posh-fg)";
+    <nav className="space-y-1">
+      {links.map((link) => {
+        const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+        return (
+          <Link
+            key={link.href}
+            href={link.href}
+            onClick={onNavigate}
+            className={`relative flex min-h-[44px] items-center rounded-xl border px-4 text-[13px] tracking-[0.01em] transition-all duration-200 ${
+              active ? "font-bold shadow-sm" : "border-transparent font-semibold"
+            }`}
+            style={
+              active
+                ? {
+                    background: "rgba(var(--posh-wash-rgb),0.08)",
+                    color: "var(--posh-fg)",
+                    borderColor: "var(--posh-border)",
                   }
-                }}
-                onMouseLeave={(e) => {
-                  if (!active) {
-                    (e.currentTarget as HTMLElement).style.background = "transparent";
-                    (e.currentTarget as HTMLElement).style.color = "var(--posh-fg-muted)";
-                  }
-                }}
-              >
-                {/* Posh accent rail on the active item */}
-                {active ? (
-                  <span
-                    className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full"
-                    style={{ background: "var(--posh-primary)" }}
-                  />
-                ) : null}
-                {link.label}
-              </Link>
-            );
-          })}
-        </div>
-      ))}
+                : { color: "var(--posh-fg-muted)" }
+            }
+            onMouseEnter={(e) => {
+              if (!active) {
+                (e.currentTarget as HTMLElement).style.background = "rgba(var(--posh-wash-rgb),0.04)";
+                (e.currentTarget as HTMLElement).style.color = "var(--posh-fg)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!active) {
+                (e.currentTarget as HTMLElement).style.background = "transparent";
+                (e.currentTarget as HTMLElement).style.color = "var(--posh-fg-muted)";
+              }
+            }}
+          >
+            {/* Posh accent rail on the active item */}
+            {active ? (
+              <span
+                className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full"
+                style={{ background: "var(--posh-primary)" }}
+              />
+            ) : null}
+            {link.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }
 
+// Flush full-width band at the top of the sidebar (no inset margin/rounded
+// "floating pill" look), using the exact same vertical padding (py-3) as
+// the header search-bar row it sits beside (see AppHeader's
+// "panel sticky top-4 z-30 ... px-4 py-3" in app/(builder)/layout.tsx) —
+// both are `sticky top-4`, so matching padding keeps their outer boxes the
+// same height and their top/bottom edges aligned, matching how the logo
+// and search bar already sit on one row on /newdashboard. A bottom border
+// visually connects this band to the nav links below as one continuous
+// sidebar container rather than a disconnected floating card.
 function BrandBlock() {
   return (
     <Link
       href="/"
-      className="flex h-20 w-full items-center justify-center overflow-hidden rounded-xl p-3 transition hover:opacity-90"
-      style={{ background: "var(--posh-cream)" }}
+      className="flex w-full items-center justify-center border-b px-4 py-3 transition hover:opacity-90"
+      style={{ background: "var(--posh-cream)", borderColor: "var(--posh-border)" }}
     >
       <BuildOHubLogo href={null} size="lg" />
     </Link>
@@ -169,10 +158,19 @@ export function BuilderNavMobileTrigger() {
 export function BuilderNav() {
   const pathname = usePathname();
 
+  // BrandBlock is flush against the aside's own top/side edges (no wrapping
+  // padding) and uses the same py-3 vertical padding as the header
+  // search-bar row beside it, so both boxes render the same height and
+  // align at the top/bottom (both are `sticky top-4`) instead of the brand
+  // block sitting inset as a separate floating card. Nav links get their
+  // own padding below it, so the grey brand band reads as part of one
+  // continuous sidebar container.
   return (
-    <aside className="panel sticky top-4 hidden h-fit space-y-4 p-4 lg:block">
+    <aside className="panel sticky top-4 hidden h-fit overflow-hidden lg:block">
       <BrandBlock />
-      <NavLinks pathname={pathname} />
+      <div className="space-y-4 p-4">
+        <NavLinks pathname={pathname} />
+      </div>
     </aside>
   );
 }

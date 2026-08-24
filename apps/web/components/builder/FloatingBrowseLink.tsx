@@ -14,7 +14,11 @@ import { Search } from "lucide-react";
 export default function FloatingBrowseLink() {
   const pathname = usePathname();
 
-  if (pathname === "/products") {
+  // Also hidden on /newdashboard — that page now has its own inline
+  // "Browse Materials" button next to "Open AI Agent" directly under the
+  // welcome heading, so the floating shortcut would be a duplicate entry
+  // point there too.
+  if (pathname === "/products" || pathname === "/newdashboard") {
     return null;
   }
 

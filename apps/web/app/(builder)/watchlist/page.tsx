@@ -134,21 +134,28 @@ export default function WatchlistPage() {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-base font-bold tracking-tight" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
+                    {/* Only the monetary value itself is Olive — "Listing
+                        price:" and the "/ {unit}" suffix keep their normal
+                        muted styling. Price value/calculation unchanged. */}
                     <p className="mt-1 text-xs font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
-                      Listing price: ₹{item.basePrice.toLocaleString("en-IN")} / {item.unit}
+                      Listing price: <span style={{ color: "var(--posh-olive)" }}>₹{item.basePrice.toLocaleString("en-IN")}</span> / {item.unit}
                     </p>
                   </div>
                   <div className="flex items-center gap-4">
                     <p className="posh-label">
                       Target: {item.targetPrice ? `₹${item.targetPrice.toLocaleString("en-IN")}` : "Not set"}
                     </p>
+                    {/* Delete/bin icon — Orange by default, switching to
+                        its existing Grey (--posh-fg-muted) on hover; only
+                        this icon's colour changed, delete functionality
+                        untouched. */}
                     <button
                       disabled={loadingId === item.id}
                       onClick={() => void handleRemove(item.productId, item.id)}
                       className="transition-colors disabled:opacity-40"
-                      style={{ color: "var(--posh-fg-muted)" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--posh-fg)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--posh-fg-muted)")}
+                      style={{ color: "var(--posh-primary)" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--posh-fg-muted)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--posh-primary)")}
                       aria-label={`Remove ${item.name} from watchlist`}
                     >
                       <Trash2 size={16} />

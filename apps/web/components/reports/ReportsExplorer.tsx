@@ -26,7 +26,16 @@ import ReportResult from "@/components/reports/ReportResult";
 import { recordReportUsage } from "@/lib/report-usage";
 
 // Report ids that have no backing data source / are intentionally not shown.
-const EXCLUDED_REPORT_IDS = new Set(["ai-buy-recommendation"]);
+// "district-price-intelligence" and "potential-cost-savings" are hidden
+// from the UI per request (their implementations/routes/API endpoints are
+// untouched — only removed from this catalogue grid). Together with the
+// already-excluded "ai-buy-recommendation" and the separately-rendered
+// Site-wise Report card below, this leaves exactly 6 reports visible.
+const EXCLUDED_REPORT_IDS = new Set([
+  "ai-buy-recommendation",
+  "district-price-intelligence",
+  "potential-cost-savings",
+]);
 
 const VISIBLE_REPORTS: ReportDefinition[] = REPORT_DEFINITIONS.filter(
   (report) => !EXCLUDED_REPORT_IDS.has(report.id) && report.available
@@ -91,15 +100,35 @@ export default function ReportsExplorer() {
   }, [openId]);
 
   return (
-    <div className="report-body space-y-6">
-      <header className="flex items-baseline justify-between gap-4">
+    // Vertical spacing tightened: outer stack space-y-6 → space-y-4, and the
+    // "Procurement desk · N views" line removed entirely (redundant text,
+    // no functionality attached).
+    <div className="report-body space-y-4">
+      <header>
         <h1 className="report-display text-4xl text-slate-900 md:text-5xl">Reports</h1>
-        <span className="report-eyebrow hidden sm:inline">
-          Procurement desk · {VISIBLE_REPORTS.length + 1} views
-        </span>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Site-wise Report — moved to the first grid position (full page:
+            filters, charts, CSV/XLSX/PDF + Tally XML export), so this card
+            navigates instead of opening the overlay like the others below. */}
+        <button
+          type="button"
+          onClick={() => router.push("/reports/site-wise")}
+          className="flex flex-col gap-3 rounded-3xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-[rgba(var(--posh-wash-rgb),0.08)] hover:shadow-lg"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="report-display text-xl text-[color:var(--posh-fg)]">Site-wise Report</h2>
+            <span className="shrink-0 rounded-full border border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--posh-primary)]">
+              Account data
+            </span>
+          </div>
+          <p className="text-xs font-medium leading-relaxed text-[color:var(--posh-primary)]">
+            Everything purchased through BuildOHub, broken down by construction site — with CSV/XLSX/PDF
+            export and Tally XML export for your accountant.
+          </p>
+        </button>
+
         {VISIBLE_REPORTS.map((report) => (
           <button
             key={report.id}
@@ -120,25 +149,6 @@ export default function ReportsExplorer() {
             <p className="text-xs font-medium leading-relaxed text-slate-600">{report.description}</p>
           </button>
         ))}
-
-        {/* Site-wise Report — full page (filters, charts, CSV/XLSX/PDF + Tally
-            XML export), so this card navigates instead of opening the overlay. */}
-        <button
-          type="button"
-          onClick={() => router.push("/reports/site-wise")}
-          className="flex flex-col gap-3 rounded-3xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] p-6 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-[rgba(var(--posh-wash-rgb),0.08)] hover:shadow-lg"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <h2 className="report-display text-xl text-[color:var(--posh-fg)]">Site-wise Report</h2>
-            <span className="shrink-0 rounded-full border border-[color:var(--posh-border)] bg-[color:var(--posh-bg-card)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--posh-primary)]">
-              Account data
-            </span>
-          </div>
-          <p className="text-xs font-medium leading-relaxed text-[color:var(--posh-primary)]">
-            Everything purchased through BuildOHub, broken down by construction site — with CSV/XLSX/PDF
-            export and Tally XML export for your accountant.
-          </p>
-        </button>
       </div>
 
       {active ? (

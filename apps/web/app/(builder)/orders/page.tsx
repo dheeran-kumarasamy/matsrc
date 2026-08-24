@@ -17,8 +17,20 @@ type OrderItem = {
 };
 
 
+// "Dispatched" removed from the visible filter chips per request — the
+// underlying OrderStatus.DISPATCHED enum, API filtering, and direct
+// `/orders?status=DISPATCHED` URL support are all untouched (still a valid
+// STATUS_FILTERS entry so a direct link continues to work and highlight
+// correctly if ever visited), only the chip button for it is no longer
+// rendered below.
 const STATUS_FILTERS = ["All", "PLACED", "PROCESSING", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+// Chips actually rendered in the filter row — everything in STATUS_FILTERS
+// except "Dispatched" (hidden from the UI, per request, while the status
+// itself keeps working everywhere else: order data, status badges, direct
+// URL filtering).
+const VISIBLE_STATUS_FILTERS = STATUS_FILTERS.filter((s) => s !== "DISPATCHED");
 
 const FILTER_LABELS: Record<string, string> = {
   All: "All",
@@ -92,9 +104,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
         </Link>
       </header>
 
-      {/* Filters */}
+      {/* Filters — "Dispatched" and "Active" chips removed from the UI per
+          request. Both remain fully functional via direct URL
+          (/orders?status=DISPATCHED, /orders?status=ACTIVE) and the
+          /newdashboard Active Orders stat card still links straight to the
+          latter; only the visible chip buttons are gone. */}
       <div className="flex flex-wrap gap-2">
-        {STATUS_FILTERS.map((s) => (
+        {VISIBLE_STATUS_FILTERS.map((s) => (
           <Link
             key={s}
             href={s === "All" ? "/orders" : `/orders?status=${s}`}
@@ -110,12 +126,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
             {FILTER_LABELS[s]}
           </Link>
         ))}
-        {/* Virtual "Active" chip — reached from the /newdashboard Active
-            Orders stat card (see comment above); also directly usable here
-            to jump back into that grouping. */}
-        <Link href={`/orders?status=${ACTIVE_STATUS_FILTER}`} className={isActiveFilter ? "posh-chip-active" : "posh-chip"}>
-          Active
-        </Link>
       </div>
 
       {apiError ? (
@@ -138,14 +148,19 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
         </div>
       ) : (
         <div className="posh-card divide-y divide-[color:var(--posh-border)]">
+          {/* Hover behaviour (desktop): the relevant text within the
+              hovered row switches from its normal Black to Olive, and
+              reverts on mouse-leave. Scoped per-row via Tailwind's
+              `group`/`group-hover` so only the hovered row is affected —
+              unrelated rows keep their normal colour. */}
           {filtered.map((order) => (
-            <div key={order.id} className="flex flex-wrap items-center justify-between gap-3 p-5">
+            <div key={order.id} className="group flex flex-wrap items-center justify-between gap-3 p-5 transition-colors">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-base font-bold tracking-tight text-[color:var(--posh-fg)]">Order #{order.id.slice(0, 8)}</p>
+                  <p className="text-base font-bold tracking-tight text-[color:var(--posh-fg)] transition-colors group-hover:text-[color:var(--posh-olive)]">Order #{order.id.slice(0, 8)}</p>
                   {order.isAggregated ? <span className="posh-status">Group Order</span> : null}
                 </div>
-                <p className="mt-1 text-xs font-semibold text-[color:var(--posh-fg-muted)]">
+                <p className="mt-1 text-xs font-semibold text-[color:var(--posh-fg-muted)] transition-colors group-hover:text-[color:var(--posh-olive)]">
                   {order.supplierName ? `${order.supplierName} · ` : ""}{order.itemCount} items · ₹{order.total.toLocaleString("en-IN")}
                 </p>
               </div>

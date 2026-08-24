@@ -17,6 +17,7 @@ type Order = {
   itemCount: number;
   items?: Array<{ name: string }>;
   supplierName?: string;
+  siteName?: string;
   createdAt: string;
 };
 
@@ -49,6 +50,10 @@ const STATUS_LABELS: Record<string, string> = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtInr(n: number) {
   return `₹${n.toLocaleString("en-IN")}`;
+}
+
+function fmtOrderDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
 }
 
 function gapLabel(pct: number | null): string {
@@ -242,11 +247,30 @@ export default function NewDashboardPage() {
             the authenticated profile via the same lib/user-display.ts
             helper the shared ProfileMenu uses (single source of truth —
             see `firstName` above). */}
-        <div className="mt-8">
+        <div className="mt-6">
           <p className="posh-eyebrow">Procurement Desk</p>
           <h1 className="posh-page-title mt-2 text-3xl">
             Welcome back{firstName ? `, ${firstName}` : ""}
           </h1>
+          {/* Browse Materials / Open AI Agent — same row, horizontally
+              aligned, wrapping gracefully on narrow screens. Both are plain
+              links to existing routes (/products, /sourcing) — no new
+              functionality, reusing the same posh-btn-* button styles used
+              elsewhere on this page. */}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Link
+              href="/products"
+              className="posh-btn-solid inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-bold"
+            >
+              Browse Materials
+            </Link>
+            <Link
+              href="/sourcing"
+              className="posh-btn-ghost inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-bold"
+            >
+              Open AI Agent
+            </Link>
+          </div>
         </div>
 
         {/* ── Dashboard statistics — the same live metrics previously shown
@@ -255,7 +279,12 @@ export default function NewDashboardPage() {
             Watchlist / Cart Items are all clickable (spec sections 7–10),
             each reusing an existing route/overlay rather than duplicating
             data-fetching or business logic. */}
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {/* Stat card height reduced ~50% — rounded-[2rem] p-7 + mt-5 (before
+            the value) + text-4xl was mostly blank card padding, not content.
+            Now rounded-2xl p-4 with a tight mt-2 before a smaller text-2xl
+            value; still fully readable and the whole card remains a large
+            click target. */}
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {statCards.map((card) => {
             const isPreviewable = card.id !== "CART";
             const isSelected = isPreviewable && selectedStat === card.id;
@@ -265,15 +294,15 @@ export default function NewDashboardPage() {
                 type="button"
                 aria-pressed={isPreviewable ? isSelected : undefined}
                 onClick={card.onClick}
-                className="block rounded-[2rem] border p-7 text-left transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
+                className="block rounded-2xl border p-4 text-left transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
                 style={{
                   background: isSelected ? "rgba(var(--posh-wash-rgb),0.06)" : CARD,
                   borderColor: isSelected ? "var(--posh-primary)" : B60,
                 }}
               >
                 <p className="posh-eyebrow">{card.label}</p>
-                <p className="posh-page-title mt-5 text-4xl">{card.value}</p>
-                <p className="posh-subtitle mt-2">{card.sub}</p>
+                <p className="posh-page-title mt-2 text-2xl">{card.value}</p>
+                <p className="posh-subtitle mt-1">{card.sub}</p>
               </button>
             );
           })}
@@ -286,7 +315,7 @@ export default function NewDashboardPage() {
             control that navigates, to the exact URLs the spec requires. */}
         {selectedStat && (
           <section
-            className="mt-4 rounded-[2rem] border p-7 shadow-sm md:p-10"
+            className="mt-4 rounded-2xl border p-5 shadow-sm md:p-6"
             style={{ background: CARD, borderColor: B60 }}
           >
             <div className="flex items-center justify-between gap-3">
@@ -324,23 +353,23 @@ export default function NewDashboardPage() {
                     }
                     return (
                       <>
+                        {/* Same required column order as the Recent Orders
+                            list above: Site Name, Order Number, Date, Total
+                            Amount. */}
                         <div className="divide-y" style={{ borderColor: B40 }}>
                           {list.map((o) => (
                             <Link
                               key={o.id}
                               href={`/orders/${o.id}`}
-                              className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
+                              className="flex items-start justify-between gap-3 py-2.5 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]"
                             >
                               <div className="min-w-0">
-                                <p className="truncate text-sm font-bold" style={{ color: FG }}>
-                                  {o.items?.[0]?.name ?? `Order #${o.id.slice(0, 6)}`}
-                                  {(o.itemCount ?? 0) > 1 ? ` +${o.itemCount - 1}` : ""}
-                                </p>
-                                <p className="posh-label mt-1">{o.supplierName ?? STATUS_LABELS[o.status] ?? o.status}</p>
+                                <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.siteName ?? "Unassigned"}</p>
+                                <p className="posh-label mt-0.5">#{o.id.slice(0, 8)} · {fmtOrderDate(o.createdAt)}</p>
                               </div>
                               <div className="shrink-0 text-right">
                                 <p className="posh-card-title text-base">{fmtInr(o.total)}</p>
-                                <p className="posh-label mt-1">{STATUS_LABELS[o.status]}</p>
+                                <p className="posh-label mt-0.5">{STATUS_LABELS[o.status]}</p>
                               </div>
                             </Link>
                           ))}
@@ -408,12 +437,16 @@ export default function NewDashboardPage() {
         )}
 
         {/* ── Two-column body ── */}
-        <div className="mt-8 flex flex-1 flex-col gap-6 lg:flex-row">
+        <div className="mt-6 flex flex-1 flex-col gap-4 lg:flex-row">
 
           {/* LEFT — exactly two user-selectable panels: "AI Suggestions" and
               "Recent Orders". No automatic rotation/timer — the panel only
               changes when the user clicks one of the two tabs below. */}
-          <aside className="flex w-full flex-col rounded-[2rem] border p-7 shadow-sm lg:w-[340px] lg:shrink-0"
+          {/* Container padding/gap tightened (p-7 → p-5, mb-5 tab-row gap →
+              mb-3) plus each line item below reduced from py-4 to py-2.5 —
+              together this lets roughly 5 line items occupy the vertical
+              space the previous 4 items needed. */}
+          <aside className="flex w-full flex-col rounded-2xl border p-5 shadow-sm lg:w-[340px] lg:shrink-0"
             style={{ background: CARD, borderColor: B60 }}>
             {/* Swappable segmented menu — AI Suggestions / Recent Orders.
                 This reads as one segmented control, not two unrelated CTA
@@ -423,7 +456,7 @@ export default function NewDashboardPage() {
                 (see .posh-tab-selected / .posh-tab-unselected in
                 globals.css). Manual toggle only — clicking a tab is the
                 only way the panel changes; there is no auto-advance. */}
-            <div role="tablist" aria-label="Dashboard panel" className="mb-5 flex gap-2">
+            <div role="tablist" aria-label="Dashboard panel" className="mb-3 flex gap-2">
               {panels.map((p) => (
                 <button
                   key={p}
@@ -450,24 +483,29 @@ export default function NewDashboardPage() {
                   </div>
                 ) : (
                   <>
+                    {/* Columns in the required order: Site Name, Order
+                        Number, Date, Total Amount. Same underlying `orders`
+                        data/fields (siteName, id, createdAt, total) — no
+                        business logic changed, only which fields render and
+                        in what order. */}
                     <div className="divide-y" style={{ borderColor: B40 }}>
                       {recentOrders.map((o) => (
                         <Link key={o.id} href={`/orders/${o.id}`}
-                          className="flex items-start justify-between gap-3 py-4 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
+                          className="flex items-start justify-between gap-3 py-2.5 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.items?.[0]?.name ?? `Order #${o.id.slice(0,6)}`}{(o.itemCount??0) > 1 ? ` +${o.itemCount-1}` : ""}</p>
-                            <p className="posh-label mt-1">{o.supplierName ?? STATUS_LABELS[o.status] ?? o.status}</p>
+                            <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.siteName ?? "Unassigned"}</p>
+                            <p className="posh-label mt-0.5">#{o.id.slice(0, 8)} · {fmtOrderDate(o.createdAt)}</p>
                           </div>
                           <div className="shrink-0 text-right">
                             <p className="posh-card-title text-base">{fmtInr(o.total)}</p>
-                            <p className="posh-label mt-1">{STATUS_LABELS[o.status]}</p>
+                            <p className="posh-label mt-0.5">{STATUS_LABELS[o.status]}</p>
                           </div>
                         </Link>
                       ))}
                     </div>
                     <Link
                       href="/orders"
-                      className="posh-btn-solid mt-5 flex items-center justify-center rounded-full py-2.5 text-sm font-bold"
+                      className="posh-btn-solid mt-3 flex items-center justify-center rounded-full py-2.5 text-sm font-bold"
                     >
                       View All
                     </Link>
@@ -476,15 +514,16 @@ export default function NewDashboardPage() {
               )}
 
               {activePanel === "suggestions" && (
-                /* Static AI suggestions, with "Open AI Sourcing" moved to
-                   the bottom of the list (spec section 5). */
+                /* Static AI suggestions, with "Open AI Agent" (renamed from
+                   "Open AI Sourcing" — label only, same /sourcing link and
+                   functionality) at the bottom of the list. */
                 <>
                   <div className="divide-y" style={{ borderColor: B40 }}>
                     {suggestions.map((s) => (
-                      <div key={s.item} className="flex items-start justify-between gap-3 py-4">
+                      <div key={s.item} className="flex items-start justify-between gap-3 py-2.5">
                         <div className="min-w-0">
                           <p className="text-sm font-bold" style={{ color: FG }}>{s.item}</p>
-                          <p className="mt-1 text-xs font-medium leading-relaxed" style={{ color: FM }}>{s.why}</p>
+                          <p className="mt-0.5 text-xs font-medium leading-relaxed" style={{ color: FM }}>{s.why}</p>
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="posh-card-title text-base">{s.move}</p>
@@ -498,9 +537,9 @@ export default function NewDashboardPage() {
                   </div>
                   <Link
                     href="/sourcing"
-                    className="posh-btn-solid mt-5 flex items-center justify-center rounded-full py-2.5 text-sm font-bold"
+                    className="posh-btn-solid mt-3 flex items-center justify-center rounded-full py-2.5 text-sm font-bold"
                   >
-                    Open AI Sourcing
+                    Open AI Agent
                   </Link>
                 </>
               )}
@@ -511,13 +550,16 @@ export default function NewDashboardPage() {
               already fetched above. Clicking through goes to the full
               /watchlist page (spec section 9); the standalone "Watchlist"
               action button has been removed. */}
-          <section className="flex flex-1 flex-col rounded-[2rem] border p-7 shadow-sm md:p-10"
+          {/* Container padding trimmed (p-7/p-10 → p-5/p-6) as part of the
+              overall page-scroll reduction; each watchlist tile's own
+              padding also reduced (p-7 → p-5). */}
+          <section className="flex flex-1 flex-col rounded-2xl border p-5 shadow-sm md:p-6"
             style={{ background: CARD, borderColor: B60 }}>
             <div className="flex items-center justify-between gap-3">
               <h2 className="posh-card-title text-xl">Watchlist</h2>
               <Link href="/watchlist" className="posh-link hidden sm:inline-block">View all →</Link>
             </div>
-            <div className="mt-6 flex-1">
+            <div className="mt-4 flex-1">
               {!watchlistReady ? (
                 <p className="posh-muted py-8 text-center text-xs">Loading…</p>
               ) : watchlistItems.length === 0 ? (
@@ -526,15 +568,21 @@ export default function NewDashboardPage() {
                   <Link href="/products" className="posh-link mt-3 inline-block">Browse &amp; watchlist materials →</Link>
                 </div>
               ) : (
-                <div className="grid gap-px overflow-hidden rounded-[2rem] border sm:grid-cols-2"
+                <div className="grid gap-px overflow-hidden rounded-2xl border sm:grid-cols-2"
                   style={{ borderColor: B60, background: B60 }}>
                   {watchlistItems.map((w) => (
-                    <Link key={w.id} href="/watchlist" className="block bg-[color:var(--posh-bg-card)] p-7 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
+                    <Link key={w.id} href="/watchlist" className="block bg-[color:var(--posh-bg-card)] p-5 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
                       <div className="flex items-baseline justify-between">
                         <h3 className="posh-card-title">{w.name}</h3>
                         <span className="posh-label">{gapLabel(w.priceIntelligence?.gapToTargetPct ?? null)}</span>
                       </div>
-                      <p className="posh-page-title mt-3">
+                      {/* Watchlist price — scoped to this dashboard preview
+                          only (not the shared .posh-page-title style, so
+                          other pages using that class are unaffected):
+                          Orange (var(--posh-primary)) and ~75% of the
+                          previous font size (posh-page-title's text-3xl/
+                          md:text-4xl → text-xl/md:text-2xl here). */}
+                      <p className="mt-3 text-xl font-extrabold leading-[1.1] tracking-[-0.02em] md:text-2xl" style={{ color: "var(--posh-primary)" }}>
                         {w.priceIntelligence?.currentPricePerBaseUnit ? fmtInr(w.priceIntelligence.currentPricePerBaseUnit) : fmtInr(w.basePrice)} / {w.unit}
                       </p>
                       <p className="posh-subtitle mt-2">{w.targetPrice ? `Target: ${fmtInr(w.targetPrice)}` : "No target set"}</p>

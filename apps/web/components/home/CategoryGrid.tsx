@@ -94,8 +94,11 @@ export default function CategoryGrid() {
       style={{ background: "var(--posh-bg)" }}
     >
       <div className="mx-auto max-w-7xl px-6 md:px-10">
+        {/* Heading-to-tiles gap reduced (mb-10 → mb-6) — was adding extra
+            blank space inside this section beyond what's needed for visual
+            separation from the category tiles below. */}
         <h2
-          className="posh-heading mb-10 text-center text-2xl md:text-3xl"
+          className="posh-heading mb-6 text-center text-2xl md:text-3xl"
           style={{ color: "var(--posh-fg)" }}
         >
           Shop by Category

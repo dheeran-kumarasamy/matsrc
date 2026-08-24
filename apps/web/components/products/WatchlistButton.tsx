@@ -1,27 +1,41 @@
 "use client";
 
 import { useState } from "react";
-import { Bookmark, BookmarkCheck } from "lucide-react";
-import { builderApiPost, builderApiDelete } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { Bookmark, BookmarkCheck, LogIn } from "lucide-react";
+import { ApiError } from "@/lib/api";
+import { useWatchlist } from "@/lib/watchlist-store";
 
 // FR-07: Watchlist a material with target price
+//
+// Reads/writes through the single shared watchlist source of truth
+// (lib/watchlist-store.tsx) instead of local component state, so this same
+// product shows as "Watchlisted" everywhere — PDP, quick-view overlay, and
+// the ProductCard toggle on the PLP — without a page refresh, and the state
+// still comes from the persisted backend after one.
 export default function WatchlistButton({ productId, initialWatching = false }: { productId: string; initialWatching?: boolean }) {
-  const [watching, setWatching] = useState(initialWatching);
+  const router = useRouter();
+  const { status, isAuthenticated, isWatched, isPending, add, remove } = useWatchlist();
+  const watching = status === "ready" ? isWatched(productId) : initialWatching;
+  const saving = isPending(productId);
+
   const [showTarget, setShowTarget] = useState(false);
   const [targetPrice, setTargetPrice] = useState("");
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   async function handleWatchlist() {
+    setError("");
+
+    if (!isAuthenticated) {
+      router.push(`/auth/login?callbackUrl=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+
     if (watching) {
-      setSaving(true);
       try {
-        await builderApiDelete(`/watchlist/${productId}`);
-        setWatching(false);
+        await remove(productId);
       } catch {
         setError("Failed to remove");
-      } finally {
-        setSaving(false);
       }
       return;
     }
@@ -29,19 +43,17 @@ export default function WatchlistButton({ productId, initialWatching = false }: 
   }
 
   async function saveWatchlist() {
-    setSaving(true);
     setError("");
     try {
-      await builderApiPost("/watchlist", {
-        productId,
-        targetPrice: targetPrice ? targetPrice : undefined,
-      });
-      setWatching(true);
+      await add(productId, targetPrice || undefined);
       setShowTarget(false);
-    } catch {
+      setTargetPrice("");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        router.push(`/auth/login?callbackUrl=${encodeURIComponent(window.location.pathname)}`);
+        return;
+      }
       setError("Failed to save");
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -49,14 +61,18 @@ export default function WatchlistButton({ productId, initialWatching = false }: 
     <div>
       <button
         onClick={handleWatchlist}
-        disabled={saving}
+        disabled={saving || status === "loading"}
         className={`flex w-full items-center justify-center gap-2 rounded-full border-2 py-2.5 text-xs font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-50 ${watching ? "posh-btn-solid" : "border-[color:var(--posh-border)] text-[color:var(--posh-fg-muted)] hover:border-[color:var(--posh-olive)] hover:text-[color:var(--posh-olive)]"}`}
       >
-        {watching ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
-        {watching ? "Watching — Price Alert Set" : "Add to Watchlist"}
+        {!isAuthenticated ? <LogIn size={16} /> : watching ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+        {!isAuthenticated
+          ? "Sign in to Watchlist"
+          : watching
+            ? "Watching — Price Alert Set"
+            : "Add to Watchlist"}
       </button>
 
-      {showTarget && !watching && (
+      {showTarget && !watching && isAuthenticated && (
         <div className="mt-2 flex gap-2">
           <input
             type="number"
@@ -72,3 +88,4 @@ export default function WatchlistButton({ productId, initialWatching = false }: 
     </div>
   );
 }
+

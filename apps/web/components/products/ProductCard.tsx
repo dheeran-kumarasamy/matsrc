@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getCategoryEmoji } from "@/lib/category-images";
+import WatchlistToggleIcon from "@/components/products/WatchlistToggleIcon";
 
 interface Props {
   skeleton?: boolean;
@@ -54,6 +55,11 @@ export default function ProductCard({ skeleton, product }: Props) {
       href={`/products/${product.slug}`}
       className="panel relative block overflow-hidden p-5 transition-shadow duration-200 hover:shadow-lg group"
     >
+      {/* Watchlist toggle — every card gets one (spec: PLP watchlist
+          control), reflecting the same persisted per-product state shown on
+          the PDP (see lib/watchlist-store.tsx / WatchlistToggleIcon.tsx). */}
+      <WatchlistToggleIcon productId={product.slug} />
+
       {/* Image / emoji area — rounded-lg per the modern-card spec */}
       <div className="h-36 bg-slate-50 rounded-lg mb-4 overflow-hidden flex items-center justify-center">
         {imageUrl ? (

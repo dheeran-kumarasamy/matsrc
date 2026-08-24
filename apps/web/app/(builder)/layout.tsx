@@ -7,6 +7,7 @@ import HeaderIconLink from "@/components/builder/HeaderIconLink";
 import NotificationBell from "@/components/builder/NotificationBell";
 import UserSessionBadge from "@/components/builder/UserSessionBadge";
 import FloatingBrowseLink from "@/components/builder/FloatingBrowseLink";
+import { WatchlistProvider } from "@/lib/watchlist-store";
 
 
 
@@ -25,6 +26,7 @@ export default function BuilderLayout({
   modal?: React.ReactNode;
 }) {
   return (
+    <WatchlistProvider>
     <div className="mx-auto grid min-h-screen max-w-7xl grid-cols-1 gap-4 overflow-x-hidden p-4 lg:grid-cols-[280px_1fr]">
       <BuilderNav />
       <main className="space-y-4">
@@ -76,6 +78,7 @@ export default function BuilderLayout({
       {/* Product quick-view overlay (spec 5A) */}
       {modal}
     </div>
+    </WatchlistProvider>
   );
 }
 

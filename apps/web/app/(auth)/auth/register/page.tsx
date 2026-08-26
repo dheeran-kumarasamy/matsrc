@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 
 // UF-01 Steps 1–5
 export default function RegisterPage() {
@@ -45,9 +46,24 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel, identifier, otp }),
+        body: JSON.stringify({ channel, identifier, otp, name }),
       });
-      if (!res.ok) throw new Error((await res.json()).message);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message);
+
+      // /api/auth/verify-otp only upserts the User row — it doesn't create a
+      // session by itself. Sign in now (before the Select Role / Contact
+      // steps) via the existing Credentials provider (apps/web/auth.ts) so
+      // /api/auth/set-role below can identify the signed-in user.
+      const signInResult = await signIn("credentials", {
+        email: data.email,
+        name: data.name || name || "",
+        redirect: false,
+      });
+      if (!signInResult || signInResult.error) {
+        throw new Error("Signed in but could not start your session. Please try again.");
+      }
+
       setStep("role");
     } catch (err: any) {
       setError(err.message ?? "Invalid OTP");

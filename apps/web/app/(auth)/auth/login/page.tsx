@@ -63,8 +63,25 @@ function LoginPageInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ channel, identifier, otp }),
       });
-      if (!res.ok) throw new Error((await res.json()).message);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message);
+
+      // /api/auth/verify-otp only upserts the User row — it doesn't create a
+      // session by itself. Complete the actual sign-in via the existing
+      // Credentials provider (apps/web/auth.ts) using the email it resolved
+      // (phone identifiers are mapped to a stable placeholder email there),
+      // so subsequent authenticated requests carry a real session cookie.
+      const signInResult = await signIn("credentials", {
+        email: data.email,
+        name: data.name || "",
+        redirect: false,
+      });
+      if (!signInResult || signInResult.error) {
+        throw new Error("Signed in but could not start your session. Please try again.");
+      }
+
       router.push("/newdashboard");
+      router.refresh();
     } catch (err: any) {
       setError(err.message ?? "Invalid OTP");
     } finally {

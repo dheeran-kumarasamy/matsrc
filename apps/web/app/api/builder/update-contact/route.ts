@@ -3,29 +3,57 @@ import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
 
 export const dynamic = "force-dynamic";
 
+// GET backs the /profile page's initial render: current email/phone plus
+// their verification status, and the existing WhatsApp preferences. Added
+// alongside the OTP-based contact verification feature so the page can show
+// "Verified"/"Unverified" badges without re-deriving them client-side.
+export async function GET(request: Request) {
+  try {
+    const ctx = getUserCtx(request);
+    const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
+    const preference = await prisma.notificationPreference.findUnique({ where: { userId: user.id } });
+
+    return NextResponse.json({
+      name: user.name,
+      email: user.email,
+      emailVerified: !!user.emailVerifiedAt,
+      phone: user.phone,
+      phoneVerified: !!user.phoneVerifiedAt,
+      whatsappNumber: user.whatsappNumber,
+      whatsappEnabled: preference?.whatsappEnabled ?? true,
+    });
+  } catch (error: any) {
+    if (error?.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ message: "Not authenticated" }, { status: 401 });
+    }
+    console.error("Update-contact GET error:", error);
+    return NextResponse.json({ message: "Failed to load contact information" }, { status: 500 });
+  }
+}
+
 // BUG-08: backs the existing app/(builder)/profile/page.tsx form, which
-// previously POSTed to this exact path with nothing behind it (404). Updates
-// the builder's phone/WhatsApp contact details and persists the WhatsApp
-// notification opt-in on the related NotificationPreference row (created on
-// first use via upsert, since it's an optional 1:1 relation on User).
+// previously POSTed to this exact path with nothing behind it (404).
+//
+// IMPORTANT (contact-verification feature): phone is intentionally NO LONGER
+// writable through this route — changing it now requires the OTP flow in
+// app/api/builder/profile/contact-verification/* (see task spec §3 "Do not
+// immediately replace the currently verified phone number"). This route now
+// only updates the WhatsApp notification preferences, which are unrelated
+// fields the spec explicitly says must NOT trigger OTP verification (§8
+// "Updating unrelated profile fields must not trigger email or phone OTP
+// verification").
 export async function POST(request: Request) {
   try {
     const ctx = getUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
     const body = await request.json().catch(() => ({}));
 
-    const phone: string | undefined = body?.phone;
     const whatsappNumber: string | null | undefined = body?.whatsappNumber ?? null;
     const whatsappEnabled: boolean = Boolean(body?.whatsappEnabled);
-
-    if (!phone || !phone.trim()) {
-      return NextResponse.json({ message: "Phone number is required" }, { status: 400 });
-    }
 
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        phone: phone.trim(),
         whatsappNumber: whatsappNumber?.trim() || null,
       },
     });
@@ -42,14 +70,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Update-contact POST error:", error);
-    // Prisma unique constraint on User.phone — surface a clean message
-    // instead of a raw 500 when another account already uses this number.
-    if (error?.code === "P2002") {
-      return NextResponse.json(
-        { message: "This phone number is already in use by another account" },
-        { status: 409 }
-      );
-    }
     return NextResponse.json({ message: "Failed to update contact information" }, { status: 500 });
   }
 }

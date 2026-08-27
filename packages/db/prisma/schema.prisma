@@ -41,16 +41,25 @@ model User {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  // Set the moment the current `email`/`phone` value was successfully OTP-
+  // verified (see PendingContactVerification below). Backfilled to
+  // `createdAt` for pre-existing users on the migration that introduced this
+  // column, so accounts created before this feature existed are not
+  // retroactively shown as "unverified".
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+
   // Relations
-  kycDocuments              KycDocument[]
-  orders                    Order[]
-  cart                      CartItem[]
-  watchlist                 Watchlist[]
-  disputes                  Dispute[]
-  supplierRatingsGiven      SupplierRating[]         @relation("BuilderSupplierRatings")
-  purchaseOrders            PurchaseOrder[]          @relation("BuilderPurchaseOrders")
-  notifications             Notification[]
-  aggregationParticipations AggregationParticipant[]
+  kycDocuments                KycDocument[]
+  orders                      Order[]
+  cart                        CartItem[]
+  watchlist                   Watchlist[]
+  disputes                    Dispute[]
+  supplierRatingsGiven        SupplierRating[]              @relation("BuilderSupplierRatings")
+  purchaseOrders              PurchaseOrder[]               @relation("BuilderPurchaseOrders")
+  notifications               Notification[]
+  aggregationParticipations   AggregationParticipant[]
+  pendingContactVerifications PendingContactVerification[]
 
   notificationPreference NotificationPreference?
   creditProfile          CreditProfile?
@@ -83,6 +92,54 @@ model AdminMenuPermission {
 
   @@unique([userId, menu])
   @@index([userId])
+}
+
+enum ContactVerificationChannel {
+  EMAIL
+  PHONE
+}
+
+// Backs the /profile "change email/phone requires OTP" flow. The user's
+// live, already-verified `User.email` / `User.phone` is NEVER overwritten
+// until the OTP for the *new* value is successfully verified — this row is
+// the only place the new, not-yet-verified value is held in the meantime.
+// One row per (userId, channel): requesting a new OTP (initial or resend)
+// overwrites the previous row for that channel, which is exactly how the
+// "resend invalidates the previous OTP" and "only one pending change per
+// channel" requirements are enforced.
+model PendingContactVerification {
+  id      String                     @id @default(cuid())
+  userId  String
+  user    User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel ContactVerificationChannel
+
+  // The new, not-yet-verified email/phone value (normalized form).
+  pendingValue String
+
+  // OTP is never stored in plain text — only a salted hash. scrypt is used
+  // (Node's built-in crypto, no new dependency) with a per-row random salt.
+  otpHash String
+  otpSalt String
+
+  expiresAt DateTime
+  // Incremented on every failed verify attempt; verification is refused once
+  // this reaches MAX_VERIFY_ATTEMPTS (see lib/contact-verification/otp.ts),
+  // which is the brute-force guard for this row.
+  attempts  Int      @default(0)
+  // Timestamp of the most recent OTP send (initial or resend) — used to
+  // enforce the 60s resend cooldown independent of `createdAt`.
+  lastSentAt DateTime @default(now())
+  // Number of sends (initial + resends) in the current rate-limit window;
+  // paired with windowStartedAt for a simple fixed-window send-rate cap.
+  sendCount      Int      @default(1)
+  windowStartedAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, channel])
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model KycDocument {

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
 import { BuilderContextService } from "src/builder/builder-context.service";
 import { AddWatchlistItemDto } from "./dto/add-watchlist-item.dto";
@@ -48,6 +48,36 @@ export class WatchlistService {
     return { id: item.id, productId: item.productId };
   }
 
+  async updateTargetPrice(userCtx: any, productId: string, targetPriceRaw: number | string) {
+    const { user } = await this.builderContext.getOrCreateBuilder(userCtx.userId, userCtx.email, userCtx.name);
+
+    const targetPrice = Number(targetPriceRaw);
+    if (!Number.isFinite(targetPrice) || targetPrice <= 0) {
+      throw new BadRequestException("Target price must be a numeric value greater than zero");
+    }
+
+    const existing = await this.prisma.watchlist.findUnique({
+      where: { userId_productId: { userId: user.id, productId } },
+    });
+
+    if (!existing) throw new NotFoundException("Watchlist item not found");
+
+    const item = await this.prisma.watchlist.update({
+      where: { id: existing.id },
+      data: { targetPrice },
+      include: { product: true },
+    });
+
+    return {
+      id: item.id,
+      productId: item.productId,
+      name: item.product.name,
+      unit: item.product.unit,
+      basePrice: Number(item.product.basePrice),
+      targetPrice: Number(item.targetPrice),
+    };
+  }
+
   async remove(userCtx: any, productId: string) {
     const { user } = await this.builderContext.getOrCreateBuilder(userCtx.userId, userCtx.email, userCtx.name);
 
@@ -55,3 +85,4 @@ export class WatchlistService {
     return { productId, removed: true };
   }
 }
+

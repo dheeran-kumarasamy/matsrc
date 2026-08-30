@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { OptionalJwtAuthGuard } from "src/auth/optional-jwt-auth.guard";
 import { Roles } from "src/auth/roles.decorator";
 import { RoleGuard } from "src/auth/role.guard";
@@ -22,8 +22,18 @@ export class WatchlistController {
     return this.watchlistService.add(user, dto);
   }
 
+  @Patch(":productId")
+  updateTargetPrice(
+    @CurrentUser() user: any,
+    @Param("productId") productId: string,
+    @Body("targetPrice") targetPrice: number
+  ) {
+    return this.watchlistService.updateTargetPrice(user, productId, targetPrice);
+  }
+
   @Delete(":productId")
   remove(@CurrentUser() user: any, @Param("productId") productId: string) {
     return this.watchlistService.remove(user, productId);
   }
 }
+

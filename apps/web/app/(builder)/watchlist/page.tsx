@@ -2,8 +2,8 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
-import { Bell, TrendingDown, Trash2, AlertCircle, Clock } from "lucide-react";
-import { builderApiDelete, builderApiGet } from "@/lib/api";
+import { Bell, TrendingDown, Trash2, AlertCircle, Clock, Edit2, Check, X } from "lucide-react";
+import { builderApiDelete, builderApiGet, builderApiPatch } from "@/lib/api";
 
 type PriceIntelligence = {
   resolved: boolean;
@@ -40,8 +40,6 @@ type WatchlistItem = {
   recentEvaluations: RecentEvaluation[];
 };
 
-// Confidence is expressed in monochrome: HIGH is solid black, MEDIUM an
-// outlined chip, LOW a faded chip. No colour is used anywhere in the portal.
 function confidenceBadgeStyle(confidence: string | null): CSSProperties {
   if (confidence === "HIGH") {
     return { background: "var(--posh-primary)", color: "var(--posh-primary-fg)", borderColor: "var(--posh-primary)" };
@@ -59,6 +57,12 @@ function confidenceBadgeStyle(confidence: string | null): CSSProperties {
 export default function WatchlistPage() {
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  // Inline editing state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState<string>("");
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -87,6 +91,66 @@ export default function WatchlistPage() {
       setItems((prev) => prev.filter((item) => item.id !== id));
     } finally {
       setLoadingId(null);
+    }
+  }
+
+  function startEditing(item: WatchlistItem) {
+    setEditingId(item.id);
+    setEditValue(item.targetPrice ? String(item.targetPrice) : "");
+    setEditError(null);
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setEditValue("");
+    setEditError(null);
+  }
+
+  async function handleSaveTargetPrice(item: WatchlistItem) {
+    setEditError(null);
+    const trimmed = editValue.trim();
+
+    if (!trimmed) {
+      setEditError("Target price cannot be empty");
+      return;
+    }
+
+    const num = Number(trimmed);
+    if (!Number.isFinite(num)) {
+      setEditError("Target price must be a valid number");
+      return;
+    }
+
+    if (num <= 0) {
+      setEditError("Target price must be greater than zero");
+      return;
+    }
+
+    setSavingId(item.id);
+    try {
+      const updated = await builderApiPatch<WatchlistItem>(`/watchlist/${item.productId}`, {
+        targetPrice: num,
+      });
+
+      // Update state immediately without full page reload
+      setItems((prev) =>
+        prev.map((existing) =>
+          existing.id === item.id
+            ? {
+                ...existing,
+                targetPrice: updated.targetPrice,
+                priceIntelligence: updated.priceIntelligence ?? existing.priceIntelligence,
+              }
+            : existing
+        )
+      );
+
+      setEditingId(null);
+      setEditValue("");
+    } catch (err: any) {
+      setEditError(err.message || "Failed to update target price");
+    } finally {
+      setSavingId(null);
     }
   }
 
@@ -129,30 +193,83 @@ export default function WatchlistPage() {
         <div className="posh-card divide-y divide-[color:var(--posh-border)]">
           {items.map((item) => {
             const pi = item.priceIntelligence;
+            const isEditing = editingId === item.id;
+            const isSaving = savingId === item.id;
+
             return (
               <div key={item.id} className="space-y-3 p-5">
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <p className="text-base font-bold tracking-tight" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
-                    {/* Only the monetary value itself is Olive — "Listing
-                        price:" and the "/ {unit}" suffix keep their normal
-                        muted styling. Price value/calculation unchanged. */}
+                    <p className="text-base font-bold tracking-tight" style={{ color: "var(--posh-fg)" }}>
+                      {item.name}
+                    </p>
                     <p className="mt-1 text-xs font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
-                      Listing price: <span style={{ color: "var(--posh-olive)" }}>₹{item.basePrice.toLocaleString("en-IN")}</span> / {item.unit}
+                      Listing price:{" "}
+                      <span style={{ color: "var(--posh-olive)" }}>₹{item.basePrice.toLocaleString("en-IN")}</span> /{" "}
+                      {item.unit}
                     </p>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <p className="posh-label">
-                      Target: {item.targetPrice ? `₹${item.targetPrice.toLocaleString("en-IN")}` : "Not set"}
-                    </p>
-                    {/* Delete/bin icon — Orange by default, switching to
-                        its existing Grey (--posh-fg-muted) on hover; only
-                        this icon's colour changed, delete functionality
-                        untouched. */}
+
+                  <div className="flex flex-wrap items-center gap-4">
+                    {/* Inline Target Price Editing UI */}
+                    {isEditing ? (
+                      <div className="flex flex-col items-end gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-medium text-slate-500">Target ₹</span>
+                          <input
+                            type="number"
+                            step="any"
+                            min="1"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            disabled={isSaving}
+                            placeholder="Enter price"
+                            className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-900 focus:border-[color:var(--posh-primary)] focus:outline-none focus:ring-1 focus:ring-[color:var(--posh-primary)]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSaveTargetPrice(item)}
+                            disabled={isSaving}
+                            className="flex items-center gap-1 rounded-lg bg-[color:var(--posh-primary)] px-2.5 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+                            title="Save target price"
+                          >
+                            <Check size={12} />
+                            {isSaving ? "Saving..." : "Save"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditing}
+                            disabled={isSaving}
+                            className="rounded-lg border border-slate-200 p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+                            title="Cancel editing"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                        {editError && <p className="text-[11px] font-medium text-red-600">{editError}</p>}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <p className="posh-label">
+                          Target: {item.targetPrice ? `₹${item.targetPrice.toLocaleString("en-IN")}` : "Not set"}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => startEditing(item)}
+                          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+                          title="Edit target price"
+                        >
+                          <Edit2 size={12} />
+                          <span>Edit</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Delete button */}
                     <button
                       disabled={loadingId === item.id}
                       onClick={() => void handleRemove(item.productId, item.id)}
-                      className="transition-colors disabled:opacity-40"
+                      className="transition-colors disabled:opacity-40 ml-2"
                       style={{ color: "var(--posh-primary)" }}
                       onMouseEnter={(e) => (e.currentTarget.style.color = "var(--posh-fg-muted)")}
                       onMouseLeave={(e) => (e.currentTarget.style.color = "var(--posh-primary)")}
@@ -183,12 +300,20 @@ export default function WatchlistPage() {
                     {pi.methodLabel && (
                       <span
                         className="rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em]"
-                        style={{ borderColor: "var(--posh-border)", background: "var(--posh-bg-card)", color: "var(--posh-fg-muted)" }}
+                        style={{
+                          borderColor: "var(--posh-border)",
+                          background: "var(--posh-bg-card)",
+                          color: "var(--posh-fg-muted)",
+                        }}
                       >
                         {pi.methodLabel}
                       </span>
                     )}
-                    {pi.districtName && <span className="font-semibold" style={{ color: "var(--posh-fg-muted)" }}>{pi.districtName}</span>}
+                    {pi.districtName && (
+                      <span className="font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
+                        {pi.districtName}
+                      </span>
+                    )}
                     {pi.isStale && (
                       <span className="flex items-center gap-1 font-bold" style={{ color: "var(--posh-fg-muted)" }}>
                         <Clock size={11} /> Stale
@@ -208,7 +333,11 @@ export default function WatchlistPage() {
                 ) : (
                   <div
                     className="flex items-center gap-2 rounded-xl border p-3 text-xs font-medium"
-                    style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)", color: "var(--posh-fg-muted)" }}
+                    style={{
+                      borderColor: "var(--posh-border)",
+                      background: "rgba(var(--posh-wash-rgb),0.04)",
+                      color: "var(--posh-fg-muted)",
+                    }}
                   >
                     <AlertCircle size={12} />
                     {pi?.emptyReason === "NO_DISTRICT"
@@ -225,7 +354,12 @@ export default function WatchlistPage() {
                     {item.recentEvaluations.slice(0, 3).map((ev, idx) => (
                       <div key={idx} className="flex items-center gap-1.5">
                         <span>{new Date(ev.evaluatedAt).toLocaleDateString("en-IN")}:</span>
-                        <span style={{ color: ev.didTrigger ? "var(--posh-fg)" : "var(--posh-fg-muted)", fontWeight: ev.didTrigger ? 700 : 500 }}>
+                        <span
+                          style={{
+                            color: ev.didTrigger ? "var(--posh-fg)" : "var(--posh-fg-muted)",
+                            fontWeight: ev.didTrigger ? 700 : 500,
+                          }}
+                        >
                           {ev.didTrigger ? "Alert sent" : ev.suppressedReasonLabel ?? "No alert"}
                         </span>
                       </div>

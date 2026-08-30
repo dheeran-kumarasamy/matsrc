@@ -226,9 +226,9 @@ describe("WhatsAppLifecycleService — payment-link cash vs BNPL/credit variant"
     await service.notifyBuilderPaymentLink("order-1");
 
     expect(sendAdapter.send).toHaveBeenCalledTimes(1);
-    const [, message] = sendAdapter.send.mock.calls[0];
+    const [, message] = (sendAdapter.send.mock.calls as any)[0];
     expect(message.name).toBe("builder_payment_link");
-    expect(audit.record.mock.calls[0][0].metadata.variant).toBe("cash");
+    expect((audit.record.mock.calls as any)[0][0].metadata.variant).toBe("cash");
   });
 
   it("uses the BNPL/credit variant (with available-credit summary) for CREDIT payment method", async () => {
@@ -247,9 +247,9 @@ describe("WhatsAppLifecycleService — payment-link cash vs BNPL/credit variant"
     await service.notifyBuilderPaymentLink("order-1");
 
     expect(sendAdapter.send).toHaveBeenCalledTimes(1);
-    const [, message] = sendAdapter.send.mock.calls[0];
+    const [, message] = (sendAdapter.send.mock.calls as any)[0];
     expect(message.name).toBe("builder_payment_link");
-    expect(audit.record.mock.calls[0][0].metadata.variant).toBe("bnpl_credit");
+    expect((audit.record.mock.calls as any)[0][0].metadata.variant).toBe("bnpl_credit");
   });
 });
 
@@ -273,7 +273,7 @@ describe("WhatsAppLifecycleService — supplier new-enquiry push", () => {
     await service.notifySupplierNewEnquiry("order-1", "supplier-1");
 
     expect(sendAdapter.send).toHaveBeenCalledTimes(1);
-    expect(sendAdapter.send.mock.calls[0][1].name).toBe("supplier_new_enquiry_notification");
+    expect(sendAdapter.send.mock.calls[0]![1].name).toBe("supplier_new_enquiry_notification");
     expect(audit.record).toHaveBeenCalledTimes(1);
   });
 });
@@ -300,15 +300,16 @@ describe("WhatsAppLifecycleService — daily digest reminders are per-supplier-p
     await service.notifySupplierPendingEnquiriesReminder("supplier-1", 5, "2026-01-01");
 
     expect(sendAdapter.send).toHaveBeenCalledTimes(1);
-    expect(sendAdapter.send.mock.calls[0][1].name).toBe("supplier_pending_enquiries_reminder");
+    expect(sendAdapter.send.mock.calls[0]![1].name).toBe("supplier_pending_enquiries_reminder");
   });
 
   it("a duplicate call with the same supplierId + dateKey does not send twice (dedupe key found)", async () => {
     // Simulate the dedupe key already existing from a prior run within the same day.
-    prisma.auditLog.findFirst = vi.fn(async () => ({ id: "existing-dedupe-row" }));
+    prisma.auditLog.findFirst = vi.fn(async () => ({ id: "existing-dedupe-row" })) as any;
 
     await service.notifySupplierPendingDeliveriesReminder("supplier-1", 3, "2026-01-01");
 
     expect(sendAdapter.send).not.toHaveBeenCalled();
   });
 });
+

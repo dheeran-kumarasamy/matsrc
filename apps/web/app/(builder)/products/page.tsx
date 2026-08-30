@@ -11,8 +11,8 @@ import { getSupplierListings, dedupeByCanonicalGroup, parseListingPrice } from "
 export const dynamic = "force-dynamic";
 
 interface SearchParams {
-  category?: string;
-  brand?: string;
+  category?: string | string[];
+  brand?: string | string[];
   minPrice?: string;
   maxPrice?: string;
   sort?: string;
@@ -30,14 +30,15 @@ interface SearchParams {
 // category-scoped) page without those params, avoiding duplicate indexation
 // from irrelevant query-parameter combinations.
 export async function generateMetadata({ searchParams }: { searchParams: SearchParams }): Promise<Metadata> {
-  const category = normalizeParam(searchParams.category);
+  const categories = parseMultiParam(searchParams.category);
   const siteUrl = getSiteUrl();
 
-  if (category) {
-    const canonical = `${siteUrl}/products?category=${encodeURIComponent(category)}`;
+  if (categories.length > 0) {
+    const primaryCategory = categories[0];
+    const canonical = `${siteUrl}/products?category=${encodeURIComponent(categories.join(","))}`;
     return {
-      title: `${category} — Buy Construction Materials Online`,
-      description: `Compare live prices from verified suppliers for ${category} on Buildohub — India's B2B construction material procurement marketplace.`,
+      title: `${primaryCategory} — Buy Construction Materials Online`,
+      description: `Compare live prices from verified suppliers for ${categories.join(", ")} on Buildohub — India's B2B construction material procurement marketplace.`,
       alternates: { canonical },
     };
   }
@@ -53,6 +54,14 @@ function normalizeParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function parseMultiParam(value?: string | string[]): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => item.split(",")).map((s) => s.trim()).filter(Boolean);
+  }
+  return value.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 function parseNumber(value?: string) {
   if (!value) return undefined;
   const parsed = Number(value);
@@ -62,8 +71,8 @@ function parseNumber(value?: string) {
 // UF-02: Material Discovery — FR-04 Faceted Search & Browse
 export default async function ProductsPage({ searchParams }: { searchParams: SearchParams }) {
   const q = normalizeParam(searchParams.q);
-  const category = normalizeParam(searchParams.category);
-  const brand = normalizeParam(searchParams.brand);
+  const categories = parseMultiParam(searchParams.category);
+  const brands = parseMultiParam(searchParams.brand);
   const minPriceRaw = normalizeParam(searchParams.minPrice);
   const maxPriceRaw = normalizeParam(searchParams.maxPrice);
   const sort = normalizeParam(searchParams.sort) ?? "price_asc";
@@ -85,7 +94,6 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
   }));
 
   // Collapse cross-supplier duplicate listings for the same canonical
-
   // product into a single card, priced at the group's lowest price
   // (headlinePrice) — fixes the Display bug from the cross-supplier price
   // resolution spec. Done BEFORE search/filter/sort so those operate on the
@@ -95,23 +103,27 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
   if (q) {
     const query = q.toLowerCase();
     filtered = filtered.filter((listing) => {
-      const haystack = `${listing.name} ${listing.category} ${listing.grade}`.toLowerCase();
+      const haystack = `${listing.name} ${listing.category} ${listing.grade} ${listing.brand ?? ""}`.toLowerCase();
       return haystack.includes(query);
     });
   }
 
-  if (category) {
-    const selectedCategory = category.toLowerCase();
-    filtered = filtered.filter((listing) => listing.category.toLowerCase().includes(selectedCategory));
+  // Multi-Select Category Filter: Category = A OR Category = B
+  if (categories.length > 0) {
+    const lowerCategories = categories.map((c) => c.toLowerCase());
+    filtered = filtered.filter((listing) => {
+      const listingCategory = listing.category.toLowerCase();
+      return lowerCategories.some((cat) => listingCategory.includes(cat) || cat === listingCategory);
+    });
   }
 
-  // BUG-01 fix: filter against the real `brand` field now returned by the
-  // public listings feed (see apps/supplier/lib/supplier-data.ts
-  // getPublicSupplierListings()), instead of a name+grade substring hack
-  // that had no reliable relationship to the actual brand.
-  if (brand) {
-    const selectedBrand = brand.toLowerCase();
-    filtered = filtered.filter((listing) => (listing.brand ?? "").toLowerCase() === selectedBrand);
+  // Multi-Select Brand Filter: Brand = A OR Brand = B
+  if (brands.length > 0) {
+    const lowerBrands = brands.map((b) => b.toLowerCase());
+    filtered = filtered.filter((listing) => {
+      const listingBrand = (listing.brand ?? "").toLowerCase();
+      return lowerBrands.includes(listingBrand);
+    });
   }
 
 
@@ -171,10 +183,11 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
   // Category name (matching what the filter/link actually uses), not the raw
   // free-text query param, so it stays accurate even if a user hand-edits
   // the URL with different casing.
+  const primaryCategory = categories.length > 0 ? categories[0] : undefined;
   const matchedCategoryName =
-    category && filtered.length > 0
-      ? filtered.find((l) => l.category.toLowerCase().includes(category.toLowerCase()))?.category ?? category
-      : category;
+    primaryCategory && filtered.length > 0
+      ? filtered.find((l) => l.category.toLowerCase().includes(primaryCategory.toLowerCase()))?.category ?? primaryCategory
+      : primaryCategory;
   const breadcrumbItems = matchedCategoryName ? categoryBreadcrumbs(matchedCategoryName) : catalogueBreadcrumbs();
 
   return (
@@ -200,8 +213,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
           alongside the header search bar while scrolling the product grid. */}
       <div className="sticky top-[88px] z-20">
         <ProductFilters
-          selectedCategory={category}
-          selectedBrand={brand}
+          selectedCategory={categories}
+          selectedBrand={brands}
           minPrice={minPriceRaw}
           maxPrice={maxPriceRaw}
           q={q}

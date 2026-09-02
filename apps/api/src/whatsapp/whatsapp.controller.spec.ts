@@ -149,7 +149,7 @@ describe("WhatsAppController", () => {
       await controller.receive(req, signature, res);
 
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
+      expect(res.send).toHaveBeenCalledWith("EVENT_RECEIVED");
       expect(router.handleInboundMessage).toHaveBeenCalledWith("919876543210", "MENU");
     });
 
@@ -191,7 +191,7 @@ describe("WhatsAppController", () => {
       );
       expect(router.handleInboundMessage).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
-      expect(res.json).toHaveBeenCalledWith({ ok: true });
+      expect(res.send).toHaveBeenCalledWith("EVENT_RECEIVED");
     });
 
     it("records failed delivery status events too", async () => {

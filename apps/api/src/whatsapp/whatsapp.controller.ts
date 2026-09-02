@@ -96,8 +96,29 @@ export class WhatsAppController {
     @Headers("x-hub-signature-256") signatureHeader: string | undefined,
     @Res() res: Response
   ) {
-    const body = req.body as MetaWebhookPayload;
+    // Meta expects a fast 200 ack for every webhook delivery, retrying (with backoff) on
+    // anything else. Wrapping the whole handler means an unexpected error downstream
+    // (router/audit/send-adapter) never surfaces as a 5xx here, which would otherwise
+    // trigger duplicate re-deliveries for an event we may have already partially processed.
     console.time("webhook-total");
+    try {
+      await this.processWebhookEvent(req, signatureHeader, res);
+    } catch (error) {
+      this.logger.error("Unhandled error processing WhatsApp webhook", error as Error);
+      if (!res.headersSent) {
+        res.status(HttpStatus.OK).send("EVENT_RECEIVED");
+      }
+    } finally {
+      console.timeEnd("webhook-total");
+    }
+  }
+
+  private async processWebhookEvent(
+    req: RawBodyRequest<Request>,
+    signatureHeader: string | undefined,
+    res: Response
+  ): Promise<void> {
+    const body = req.body as MetaWebhookPayload;
     const appSecret = process.env.WHATSAPP_APP_SECRET;
 
     // Only enforce signature verification when an app secret is configured — this keeps
@@ -110,23 +131,55 @@ export class WhatsAppController {
       }
     }
 
+    // Meta's real Cloud API payloads are always `{ object: "whatsapp_business_account", ... }`.
+    // The simplified `{phone, text}` mock shape used in local/dev/test has no `object` field,
+    // so we only gate on it when it's present — this keeps the mock flow working unchanged
+    // while giving us an explicit, documented check against the real Meta contract.
+    if (body?.object !== undefined && body.object !== "whatsapp_business_account") {
+      this.logger.warn(`[WhatsApp Webhook] Ignoring unrecognized payload object: ${body.object}`);
+      res.status(HttpStatus.OK).send("EVENT_RECEIVED");
+      return;
+    }
+
+    const value = body.entry?.[0]?.changes?.[0]?.value;
+
+    if (value?.statuses && value.statuses.length > 0) {
+      for (const status of value.statuses) {
+        this.logger.log(
+          `[WhatsApp Webhook] Status update for message ${status.id}: ${status.status} (recipient ${status.recipient_id})`
+        );
+      }
+    }
+
     const statuses = this.extractStatuses(body);
     if (statuses.length > 0) {
       await this.handleDeliveryStatuses(statuses);
+    }
+
+    const firstMessage = value?.messages?.[0];
+    if (firstMessage) {
+      const messageText =
+        firstMessage.text?.body ??
+        firstMessage.interactive?.list_reply?.title ??
+        firstMessage.interactive?.button_reply?.title ??
+        "";
+      this.logger.log(
+        `[WhatsApp Webhook] Incoming message from ${firstMessage.from}: ${messageText} (id=${firstMessage.id}, type=${firstMessage.type})`
+      );
     }
 
     const inbound = this.extractInboundMessage(body);
     if (!inbound) {
       // Statuses-only payload (or nothing actionable) — acknowledge with 200 so Meta
       // doesn't retry, per its webhook contract.
-      res.status(HttpStatus.OK).json({ ok: true });
+      res.status(HttpStatus.OK).send("EVENT_RECEIVED");
       return;
     }
 
     const { phone, text, messageId } = inbound;
 
     if (!phone) {
-      res.status(HttpStatus.OK).json({ ok: false, error: "Missing sender phone number" });
+      res.status(HttpStatus.OK).send("EVENT_RECEIVED");
       return;
     }
 
@@ -155,7 +208,7 @@ try {
   console.timeEnd("sendReply");
 }
 
-res.status(HttpStatus.OK).json({ ok: true, reply });
+res.status(HttpStatus.OK).send("EVENT_RECEIVED");
   }
 
 

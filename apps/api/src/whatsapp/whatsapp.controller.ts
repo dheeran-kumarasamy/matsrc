@@ -100,7 +100,13 @@ export class WhatsAppController {
     // anything else. Wrapping the whole handler means an unexpected error downstream
     // (router/audit/send-adapter) never surfaces as a 5xx here, which would otherwise
     // trigger duplicate re-deliveries for an event we may have already partially processed.
-    console.time("webhook-total");
+    //
+    // Request-scoped timing via `performance.now()` instead of `console.time`/`timeEnd`:
+    // those use a single global label keyed by string, so concurrent webhook deliveries
+    // (very common — Meta can fire several in quick succession) stomp on each other's
+    // timers and log bogus durations / "No such label" warnings. A local `startTime`
+    // closes over this specific invocation only.
+    const startTime = performance.now();
     try {
       await this.processWebhookEvent(req, signatureHeader, res);
     } catch (error) {
@@ -109,7 +115,8 @@ export class WhatsAppController {
         res.status(HttpStatus.OK).send("EVENT_RECEIVED");
       }
     } finally {
-      console.timeEnd("webhook-total");
+      const duration = (performance.now() - startTime).toFixed(2);
+      console.log(`[WhatsApp Webhook] Processed in ${duration}ms`);
     }
   }
 
@@ -187,7 +194,7 @@ export class WhatsAppController {
     // the per-mutating-action idempotency already implemented in
     // `WhatsAppSessionService.withIdempotency`, which is keyed per action, not per
     // inbound delivery).
-    console.time("handleInboundMessage");
+    const handleInboundMessageStart = performance.now();
 
 const reply = messageId
   ? await this.sessionService.withIdempotency(
@@ -196,16 +203,16 @@ const reply = messageId
     )
   : await this.router.handleInboundMessage(phone, text);
 
-console.timeEnd("handleInboundMessage");
+console.log(`[WhatsApp Webhook] handleInboundMessage took ${(performance.now() - handleInboundMessageStart).toFixed(2)}ms`);
 
-console.time("sendReply");
+const sendReplyStart = performance.now();
 
 try {
   await this.sendAdapter.send(phone, reply);
 } catch (error) {
   this.logger.error(`Failed to send reply to ${phone}`, error as Error);
 } finally {
-  console.timeEnd("sendReply");
+  console.log(`[WhatsApp Webhook] sendReply took ${(performance.now() - sendReplyStart).toFixed(2)}ms`);
 }
 
 res.status(HttpStatus.OK).send("EVENT_RECEIVED");

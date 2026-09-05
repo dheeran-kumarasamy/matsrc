@@ -2,7 +2,11 @@
   "name": "@matsrc/db",
   "version": "0.0.1",
   "private": true,
-  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./lib/*": "./lib/*.js",
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "db:generate": "prisma generate",
     "db:migrate": "node scripts/prisma-safe.js migrate-dev",

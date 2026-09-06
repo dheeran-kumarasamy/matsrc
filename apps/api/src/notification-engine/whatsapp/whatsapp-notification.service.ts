@@ -41,6 +41,22 @@ type MetaGraphErrorBody = {
  *  - "off": does not send and does not create a misleading "sent" row —
  *    the log row is created with status "failed" and errorDetails
  *    "DISABLED_BY_CHANNEL".
+ *
+ * Buttons: this service deliberately sends ONLY a `body` component (the
+ * text parameters) and never constructs a `button`/header component. A
+ * Meta Utility template's Quick-Reply/Call-to-Action button (e.g.
+ * "supplier_rfq_reminder"'s static "Submit Quote" button, or
+ * "supplier_quote_alert"'s "Review RFQ" button) is rendered automatically
+ * by WhatsApp from the approved template definition itself — it requires
+ * no extra `components` entry unless the button is configured in Meta as a
+ * *dynamic* URL button (which would need a `type: "button"` component with
+ * the per-recipient URL suffix). None of the currently-mapped templates
+ * (including "supplier_rfq_reminder") are configured with a dynamic URL
+ * button in Meta today, so this stays body-parameters-only. This is also
+ * exactly why "customer_order_status" (Order Status template type, no
+ * button at all) sends correctly with zero special-casing: the absence of
+ * a button component here works identically whether or not the approved
+ * template itself has a button.
  */
 @Injectable()
 export class WhatsappNotificationService {

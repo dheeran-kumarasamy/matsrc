@@ -139,4 +139,59 @@ describe("NotificationPolicyService", () => {
 
     expect(decision).toEqual({ allowed: true, templateName: "supplier_price_update", channel: "WHATSAPP", priority: "P1" });
   });
+
+  describe("Meta template configuration updates (supplier_rfq_reminder / customer_order_status)", () => {
+    it("SUPPLIER_RFQ_REMINDER resolves to the new Meta template name supplier_rfq_reminder, not the deleted supplier_quote_reminder", async () => {
+      const prisma = makePrisma({
+        policy: {
+          id: "p-rfq-reminder",
+          eventType: "SUPPLIER_RFQ_REMINDER",
+          channel: "WHATSAPP",
+          templateName: "supplier_rfq_reminder",
+          enabled: true,
+          priority: "P1",
+          maxPerDay: 1,
+          cooldownMinutes: 240,
+          businessHoursOnly: true,
+        },
+      });
+      const service = new NotificationPolicyService(prisma as any);
+
+      // businessHourWindow covers every hour so this assertion isn't flaky depending on
+      // the real wall-clock time the suite happens to run at (the policy is
+      // businessHoursOnly:true).
+      const decision = await service.evaluate({
+        eventType: "SUPPLIER_RFQ_REMINDER",
+        channel: "WHATSAPP",
+        recipientId: "supplier-user-1",
+        businessHourWindow: { startHour: 0, endHour: 24 },
+      });
+
+      expect(decision).toEqual({ allowed: true, templateName: "supplier_rfq_reminder", channel: "WHATSAPP", priority: "P1" });
+      if (decision.allowed) {
+        expect(decision.templateName).not.toBe("supplier_quote_reminder");
+      }
+    });
+
+    it("ORDER_STATUS_CHANGED (customer_order_status) resolves correctly and is unaffected by the SUPPLIER_RFQ_REMINDER template rename", async () => {
+      const prisma = makePrisma({
+        policy: {
+          id: "p-order-status",
+          eventType: "ORDER_STATUS_CHANGED",
+          channel: "WHATSAPP",
+          templateName: "customer_order_status",
+          enabled: true,
+          priority: "P1",
+          maxPerDay: null,
+          cooldownMinutes: null,
+          businessHoursOnly: false,
+        },
+      });
+      const service = new NotificationPolicyService(prisma as any);
+
+      const decision = await service.evaluate({ eventType: "ORDER_STATUS_CHANGED", channel: "WHATSAPP", recipientId: "customer-user-1" });
+
+      expect(decision).toEqual({ allowed: true, templateName: "customer_order_status", channel: "WHATSAPP", priority: "P1" });
+    });
+  });
 });

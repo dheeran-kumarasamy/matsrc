@@ -55,8 +55,8 @@ model User {
   cart                        CartItem[]
   watchlist                   Watchlist[]
   disputes                    Dispute[]
-  supplierRatingsGiven        SupplierRating[]              @relation("BuilderSupplierRatings")
-  purchaseOrders              PurchaseOrder[]               @relation("BuilderPurchaseOrders")
+  supplierRatingsGiven        SupplierRating[]             @relation("BuilderSupplierRatings")
+  purchaseOrders              PurchaseOrder[]              @relation("BuilderPurchaseOrders")
   notifications               Notification[]
   aggregationParticipations   AggregationParticipant[]
   pendingContactVerifications PendingContactVerification[]
@@ -121,17 +121,17 @@ model PendingContactVerification {
   otpHash String
   otpSalt String
 
-  expiresAt DateTime
+  expiresAt       DateTime
   // Incremented on every failed verify attempt; verification is refused once
   // this reaches MAX_VERIFY_ATTEMPTS (see lib/contact-verification/otp.ts),
   // which is the brute-force guard for this row.
-  attempts  Int      @default(0)
+  attempts        Int      @default(0)
   // Timestamp of the most recent OTP send (initial or resend) — used to
   // enforce the 60s resend cooldown independent of `createdAt`.
-  lastSentAt DateTime @default(now())
+  lastSentAt      DateTime @default(now())
   // Number of sends (initial + resends) in the current rate-limit window;
   // paired with windowStartedAt for a simple fixed-window send-rate cap.
-  sendCount      Int      @default(1)
+  sendCount       Int      @default(1)
   windowStartedAt DateTime @default(now())
 
   createdAt DateTime @default(now())
@@ -1005,6 +1005,118 @@ model AuditLog {
 
   @@index([actorId])
   @@index([entityType, entityId])
+}
+
+// ─────────────────────────────────────────────
+// M09b Notification Engine (channel-agnostic) — Buildohub Notification Engine
+// + WhatsApp Alerting System.
+//
+// Deliberately additive, alongside (never replacing) the pre-existing
+// `Notification`/`NotificationTemplate`/`NotificationDeliveryLog` models
+// (BullMQ mock-WhatsApp channel) and the Twilio-based
+// `notifications/whatsapp-alerts` feature. Those keep working unchanged.
+//
+// NOTE: the spec's proposed model name "NotificationTemplate" collides with
+// the pre-existing `NotificationTemplate` model above (keyed on the
+// `NotificationTemplateType` enum + channel). To avoid a duplicate/ambiguous
+// model name, the database-backed, Admin-editable business-enable/disable
+// registry described in the spec is implemented here as
+// `NotificationEventPolicy` (eventType+channel -> enabled/priority/limits).
+// It controls BUSINESS USE of a Meta-approved template; it never changes the
+// underlying Meta template name/content.
+// ─────────────────────────────────────────────
+
+model WhatsAppMessageLog {
+  id            String   @id @default(cuid())
+  phoneNumber   String
+  templateName  String
+  direction     String   @default("outbound")
+  status        String   @default("queued")
+  parameters    Json?
+  mode          String   @default("live") // live | dry-run | off
+  metaMessageId String?  @unique
+  errorDetails  String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([phoneNumber])
+  @@index([templateName])
+  @@index([status])
+  @@index([createdAt])
+  @@map("whatsapp_message_logs")
+}
+
+model NotificationEvent {
+  id             String    @id @default(cuid())
+  eventType      String
+  recipientId    String
+  recipientType  String
+  entityType     String?
+  entityId       String?
+  priority       String    @default("P1")
+  channel        String?
+  dedupeKey      String?   @unique
+  payload        Json
+  status         String    @default("created") // created | sent | suppressed | failed | resolved
+  suppressReason String?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([eventType])
+  @@index([recipientId])
+  @@index([priority])
+  @@index([status])
+  @@index([createdAt])
+  @@map("notification_events")
+}
+
+model NotificationEventPolicy {
+  id                String   @id @default(cuid())
+  eventType         String
+  channel           String
+  templateName      String
+  displayName       String
+  description       String?
+  enabled           Boolean  @default(true)
+  priority          String   @default("P1")
+  maxPerDay         Int?
+  cooldownMinutes   Int?
+  businessHoursOnly Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([eventType, channel])
+  @@index([channel])
+  @@index([enabled])
+  @@index([eventType])
+  @@map("notification_event_policies")
+}
+
+model NotificationPolicyAudit {
+  id        String   @id @default(cuid())
+  policyId  String
+  action    String
+  oldValue  Json?
+  newValue  Json?
+  reason    String?
+  changedBy String?
+  createdAt DateTime @default(now())
+
+  @@index([policyId])
+  @@index([createdAt])
+  @@map("notification_policy_audits")
+}
+
+// Singleton row (fixed id "global") backing the Admin Portal's global
+// "WhatsApp Business Notifications: ON/OFF" kill-switch (spec Phase 8).
+// Deliberately does NOT gate authentication/security event types — those are
+// enforced to always bypass this switch in NotificationPolicyService.
+model NotificationGlobalSettings {
+  id                      String   @id @default("global")
+  whatsappBusinessEnabled Boolean  @default(true)
+  updatedAt               DateTime @updatedAt
+  updatedBy               String?
 }
 
 // ─────────────────────────────────────────────
@@ -2145,7 +2257,7 @@ model SourcingRecommendation {
   productId  String?
   product    Product?        @relation("ProductSourcingRecommendations", fields: [productId], references: [id])
 
-  rank Int
+  rank  Int
   /// 0-100 transparent score from ranking.ts.
   score Decimal @db.Decimal(5, 2)
 
@@ -2165,14 +2277,14 @@ model SourcingRecommendation {
   /// in the comparison table.
   unitLandedCost      Decimal? @db.Decimal(14, 4)
 
-  deliveryDays Int?
+  deliveryDays       Int?
   /// 0-100, derived from the existing SupplierRating rows only.
   reliabilityScore   Decimal? @db.Decimal(5, 2)
   specificationMatch Boolean  @default(false)
 
   /// Human-readable scoring reasons, e.g. ["Lowest estimated landed cost",
   /// "Delivery available within 1 day"].
-  reasonsJson Json
+  reasonsJson  Json
   /// Inputs that were unavailable, so the UI/assistant can disclose them
   /// instead of guessing, e.g. ["freight", "deliveryDays"].
   dataGapsJson Json?
@@ -2219,5 +2331,3 @@ model SourcingToolInvocation {
   @@index([userId, createdAt(sort: Desc)])
   @@index([tool])
 }
-
-

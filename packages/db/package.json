@@ -15,7 +15,8 @@
     "db:safe:migrate-deploy": "node scripts/prisma-safe.js migrate-deploy",
     "db:safe:migrate-diff": "node scripts/prisma-safe.js migrate-diff",
     "db:safe:db-execute": "node scripts/prisma-safe.js db-execute",
-    "db:check-unsafe-patterns": "node scripts/check-unsafe-patterns.js"
+    "db:check-unsafe-patterns": "node scripts/check-unsafe-patterns.js",
+    "db:seed-notification-templates": "node scripts/seed-notification-templates.js"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",

@@ -10,6 +10,8 @@ export const MENU_CONFIG = [
   { key: "aggregation", href: "/aggregation", label: "Aggregation Pools" },
   { key: "catalog", href: "/catalog", label: "Catalog Master Data" },
   { key: "pricing", href: "/pricing", label: "Price Intelligence" },
+  { key: "notifications", href: "/notifications", label: "Notification Engine" },
+  { key: "whatsapp-alerts", href: "/whatsapp-alerts", label: "WhatsApp Alerts (Test)" },
   { key: "audit", href: "/audit", label: "Audit Logs" },
 
   { key: "access", href: "/access", label: "Access Control" },

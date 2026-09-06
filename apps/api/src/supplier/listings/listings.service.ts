@@ -6,6 +6,7 @@ import { CreateListingDto } from "./dto/create-listing.dto";
 import { UpdateListingDto } from "./dto/update-listing.dto";
 import { UpdateAggregationSettingsDto } from "./dto/update-aggregation-settings.dto";
 import { WhatsAppAlertService } from "src/notifications/whatsapp-alerts/whatsapp-alert.service";
+import { SupplierDailyPriceReminderService } from "src/notification-engine/supplier-daily-price/supplier-daily-price-reminder.service";
 
 @Injectable()
 export class ListingsService {
@@ -14,7 +15,8 @@ export class ListingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly supplierContext: SupplierContextService,
-    private readonly whatsAppAlertService: WhatsAppAlertService
+    private readonly whatsAppAlertService: WhatsAppAlertService,
+    private readonly dailyPriceReminder: SupplierDailyPriceReminderService
   ) {}
 
   async findAll(user: any) {
@@ -107,6 +109,16 @@ export class ListingsService {
       );
     });
 
+    // Notification Engine (Phase 11/12): a new listing counts as "touched today"
+    // for the supplier daily price-completeness check — re-evaluate and resolve
+    // today's reminder if this was the last missing product. Never blocks/affects
+    // listing creation on failure.
+    void this.dailyPriceReminder.resolveIfComplete(product.supplierId).catch((error) => {
+      this.logger.warn(
+        `Failed to resolve daily price reminder for supplier ${product.supplierId}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+
 
     return {
       id: product.id,
@@ -176,6 +188,20 @@ export class ListingsService {
 
         this.logger.warn(
           `Failed to record price snapshot for listing ${product.id}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+    }
+
+    // Notification Engine (Phase 11/12): the supplier daily price-completeness
+    // check (SupplierDailyPriceCompletenessService) reads today's PriceSnapshot
+    // rows, so only re-check/resolve when this update actually produced a new
+    // snapshot (see the `newPrice !== previousPrice` guard above) — an
+    // unchanged price does not count as "today's update" for that listing.
+    // Never blocks/affects the listing update on failure.
+    if (dto.price && newPrice !== previousPrice) {
+      void this.dailyPriceReminder.resolveIfComplete(product.supplierId).catch((error) => {
+        this.logger.warn(
+          `Failed to resolve daily price reminder for supplier ${product.supplierId}: ${error instanceof Error ? error.message : String(error)}`
         );
       });
     }

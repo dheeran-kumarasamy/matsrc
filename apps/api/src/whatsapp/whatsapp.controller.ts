@@ -5,6 +5,7 @@ import { WhatsAppRouterService } from "./whatsapp-router.service";
 import { WhatsAppSessionService } from "./whatsapp-session.service";
 import { WhatsAppAuditHelper } from "./whatsapp-audit.helper";
 import { WHATSAPP_SEND_PROVIDER, WhatsAppSendAdapter } from "./adapters/whatsapp-send.interface";
+import { WhatsAppWebhookStatusProcessorService } from "../notification-engine/whatsapp/whatsapp-webhook-status-processor.service";
 
 
 type MetaWebhookMessage = {
@@ -68,7 +69,8 @@ export class WhatsAppController {
     private readonly router: WhatsAppRouterService,
     private readonly sessionService: WhatsAppSessionService,
     private readonly auditHelper: WhatsAppAuditHelper,
-    @Inject(WHATSAPP_SEND_PROVIDER) private readonly sendAdapter: WhatsAppSendAdapter
+    @Inject(WHATSAPP_SEND_PROVIDER) private readonly sendAdapter: WhatsAppSendAdapter,
+    private readonly webhookStatusProcessor: WhatsAppWebhookStatusProcessorService
   ) {}
 
 
@@ -263,6 +265,16 @@ res.status(HttpStatus.OK).send("EVENT_RECEIVED");
       } catch {
         // Best-effort audit trail — never fail the webhook response over a logging issue.
       }
+    }
+
+    // Notification Engine (Phase 7): additionally reconcile against
+    // WhatsAppMessageLog for sends originated by the new NotificationEngine
+    // (WhatsappNotificationService) — separate concern from the AuditLog
+    // trail above, never blocking/failing the webhook on error.
+    try {
+      await this.webhookStatusProcessor.processStatuses(statuses);
+    } catch {
+      // Best-effort — never fail the webhook response over a logging issue.
     }
   }
 

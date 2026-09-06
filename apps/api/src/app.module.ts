@@ -35,6 +35,8 @@ import { SupplierReportsModule } from "./supplier/reports/reports.module";
 import { WhatsAppModule } from "./whatsapp/whatsapp.module";
 import { PricingModule } from "./pricing/pricing.module";
 import { AdminPricingModule } from "./admin/pricing/admin-pricing.module";
+import { NotificationEngineModule } from "./notification-engine/notification-engine.module";
+import { AdminNotificationEngineModule } from "./notification-engine/admin/admin-notification-engine.module";
 
 
 @Module({
@@ -76,6 +78,8 @@ import { AdminPricingModule } from "./admin/pricing/admin-pricing.module";
     WhatsAppModule,
     PricingModule,
     AdminPricingModule,
+    NotificationEngineModule,
+    AdminNotificationEngineModule,
   ],
 
   providers: [RoleGuard],

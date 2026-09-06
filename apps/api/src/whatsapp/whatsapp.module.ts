@@ -19,9 +19,10 @@ import { PriceUpdateFlow } from "./flows/price-update.flow";
 import { EnquiryDecisionFlow } from "./flows/enquiry-decision.flow";
 import { OrderStatusFlow } from "./flows/order-status.flow";
 import { DailyReportFlow } from "./flows/daily-report.flow";
+import { NotificationEngineModule } from "../notification-engine/notification-engine.module";
 
 @Module({
-  imports: [SupplierModule, ListingsModule, OrdersModule, RfqsModule, SupplierReportsModule],
+  imports: [SupplierModule, ListingsModule, OrdersModule, RfqsModule, SupplierReportsModule, NotificationEngineModule],
   controllers: [WhatsAppController, TwilioWhatsAppController],
   providers: [
     WhatsAppRouterService,

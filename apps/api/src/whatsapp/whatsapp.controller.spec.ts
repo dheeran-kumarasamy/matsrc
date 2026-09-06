@@ -110,7 +110,15 @@ describe("WhatsAppController", () => {
       send: vi.fn().mockResolvedValue({ externalId: "mock-id", provider: "mock" }),
     };
 
-    controller = new WhatsAppController(router as any, sessionService as any, auditHelper as any, sendAdapter as any);
+    const webhookStatusProcessor = { processStatuses: vi.fn().mockResolvedValue(undefined) };
+
+    controller = new WhatsAppController(
+      router as any,
+      sessionService as any,
+      auditHelper as any,
+      sendAdapter as any,
+      webhookStatusProcessor as any
+    );
   });
 
 

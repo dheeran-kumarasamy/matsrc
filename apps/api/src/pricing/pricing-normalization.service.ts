@@ -56,12 +56,152 @@ export class PricingNormalizationService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * Safe Phase 2 endpoint-scoped normalization: processes PENDING raw
+   * observations belonging strictly to `endpointId`, using only that
+   * endpoint's trusted geography configuration (geographyLevel, stateId,
+   * districtId). Eliminates multi-source geography contamination risk.
+   */
+  async normalizeEndpoint(
+    endpointId: string,
+    limit = 100
+  ): Promise<{ processed: number; parsed: number; unmapped: number; quarantined: number; rejected: number }> {
+    const endpoint = await this.prisma.pricingSourceEndpoint.findUnique({
+      where: { id: endpointId },
+      include: { source: true, state: true, district: true },
+    });
+
+    if (!endpoint) {
+      throw new Error(`PricingSourceEndpoint "${endpointId}" not found.`);
+    }
+
+    const pending = await this.prisma.pricingRawObservation.findMany({
+      where: {
+        sourceId: endpoint.sourceId,
+        sourceUrl: endpoint.url,
+        parseStatus: "PENDING",
+      },
+      take: limit,
+      orderBy: { fetchedAt: "asc" },
+    });
+
+    if (pending.length === 0) {
+      return { processed: 0, parsed: 0, unmapped: 0, quarantined: 0, rejected: 0 };
+    }
+
+    // Validate trusted endpoint geography configuration
+    const context = this.getEndpointGeographyContext(endpoint);
+    if (!context) {
+      // Endpoint geography is missing or invalid — quarantine all raw rows rather than guess
+      let quarantinedCount = 0;
+      for (const raw of pending) {
+        await this.markStatus(
+          raw.id,
+          "QUARANTINED",
+          "Endpoint geography is not configured or is invalid (requires explicit geographyLevel and valid stateId/districtId)"
+        );
+        quarantinedCount++;
+      }
+      this.logger.warn(`normalizeEndpoint: endpointId=${endpointId} quarantined ${quarantinedCount} row(s) due to missing endpoint geography`);
+      return { processed: pending.length, parsed: 0, unmapped: 0, quarantined: quarantinedCount, rejected: 0 };
+    }
+
+    let parsed = 0;
+    let unmapped = 0;
+    let quarantined = 0;
+    let rejected = 0;
+
+    for (const raw of pending) {
+      const outcome = await this.normalizeOne(raw, context);
+      if (outcome === "PARSED") parsed++;
+      else if (outcome === "UNMAPPED") unmapped++;
+      else if (outcome === "QUARANTINED") quarantined++;
+      else rejected++;
+    }
+
+    this.logger.log(
+      `normalizeEndpoint: endpointId=${endpointId} geographyLevel=${context.geographyLevel} processed=${pending.length} parsed=${parsed} unmapped=${unmapped} quarantined=${quarantined} rejected=${rejected}`
+    );
+
+    return { processed: pending.length, parsed, unmapped, quarantined, rejected };
+  }
+
+  /**
+   * Normalizes all PENDING raw observations for a given PricingSource by
+   * iterating through each of its endpoints independently with their respective
+   * trusted geography contexts.
+   */
+  async normalizeSource(
+    sourceId: string,
+    limit = 100
+  ): Promise<{ processed: number; parsed: number; unmapped: number; quarantined: number; rejected: number }> {
+    const endpoints = await this.prisma.pricingSourceEndpoint.findMany({
+      where: { sourceId },
+      select: { id: true },
+    });
+
+    let totalProcessed = 0;
+    let totalParsed = 0;
+    let totalUnmapped = 0;
+    let totalQuarantined = 0;
+    let totalRejected = 0;
+
+    for (const endpoint of endpoints) {
+      const res = await this.normalizeEndpoint(endpoint.id, limit);
+      totalProcessed += res.processed;
+      totalParsed += res.parsed;
+      totalUnmapped += res.unmapped;
+      totalQuarantined += res.quarantined;
+      totalRejected += res.rejected;
+    }
+
+    return {
+      processed: totalProcessed,
+      parsed: totalParsed,
+      unmapped: totalUnmapped,
+      quarantined: totalQuarantined,
+      rejected: totalRejected,
+    };
+  }
+
+  /**
+   * Validates and shapes an endpoint's DB fields into NormalizationGeographyContext.
+   * Enforces DB CHECK constraints:
+   *   DISTRICT  -> stateId NOT NULL, districtId NOT NULL
+   *   STATE     -> stateId NOT NULL, districtId NULL
+   *   NATIONAL  -> stateId NULL, districtId NULL
+   */
+  private getEndpointGeographyContext(endpoint: {
+    geographyLevel: "DISTRICT" | "STATE" | "NATIONAL" | null;
+    stateId: string | null;
+    districtId: string | null;
+    district?: { stateId: string } | null;
+  }): NormalizationGeographyContext | null {
+    if (!endpoint.geographyLevel) return null;
+
+    if (endpoint.geographyLevel === "NATIONAL") {
+      if (endpoint.stateId !== null || endpoint.districtId !== null) return null;
+      return { geographyLevel: "NATIONAL" };
+    }
+
+    if (endpoint.geographyLevel === "STATE") {
+      if (!endpoint.stateId || endpoint.districtId !== null) return null;
+      return { geographyLevel: "STATE", stateId: endpoint.stateId };
+    }
+
+    if (endpoint.geographyLevel === "DISTRICT") {
+      if (!endpoint.districtId) return null;
+      const stateId = endpoint.stateId || endpoint.district?.stateId;
+      if (!stateId) return null;
+      return { geographyLevel: "DISTRICT", districtId: endpoint.districtId };
+    }
+
+    return null;
+  }
+
+  /**
    * Processes up to `limit` PENDING raw observations, stamping every
    * resulting PricingObservation with the explicit `geography` the caller
-   * provides (Phase 6F — see NormalizationGeographyContext). Kept
-   * backward-compatible with the pre-Phase-6F call shape: passing a bare
-   * districtId string is equivalent to `{ geographyLevel: "DISTRICT",
-   * districtId }`.
+   * provides. Kept for backward compatibility in test suites.
    */
   async normalizeBatch(
     geography: NormalizationGeographyContext | string,

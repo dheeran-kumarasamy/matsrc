@@ -16,6 +16,14 @@
   ],
   "crons": [
     {
+      "path": "/api/pricing/cron/ingest",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/pricing/cron/normalize",
+      "schedule": "30 1 * * *"
+    },
+    {
       "path": "/api/pricing/cron/daily",
       "schedule": "0 2 * * *"
     },
@@ -29,3 +37,4 @@
     }
   ]
 }
+

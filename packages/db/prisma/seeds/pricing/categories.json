@@ -32,7 +32,10 @@
     "children": [
       { "code": "TMT_STEEL_FE500", "name": "Fe 500" },
       { "code": "TMT_STEEL_FE500D", "name": "Fe 500D" },
-      { "code": "TMT_STEEL_FE550", "name": "Fe 550" }
+      { "code": "TMT_STEEL_FE550", "name": "Fe 550" },
+      { "code": "TMT_STEEL_FE550D", "name": "Fe 550D" },
+      { "code": "TMT_STEEL_FE550D_CRS", "name": "Fe 550D-CRS" },
+      { "code": "TMT_STEEL_FE600", "name": "Fe 600" }
     ]
   },
   {

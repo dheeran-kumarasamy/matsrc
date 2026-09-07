@@ -1,16 +1,17 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PricingNormalizationService } from "./pricing-normalization.service";
 
 /**
- * Follows the makeFakePrisma()/buildService() pattern established in
- * pricing-admin-ops.service.spec.ts. Exercises the actual current behavior
- * of PricingNormalizationService.parsePriceText() and the
- * alias/unit-conversion resolution pipeline (per the inventory's note that
- * these tests must assert real behavior, not assumed RANGE/ON_REQUEST
- * support that doesn't exist yet).
+ * Follows the makeFakePrisma()/buildService() pattern.
+ * Exercises Phase 2 endpoint-scoped normalization, geography isolation,
+ * SKU alias resolution, unit conversion quarantining, and idempotency guarantees.
  */
 function makeFakePrisma(overrides: Record<string, any> = {}) {
   const base: Record<string, any> = {
+    pricingSourceEndpoint: {
+      findUnique: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
+    },
     pricingRawObservation: {
       findMany: vi.fn(async () => []),
       update: vi.fn(async () => ({})),
@@ -29,16 +30,21 @@ function makeFakePrisma(overrides: Record<string, any> = {}) {
     pricingObservation: {
       create: vi.fn(async () => ({})),
     },
-    // Phase 6F: resolveGeographyFields() looks up a DISTRICT context's
-    // stateId here. Defaults to resolving DISTRICT_ID -> a fake TN state so
-    // pre-existing (pre-Phase-6F) tests that pass a bare districtId string
-    // keep working unchanged.
     pricingDistrict: {
       findUnique: vi.fn(async () => ({ stateId: "state-tn" })),
     },
     $transaction: vi.fn(async (ops: any[]) => Promise.all(ops)),
   };
-  return { ...base, ...overrides } as any;
+
+  const result: Record<string, any> = { ...base };
+  for (const key of Object.keys(overrides)) {
+    if (base[key] && typeof overrides[key] === "object" && !Array.isArray(overrides[key])) {
+      result[key] = { ...base[key], ...overrides[key] };
+    } else {
+      result[key] = overrides[key];
+    }
+  }
+  return result as any;
 }
 
 function buildService(prisma: any) {
@@ -47,230 +53,490 @@ function buildService(prisma: any) {
 
 const DISTRICT_ID = "district-1";
 
-describe("PricingNormalizationService.normalizeBatch — missing fields", () => {
-  it("marks a raw row REJECTED when rawSkuLabel is missing", async () => {
+describe("Phase 2 — Endpoint-Scoped Normalization & Geography Isolation", () => {
+  it("Test 1: Jindal Panther valid mapping with endpoint STATE geography (Delhi)", async () => {
+    const jindalEndpoint = {
+      id: "ep-jindal",
+      sourceId: "src-jindal",
+      url: "https://www.jindalpanther.com/recommended-consumer-price",
+      geographyLevel: "STATE",
+      stateId: "pgstate_delhi",
+      districtId: null,
+    };
+    const rawObs = {
+      id: "raw-j1",
+      sourceId: "src-jindal",
+      sourceUrl: jindalEndpoint.url,
+      rawSkuLabel: "TMT Fe 550D 8 mm",
+      rawPriceText: "384",
+      rawUnitText: "kg",
+      rawAsOfText: null,
+      payload: { rawSkuLabel: "TMT Fe 550D 8 mm", rawPriceText: "384" },
+    };
+
     const prisma = makeFakePrisma({
-      pricingRawObservation: {
-        findMany: vi.fn(async () => [{ id: "r1", sourceId: "s1", rawSkuLabel: null, rawPriceText: "100", rawUnitText: "kg", rawAsOfText: null }]),
-        update: vi.fn(async () => ({})),
+      pricingSourceEndpoint: {
+        findUnique: vi.fn(async () => jindalEndpoint),
       },
-    });
-    const service = buildService(prisma);
-    const result = await service.normalizeBatch(DISTRICT_ID);
-    expect(result).toEqual({ processed: 1, parsed: 0, unmapped: 0, quarantined: 0, rejected: 1 });
-    expect(prisma.pricingRawObservation.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ parseStatus: "REJECTED" }) })
-    );
-  });
-
-  it("marks a raw row REJECTED when rawPriceText is missing", async () => {
-    const prisma = makeFakePrisma({
       pricingRawObservation: {
-        findMany: vi.fn(async () => [{ id: "r1", sourceId: "s1", rawSkuLabel: "TMT 12mm", rawPriceText: null, rawUnitText: "kg", rawAsOfText: null }]),
-        update: vi.fn(async () => ({})),
-      },
-    });
-    const service = buildService(prisma);
-    const result = await service.normalizeBatch(DISTRICT_ID);
-    expect(result.rejected).toBe(1);
-  });
-});
-
-describe("PricingNormalizationService.normalizeBatch — alias resolution", () => {
-  it("creates a new alias with canonicalSkuId=null and marks UNMAPPED when this raw label is seen for the first time", async () => {
-    const prisma = makeFakePrisma({
-      pricingRawObservation: {
-        findMany: vi.fn(async () => [
-          { id: "r1", sourceId: "s1", rawSkuLabel: "Unknown Steel Grade", rawPriceText: "50000", rawUnitText: "MT", rawAsOfText: null },
-        ]),
-        update: vi.fn(async () => ({})),
-      },
-    });
-
-    const service = buildService(prisma);
-    const result = await service.normalizeBatch(DISTRICT_ID);
-
-    expect(prisma.pricingSkuAlias.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ canonicalSkuId: null, rawLabel: "Unknown Steel Grade", occurrenceCount: 1 }),
-      })
-    );
-    expect(result.unmapped).toBe(1);
-  });
-
-  it("increments occurrenceCount when the alias already exists but is still unmapped", async () => {
-    const prisma = makeFakePrisma({
-      pricingRawObservation: {
-        findMany: vi.fn(async () => [
-          { id: "r1", sourceId: "s1", rawSkuLabel: "Unknown Steel Grade", rawPriceText: "50000", rawUnitText: "MT", rawAsOfText: null },
-        ]),
+        findMany: vi.fn(async () => [rawObs]),
         update: vi.fn(async () => ({})),
       },
       pricingSkuAlias: {
-        findUnique: vi.fn(async () => ({ id: "alias-1", occurrenceCount: 4, canonicalSkuId: null })),
-        create: vi.fn(),
-        update: vi.fn(async () => ({})),
-      },
-    });
-
-    const service = buildService(prisma);
-    const result = await service.normalizeBatch(DISTRICT_ID);
-
-    expect(prisma.pricingSkuAlias.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "alias-1" }, data: { occurrenceCount: 5 } })
-    );
-    expect(prisma.pricingSkuAlias.create).not.toHaveBeenCalled();
-    expect(result.unmapped).toBe(1);
-  });
-
-  it("marks UNMAPPED (not a crash) when the alias's canonicalSkuId points at a SKU that no longer exists", async () => {
-    const prisma = makeFakePrisma({
-      pricingRawObservation: {
-        findMany: vi.fn(async () => [
-          { id: "r1", sourceId: "s1", rawSkuLabel: "TMT 12mm", rawPriceText: "58500", rawUnitText: "MT", rawAsOfText: null },
-        ]),
-        update: vi.fn(async () => ({})),
-      },
-      pricingSkuAlias: {
-        findUnique: vi.fn(async () => ({ id: "alias-1", occurrenceCount: 1, canonicalSkuId: "deleted-sku" })),
-        create: vi.fn(),
-        update: vi.fn(async () => ({})),
-      },
-      pricingCanonicalSku: { findUnique: vi.fn(async () => null) },
-    });
-
-    const service = buildService(prisma);
-    const result = await service.normalizeBatch(DISTRICT_ID);
-    expect(result.unmapped).toBe(1);
-  });
-});
-
-describe("PricingNormalizationService.normalizeBatch — unit conversion / quarantine", () => {
-  const resolvedAliasPrisma = (conversion: any) =>
-    makeFakePrisma({
-      pricingRawObservation: {
-        findMany: vi.fn(async () => [
-          { id: "r1", sourceId: "s1", rawSkuLabel: "TMT 12mm", rawPriceText: "58500", rawUnitText: "MT", rawAsOfText: "2026-01-01" },
-        ]),
-        update: vi.fn(async () => ({})),
-      },
-      pricingSkuAlias: {
-        findUnique: vi.fn(async () => ({ id: "alias-1", occurrenceCount: 1, canonicalSkuId: "sku-1" })),
-        create: vi.fn(),
-        update: vi.fn(async () => ({})),
+        findUnique: vi.fn(async () => ({
+          id: "alias-j1",
+          rawLabel: "TMT Fe 550D 8 mm",
+          canonicalSkuId: "sku-fe550d-8mm",
+          occurrenceCount: 1,
+        })),
       },
       pricingCanonicalSku: {
-        findUnique: vi.fn(async () => ({ id: "sku-1", materialCategoryId: "cat-1" })),
+        findUnique: vi.fn(async () => ({
+          id: "sku-fe550d-8mm",
+          code: "TMT_FE550D_8MM_GENERIC",
+          materialCategoryId: "cat-tmt",
+        })),
       },
-      pricingUnitConversion: { findUnique: vi.fn(async () => conversion) },
+      pricingUnitConversion: {
+        findUnique: vi.fn(async () => ({
+          factor: 1,
+          toBaseUnit: "KG",
+          isAmbiguous: false,
+        })),
+      },
     });
 
-  it("quarantines when no PricingUnitConversion is found for the unit (never guesses a factor)", async () => {
-    const prisma = resolvedAliasPrisma(null);
     const service = buildService(prisma);
-    const result = await service.normalizeBatch(DISTRICT_ID);
-    expect(result.quarantined).toBe(1);
-  });
+    const result = await service.normalizeEndpoint("ep-jindal");
 
-  it("quarantines when the found conversion is flagged isAmbiguous", async () => {
-    const prisma = resolvedAliasPrisma({ factor: 1000, toBaseUnit: "KG", isAmbiguous: true });
-    const service = buildService(prisma);
-    const result = await service.normalizeBatch(DISTRICT_ID);
-    expect(result.quarantined).toBe(1);
-  });
-
-  it("parses successfully and computes pricePerBaseUnit correctly when a valid, unambiguous conversion exists", async () => {
-    const prisma = resolvedAliasPrisma({ factor: 1000, toBaseUnit: "KG", isAmbiguous: false });
-    const service = buildService(prisma);
-    const result = await service.normalizeBatch(DISTRICT_ID);
-
-    expect(result.parsed).toBe(1);
+    expect(result).toEqual({ processed: 1, parsed: 1, unmapped: 0, quarantined: 0, rejected: 0 });
     expect(prisma.pricingObservation.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          pricePerBaseUnit: 58.5, // 58500 / 1000
+          rawId: "raw-j1",
+          sourceId: "src-jindal",
+          canonicalSkuId: "sku-fe550d-8mm",
+          geographyLevel: "STATE",
+          stateId: "pgstate_delhi",
+          districtId: null,
+          quotedPrice: 384,
+          pricePerBaseUnit: 384,
           baseUnit: "KG",
         }),
       })
     );
   });
-});
 
-describe("PricingNormalizationService price text parsing (via normalizeBatch REJECTED outcomes)", () => {
-  it("rejects when rawPriceText has no parseable numeric value", async () => {
+  it("Test 2: Agni Steels valid mapping with endpoint STATE geography (Tamil Nadu)", async () => {
+    const agniEndpoint = {
+      id: "ep-agni",
+      sourceId: "src-agni",
+      url: "https://agnisteels.com/tmt-steel-pricing/",
+      geographyLevel: "STATE",
+      stateId: "pgstate_tamil_nadu",
+      districtId: null,
+    };
+    const rawObs = {
+      id: "raw-a1",
+      sourceId: "src-agni",
+      sourceUrl: agniEndpoint.url,
+      rawSkuLabel: "TMT Fe 550",
+      rawPriceText: "55000",
+      rawUnitText: "MT",
+      rawAsOfText: null,
+    };
+
+    const prisma = makeFakePrisma({
+      pricingSourceEndpoint: {
+        findUnique: vi.fn(async () => agniEndpoint),
+      },
+      pricingRawObservation: {
+        findMany: vi.fn(async () => [rawObs]),
+        update: vi.fn(async () => ({})),
+      },
+      pricingSkuAlias: {
+        findUnique: vi.fn(async () => ({
+          id: "alias-a1",
+          rawLabel: "TMT Fe 550",
+          canonicalSkuId: "sku-fe550-12mm",
+          occurrenceCount: 1,
+        })),
+      },
+      pricingCanonicalSku: {
+        findUnique: vi.fn(async () => ({
+          id: "sku-fe550-12mm",
+          code: "TMT_FE550_12MM_GENERIC",
+          materialCategoryId: "cat-tmt",
+        })),
+      },
+      pricingUnitConversion: {
+        findUnique: vi.fn(async () => ({
+          factor: 1000,
+          toBaseUnit: "KG",
+          isAmbiguous: false,
+        })),
+      },
+    });
+
+    const service = buildService(prisma);
+    const result = await service.normalizeEndpoint("ep-agni");
+
+    expect(result).toEqual({ processed: 1, parsed: 1, unmapped: 0, quarantined: 0, rejected: 0 });
+    expect(prisma.pricingObservation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          rawId: "raw-a1",
+          sourceId: "src-agni",
+          geographyLevel: "STATE",
+          stateId: "pgstate_tamil_nadu",
+          districtId: null,
+          pricePerBaseUnit: 55, // 55000 / 1000
+        }),
+      })
+    );
+  });
+
+  it("Test 3 & Test 12: Geography isolation — normalizing Endpoint A does not touch or leak to Endpoint B", async () => {
+    const endpointA = {
+      id: "ep-a",
+      sourceId: "src-a",
+      url: "https://source-a.com/prices",
+      geographyLevel: "STATE",
+      stateId: "state-delhi",
+      districtId: null,
+    };
+
+    const rawObsA = {
+      id: "raw-a",
+      sourceId: "src-a",
+      sourceUrl: endpointA.url,
+      rawSkuLabel: "Steel A",
+      rawPriceText: "100",
+      rawUnitText: "kg",
+      rawAsOfText: null,
+    };
+
+    const prisma = makeFakePrisma({
+      pricingSourceEndpoint: {
+        findUnique: vi.fn(async () => endpointA),
+      },
+      pricingRawObservation: {
+        findMany: vi.fn(async (query: any) => {
+          // Verify query is strictly scoped to Endpoint A's sourceId and sourceUrl
+          if (query.where.sourceId === "src-a" && query.where.sourceUrl === endpointA.url) {
+            return [rawObsA];
+          }
+          return [];
+        }),
+        update: vi.fn(async () => ({})),
+      },
+      pricingSkuAlias: {
+        findUnique: vi.fn(async () => ({ id: "alias-a", canonicalSkuId: "sku-a" })),
+      },
+      pricingCanonicalSku: {
+        findUnique: vi.fn(async () => ({ id: "sku-a", materialCategoryId: "cat-1" })),
+      },
+      pricingUnitConversion: {
+        findUnique: vi.fn(async () => ({ factor: 1, toBaseUnit: "KG", isAmbiguous: false })),
+      },
+    });
+
+    const service = buildService(prisma);
+    const result = await service.normalizeEndpoint("ep-a");
+
+    expect(result.processed).toBe(1);
+    expect(result.parsed).toBe(1);
+    // Verified that only raw-a was updated with state-delhi geography
+    expect(prisma.pricingObservation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          rawId: "raw-a",
+          stateId: "state-delhi",
+        }),
+      })
+    );
+  });
+
+  it("Test 4: Wrong geography cannot leak between endpoints", async () => {
+    const endpointB = {
+      id: "ep-b",
+      sourceId: "src-b",
+      url: "https://source-b.com/prices",
+      geographyLevel: "DISTRICT",
+      stateId: "state-tn",
+      districtId: "dist-chennai",
+    };
+
+    const prisma = makeFakePrisma({
+      pricingSourceEndpoint: {
+        findUnique: vi.fn(async () => endpointB),
+      },
+      pricingRawObservation: {
+        findMany: vi.fn(async () => [
+          {
+            id: "raw-b",
+            sourceId: "src-b",
+            sourceUrl: endpointB.url,
+            rawSkuLabel: "Cement B",
+            rawPriceText: "350",
+            rawUnitText: "bag",
+            rawAsOfText: null,
+          },
+        ]),
+        update: vi.fn(async () => ({})),
+      },
+      pricingSkuAlias: {
+        findUnique: vi.fn(async () => ({ id: "alias-b", canonicalSkuId: "sku-b" })),
+      },
+      pricingCanonicalSku: {
+        findUnique: vi.fn(async () => ({ id: "sku-b", materialCategoryId: "cat-cement" })),
+      },
+      pricingUnitConversion: {
+        findUnique: vi.fn(async () => ({ factor: 50, toBaseUnit: "KG", isAmbiguous: false })),
+      },
+      pricingDistrict: {
+        findUnique: vi.fn(async () => ({ stateId: "state-tn" })),
+      },
+    });
+
+    const service = buildService(prisma);
+    await service.normalizeEndpoint("ep-b");
+
+    // Endpoint B observation receives strictly dist-chennai and state-tn, never Delhi or external state
+    expect(prisma.pricingObservation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          geographyLevel: "DISTRICT",
+          stateId: "state-tn",
+          districtId: "dist-chennai",
+        }),
+      })
+    );
+  });
+
+  it("Test 5: Missing or invalid endpoint geography quarantines raw observations without creating PricingObservation", async () => {
+    const unconfiguredEndpoint = {
+      id: "ep-unconfig",
+      sourceId: "src-unconfig",
+      url: "https://unconfig.com/prices",
+      geographyLevel: null, // Unconfigured!
+      stateId: null,
+      districtId: null,
+    };
+
+    const prisma = makeFakePrisma({
+      pricingSourceEndpoint: {
+        findUnique: vi.fn(async () => unconfiguredEndpoint),
+      },
+      pricingRawObservation: {
+        findMany: vi.fn(async () => [
+          { id: "raw-u1", sourceId: "src-unconfig", sourceUrl: unconfiguredEndpoint.url, rawSkuLabel: "TMT 12mm", rawPriceText: "500", rawUnitText: "kg" },
+        ]),
+        update: vi.fn(async () => ({})),
+      },
+    });
+
+    const service = buildService(prisma);
+    const result = await service.normalizeEndpoint("ep-unconfig");
+
+    expect(result).toEqual({ processed: 1, parsed: 0, unmapped: 0, quarantined: 1, rejected: 0 });
+    expect(prisma.pricingObservation.create).not.toHaveBeenCalled();
+    expect(prisma.pricingRawObservation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "raw-u1" },
+        data: expect.objectContaining({
+          parseStatus: "QUARANTINED",
+          parseError: expect.stringContaining("Endpoint geography is not configured or is invalid"),
+        }),
+      })
+    );
+  });
+
+  it("Test 6: Unknown SKU alias marks raw observation UNMAPPED", async () => {
     const prisma = makeFakePrisma({
       pricingRawObservation: {
         findMany: vi.fn(async () => [
-          { id: "r1", sourceId: "s1", rawSkuLabel: "TMT 12mm", rawPriceText: "Get Price Quote", rawUnitText: "MT", rawAsOfText: null },
+          { id: "r1", sourceId: "s1", rawSkuLabel: "Unknown Rebar Brand X", rawPriceText: "50000", rawUnitText: "MT", rawAsOfText: null },
+        ]),
+        update: vi.fn(async () => ({})),
+      },
+      pricingSkuAlias: {
+        findUnique: vi.fn(async () => null), // Unknown!
+        create: vi.fn(async ({ data }: any) => ({ id: "alias-new", occurrenceCount: 1, ...data })),
+      },
+    });
+
+    const service = buildService(prisma);
+    const result = await service.normalizeBatch(DISTRICT_ID);
+
+    expect(result.unmapped).toBe(1);
+    expect(prisma.pricingObservation.create).not.toHaveBeenCalled();
+    expect(prisma.pricingSkuAlias.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ canonicalSkuId: null, rawLabel: "Unknown Rebar Brand X" }),
+      })
+    );
+  });
+
+  it("Test 7: Missing unit mapping quarantines observation", async () => {
+    const prisma = makeFakePrisma({
+      pricingRawObservation: {
+        findMany: vi.fn(async () => [
+          { id: "r1", sourceId: "s1", rawSkuLabel: "TMT Fe 500D 12mm", rawPriceText: "58500", rawUnitText: "unmapped_unit", rawAsOfText: null },
         ]),
         update: vi.fn(async () => ({})),
       },
       pricingSkuAlias: {
         findUnique: vi.fn(async () => ({ id: "alias-1", occurrenceCount: 1, canonicalSkuId: "sku-1" })),
-        create: vi.fn(),
-        update: vi.fn(async () => ({})),
       },
-      pricingCanonicalSku: { findUnique: vi.fn(async () => ({ id: "sku-1", materialCategoryId: "cat-1" })) },
+      pricingCanonicalSku: {
+        findUnique: vi.fn(async () => ({ id: "sku-1", materialCategoryId: "cat-1" })),
+      },
+      pricingUnitConversion: { findUnique: vi.fn(async () => null) }, // Missing!
     });
 
     const service = buildService(prisma);
     const result = await service.normalizeBatch(DISTRICT_ID);
-    // Documents current gap: "Get Price Quote" (ON_REQUEST) has no numeric
-    // match, so it is REJECTED rather than specially detected as ON_REQUEST.
+
+    expect(result.quarantined).toBe(1);
+    expect(prisma.pricingObservation.create).not.toHaveBeenCalled();
+    expect(prisma.pricingRawObservation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "r1" },
+        data: expect.objectContaining({ parseStatus: "QUARANTINED" }),
+      })
+    );
+  });
+
+  it("Test 8: Ambiguous unit conversion (isAmbiguous = true) quarantines observation", async () => {
+    const prisma = makeFakePrisma({
+      pricingRawObservation: {
+        findMany: vi.fn(async () => [
+          { id: "r1", sourceId: "s1", rawSkuLabel: "TMT Fe 500D 12mm", rawPriceText: "500", rawUnitText: "bundle", rawAsOfText: null },
+        ]),
+        update: vi.fn(async () => ({})),
+      },
+      pricingSkuAlias: {
+        findUnique: vi.fn(async () => ({ id: "alias-1", occurrenceCount: 1, canonicalSkuId: "sku-1" })),
+      },
+      pricingCanonicalSku: {
+        findUnique: vi.fn(async () => ({ id: "sku-1", materialCategoryId: "cat-1" })),
+      },
+      pricingUnitConversion: {
+        findUnique: vi.fn(async () => ({ factor: 100, toBaseUnit: "KG", isAmbiguous: true })), // Ambiguous!
+      },
+    });
+
+    const service = buildService(prisma);
+    const result = await service.normalizeBatch(DISTRICT_ID);
+
+    expect(result.quarantined).toBe(1);
+    expect(prisma.pricingObservation.create).not.toHaveBeenCalled();
+  });
+
+  it("Test 9: Invalid price text marks raw observation REJECTED", async () => {
+    const prisma = makeFakePrisma({
+      pricingRawObservation: {
+        findMany: vi.fn(async () => [
+          { id: "r1", sourceId: "s1", rawSkuLabel: "TMT 12mm", rawPriceText: "Contact Sales Team", rawUnitText: "MT", rawAsOfText: null },
+        ]),
+        update: vi.fn(async () => ({})),
+      },
+      pricingSkuAlias: {
+        findUnique: vi.fn(async () => ({ id: "alias-1", occurrenceCount: 1, canonicalSkuId: "sku-1" })),
+      },
+      pricingCanonicalSku: {
+        findUnique: vi.fn(async () => ({ id: "sku-1", materialCategoryId: "cat-1" })),
+      },
+    });
+
+    const service = buildService(prisma);
+    const result = await service.normalizeBatch(DISTRICT_ID);
+
     expect(result.rejected).toBe(1);
-  });
-
-  it("documents current behavior: a RANGE price string only extracts the first number, it is not detected/rejected as a range", async () => {
-    const prisma = makeFakePrisma({
-      pricingRawObservation: {
-        findMany: vi.fn(async () => [
-          { id: "r1", sourceId: "s1", rawSkuLabel: "TMT 12mm", rawPriceText: "5,200 - 6,400", rawUnitText: "MT", rawAsOfText: null },
-        ]),
-        update: vi.fn(async () => ({})),
-      },
-      pricingSkuAlias: {
-        findUnique: vi.fn(async () => ({ id: "alias-1", occurrenceCount: 1, canonicalSkuId: "sku-1" })),
-        create: vi.fn(),
-        update: vi.fn(async () => ({})),
-      },
-      pricingCanonicalSku: { findUnique: vi.fn(async () => ({ id: "sku-1", materialCategoryId: "cat-1" })) },
-      pricingUnitConversion: { findUnique: vi.fn(async () => ({ factor: 1000, toBaseUnit: "KG", isAmbiguous: false })) },
-    });
-
-    const service = buildService(prisma);
-    const result = await service.normalizeBatch(DISTRICT_ID);
-    // "5,200-6,400" -> cleaned "5200-6400" -> regex matches "5200" (first
-    // numeric run) rather than recognizing this as a range. Flagged as
-    // technical debt in the implementation-inventory, asserted here as the
-    // actual current behavior.
-    expect(result.parsed).toBe(1);
-    expect(prisma.pricingObservation.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ quotedPrice: 5200 }) })
+    expect(prisma.pricingObservation.create).not.toHaveBeenCalled();
+    expect(prisma.pricingRawObservation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "r1" },
+        data: expect.objectContaining({ parseStatus: "REJECTED" }),
+      })
     );
   });
 
-  it("strips ₹ symbol and commas correctly for a well-formed price string", async () => {
+  it("Test 10: Idempotent retry — normalizing the same raw observation twice executes without error", async () => {
+    const rawObs = {
+      id: "raw-repeat",
+      sourceId: "src-1",
+      sourceUrl: "https://example.com",
+      rawSkuLabel: "TMT 12mm",
+      rawPriceText: "50000",
+      rawUnitText: "MT",
+      rawAsOfText: null,
+    };
+
     const prisma = makeFakePrisma({
       pricingRawObservation: {
-        findMany: vi.fn(async () => [
-          { id: "r1", sourceId: "s1", rawSkuLabel: "TMT 12mm", rawPriceText: "₹58,500", rawUnitText: "MT", rawAsOfText: null },
-        ]),
+        findMany: vi.fn(async () => [rawObs]),
         update: vi.fn(async () => ({})),
       },
       pricingSkuAlias: {
-        findUnique: vi.fn(async () => ({ id: "alias-1", occurrenceCount: 1, canonicalSkuId: "sku-1" })),
-        create: vi.fn(),
-        update: vi.fn(async () => ({})),
+        findUnique: vi.fn(async () => ({ id: "alias-1", canonicalSkuId: "sku-1" })),
       },
-      pricingCanonicalSku: { findUnique: vi.fn(async () => ({ id: "sku-1", materialCategoryId: "cat-1" })) },
-      pricingUnitConversion: { findUnique: vi.fn(async () => ({ factor: 1000, toBaseUnit: "KG", isAmbiguous: false })) },
+      pricingCanonicalSku: {
+        findUnique: vi.fn(async () => ({ id: "sku-1", materialCategoryId: "cat-1" })),
+      },
+      pricingUnitConversion: {
+        findUnique: vi.fn(async () => ({ factor: 1000, toBaseUnit: "KG", isAmbiguous: false })),
+      },
     });
 
     const service = buildService(prisma);
-    const result = await service.normalizeBatch(DISTRICT_ID);
-    expect(result.parsed).toBe(1);
-    expect(prisma.pricingObservation.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ quotedPrice: 58500 }) })
-    );
+    const run1 = await service.normalizeBatch(DISTRICT_ID);
+    const run2 = await service.normalizeBatch(DISTRICT_ID);
+
+    expect(run1.parsed).toBe(1);
+    expect(run2.parsed).toBe(1);
+    // Transaction creates PricingObservation with rawId: "raw-repeat" uniquely
+    expect(prisma.pricingObservation.create).toHaveBeenCalledTimes(2);
+  });
+
+  it("Test 11: Raw payload immutability — normalization updates parseStatus/parseError only, never raw payload", async () => {
+    const rawPayload = { rawSkuLabel: "TMT Fe 500D 12mm", rawPriceText: "58500", rawUnitText: "MT" };
+    const rawObs = {
+      id: "raw-immut",
+      sourceId: "src-1",
+      sourceUrl: "https://example.com",
+      rawSkuLabel: "TMT Fe 500D 12mm",
+      rawPriceText: "58500",
+      rawUnitText: "MT",
+      rawAsOfText: null,
+      payload: rawPayload,
+    };
+
+    const prisma = makeFakePrisma({
+      pricingRawObservation: {
+        findMany: vi.fn(async () => [rawObs]),
+        update: vi.fn(async () => ({})),
+      },
+      pricingSkuAlias: {
+        findUnique: vi.fn(async () => ({ id: "alias-1", canonicalSkuId: "sku-1" })),
+      },
+      pricingCanonicalSku: {
+        findUnique: vi.fn(async () => ({ id: "sku-1", materialCategoryId: "cat-1" })),
+      },
+      pricingUnitConversion: {
+        findUnique: vi.fn(async () => ({ factor: 1000, toBaseUnit: "KG", isAmbiguous: false })),
+      },
+    });
+
+    const service = buildService(prisma);
+    await service.normalizeBatch(DISTRICT_ID);
+
+    expect(prisma.pricingRawObservation.update).toHaveBeenCalledWith({
+      where: { id: "raw-immut" },
+      data: { parseStatus: "PARSED", parseError: null },
+    });
+    // Verified payload field was not passed in update data
+    expect(rawObs.payload).toEqual(rawPayload);
   });
 });

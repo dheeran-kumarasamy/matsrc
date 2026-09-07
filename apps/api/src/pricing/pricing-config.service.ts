@@ -29,4 +29,13 @@ export class PricingConfigService {
     }
     return raw.trim().toLowerCase() === "true" || raw.trim() === "1";
   }
+
+  isCronDryRunEnabled(): boolean {
+    const raw = process.env.PRICING_CRON_DRY_RUN;
+    if (raw === undefined) {
+      return false;
+    }
+    return raw.trim().toLowerCase() === "true" || raw.trim() === "1";
+  }
 }
+

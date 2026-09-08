@@ -339,6 +339,7 @@
     "robotsAllowed": true,
     "tosReviewedAt": null,
     "defaultPriceType": "LIST_PRICE",
+    "defaultTaxTreatment": "INCLUSIVE_GST",
     "isEnabled": false
   },
   {

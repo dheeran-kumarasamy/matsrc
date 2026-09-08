@@ -358,6 +358,7 @@ export class PricingSchedulerService {
       };
     }
 
+    const tStart = performance.now();
     let totalProcessed = 0;
     let totalParsed = 0;
     let totalUnmapped = 0;
@@ -388,9 +389,10 @@ export class PricingSchedulerService {
         this.logger.error(`runNormalizationJob: failed for endpointId=${epId}`, err instanceof Error ? err.stack : String(err));
       }
     }
+    const totalMs = (performance.now() - tStart).toFixed(1);
 
     this.logger.log(
-      `pricing.normalize.completed: rawCandidates=${candidateCount} processed=${totalProcessed} parsed=${totalParsed} quarantined=${totalQuarantined} unmapped=${totalUnmapped}`
+      `pricing.normalize.completed: rawCandidates=${candidateCount} processed=${totalProcessed} parsed=${totalParsed} quarantined=${totalQuarantined} unmapped=${totalUnmapped} timing={totalMs:${totalMs}}`
     );
 
     return {

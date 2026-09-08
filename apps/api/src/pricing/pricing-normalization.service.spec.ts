@@ -8,6 +8,10 @@ import { PricingNormalizationService } from "./pricing-normalization.service";
  */
 function makeFakePrisma(overrides: Record<string, any> = {}) {
   const base: Record<string, any> = {
+    pricingSource: {
+      findUnique: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
+    },
     pricingSourceEndpoint: {
       findUnique: vi.fn(async () => null),
       findMany: vi.fn(async () => []),
@@ -18,14 +22,17 @@ function makeFakePrisma(overrides: Record<string, any> = {}) {
     },
     pricingSkuAlias: {
       findUnique: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
       create: vi.fn(async ({ data }: any) => ({ id: "alias-new", occurrenceCount: 1, ...data })),
       update: vi.fn(async () => ({})),
     },
     pricingCanonicalSku: {
       findUnique: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
     },
     pricingUnitConversion: {
       findUnique: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
     },
     pricingObservation: {
       create: vi.fn(async () => ({})),
@@ -54,7 +61,12 @@ function buildService(prisma: any) {
 const DISTRICT_ID = "district-1";
 
 describe("Phase 2 — Endpoint-Scoped Normalization & Geography Isolation", () => {
-  it("Test 1: Jindal Panther valid mapping with endpoint STATE geography (Delhi)", async () => {
+  it("Test 1: Jindal Panther valid mapping with endpoint STATE geography (Delhi), 8mm 12m piece conversion & INCLUSIVE_GST tax treatment", async () => {
+    const jindalSource = {
+      id: "src-jindal",
+      code: "JINDAL_PANTHER",
+      defaultTaxTreatment: "INCLUSIVE_GST",
+    };
     const jindalEndpoint = {
       id: "ep-jindal",
       sourceId: "src-jindal",
@@ -69,12 +81,15 @@ describe("Phase 2 — Endpoint-Scoped Normalization & Geography Isolation", () =
       sourceUrl: jindalEndpoint.url,
       rawSkuLabel: "TMT Fe 550D 8 mm",
       rawPriceText: "384",
-      rawUnitText: "kg",
+      rawUnitText: "per piece",
       rawAsOfText: null,
-      payload: { rawSkuLabel: "TMT Fe 550D 8 mm", rawPriceText: "384" },
+      payload: { rawSkuLabel: "TMT Fe 550D 8 mm", rawPriceText: "384", rawUnitText: "per piece" },
     };
 
     const prisma = makeFakePrisma({
+      pricingSource: {
+        findUnique: vi.fn(async () => jindalSource),
+      },
       pricingSourceEndpoint: {
         findUnique: vi.fn(async () => jindalEndpoint),
       },
@@ -95,19 +110,17 @@ describe("Phase 2 — Endpoint-Scoped Normalization & Geography Isolation", () =
           id: "sku-fe550d-8mm",
           code: "TMT_FE550D_8MM_GENERIC",
           materialCategoryId: "cat-tmt",
-        })),
-      },
-      pricingUnitConversion: {
-        findUnique: vi.fn(async () => ({
-          factor: 1,
-          toBaseUnit: "KG",
-          isAmbiguous: false,
+          baseUnit: "KG",
+          specJson: { nominalWeightKgPerMeter: 0.3949 },
         })),
       },
     });
 
     const service = buildService(prisma);
     const result = await service.normalizeEndpoint("ep-jindal");
+
+    const expectedKgPerPiece = 12 * 0.3949; // 4.7388
+    const expectedPricePerKg = 384 / expectedKgPerPiece; // 81.03317295517852
 
     expect(result).toEqual({ processed: 1, parsed: 1, unmapped: 0, quarantined: 0, rejected: 0 });
     expect(prisma.pricingObservation.create).toHaveBeenCalledWith(
@@ -120,8 +133,212 @@ describe("Phase 2 — Endpoint-Scoped Normalization & Geography Isolation", () =
           stateId: "pgstate_delhi",
           districtId: null,
           quotedPrice: 384,
-          pricePerBaseUnit: 384,
+          quotedUnitLabel: "per piece",
+          pricePerBaseUnit: expectedPricePerKg,
           baseUnit: "KG",
+          taxTreatment: "INCLUSIVE_GST",
+        }),
+      })
+    );
+  });
+
+  it("Test 1b: Jindal Panther 12mm TMT per-piece conversion uses SKU-specific nominal weight", async () => {
+    const jindalSource = {
+      id: "src-jindal",
+      code: "JINDAL_PANTHER",
+      defaultTaxTreatment: "INCLUSIVE_GST",
+    };
+    const jindalEndpoint = {
+      id: "ep-jindal",
+      sourceId: "src-jindal",
+      url: "https://www.jindalpanther.com/recommended-consumer-price",
+      geographyLevel: "STATE",
+      stateId: "pgstate_delhi",
+      districtId: null,
+    };
+    const rawObs = {
+      id: "raw-j12",
+      sourceId: "src-jindal",
+      sourceUrl: jindalEndpoint.url,
+      rawSkuLabel: "TMT Fe 550D 12 mm",
+      rawPriceText: "750",
+      rawUnitText: "per piece",
+      rawAsOfText: null,
+    };
+
+    const prisma = makeFakePrisma({
+      pricingSource: {
+        findUnique: vi.fn(async () => jindalSource),
+      },
+      pricingSourceEndpoint: {
+        findUnique: vi.fn(async () => jindalEndpoint),
+      },
+      pricingRawObservation: {
+        findMany: vi.fn(async () => [rawObs]),
+        update: vi.fn(async () => ({})),
+      },
+      pricingSkuAlias: {
+        findUnique: vi.fn(async () => ({
+          id: "alias-j12",
+          rawLabel: "TMT Fe 550D 12 mm",
+          canonicalSkuId: "sku-fe550d-12mm",
+          occurrenceCount: 1,
+        })),
+      },
+      pricingCanonicalSku: {
+        findUnique: vi.fn(async () => ({
+          id: "sku-fe550d-12mm",
+          code: "TMT_FE550D_12MM_GENERIC",
+          materialCategoryId: "cat-tmt",
+          baseUnit: "KG",
+          specJson: { nominalWeightKgPerMeter: 0.8885 },
+        })),
+      },
+    });
+
+    const service = buildService(prisma);
+    const result = await service.normalizeEndpoint("ep-jindal");
+
+    const expectedKgPerPiece = 12 * 0.8885; // 10.662
+    const expectedPricePerKg = 750 / expectedKgPerPiece; // 70.34327518289251
+
+    expect(result).toEqual({ processed: 1, parsed: 1, unmapped: 0, quarantined: 0, rejected: 0 });
+    expect(prisma.pricingObservation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          rawId: "raw-j12",
+          canonicalSkuId: "sku-fe550d-12mm",
+          pricePerBaseUnit: expectedPricePerKg,
+          taxTreatment: "INCLUSIVE_GST",
+        }),
+      })
+    );
+  });
+
+  it("Test 1c: Jindal Panther per-piece observation with missing nominalWeightKgPerMeter is QUARANTINED", async () => {
+    const jindalSource = {
+      id: "src-jindal",
+      code: "JINDAL_PANTHER",
+      defaultTaxTreatment: "INCLUSIVE_GST",
+    };
+    const jindalEndpoint = {
+      id: "ep-jindal",
+      sourceId: "src-jindal",
+      url: "https://www.jindalpanther.com/recommended-consumer-price",
+      geographyLevel: "STATE",
+      stateId: "pgstate_delhi",
+      districtId: null,
+    };
+    const rawObs = {
+      id: "raw-j-noweight",
+      sourceId: "src-jindal",
+      sourceUrl: jindalEndpoint.url,
+      rawSkuLabel: "TMT Fe 550D 8 mm",
+      rawPriceText: "384",
+      rawUnitText: "per piece",
+    };
+
+    const prisma = makeFakePrisma({
+      pricingSource: {
+        findUnique: vi.fn(async () => jindalSource),
+      },
+      pricingSourceEndpoint: {
+        findUnique: vi.fn(async () => jindalEndpoint),
+      },
+      pricingRawObservation: {
+        findMany: vi.fn(async () => [rawObs]),
+        update: vi.fn(async () => ({})),
+      },
+      pricingSkuAlias: {
+        findUnique: vi.fn(async () => ({ id: "alias-j1", canonicalSkuId: "sku-no-weight" })),
+      },
+      pricingCanonicalSku: {
+        findUnique: vi.fn(async () => ({
+          id: "sku-no-weight",
+          code: "TMT_NO_WEIGHT",
+          materialCategoryId: "cat-tmt",
+          baseUnit: "KG",
+          specJson: {}, // missing nominalWeightKgPerMeter!
+        })),
+      },
+    });
+
+    const service = buildService(prisma);
+    const result = await service.normalizeEndpoint("ep-jindal");
+
+    expect(result).toEqual({ processed: 1, parsed: 0, unmapped: 0, quarantined: 1, rejected: 0 });
+    expect(prisma.pricingRawObservation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "raw-j-noweight" },
+        data: expect.objectContaining({
+          parseStatus: "QUARANTINED",
+          parseError: expect.stringContaining("Missing or invalid nominalWeightKgPerMeter"),
+        }),
+      })
+    );
+  });
+
+  it("Test 1d: Non-Jindal per-piece observation without conversion remains QUARANTINED (safety guard preserved)", async () => {
+    const genericSource = {
+      id: "src-generic",
+      code: "GENERIC_STEEL_SRC",
+      defaultTaxTreatment: "UNKNOWN",
+    };
+    const genericEndpoint = {
+      id: "ep-generic",
+      sourceId: "src-generic",
+      url: "https://generic-steel.com/prices",
+      geographyLevel: "STATE",
+      stateId: "pgstate_delhi",
+      districtId: null,
+    };
+    const rawObs = {
+      id: "raw-g1",
+      sourceId: "src-generic",
+      sourceUrl: genericEndpoint.url,
+      rawSkuLabel: "TMT Fe 550D 8 mm",
+      rawPriceText: "384",
+      rawUnitText: "per piece",
+    };
+
+    const prisma = makeFakePrisma({
+      pricingSource: {
+        findUnique: vi.fn(async () => genericSource),
+      },
+      pricingSourceEndpoint: {
+        findUnique: vi.fn(async () => genericEndpoint),
+      },
+      pricingRawObservation: {
+        findMany: vi.fn(async () => [rawObs]),
+        update: vi.fn(async () => ({})),
+      },
+      pricingSkuAlias: {
+        findUnique: vi.fn(async () => ({ id: "alias-g1", canonicalSkuId: "sku-fe550d-8mm" })),
+      },
+      pricingCanonicalSku: {
+        findUnique: vi.fn(async () => ({
+          id: "sku-fe550d-8mm",
+          code: "TMT_FE550D_8MM_GENERIC",
+          materialCategoryId: "cat-tmt",
+          baseUnit: "KG",
+          specJson: { nominalWeightKgPerMeter: 0.3949 },
+        })),
+      },
+      pricingUnitConversion: {
+        findUnique: vi.fn(async () => null), // No conversion in DB for non-Jindal source
+      },
+    });
+
+    const service = buildService(prisma);
+    const result = await service.normalizeEndpoint("ep-generic");
+
+    expect(result).toEqual({ processed: 1, parsed: 0, unmapped: 0, quarantined: 1, rejected: 0 });
+    expect(prisma.pricingRawObservation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "raw-g1" },
+        data: expect.objectContaining({
+          parseStatus: "QUARANTINED",
+          parseError: expect.stringContaining("No PricingUnitConversion found"),
         }),
       })
     );
@@ -540,3 +757,112 @@ describe("Phase 2 — Endpoint-Scoped Normalization & Geography Isolation", () =
     expect(rawObs.payload).toEqual(rawPayload);
   });
 });
+
+describe("Phase 3 — Batch Normalization Performance & Batch Pre-fetching", () => {
+  it("processes 25 pending Jindal observations in a single batch without per-row DB round-trips for source, alias, canonical SKU, or geography", async () => {
+    const jindalSource = {
+      id: "src-jindal",
+      code: "JINDAL_PANTHER",
+      defaultTaxTreatment: "INCLUSIVE_GST",
+    };
+    const jindalEndpoint = {
+      id: "ep-jindal",
+      sourceId: "src-jindal",
+      url: "https://www.jindalpanther.com/recommended-consumer-price",
+      geographyLevel: "STATE",
+      stateId: "pgstate_delhi",
+      districtId: null,
+    };
+
+    // Create 25 pending observations (13 for 8mm, 12 for 12mm)
+    const rawObsList = Array.from({ length: 25 }, (_, i) => ({
+      id: `raw-j-batch-${i + 1}`,
+      sourceId: "src-jindal",
+      sourceUrl: jindalEndpoint.url,
+      rawSkuLabel: i % 2 === 0 ? "TMT Fe 550D 8 mm" : "TMT Fe 550D 12 mm",
+      rawPriceText: i % 2 === 0 ? "384" : "750",
+      rawUnitText: "per piece",
+      rawAsOfText: null,
+    }));
+
+    const aliases = [
+      {
+        id: "alias-8mm",
+        sourceId: "src-jindal",
+        rawLabel: "TMT Fe 550D 8 mm",
+        canonicalSkuId: "sku-8mm",
+        occurrenceCount: 10,
+      },
+      {
+        id: "alias-12mm",
+        sourceId: "src-jindal",
+        rawLabel: "TMT Fe 550D 12 mm",
+        canonicalSkuId: "sku-12mm",
+        occurrenceCount: 10,
+      },
+    ];
+
+    const canonicalSkus = [
+      {
+        id: "sku-8mm",
+        code: "TMT_FE550D_8MM_GENERIC",
+        materialCategoryId: "cat-tmt",
+        baseUnit: "KG",
+        specJson: { nominalWeightKgPerMeter: 0.3949 },
+      },
+      {
+        id: "sku-12mm",
+        code: "TMT_FE550D_12MM_GENERIC",
+        materialCategoryId: "cat-tmt",
+        baseUnit: "KG",
+        specJson: { nominalWeightKgPerMeter: 0.8885 },
+      },
+    ];
+
+    const prisma = makeFakePrisma({
+      pricingSourceEndpoint: {
+        findUnique: vi.fn(async () => jindalEndpoint),
+      },
+      pricingRawObservation: {
+        findMany: vi.fn(async () => rawObsList),
+        update: vi.fn(async () => ({})),
+      },
+      pricingSource: {
+        findMany: vi.fn(async () => [jindalSource]),
+        findUnique: vi.fn(async () => jindalSource),
+      },
+      pricingSkuAlias: {
+        findMany: vi.fn(async () => aliases),
+        findUnique: vi.fn(async (query: any) => {
+          const rawLabel = query?.where?.sourceId_rawLabel?.rawLabel;
+          return aliases.find((a) => a.rawLabel === rawLabel) || null;
+        }),
+        update: vi.fn(async () => ({})),
+      },
+      pricingCanonicalSku: {
+        findMany: vi.fn(async () => canonicalSkus),
+        findUnique: vi.fn(async (query: any) => {
+          const id = query?.where?.id;
+          return canonicalSkus.find((s) => s.id === id) || null;
+        }),
+      },
+    });
+
+    const service = buildService(prisma);
+    const result = await service.normalizeEndpoint("ep-jindal", 25);
+
+    expect(result).toEqual({ processed: 25, parsed: 25, unmapped: 0, quarantined: 0, rejected: 0 });
+
+    // Assert batch lookups were called ONCE during batch setup
+    expect(prisma.pricingSource.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.pricingSkuAlias.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.pricingCanonicalSku.findMany).toHaveBeenCalledTimes(1);
+
+    // Assert pricingSource.findUnique was NOT called once per observation (N+1 query check)
+    expect(prisma.pricingSource.findUnique).not.toHaveBeenCalled();
+
+    // Assert 25 observations were created atomically in $transaction
+    expect(prisma.pricingObservation.create).toHaveBeenCalledTimes(25);
+  });
+});
+

@@ -313,3 +313,101 @@ describe("PricingAdminOpsService.globalSearch", () => {
     expect(result.districts).toEqual([{ id: "d1", code: "CHN", name: "Chennai" }]);
   });
 });
+
+describe("PricingAdminOpsService.updateSourceStatus enablement gates", () => {
+  it("allows native source with apifyActorId = null and valid native parser URL to enable when ToS and robots are valid", async () => {
+    const prisma = makeFakePrisma();
+    prisma.pricingSource.findUnique = vi.fn(async () => ({
+      id: "src-jindal",
+      code: "JINDAL_PANTHER",
+      baseUrl: "https://www.jindalpanther.com/recommended-consumer-price",
+      apifyActorId: null,
+      tosReviewedAt: new Date("2026-01-01"),
+      robotsAllowed: true,
+      isEnabled: false,
+    }));
+    prisma.pricingSource.update = vi.fn(async ({ where, data }: any) => ({ id: where.id, code: "JINDAL_PANTHER", isEnabled: data.isEnabled }));
+
+    const service = buildService(prisma);
+    const result = await service.updateSourceStatus("src-jindal", "enable", "pilot test", "admin-1");
+
+    expect(result.isEnabled).toBe(true);
+    expect(prisma.pricingSource.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "src-jindal" }, data: { isEnabled: true } })
+    );
+  });
+
+  it("allows source with valid apifyActorId to enable when ToS and robots are valid", async () => {
+    const prisma = makeFakePrisma();
+    prisma.pricingSource.findUnique = vi.fn(async () => ({
+      id: "src-apify",
+      code: "APIFY_SRC",
+      baseUrl: "https://example.com/pricing",
+      apifyActorId: "apify/cheerio-scraper",
+      tosReviewedAt: new Date("2026-01-01"),
+      robotsAllowed: true,
+      isEnabled: false,
+    }));
+    prisma.pricingSource.update = vi.fn(async ({ where, data }: any) => ({ id: where.id, code: "APIFY_SRC", isEnabled: data.isEnabled }));
+
+    const service = buildService(prisma);
+    const result = await service.updateSourceStatus("src-apify", "enable", "enable apify", "admin-1");
+
+    expect(result.isEnabled).toBe(true);
+  });
+
+  it("blocks source with neither native parser nor apifyActorId", async () => {
+    const prisma = makeFakePrisma();
+    prisma.pricingSource.findUnique = vi.fn(async () => ({
+      id: "src-unknown",
+      code: "UNKNOWN_SRC",
+      baseUrl: "https://unknownsite.com/prices",
+      apifyActorId: null,
+      tosReviewedAt: new Date("2026-01-01"),
+      robotsAllowed: true,
+      isEnabled: false,
+    }));
+
+    const service = buildService(prisma);
+    await expect(service.updateSourceStatus("src-unknown", "enable", undefined, "admin-1")).rejects.toThrow(
+      BadRequestException
+    );
+  });
+
+  it("blocks source when tosReviewedAt is null", async () => {
+    const prisma = makeFakePrisma();
+    prisma.pricingSource.findUnique = vi.fn(async () => ({
+      id: "src-jindal",
+      code: "JINDAL_PANTHER",
+      baseUrl: "https://www.jindalpanther.com/recommended-consumer-price",
+      apifyActorId: null,
+      tosReviewedAt: null,
+      robotsAllowed: true,
+      isEnabled: false,
+    }));
+
+    const service = buildService(prisma);
+    await expect(service.updateSourceStatus("src-jindal", "enable", undefined, "admin-1")).rejects.toThrow(
+      "Cannot enable source: ToS has not been reviewed for this source."
+    );
+  });
+
+  it("blocks source when robotsAllowed is false", async () => {
+    const prisma = makeFakePrisma();
+    prisma.pricingSource.findUnique = vi.fn(async () => ({
+      id: "src-jindal",
+      code: "JINDAL_PANTHER",
+      baseUrl: "https://www.jindalpanther.com/recommended-consumer-price",
+      apifyActorId: null,
+      tosReviewedAt: new Date("2026-01-01"),
+      robotsAllowed: false,
+      isEnabled: false,
+    }));
+
+    const service = buildService(prisma);
+    await expect(service.updateSourceStatus("src-jindal", "enable", undefined, "admin-1")).rejects.toThrow(
+      "Cannot enable source: robots.txt does not allow scraping this source."
+    );
+  });
+});
+

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from "@nes
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { PrismaService } from "src/prisma/prisma.service";
 import { PricingIngestionService } from "src/pricing/pricing-ingestion.service";
+import { hasNativeParserForUrl } from "src/pricing/native-http-extractor-client";
 import type { SourceStatusAction } from "./dto/update-source-status.dto";
 import type { EndpointStatusAction } from "./dto/update-endpoint-status.dto";
 
@@ -187,7 +188,9 @@ export class PricingAdminOpsService {
         rowsCollected,
         rowsParsed,
         rowsPublished: rowsParsed, // no separate "published" counter on PricingScrapeRun yet
-        configComplete: Boolean(source.baseUrl && source.apifyActorId),
+        configComplete: Boolean(
+          source.baseUrl && (hasNativeParserForUrl(source.baseUrl) || source.apifyActorId)
+        ),
       };
     });
 
@@ -212,8 +215,12 @@ export class PricingAdminOpsService {
       if (!source.robotsAllowed) {
         throw new BadRequestException("Cannot enable source: robots.txt does not allow scraping this source.");
       }
-      if (!source.baseUrl || !source.apifyActorId) {
-        throw new BadRequestException("Cannot enable source: configuration is incomplete (baseUrl/apifyActorId).");
+      const hasNativeExtractor = source.baseUrl ? hasNativeParserForUrl(source.baseUrl) : false;
+      const hasApifyExtractor = Boolean(source.apifyActorId);
+      if (!source.baseUrl || (!hasNativeExtractor && !hasApifyExtractor)) {
+        throw new BadRequestException(
+          "Cannot enable source: configuration is incomplete (baseUrl and valid native HTTP parser or apifyActorId required)."
+        );
       }
     }
 
@@ -235,6 +242,7 @@ export class PricingAdminOpsService {
 
     return { id: updated.id, code: updated.code, isEnabled: updated.isEnabled };
   }
+
 
   async testSourceConnection(id: string, actorId: string) {
     const source = await this.prisma.pricingSource.findUnique({ where: { id } });

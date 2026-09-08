@@ -61,10 +61,20 @@ export class PricingNormalizationService {
    * endpoint's trusted geography configuration (geographyLevel, stateId,
    * districtId). Eliminates multi-source geography contamination risk.
    */
+  /**
+   * Safe Phase 2 endpoint-scoped normalization: processes PENDING raw
+   * observations belonging strictly to `endpointId`, using only that
+   * endpoint's trusted geography configuration (geographyLevel, stateId,
+   * districtId). Eliminates multi-source geography contamination risk.
+   *
+   * Optimized: pre-fetches source, SKU aliases, canonical SKUs, unit conversions,
+   * and geography fields once per batch to eliminate N+1 per-row DB round-trips.
+   */
   async normalizeEndpoint(
     endpointId: string,
     limit = 100
   ): Promise<{ processed: number; parsed: number; unmapped: number; quarantined: number; rejected: number }> {
+    const tStart = performance.now();
     const endpoint = await this.prisma.pricingSourceEndpoint.findUnique({
       where: { id: endpointId },
       include: { source: true, state: true, district: true },
@@ -74,6 +84,7 @@ export class PricingNormalizationService {
       throw new Error(`PricingSourceEndpoint "${endpointId}" not found.`);
     }
 
+    const tFetchPendingStart = performance.now();
     const pending = await this.prisma.pricingRawObservation.findMany({
       where: {
         sourceId: endpoint.sourceId,
@@ -105,21 +116,36 @@ export class PricingNormalizationService {
       return { processed: pending.length, parsed: 0, unmapped: 0, quarantined: quarantinedCount, rejected: 0 };
     }
 
+    const tBatchContextStart = performance.now();
+    const batchContext = await this.buildBatchContext(pending, context);
+    const tBatchContextEnd = performance.now();
+
     let parsed = 0;
     let unmapped = 0;
     let quarantined = 0;
     let rejected = 0;
 
+    const tLoopStart = performance.now();
     for (const raw of pending) {
-      const outcome = await this.normalizeOne(raw, context);
-      if (outcome === "PARSED") parsed++;
-      else if (outcome === "UNMAPPED") unmapped++;
-      else if (outcome === "QUARANTINED") quarantined++;
-      else rejected++;
+      try {
+        const outcome = await this.normalizeOne(raw, context, batchContext);
+        if (outcome === "PARSED") parsed++;
+        else if (outcome === "UNMAPPED") unmapped++;
+        else if (outcome === "QUARANTINED") quarantined++;
+        else rejected++;
+      } catch (err) {
+        this.logger.error(`normalizeEndpoint: failed processing raw observation ${raw.id}`, err instanceof Error ? err.stack : String(err));
+        rejected++;
+      }
     }
+    const tLoopEnd = performance.now();
+    const totalMs = (performance.now() - tStart).toFixed(1);
+    const batchContextMs = (tBatchContextEnd - tBatchContextStart).toFixed(1);
+    const loopMs = (tLoopEnd - tLoopStart).toFixed(1);
+    const avgRowMs = pending.length > 0 ? ((tLoopEnd - tLoopStart) / pending.length).toFixed(1) : "0.0";
 
     this.logger.log(
-      `normalizeEndpoint: endpointId=${endpointId} geographyLevel=${context.geographyLevel} processed=${pending.length} parsed=${parsed} unmapped=${unmapped} quarantined=${quarantined} rejected=${rejected}`
+      `normalizeEndpoint: endpointId=${endpointId} geographyLevel=${context.geographyLevel} processed=${pending.length} parsed=${parsed} unmapped=${unmapped} quarantined=${quarantined} rejected=${rejected} timing={totalMs:${totalMs}, batchContextMs:${batchContextMs}, rowsLoopMs:${loopMs}, avgRowMs:${avgRowMs}}`
     );
 
     return { processed: pending.length, parsed, unmapped, quarantined, rejected };
@@ -216,17 +242,28 @@ export class PricingNormalizationService {
       orderBy: { fetchedAt: "asc" },
     });
 
+    if (pending.length === 0) {
+      return { processed: 0, parsed: 0, unmapped: 0, quarantined: 0, rejected: 0 };
+    }
+
+    const batchContext = await this.buildBatchContext(pending, context);
+
     let parsed = 0;
     let unmapped = 0;
     let quarantined = 0;
     let rejected = 0;
 
     for (const raw of pending) {
-      const outcome = await this.normalizeOne(raw, context);
-      if (outcome === "PARSED") parsed++;
-      else if (outcome === "UNMAPPED") unmapped++;
-      else if (outcome === "QUARANTINED") quarantined++;
-      else rejected++;
+      try {
+        const outcome = await this.normalizeOne(raw, context, batchContext);
+        if (outcome === "PARSED") parsed++;
+        else if (outcome === "UNMAPPED") unmapped++;
+        else if (outcome === "QUARANTINED") quarantined++;
+        else rejected++;
+      } catch (err) {
+        this.logger.error(`normalizeBatch: failed processing raw observation ${raw.id}`, err instanceof Error ? err.stack : String(err));
+        rejected++;
+      }
     }
 
     this.logger.log(
@@ -236,38 +273,165 @@ export class PricingNormalizationService {
     return { processed: pending.length, parsed, unmapped, quarantined, rejected };
   }
 
+  /**
+   * Batch pre-fetches source metadata, SKU aliases, canonical SKUs, unit conversions,
+   * and geography fields in memory once per batch to eliminate N+1 per-row DB round-trips.
+   */
+  private async buildBatchContext(
+    pending: { id: string; sourceId: string; rawSkuLabel: string | null; rawUnitText: string | null }[],
+    geography: NormalizationGeographyContext
+  ) {
+    const sourceIds = Array.from(new Set(pending.map((r) => r.sourceId).filter(Boolean)));
+    const sources = sourceIds.length > 0
+      ? await this.prisma.pricingSource.findMany({
+          where: { id: { in: sourceIds } },
+          select: { id: true, code: true, defaultTaxTreatment: true },
+        })
+      : [];
+    const sourceMap = new Map(sources.map((s) => [s.id, s]));
+
+    const geographyFields = await this.resolveGeographyFields(geography);
+
+    // Pre-fetch SKU Aliases
+    const rawLabels = Array.from(new Set(pending.map((r) => r.rawSkuLabel).filter((l): l is string => Boolean(l))));
+    const aliasMap = new Map<string, any>();
+
+    if (rawLabels.length > 0 && sourceIds.length > 0) {
+      const existingAliases = await this.prisma.pricingSkuAlias.findMany({
+        where: {
+          sourceId: { in: sourceIds },
+          rawLabel: { in: rawLabels },
+        },
+      });
+
+      for (const alias of existingAliases) {
+        if (alias.sourceId) {
+          aliasMap.set(`${alias.sourceId}:${alias.rawLabel}`, alias);
+        }
+      }
+
+      // Handle rawLabels that do not exist yet in SKU Aliases
+      for (const raw of pending) {
+        if (!raw.rawSkuLabel) continue;
+        const key = `${raw.sourceId}:${raw.rawSkuLabel}`;
+        if (!aliasMap.has(key)) {
+          const normalizedLabel = this.normalizeLabel(raw.rawSkuLabel);
+          let alias = await this.prisma.pricingSkuAlias.findUnique({
+            where: { sourceId_rawLabel: { sourceId: raw.sourceId, rawLabel: raw.rawSkuLabel } },
+          });
+          if (!alias) {
+            alias = await this.prisma.pricingSkuAlias.create({
+              data: {
+                sourceId: raw.sourceId,
+                rawLabel: raw.rawSkuLabel,
+                normalizedLabel,
+                canonicalSkuId: null,
+                matchType: "EXACT",
+                occurrenceCount: 1,
+              },
+            });
+          } else {
+            await this.prisma.pricingSkuAlias.update({
+              where: { id: alias.id },
+              data: { occurrenceCount: alias.occurrenceCount + 1 },
+            });
+          }
+          aliasMap.set(key, alias);
+        } else {
+          // Increment occurrenceCount in DB and memory
+          const alias = aliasMap.get(key);
+          await this.prisma.pricingSkuAlias.update({
+            where: { id: alias.id },
+            data: { occurrenceCount: alias.occurrenceCount + 1 },
+          });
+          alias.occurrenceCount += 1;
+        }
+      }
+    }
+
+    // Pre-fetch Canonical SKUs
+    const canonicalSkuIds = Array.from(
+      new Set(Array.from(aliasMap.values()).map((a) => a.canonicalSkuId).filter((id): id is string => Boolean(id)))
+    );
+    const canonicalSkus = canonicalSkuIds.length > 0
+      ? await this.prisma.pricingCanonicalSku.findMany({
+          where: { id: { in: canonicalSkuIds } },
+        })
+      : [];
+    const canonicalSkuMap = new Map(canonicalSkus.map((s) => [s.id, s]));
+
+    // Pre-fetch Unit Conversions
+    const categoryIds = Array.from(new Set(canonicalSkus.map((s) => s.materialCategoryId).filter(Boolean)));
+    const unitLabels = Array.from(
+      new Set(pending.map((r) => (r.rawUnitText ?? "").trim().toLowerCase()).filter((u) => u.length > 0))
+    );
+    const unitConversionMap = new Map<string, any>();
+
+    if (categoryIds.length > 0 && unitLabels.length > 0) {
+      const conversions = await this.prisma.pricingUnitConversion.findMany({
+        where: {
+          materialCategoryId: { in: categoryIds },
+          fromLabel: { in: unitLabels },
+        },
+      });
+      for (const conv of conversions) {
+        if (conv.materialCategoryId) {
+          unitConversionMap.set(`${conv.materialCategoryId}:${conv.fromLabel}`, conv);
+        }
+      }
+    }
+
+    return {
+      sourceMap,
+      geographyFields,
+      aliasMap,
+      canonicalSkuMap,
+      unitConversionMap,
+    };
+  }
+
   private async normalizeOne(
     raw: { id: string; sourceId: string; rawSkuLabel: string | null; rawPriceText: string | null; rawUnitText: string | null; rawAsOfText: string | null },
-    geography: NormalizationGeographyContext
+    geography: NormalizationGeographyContext,
+    batchContext?: {
+      sourceMap: Map<string, any>;
+      geographyFields: { geographyLevel: "DISTRICT" | "STATE" | "NATIONAL"; stateId: string | null; districtId: string | null } | null;
+      aliasMap: Map<string, any>;
+      canonicalSkuMap: Map<string, any>;
+      unitConversionMap: Map<string, any>;
+    }
   ): Promise<"PARSED" | "UNMAPPED" | "QUARANTINED" | "REJECTED"> {
     if (!raw.rawSkuLabel || !raw.rawPriceText) {
       await this.markStatus(raw.id, "REJECTED", "Missing rawSkuLabel or rawPriceText");
       return "REJECTED";
     }
 
-    const normalizedLabel = this.normalizeLabel(raw.rawSkuLabel);
-
-    let alias = await this.prisma.pricingSkuAlias.findUnique({
-      where: { sourceId_rawLabel: { sourceId: raw.sourceId, rawLabel: raw.rawSkuLabel } },
-    });
+    const key = `${raw.sourceId}:${raw.rawSkuLabel}`;
+    let alias = batchContext?.aliasMap.get(key);
 
     if (!alias) {
-      // First time we've seen this exact raw label from this source.
-      alias = await this.prisma.pricingSkuAlias.create({
-        data: {
-          sourceId: raw.sourceId,
-          rawLabel: raw.rawSkuLabel,
-          normalizedLabel,
-          canonicalSkuId: null,
-          matchType: "EXACT",
-          occurrenceCount: 1,
-        },
+      const normalizedLabel = this.normalizeLabel(raw.rawSkuLabel);
+      alias = await this.prisma.pricingSkuAlias.findUnique({
+        where: { sourceId_rawLabel: { sourceId: raw.sourceId, rawLabel: raw.rawSkuLabel } },
       });
-    } else {
-      await this.prisma.pricingSkuAlias.update({
-        where: { id: alias.id },
-        data: { occurrenceCount: alias.occurrenceCount + 1 },
-      });
+
+      if (!alias) {
+        alias = await this.prisma.pricingSkuAlias.create({
+          data: {
+            sourceId: raw.sourceId,
+            rawLabel: raw.rawSkuLabel,
+            normalizedLabel,
+            canonicalSkuId: null,
+            matchType: "EXACT",
+            occurrenceCount: 1,
+          },
+        });
+      } else {
+        await this.prisma.pricingSkuAlias.update({
+          where: { id: alias.id },
+          data: { occurrenceCount: alias.occurrenceCount + 1 },
+        });
+      }
     }
 
     if (!alias.canonicalSkuId) {
@@ -275,9 +439,13 @@ export class PricingNormalizationService {
       return "UNMAPPED";
     }
 
-    const canonicalSku = await this.prisma.pricingCanonicalSku.findUnique({
-      where: { id: alias.canonicalSkuId },
-    });
+    let canonicalSku = batchContext?.canonicalSkuMap.get(alias.canonicalSkuId);
+    if (!canonicalSku) {
+      canonicalSku = await this.prisma.pricingCanonicalSku.findUnique({
+        where: { id: alias.canonicalSkuId },
+      });
+    }
+
     if (!canonicalSku) {
       await this.markStatus(raw.id, "UNMAPPED", "Alias points at a canonicalSkuId that no longer exists");
       return "UNMAPPED";
@@ -289,34 +457,85 @@ export class PricingNormalizationService {
       return "REJECTED";
     }
 
+    let source = batchContext?.sourceMap.get(raw.sourceId);
+    if (!source) {
+      source = await this.prisma.pricingSource.findUnique({
+        where: { id: raw.sourceId },
+        select: { code: true, defaultTaxTreatment: true },
+      });
+    }
+
     const unitLabel = (raw.rawUnitText ?? "").trim().toLowerCase();
-    const conversion = unitLabel
-      ? await this.prisma.pricingUnitConversion.findUnique({
+    let conversionFactor: number | null = null;
+    let conversionBaseUnit: "KG" | "TONNE" | "CFT" | "CUM" | "PIECE" | "SQFT" | "LITRE" | "RFT" | "BAG" = canonicalSku.baseUnit;
+
+    // Narrowly scoped, source-backed conversion rule for JINDAL_PANTHER 12m fixed length piece TMT bars
+    if (source?.code === "JINDAL_PANTHER" && (unitLabel === "per piece" || unitLabel === "piece")) {
+      if (canonicalSku.baseUnit !== "KG") {
+        await this.markStatus(
+          raw.id,
+          "QUARANTINED",
+          `Jindal Panther piece conversion expects canonical SKU baseUnit KG, got ${canonicalSku.baseUnit}`
+        );
+        return "QUARANTINED";
+      }
+
+      const specJson = canonicalSku.specJson as { nominalWeightKgPerMeter?: number } | null;
+      const nominalWeight = specJson?.nominalWeightKgPerMeter;
+
+      if (typeof nominalWeight !== "number" || nominalWeight <= 0 || !Number.isFinite(nominalWeight)) {
+        await this.markStatus(
+          raw.id,
+          "QUARANTINED",
+          "Missing or invalid nominalWeightKgPerMeter on canonicalSku specJson for Jindal Panther 12m piece conversion"
+        );
+        return "QUARANTINED";
+      }
+
+      // Jindal Panther published rate table explicitly specifies 12m fixed length for TMT rebar pieces
+      const JINDAL_PANTHER_FIXED_PIECE_LENGTH_METERS = 12;
+      conversionFactor = JINDAL_PANTHER_FIXED_PIECE_LENGTH_METERS * nominalWeight;
+      conversionBaseUnit = "KG";
+    } else {
+      const convKey = `${canonicalSku.materialCategoryId}:${unitLabel}`;
+      let conversion = batchContext?.unitConversionMap.get(convKey);
+
+      if (!conversion && unitLabel) {
+        conversion = await this.prisma.pricingUnitConversion.findUnique({
           where: {
             materialCategoryId_fromLabel: {
               materialCategoryId: canonicalSku.materialCategoryId,
               fromLabel: unitLabel,
             },
           },
-        })
-      : null;
+        });
+      }
 
-    if (!conversion || conversion.isAmbiguous) {
-      await this.markStatus(
-        raw.id,
-        "QUARANTINED",
-        !conversion
-          ? `No PricingUnitConversion found for materialCategoryId=${canonicalSku.materialCategoryId} fromLabel="${unitLabel}"`
-          : `Conversion for "${unitLabel}" is flagged isAmbiguous — requires explicit override, not a guess`
-      );
-      return "QUARANTINED";
+      if (!conversion || conversion.isAmbiguous) {
+        await this.markStatus(
+          raw.id,
+          "QUARANTINED",
+          !conversion
+            ? `No PricingUnitConversion found for materialCategoryId=${canonicalSku.materialCategoryId} fromLabel="${unitLabel}"`
+            : `Conversion for "${unitLabel}" is flagged isAmbiguous — requires explicit override, not a guess`
+        );
+        return "QUARANTINED";
+      }
+
+      conversionFactor = Number(conversion.factor);
+      conversionBaseUnit = conversion.toBaseUnit;
     }
 
-    const pricePerBaseUnit = price / Number(conversion.factor);
+    const pricePerBaseUnit = price / conversionFactor;
+
+    const taxTreatment =
+      source?.defaultTaxTreatment && source.defaultTaxTreatment !== "UNKNOWN"
+        ? source.defaultTaxTreatment
+        : "UNKNOWN";
 
     const asOfDate = this.parseAsOfDate(raw.rawAsOfText);
 
-    const geographyFields = await this.resolveGeographyFields(geography);
+    const geographyFields = batchContext ? batchContext.geographyFields : await this.resolveGeographyFields(geography);
     if (!geographyFields) {
       // DISTRICT geography whose districtId no longer resolves to a
       // PricingDistrict row — never fabricate a stateId, quarantine instead.
@@ -336,8 +555,8 @@ export class PricingNormalizationService {
           quotedPrice: price,
           quotedUnitLabel: unitLabel || "unknown",
           pricePerBaseUnit,
-          baseUnit: conversion.toBaseUnit,
-          taxTreatment: "UNKNOWN",
+          baseUnit: conversionBaseUnit,
+          taxTreatment,
           priceType: "LIST_PRICE",
           asOfDate,
           fetchedAt: new Date(),

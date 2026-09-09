@@ -25,10 +25,10 @@ export default function HeroSection() {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/images/hero.jpg"
-        alt="Steel frame of a building under construction at golden hour"
+        alt="Construction site background with cement bags, steel rebar, and tower cranes"
         width={1920}
         height={1200}
-        className="absolute inset-0 h-full w-full object-cover opacity-45"
+        className="absolute inset-0 h-full w-full object-cover opacity-25"
       />
 
       {/* Charcoal-to-offwhite gradient overlay — overlay strength reduced by

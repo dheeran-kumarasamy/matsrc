@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCategoryEmoji } from "@/lib/category-images";
 import WatchlistToggleIcon from "@/components/products/WatchlistToggleIcon";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 interface Props {
   skeleton?: boolean;
@@ -83,7 +84,7 @@ export default function ProductCard({ skeleton, product }: Props) {
 
       {/* Supplier */}
       <p className="mt-1 text-[11px] uppercase tracking-wide" style={{ color: "var(--posh-fg-muted)" }}>
-        {product.supplier}
+        {getSupplierDisplayName(product.supplier)}
       </p>
 
       {/* Price row — high-contrast charcoal price, real unit label */}

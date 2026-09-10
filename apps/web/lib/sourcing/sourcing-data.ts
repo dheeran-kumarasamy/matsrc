@@ -11,6 +11,7 @@
 //   - Brand + PricingDistrict master data to keep extraction grounded
 
 import { prisma } from "@/lib/builder-db";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 import type { SourcingMatchableListing } from "./product-search";
 import type { SupplierListingRow } from "./supplier-search";
@@ -145,7 +146,7 @@ export async function loadSourcingListings(): Promise<{
       productId: product.id,
       productName: product.name,
       supplierId: product.supplier.id,
-      supplierName: product.supplier.companyName,
+      supplierName: getSupplierDisplayName(product.supplier.companyName, product.supplier.id),
       supplierRegion: product.supplier.region,
       verifiedBadge: product.supplier.verifiedBadge,
       isActive: product.isActive,

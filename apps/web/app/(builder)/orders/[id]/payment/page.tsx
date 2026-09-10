@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { builderApiGet } from "@/lib/api";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import PaymentMethodSelector from "@/components/orders/PaymentMethodSelector";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 type OrderPayment = {
   id: string;
@@ -37,7 +38,7 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
       <header>
         <p className="posh-eyebrow">Payment Link</p>
         <h1 className="posh-page-title mt-2">Order #{order.id.slice(0, 8)}</h1>
-        <p className="posh-subtitle mt-2">{order.supplierName}</p>
+        <p className="posh-subtitle mt-2">{getSupplierDisplayName(order.supplierName)}</p>
       </header>
 
       <div className="posh-card space-y-4 p-6">

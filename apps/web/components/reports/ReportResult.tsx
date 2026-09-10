@@ -8,6 +8,7 @@ import type {
   DistrictPriceIntelligenceRow,
 } from "@/lib/reports-types";
 import ReportDownloadButtons from "@/components/reports/ReportDownloadButtons";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 
 type Props = {
@@ -190,7 +191,7 @@ function LiveMarketPriceResult({ rows }: { rows: LiveMarketPriceRow[] }) {
                   key={offer.supplierId ?? offer.label}
                   className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600"
                 >
-                  {offer.supplierName ?? offer.label} · ₹{offer.price.toLocaleString("en-IN")}
+                  {getSupplierDisplayName(offer.supplierName ?? offer.label, offer.supplierId)} · ₹{offer.price.toLocaleString("en-IN")}
                 </span>
               ))}
             </div>

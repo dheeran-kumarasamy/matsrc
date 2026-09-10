@@ -7,6 +7,7 @@ import {
   getOrCreateBuilder,
   getUserCtx,
 } from "@/lib/builder-db";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +100,10 @@ export async function GET(
       total: Number(order.totalAmount),
       totalLabel: formatCurrency(order.totalAmount),
       deliveryDate: formatDate(order.deliveryDate),
-      supplierName: order.items[0]?.product.supplier.companyName ?? "Supplier",
+      supplierName: getSupplierDisplayName(
+        order.items[0]?.product.supplier.companyName,
+        order.items[0]?.product.supplier.id
+      ),
       // PO trigger point: available once a supplier quote has been accepted for this enquiry.
       // Defensive guard: never true for a cancelled order, even if
       // quoteSelectionCompletedAt was set earlier (e.g. a supplier confirmed,

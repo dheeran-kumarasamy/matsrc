@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { builderApiDelete, builderApiGet, builderApiPost } from "@/lib/api";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 // BUG-06 fix: this input keeps its own local editable string state, synced
 // from the `quantity` prop via useEffect (so +/- button clicks and cart
@@ -212,7 +213,7 @@ export default function CartPage() {
                 <div className="h-16 w-16 shrink-0 rounded-xl border" style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.06)" }} />
                 <div className="flex-1">
                   <p className="text-base font-bold tracking-tight" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
-                  <p className="posh-label mt-1">Supplier: {item.supplierName}</p>
+                  <p className="posh-label mt-1">Supplier: {getSupplierDisplayName(item.supplierName, item.supplierId)}</p>
                   <p className="posh-label mt-0.5">Unit price: ₹{item.unitPrice.toLocaleString("en-IN")}</p>
                   <div className="mt-3 flex items-center gap-3">
                     <div className="flex items-center rounded-full border" style={{ borderColor: "var(--posh-border)" }}>

@@ -6,6 +6,7 @@ import {
   getOrCreateBuilder,
   getUserCtx,
 } from "@/lib/builder-db";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +60,10 @@ export async function GET(request: Request) {
           name: item.product.name,
           unit: item.product.unit,
           supplierId: item.resolvedSupplierId ?? item.product.supplierId,
-          supplierName: item.product.supplier.companyName,
+          supplierName: getSupplierDisplayName(
+            item.product.supplier.companyName,
+            item.resolvedSupplierId ?? item.product.supplierId
+          ),
           quantity: item.quantity,
           unitPrice,
           lineTotal: unitPrice * item.quantity,

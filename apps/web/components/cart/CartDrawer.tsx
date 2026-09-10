@@ -32,6 +32,7 @@ import { useCartStore } from "@/lib/store/cart-store";
 import { builderApiPost } from "@/lib/api";
 import MapLocationPicker from "./MapLocationPicker";
 import SiteSelector from "@/components/orders/SiteSelector";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 
 
@@ -300,7 +301,9 @@ export default function CartDrawer() {
                     <div className="h-14 w-14 shrink-0 rounded-xl" style={{ background: "rgba(var(--posh-wash-rgb),0.08)" }} />
                     <div className="flex-1">
                       <p className="text-sm font-medium" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
-                      <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>{item.supplierName}</p>
+                      <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
+                        {getSupplierDisplayName(item.supplierName, item.supplierId)}
+                      </p>
                       <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>₹{item.unitPrice.toLocaleString("en-IN")}/unit</p>
                       <div className="mt-1.5 flex items-center gap-2">
                         <div className="flex items-center rounded-lg border" style={{ borderColor: "var(--posh-border)" }}>

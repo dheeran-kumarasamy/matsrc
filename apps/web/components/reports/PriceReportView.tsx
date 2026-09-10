@@ -20,6 +20,7 @@ import type {
   BestPriceOffer,
   MarketBenchmark,
 } from "@/lib/price-report-types";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Builder "pricing desk" report page — assembles all 7 modules described in
@@ -413,7 +414,9 @@ function BestPriceModule({ offers }: { offers: BestPriceOffer[] }) {
                     </span>
                   ) : null}
                   <div>
-                    <p className="text-sm font-medium text-deskInk">{offer.supplierName}</p>
+                    <p className="text-sm font-medium text-deskInk">
+                      {getSupplierDisplayName(offer.supplierName, offer.supplierId, idx)}
+                    </p>
                     <p className="text-xs text-deskInk/50">
                       {offer.brand || "—"} · {offer.unit || "unit"}
                     </p>

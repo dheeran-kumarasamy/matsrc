@@ -1,8 +1,8 @@
 "use client";
 
 import { BadgeCheck } from "lucide-react";
-
 import { describeDataGaps, formatInr, type StoredRecommendationView } from "./types";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 // §16 sourcing-result comparison.
 //
@@ -40,7 +40,7 @@ function ComparisonRow({
     >
       <td className="px-4 py-3">
         <div className="flex items-center gap-1.5 font-medium text-slate-800">
-          {row.supplierName}
+          {getSupplierDisplayName(row.supplierName, row.supplierId, row.rank - 1)}
           {row.verifiedBadge && (
             <BadgeCheck className="h-3.5 w-3.5 text-[color:var(--posh-fg)]" aria-label="Verified supplier" />
           )}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { builderApiGet, ApiError } from "@/lib/api";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 import OrderTimeline from "@/components/orders/OrderTimeline";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
@@ -94,7 +95,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           <p className="posh-eyebrow">My Orders</p>
           <h1 className="posh-page-title mt-2">Order #{order.id.slice(0, 8)}</h1>
           <p className="posh-subtitle mt-2">
-            {order.supplierName} · Delivery: {order.deliveryDate}
+            {getSupplierDisplayName(order.supplierName, order.supplierId)} · Delivery: {order.deliveryDate}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">

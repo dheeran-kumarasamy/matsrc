@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { builderApiGet, builderApiPost } from "@/lib/api";
 import { recordInterestEvent } from "@/lib/interest-events";
 import SiteSelector from "@/components/orders/SiteSelector";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 
 async function builderAggregationPost<T>(path: string, body: unknown): Promise<T> {
@@ -209,7 +210,9 @@ export default function CheckoutPage() {
               <div key={group.supplierId} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
                 <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">{group.supplierName}</p>
+                    <p className="text-sm font-semibold text-slate-800">
+                      {getSupplierDisplayName(group.supplierName, group.supplierId)}
+                    </p>
                     <p className="text-xs text-slate-400">{group.items.length} line item(s) will be sent as one enquiry</p>
                   </div>
                   <p className="text-sm font-bold text-slate-900">₹{group.total.toLocaleString("en-IN")}</p>

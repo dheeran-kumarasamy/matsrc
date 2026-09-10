@@ -1,8 +1,8 @@
 "use client";
 
 import { AlertCircle, BadgeCheck, Truck } from "lucide-react";
-
 import { describeDataGaps, formatInr, type StoredRecommendationView } from "./types";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 // §9 customer-facing recommendation card.
 //
@@ -34,7 +34,9 @@ export default function RecommendationCard({
       </p>
 
       <div className="mt-1 flex items-center gap-1.5">
-        <h2 className="text-lg font-semibold text-slate-900">{recommendation.supplierName}</h2>
+        <h2 className="text-lg font-semibold text-slate-900">
+          {getSupplierDisplayName(recommendation.supplierName, recommendation.supplierId, recommendation.rank - 1)}
+        </h2>
         {recommendation.verifiedBadge && (
           <BadgeCheck className="h-4 w-4 text-[color:var(--posh-fg)]" aria-label="Verified supplier" />
         )}

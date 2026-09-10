@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 export const dynamic = "force-dynamic";
 
@@ -73,12 +74,12 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
     return NextResponse.json({
       canonicalProductId,
       title: canonicalProduct.title,
-      offers: offers.map((offer) => ({
+      offers: offers.map((offer, idx) => ({
         productId: offer.id,
         name: offer.name,
         brand: offer.brandRef?.name ?? offer.brand ?? null,
         supplierId: offer.supplierId,
-        supplierName: offer.supplier.companyName,
+        supplierName: getSupplierDisplayName(offer.supplier.companyName, offer.supplierId, idx),
         price: Number(offer.basePrice),
         unit: offer.unit,
         pricingTiers: offer.pricingTiers.map((tier) => ({

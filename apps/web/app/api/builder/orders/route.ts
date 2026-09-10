@@ -7,6 +7,7 @@ import {
   getUserCtx,
 } from "@/lib/builder-db";
 import { createOrdersFromCart } from "@/lib/order-checkout";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 export const dynamic = "force-dynamic";
 
@@ -76,7 +77,7 @@ export async function GET(request: Request) {
             id: true,
             product: {
               select: {
-                supplier: { select: { companyName: true } },
+                supplier: { select: { id: true, companyName: true } },
               },
             },
           },
@@ -86,7 +87,7 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(
-      orders.map((order) => ({
+      orders.map((order, idx) => ({
         id: order.id,
         status: order.status,
         paymentStatus: order.paymentStatus,
@@ -96,7 +97,11 @@ export async function GET(request: Request) {
         createdAt: order.createdAt,
         isAggregated: order.isAggregated,
         aggregationPoolId: order.aggregationPoolId,
-        supplierName: order.items[0]?.product.supplier.companyName ?? "Supplier",
+        supplierName: getSupplierDisplayName(
+          order.items[0]?.product.supplier.companyName,
+          order.items[0]?.product.supplier.id,
+          idx
+        ),
         siteId: order.siteId,
         siteName: order.site?.name ?? "Unassigned",
 

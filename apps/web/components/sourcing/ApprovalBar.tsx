@@ -1,6 +1,7 @@
 "use client";
 
 import { formatInr, type StoredRecommendationView } from "./types";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 // §14 human-approval boundary, in the UI.
 //
@@ -30,13 +31,14 @@ export default function ApprovalBar({
   onCancel,
 }: Props) {
   const hasVerifiedCost = recommendation.estimatedLandedCost !== null;
+  const supplierLabel = getSupplierDisplayName(recommendation.supplierName);
 
   return (
     <section className="panel sticky bottom-4 z-20 p-4">
       <p className="text-sm text-slate-800">
         {hasVerifiedCost ? (
           <>
-            <span className="font-semibold">{recommendation.supplierName}</span> is recommended at an
+            <span className="font-semibold">{supplierLabel}</span> is recommended at an
             estimated delivered cost of{" "}
             <span className="font-semibold">{formatInr(recommendation.estimatedLandedCost)}</span>.
             Proceed with this supplier?
@@ -44,7 +46,7 @@ export default function ApprovalBar({
         ) : (
           <>
             I don&apos;t have verified pricing for{" "}
-            <span className="font-semibold">{recommendation.supplierName}</span> yet, so I can&apos;t
+            <span className="font-semibold">{supplierLabel}</span> yet, so I can&apos;t
             proceed. Select a priced option, or ask me to request a fresh quotation.
           </>
         )}

@@ -28,18 +28,17 @@ export default function HeroSection() {
         alt="Construction site background with cement bags, steel rebar, and tower cranes"
         width={1920}
         height={1200}
-        className="absolute inset-0 h-full w-full object-cover opacity-25"
+        className="absolute inset-0 h-full w-full object-cover opacity-75"
       />
 
-      {/* Charcoal-to-offwhite gradient overlay — overlay strength reduced by
-          ~50% (0.55 → 0.28 top alpha) from the previous treatment so the
-          photograph is significantly more visible, while still keeping the
-          headline/search area legible near the bottom. */}
+      {/* Soft gradient overlay tuned for high legibility while ensuring 
+          the cement bags (left), steel rebars (right) and construction site 
+          remain clearly visible at 75% opacity. */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(180deg, rgba(248,250,252,0.28) 0%, var(--posh-bg) 92%)",
+            "linear-gradient(180deg, rgba(248,250,252,0.45) 0%, rgba(248,250,252,0.2) 40%, rgba(248,250,252,0.35) 100%)",
         }}
       />
 

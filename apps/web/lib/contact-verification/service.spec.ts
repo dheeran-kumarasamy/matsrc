@@ -1,4 +1,3 @@
-// Covers the OTP-based /profile email + phone change flow end-to-end at the
 // service layer, with Prisma and the email/SMS senders mocked (same pattern
 // as lib/sourcing/session-authorization.spec.ts — no real database or
 // network calls). Exercises every scenario called out in the task spec's

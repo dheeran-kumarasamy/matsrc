@@ -239,6 +239,44 @@ export type AdminAuditEntry = {
   createdAt: string;
 };
 
+// ───────────────────────── Scraped Prices List ─────────────────────────
+
+export type PricingScrapedPriceRow = {
+  id: string;
+  priceDate: string;
+  canonicalSku: {
+    id: string;
+    code: string;
+    grade: string | null;
+    sizeLabel: string | null;
+    brandName: string | null;
+    materialCategory: { code: string; name: string } | null;
+  };
+  geographyLevel: "DISTRICT" | "STATE" | "NATIONAL" | string;
+  district: { id: string; code: string; name: string } | null;
+  state: { id: string; code: string; name: string } | null;
+  baseUnit: string;
+  medianPerBaseUnit: number;
+  p25PerBaseUnit: number | null;
+  p75PerBaseUnit: number | null;
+  minPerBaseUnit: number | null;
+  maxPerBaseUnit: number | null;
+  observationCount: number;
+  sourceCount: number;
+  contributingSourceCodes: string[];
+  method: string;
+  confidence: string;
+  publicDisplayAllowed: boolean;
+  computedAt: string;
+};
+
+export type PricingScrapedPricesResponse = {
+  rows: PricingScrapedPriceRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 export type PricingGlobalSearchResult = {
   districts: { id: string; code: string; name: string }[];
   categories: { id: string; code: string; name: string }[];

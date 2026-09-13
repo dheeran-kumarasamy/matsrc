@@ -240,6 +240,29 @@ export class AdminPricingController {
     }
   }
 
+  // ───────────────────────── Scraped Prices List ─────────────────────────
+
+  @Get("scraped-prices")
+  listScrapedPrices(
+    @Query("canonicalSkuId") canonicalSkuId?: string,
+    @Query("districtId") districtId?: string,
+    @Query("search") search?: string,
+    @Query("fromDate") fromDate?: string,
+    @Query("toDate") toDate?: string,
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string
+  ) {
+    return this.ops.listScrapedPrices({
+      canonicalSkuId,
+      districtId,
+      search,
+      fromDate,
+      toDate,
+      page: page ? Number(page) : undefined,
+      pageSize: pageSize ? Number(pageSize) : undefined,
+    });
+  }
+
   // ───────────────────────── Batch C: Canonical SKU Management ─────────────────────────
 
   @Get("sku/canonical")

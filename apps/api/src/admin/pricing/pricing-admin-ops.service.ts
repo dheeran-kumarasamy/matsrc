@@ -461,6 +461,117 @@ export class PricingAdminOpsService {
     };
   }
 
+  // ───────────────────────── Scraped Prices List ─────────────────────────
+
+  /**
+   * Lists the normalized, rolled-up scraped prices per product (canonical
+   * SKU) from PricingDistrictPriceDaily — the same serving-layer table the
+   * public pricing endpoints and the AI Sourcing Assistant's price
+   * intelligence read from. This is deliberately NOT the raw
+   * PricingRawObservation/PricingObservation rows: those are pre-normalization
+   * scrape artifacts (may include duplicates, unmapped labels, excluded
+   * outliers); PricingDistrictPriceDaily is the de-duplicated, anomaly-
+   * filtered, one-row-per-SKU-per-geography-per-day view that the rest of
+   * the platform already treats as "the scraped price" for a product.
+   *
+   * Supports optional filters (all AND-combined) and is paginated —
+   * this table can grow to one row per SKU × geography × day.
+   */
+  async listScrapedPrices(filters: {
+    canonicalSkuId?: string;
+    districtId?: string;
+    search?: string;
+    fromDate?: string;
+    toDate?: string;
+    page?: number;
+    pageSize?: number;
+  }) {
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const pageSize = filters.pageSize && filters.pageSize > 0 ? Math.min(filters.pageSize, 200) : 50;
+
+    const where: Record<string, unknown> = {};
+    if (filters.canonicalSkuId) where.canonicalSkuId = filters.canonicalSkuId;
+    if (filters.districtId) where.districtId = filters.districtId;
+    if (filters.fromDate || filters.toDate) {
+      where.priceDate = {
+        ...(filters.fromDate ? { gte: new Date(filters.fromDate) } : {}),
+        ...(filters.toDate ? { lte: new Date(filters.toDate) } : {}),
+      };
+    }
+    if (filters.search) {
+      const term = filters.search.trim();
+      if (term) {
+        where.canonicalSku = {
+          OR: [
+            { code: { contains: term, mode: "insensitive" } },
+            { grade: { contains: term, mode: "insensitive" } },
+            { brand: { name: { contains: term, mode: "insensitive" } } },
+          ],
+        };
+      }
+    }
+
+    const [rows, total] = await Promise.all([
+      this.prisma.pricingDistrictPriceDaily.findMany({
+        where,
+        orderBy: [{ priceDate: "desc" }, { canonicalSkuId: "asc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          canonicalSku: {
+            select: {
+              id: true,
+              code: true,
+              grade: true,
+              sizeLabel: true,
+              brand: { select: { name: true } },
+              materialCategory: { select: { code: true, name: true } },
+            },
+          },
+          district: { select: { id: true, code: true, name: true } },
+          state: { select: { id: true, code: true, name: true } },
+        },
+      }),
+      this.prisma.pricingDistrictPriceDaily.count({ where }),
+    ]);
+
+    return {
+      rows: rows.map((row) => ({
+        id: row.id,
+        priceDate: row.priceDate.toISOString().slice(0, 10),
+        canonicalSku: {
+          id: row.canonicalSku.id,
+          code: row.canonicalSku.code,
+          grade: row.canonicalSku.grade,
+          sizeLabel: row.canonicalSku.sizeLabel,
+          brandName: row.canonicalSku.brand?.name ?? null,
+          materialCategory: row.canonicalSku.materialCategory
+            ? { code: row.canonicalSku.materialCategory.code, name: row.canonicalSku.materialCategory.name }
+            : null,
+        },
+        geographyLevel: row.geographyLevel,
+        district: row.district ? { id: row.district.id, code: row.district.code, name: row.district.name } : null,
+        state: row.state ? { id: row.state.id, code: row.state.code, name: row.state.name } : null,
+        baseUnit: row.baseUnit,
+        medianPerBaseUnit: Number(row.medianPerBaseUnit),
+        p25PerBaseUnit: row.p25PerBaseUnit !== null ? Number(row.p25PerBaseUnit) : null,
+        p75PerBaseUnit: row.p75PerBaseUnit !== null ? Number(row.p75PerBaseUnit) : null,
+        minPerBaseUnit: row.minPerBaseUnit !== null ? Number(row.minPerBaseUnit) : null,
+        maxPerBaseUnit: row.maxPerBaseUnit !== null ? Number(row.maxPerBaseUnit) : null,
+        observationCount: row.observationCount,
+        sourceCount: row.sourceCount,
+        contributingSourceCodes: row.contributingSourceCodes,
+        method: row.method,
+        confidence: row.confidence,
+        publicDisplayAllowed: row.publicDisplayAllowed,
+        computedAt: row.computedAt.toISOString(),
+      })),
+      total,
+      page,
+      pageSize,
+    };
+  }
+
   // ───────────────────────── Batch C: Canonical SKU Management ─────────────────────────
 
   async listCanonicalSkus(search?: string) {

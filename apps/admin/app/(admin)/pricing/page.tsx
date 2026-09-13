@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PricingAnomalyBoard, type AdminPricingAnomaly } from "@/components/admin/PricingAnomalyBoard";
 import { PricingDashboardPanel } from "@/components/admin/pricing/PricingDashboardPanel";
 import { SourceManagementPanel } from "@/components/admin/pricing/SourceManagementPanel";
@@ -92,6 +93,20 @@ export default async function PricingPage() {
   return (
     <div className="space-y-6">
       <PricingDashboardPanel summary={dashboard} />
+      <section className="panel flex flex-wrap items-center justify-between gap-3 p-4">
+        <div>
+          <h3 className="text-lg font-bold text-slate-950">Scraped Prices</h3>
+          <p className="mt-1 text-sm text-slate-600">
+            Browse the normalized daily scraped price for every product, by date and geography.
+          </p>
+        </div>
+        <Link
+          href="/pricing/scraped-prices"
+          className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+        >
+          View Scraped Prices →
+        </Link>
+      </section>
       <SourceManagementPanel sources={sources} />
       <EndpointHealthPanel endpoints={endpoints} />
       <CoverageMatrixPanel matrix={coverageMatrix} />

@@ -4,7 +4,7 @@
 //
 // Change HIDE_SUPPLIER_NAMES to false when you want to display real supplier names on the website.
 
-export const HIDE_SUPPLIER_NAMES = true;
+export const HIDE_SUPPLIER_NAMES = false;
 
 const supplierIndexMap = new Map<string, number>();
 

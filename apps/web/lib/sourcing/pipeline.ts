@@ -33,7 +33,7 @@ import {
   resolveCanonicalSkuId,
   resolveDistrictId,
 } from "./sourcing-intelligence-data";
-import { findSuppliers, partitionByLocation } from "./supplier-search";
+import { findSuppliers } from "./supplier-search";
 import type {
   ProductSearchOutcome,
   RankedSupplierOption,
@@ -150,8 +150,14 @@ export async function runSourcingTurn(input: RunTurnInput): Promise<SourcingTurn
     listings: rowsWithLeadTimes,
   });
 
-  const { local, other } = partitionByLocation(allCandidates, requirement.location);
-  const candidates = local.length > 0 ? local : other;
+  // Location is a DISCLOSURE attribute (candidate.locality, set by
+  // find_suppliers), never a hard exclusion filter. A local supplier's
+  // existence must never remove a cheaper non-local/unknown-region supplier
+  // from price comparison — see the /sourcing pricing investigation. Every
+  // active, matched, priced-or-unpriced candidate is carried forward into
+  // landed-cost calculation and ranking; rank_suppliers is what surfaces the
+  // true lowest landed cost, with locality shown as metadata alongside it.
+  const candidates = allCandidates;
 
   if (candidates.length === 0) {
     return {

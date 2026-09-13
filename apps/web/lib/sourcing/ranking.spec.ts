@@ -13,6 +13,7 @@ function candidate(
 ): SourcingSupplierCandidate {
   return {
     location: "Erode",
+    locality: "LOCAL",
     productId: `prod-${overrides.supplierId}`,
     productName: "PPC Cement",
     availability: "IN_STOCK",

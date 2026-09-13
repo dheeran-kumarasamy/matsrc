@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
 import { getRecommendations, getSession } from "@/lib/sourcing/session-store";
+import { classifyLocality } from "@/lib/sourcing/supplier-search";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
         supplierId: row.supplierId,
         supplierName: row.supplier.companyName,
         supplierRegion: row.supplier.region,
+        // Disclosure only (never re-filters the already-persisted ranking) —
+        // derived at read time from the persisted supplier region plus the
+        // session's requested delivery location, no schema change required.
+        locality: classifyLocality(row.supplier.region, session.requirement.location),
         verifiedBadge: row.supplier.verifiedBadge,
         productId: row.productId,
         score: Number(row.score),

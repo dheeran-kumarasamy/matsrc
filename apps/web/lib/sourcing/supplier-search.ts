@@ -24,6 +24,7 @@
 
 import { effectiveTierForQuantity, type ResolutionCandidate } from "../resolution";
 import type {
+  SourcingLocality,
   SourcingProductMatch,
   SourcingRequirement,
   SourcingSupplierCandidate,
@@ -82,6 +83,26 @@ function availabilityOf(
 }
 
 /**
+ * Classifies a supplier's locality relative to the requested delivery
+ * location. DISCLOSURE ONLY — never used to exclude a candidate (§7/§8 of the
+ * investigation). A supplier with no region on file is UNKNOWN, never
+ * silently coerced into LOCAL (which would misrepresent it as serviceable
+ * nearby) or NON_LOCAL (which would misrepresent it as confirmed distant).
+ */
+export function classifyLocality(
+  supplierRegion: string | null,
+  requestedLocation: string | null
+): SourcingLocality {
+  const target = normalizeKey(requestedLocation);
+  if (!target) return "UNKNOWN";
+
+  const region = normalizeKey(supplierRegion);
+  if (!region) return "UNKNOWN";
+
+  return region.includes(target) || target.includes(region) ? "LOCAL" : "NON_LOCAL";
+}
+
+/**
  * `find_suppliers` tool implementation.
  *
  * Filters the given listings to the matched products, resolves each supplier's
@@ -137,6 +158,7 @@ export function findSuppliers({
       supplierId: row.supplierId,
       supplierName: row.supplierName,
       location: row.supplierRegion,
+      locality: classifyLocality(row.supplierRegion, requirement.location),
       productId: row.productId,
       productName: row.productName,
       availability: availabilityOf(serviceable, requirement.quantity),

@@ -103,6 +103,7 @@ describe("template explanation is always accurate without AI", () => {
   ): SourcingSupplierCandidate {
     return {
       location: "Erode",
+      locality: "LOCAL",
       productId: "prod-1",
       productName: "PPC Cement",
       availability: "IN_STOCK",

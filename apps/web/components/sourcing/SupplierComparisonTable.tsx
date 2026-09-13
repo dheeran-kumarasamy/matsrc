@@ -1,7 +1,7 @@
 "use client";
 
 import { BadgeCheck } from "lucide-react";
-import { describeDataGaps, formatInr, type StoredRecommendationView } from "./types";
+import { describeDataGaps, describeLocality, formatInr, type StoredRecommendationView } from "./types";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 // §16 sourcing-result comparison.
@@ -46,6 +46,15 @@ function ComparisonRow({
           )}
         </div>
         {row.supplierRegion && <div className="text-xs text-slate-500">{row.supplierRegion}</div>}
+        <div
+          className={`mt-0.5 inline-block rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+            row.locality === "LOCAL"
+              ? "bg-[rgba(var(--posh-wash-rgb),0.10)] text-[color:var(--posh-fg)]"
+              : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          {describeLocality(row.locality)}
+        </div>
       </td>
 
       <td className="px-4 py-3 text-right font-medium text-slate-800">

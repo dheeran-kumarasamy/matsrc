@@ -30,10 +30,17 @@ export type ProductMatchView = {
   stage: string;
 };
 
+/**
+ * Mirrors lib/sourcing/types.ts's SourcingLocality. Disclosure only — never
+ * used to hide a supplier from the comparison table.
+ */
+export type SourcingLocalityView = "LOCAL" | "NON_LOCAL" | "UNKNOWN";
+
 export type SupplierCandidateView = {
   supplierId: string;
   supplierName: string;
   location: string | null;
+  locality: SourcingLocalityView;
   productId: string;
   productName: string;
   availability: "IN_STOCK" | "PARTIAL" | "UNKNOWN";
@@ -79,6 +86,7 @@ export type StoredRecommendationView = {
   supplierId: string;
   supplierName: string;
   supplierRegion: string | null;
+  locality: SourcingLocalityView;
   verifiedBadge: boolean;
   productId: string | null;
   score: number;
@@ -188,4 +196,16 @@ export const DATA_GAP_LABELS: Record<string, string> = {
 
 export function describeDataGaps(gaps: string[]): string {
   return gaps.map((gap) => DATA_GAP_LABELS[gap] ?? gap).join(", ");
+}
+
+/** Human label for a supplier's locality relative to the requested delivery location. */
+export function describeLocality(locality: SourcingLocalityView): string {
+  switch (locality) {
+    case "LOCAL":
+      return "Local";
+    case "NON_LOCAL":
+      return "Outside requested location";
+    default:
+      return "Region unknown";
+  }
 }

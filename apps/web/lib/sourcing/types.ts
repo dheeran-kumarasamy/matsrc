@@ -106,6 +106,22 @@ export type ProductSearchOutcome = {
 };
 
 /**
+ * Whether a supplier's region matches the requested delivery location.
+ *
+ * This is a DISCLOSURE attribute only — see supplier-search.ts's
+ * classifyLocality() and pipeline.ts's runSourcingTurn(). It must never be
+ * used to remove an otherwise-eligible supplier from price comparison; a
+ * cheaper NON_LOCAL or UNKNOWN supplier must still compete on landed cost.
+ *
+ *   LOCAL     — SupplierProfile.region textually matches the requested
+ *               delivery location.
+ *   NON_LOCAL — the supplier has a region on file, but it does not match.
+ *   UNKNOWN   — the supplier has no region on file at all. Never coerced
+ *               into LOCAL or NON_LOCAL, and never a reason for exclusion.
+ */
+export type SourcingLocality = "LOCAL" | "NON_LOCAL" | "UNKNOWN";
+
+/**
  * A candidate supplier for the requirement. Every field here comes from the
  * database / live listings feed — nothing is inferred.
  */
@@ -114,6 +130,8 @@ export type SourcingSupplierCandidate = {
   supplierName: string;
   /** SupplierProfile.region — null when the supplier hasn't set one. */
   location: string | null;
+  /** Locality relative to the requested delivery location. Disclosure only. */
+  locality: SourcingLocality;
   productId: string;
   productName: string;
   /** Availability derived from stock/maxServiceableQty only. */

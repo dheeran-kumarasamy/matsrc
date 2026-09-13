@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertCircle, BadgeCheck, Truck } from "lucide-react";
-import { describeDataGaps, formatInr, type StoredRecommendationView } from "./types";
+import { describeDataGaps, describeLocality, formatInr, type StoredRecommendationView } from "./types";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 // §9 customer-facing recommendation card.
@@ -40,6 +40,15 @@ export default function RecommendationCard({
         {recommendation.verifiedBadge && (
           <BadgeCheck className="h-4 w-4 text-[color:var(--posh-fg)]" aria-label="Verified supplier" />
         )}
+        <span
+          className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+            recommendation.locality === "LOCAL"
+              ? "bg-[rgba(var(--posh-wash-rgb),0.10)] text-[color:var(--posh-fg)]"
+              : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          {describeLocality(recommendation.locality)}
+        </span>
       </div>
 
       <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">

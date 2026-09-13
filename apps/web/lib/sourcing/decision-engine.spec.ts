@@ -11,6 +11,7 @@ function makeCandidate(id: string): SourcingSupplierCandidate {
     supplierId: id,
     supplierName: `Supplier ${id}`,
     location: "Erode",
+    locality: "LOCAL",
     productId: "prod-1",
     productName: "PPC Cement",
     availability: "IN_STOCK",

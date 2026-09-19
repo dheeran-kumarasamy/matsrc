@@ -24,6 +24,7 @@ import { canRecommend, rankSuppliers, recommendationHeadline } from "./ranking";
 import { isRequirementComplete, nextClarificationQuestion } from "./requirement-extractor";
 import {
   loadFreightObservations,
+  loadGeographyIndex,
   loadMasterData,
   loadSourcingListings,
   loadSupplierLeadTimes,
@@ -138,7 +139,18 @@ export async function runSourcingTurn(input: RunTurnInput): Promise<SourcingTurn
   }
 
   // ── 4. find_suppliers ──
-  const leadTimes = await loadSupplierLeadTimes();
+  const [leadTimes, geography] = await Promise.all([
+    loadSupplierLeadTimes(),
+    // Real district -> state hierarchy, used ONLY to recognise that a
+    // supplier's state-level region (e.g. "Tamilnadu") is a pricing match
+    // for a district-level request (e.g. "Erode") — never to exclude a
+    // candidate. Failing soft here (falling back to no STATE tier) must
+    // never break a sourcing turn.
+    loadGeographyIndex().catch((err) => {
+      console.warn("[sourcing] geography index unavailable:", err instanceof Error ? err.message : err);
+      return undefined;
+    }),
+  ]);
   const rowsWithLeadTimes = rows.map((row) => ({
     ...row,
     leadTimeDays: leadTimes.get(row.supplierId) ?? null,
@@ -148,6 +160,7 @@ export async function runSourcingTurn(input: RunTurnInput): Promise<SourcingTurn
     requirement,
     productMatches: productSearch.matches,
     listings: rowsWithLeadTimes,
+    geography,
   });
 
   // Location is a DISCLOSURE attribute (candidate.locality, set by

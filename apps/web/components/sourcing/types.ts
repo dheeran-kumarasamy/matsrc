@@ -32,9 +32,12 @@ export type ProductMatchView = {
 
 /**
  * Mirrors lib/sourcing/types.ts's SourcingLocality. Disclosure only — never
- * used to hide a supplier from the comparison table.
+ * used to hide a supplier from the comparison table. STATE means the
+ * supplier's pricing region resolves (via the platform's real district/state
+ * hierarchy) to the same state as the requested delivery location — e.g. a
+ * "Tamilnadu" supplier IS price-applicable to an "Erode" request.
  */
-export type SourcingLocalityView = "LOCAL" | "NON_LOCAL" | "UNKNOWN";
+export type SourcingLocalityView = "LOCAL" | "STATE" | "NON_LOCAL" | "UNKNOWN";
 
 export type SupplierCandidateView = {
   supplierId: string;
@@ -203,9 +206,25 @@ export function describeLocality(locality: SourcingLocalityView): string {
   switch (locality) {
     case "LOCAL":
       return "Local";
+    case "STATE":
+      return "Price applicable to your location";
     case "NON_LOCAL":
       return "Outside requested location";
     default:
       return "Region unknown";
   }
+}
+
+/**
+ * True when a supplier is NOT confirmed local — i.e. freight to the
+ * requested delivery location has not necessarily been accounted for.
+ * Drives the "additional delivery/freight charges may apply" disclosure
+ * (§7/§16 of the pricing-geography refinement). Deliberately NOT the same
+ * question as `dataGaps.includes("freight")` on its own: a LOCAL supplier
+ * with unknown freight still gets that dataGaps disclosure from the landed
+ * cost breakdown, but does not need the distance-based warning below, since
+ * "local" already implies the shortest/most likely-served route.
+ */
+export function needsFreightDisclosure(locality: SourcingLocalityView): boolean {
+  return locality !== "LOCAL";
 }

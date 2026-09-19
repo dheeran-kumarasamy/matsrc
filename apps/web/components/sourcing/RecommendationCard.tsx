@@ -1,7 +1,13 @@
 "use client";
 
-import { AlertCircle, BadgeCheck, Truck } from "lucide-react";
-import { describeDataGaps, describeLocality, formatInr, type StoredRecommendationView } from "./types";
+import { AlertCircle, AlertTriangle, BadgeCheck, Truck } from "lucide-react";
+import {
+  describeDataGaps,
+  describeLocality,
+  formatInr,
+  needsFreightDisclosure,
+  type StoredRecommendationView,
+} from "./types";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 // §9 customer-facing recommendation card.
@@ -54,7 +60,9 @@ export default function RecommendationCard({
       <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div>
           <dt className="text-[11px] uppercase tracking-wide text-slate-500">
-            Estimated delivered cost
+            {recommendation.dataGaps.includes("freight")
+              ? "Material price incl. GST"
+              : "Estimated delivered cost"}
           </dt>
           <dd className="text-sm font-semibold text-slate-900">
             {formatInr(recommendation.estimatedLandedCost)}
@@ -65,6 +73,13 @@ export default function RecommendationCard({
               {unit ? `/${unit}` : ""}
             </dd>
           )}
+          {needsFreightDisclosure(recommendation.locality) &&
+            recommendation.dataGaps.includes("freight") && (
+              <dd className="mt-1 flex items-center gap-1 text-[11px] text-amber-600">
+                <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span>Additional delivery/freight charges may apply</span>
+              </dd>
+            )}
         </div>
 
         <div>

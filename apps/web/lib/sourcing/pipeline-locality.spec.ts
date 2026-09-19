@@ -23,6 +23,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { buildGeographyIndex } from "./geography";
 import { calculateLandedCost } from "./landed-cost";
 import { canRecommend, rankSuppliers, recommendationHeadline } from "./ranking";
 import { findSuppliers, type SupplierListingRow } from "./supplier-search";
@@ -37,6 +38,12 @@ const REQUIREMENT = validateRequirement({
   unit: "bags",
   location: "Erode",
 });
+
+/** Mirrors the real PricingDistrict/PricingState rows (Erode -> Tamil Nadu). */
+const GEOGRAPHY = buildGeographyIndex(
+  [{ name: "Erode", stateName: "Tamil Nadu" }],
+  [{ name: "Tamil Nadu", code: "TN" }]
+);
 
 /** Builds a confident product match for a given listing/productId. */
 function productMatch(productId: string): SourcingProductMatch {
@@ -119,11 +126,12 @@ const FOUR_LISTINGS: SupplierListingRow[] = [
  * find_suppliers (post-fix): every candidate is carried into landed cost +
  * ranking, with no location-based exclusion.
  */
-function priceAndRankAll(listings: SupplierListingRow[]) {
+function priceAndRankAll(listings: SupplierListingRow[], geography = GEOGRAPHY) {
   const candidates = findSuppliers({
     requirement: REQUIREMENT,
     productMatches: listings.map((listing) => productMatch(listing.productId)),
     listings,
+    geography,
   });
 
   const ranking = candidates.map((candidate) => ({
@@ -146,13 +154,18 @@ describe("Shree Cement OPC 43 — location must not exclude cheaper suppliers", 
       requirement: REQUIREMENT,
       productMatches: FOUR_LISTINGS.map((listing) => productMatch(listing.productId)),
       listings: FOUR_LISTINGS,
+      geography: GEOGRAPHY,
     });
 
     expect(candidates).toHaveLength(4);
 
     const bySupplier = new Map(candidates.map((c) => [c.supplierId, c]));
     expect(bySupplier.get("girinathan")?.locality).toBe("LOCAL");
-    expect(bySupplier.get("dheeran")?.locality).toBe("NON_LOCAL");
+    // Tamil Nadu resolves to the SAME state as Erode via the real
+    // PricingDistrict/PricingState hierarchy, so this is STATE-applicable
+    // pricing — NEVER NON_LOCAL/excluded (this is the mandatory regression
+    // from the pricing-geography refinement).
+    expect(bySupplier.get("dheeran")?.locality).toBe("STATE");
     expect(bySupplier.get("mithran-g")?.locality).toBe("UNKNOWN");
     expect(bySupplier.get("mithran-g-csa-erd")?.locality).toBe("UNKNOWN");
   });
@@ -189,6 +202,28 @@ describe("Shree Cement OPC 43 — location must not exclude cheaper suppliers", 
     const { options } = priceAndRankAll(FOUR_LISTINGS);
     expect(canRecommend(options)).toBe(true);
     expect(recommendationHeadline(options)).toBe("Best available option based on current data");
+  });
+
+  it("flags every non-local/unknown option with an unresolved freight data gap (drives the UI freight warning)", () => {
+    const { options } = priceAndRankAll(FOUR_LISTINGS);
+    const byId = new Map(options.map((option) => [option.supplierId, option]));
+
+    // Freight is never fabricated for any of these — no real freight
+    // observation exists in the fixtures, matching the production data this
+    // scenario was derived from.
+    for (const supplierId of ["dheeran", "mithran-g", "mithran-g-csa-erd", "girinathan"]) {
+      expect(byId.get(supplierId)?.landedCost.dataGaps).toContain("freight");
+    }
+    // These three are NOT confirmed local, so the UI must show the
+    // "additional freight may apply" warning for them.
+    expect(byId.get("dheeran")?.candidate.locality).not.toBe("LOCAL");
+    expect(byId.get("mithran-g")?.candidate.locality).not.toBe("LOCAL");
+    expect(byId.get("mithran-g-csa-erd")?.candidate.locality).not.toBe("LOCAL");
+    // The Erode supplier IS local — freight is still unknown here too (no
+    // freight observation exists for it either), but the disclosure rule
+    // (needsFreightDisclosure) intentionally treats LOCAL differently in the
+    // UI layer, since "local" already implies the shortest likely route.
+    expect(byId.get("girinathan")?.candidate.locality).toBe("LOCAL");
   });
 });
 
@@ -263,5 +298,50 @@ describe("locality classification — regression matrix", () => {
     expect(candidates).toEqual([]);
     expect(options).toEqual([]);
     expect(canRecommend(options)).toBe(false);
+  });
+
+  it("Erode customer + Tamil Nadu supplier: pricing is applicable, never excluded", () => {
+    const listings = [
+      listingRow({ productId: "p1", supplierId: "tn-supplier", supplierRegion: "Tamilnadu", basePrice: 390.5 }),
+    ];
+    const { candidates, options } = priceAndRankAll(listings);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].locality).toBe("STATE");
+    expect(options).toHaveLength(1);
+    expect(options[0].landedCost.unitLandedCost).toBeCloseTo(460.79, 2);
+  });
+
+  it("Non-local supplier with KNOWN freight: landed cost includes it (not just material price)", () => {
+    const candidate = findSuppliers({
+      requirement: REQUIREMENT,
+      productMatches: [productMatch("p1")],
+      listings: [listingRow({ productId: "p1", supplierId: "far", supplierRegion: "Delhi", basePrice: 280 })],
+      geography: GEOGRAPHY,
+    })[0];
+    expect(candidate.locality).toBe("NON_LOCAL");
+
+    const landedCost = calculateLandedCost({
+      quantity: 500,
+      unitMaterialPrice: candidate.basePrice,
+      freightCost: 5000, // a genuinely KNOWN freight observation
+      deliveryCharges: null,
+      handlingCharges: null,
+    });
+
+    expect(landedCost.dataGaps).not.toContain("freight");
+    // (280*500 + 5000) * 1.18 / 500 = 342.20 — a real, freight-inclusive
+    // delivered price, distinct from the material-only 280*1.18=330.40.
+    expect(landedCost.unitLandedCost).toBeCloseTo(342.2, 2);
+  });
+
+  it("Different state supplier remains a candidate but is NON_LOCAL, not STATE", () => {
+    const candidates = findSuppliers({
+      requirement: REQUIREMENT,
+      productMatches: [productMatch("p1")],
+      listings: [listingRow({ productId: "p1", supplierId: "delhi-sup", supplierRegion: "Delhi", basePrice: 260 })],
+      geography: GEOGRAPHY,
+    });
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].locality).toBe("NON_LOCAL");
   });
 });

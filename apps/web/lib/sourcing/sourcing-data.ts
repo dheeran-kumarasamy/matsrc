@@ -13,6 +13,7 @@
 import { prisma } from "@/lib/builder-db";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 
+import { buildGeographyIndex, type GeographyIndex } from "./geography";
 import type { SourcingMatchableListing } from "./product-search";
 import type { SupplierListingRow } from "./supplier-search";
 import type { FreightObservation } from "./price-lookup";
@@ -54,6 +55,29 @@ export async function loadMasterData(): Promise<SourcingMasterData> {
     brands: brands.map((brand) => brand.name).filter(Boolean),
     locations: Array.from(locations),
   };
+}
+
+/**
+ * Loads the platform's real district -> state hierarchy (PricingDistrict /
+ * PricingState — the same master-data tables the AGNI price-intelligence
+ * layer uses), so `find_suppliers` can classify a supplier's free-text
+ * region as STATE-applicable (e.g. "Tamilnadu" applies to a request for
+ * "Erode") using real data rather than a fabricated mapping. Read-only,
+ * cheap (bounded row counts), and never mutates PricingDistrict/PricingState.
+ */
+export async function loadGeographyIndex(): Promise<GeographyIndex> {
+  const [districts, states] = await Promise.all([
+    prisma.pricingDistrict.findMany({
+      select: { name: true, state: { select: { name: true } } },
+      take: 1000,
+    }),
+    prisma.pricingState.findMany({ select: { name: true, code: true }, take: 100 }),
+  ]);
+
+  return buildGeographyIndex(
+    districts.map((district) => ({ name: district.name, stateName: district.state.name })),
+    states
+  );
 }
 
 /**

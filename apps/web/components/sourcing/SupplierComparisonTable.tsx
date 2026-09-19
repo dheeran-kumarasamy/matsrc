@@ -1,7 +1,13 @@
 "use client";
 
-import { BadgeCheck } from "lucide-react";
-import { describeDataGaps, describeLocality, formatInr, type StoredRecommendationView } from "./types";
+import { AlertTriangle, BadgeCheck } from "lucide-react";
+import {
+  describeDataGaps,
+  describeLocality,
+  formatInr,
+  needsFreightDisclosure,
+  type StoredRecommendationView,
+} from "./types";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 // §16 sourcing-result comparison.
@@ -65,9 +71,24 @@ function ComparisonRow({
       </td>
 
       <td className="px-4 py-3 text-right text-slate-600">
-        {row.unitLandedCost === null
-          ? "Not available"
-          : `${formatInr(row.unitLandedCost)}${row.unit ? `/${row.unit}` : ""}`}
+        {row.unitLandedCost === null ? (
+          "Not available"
+        ) : (
+          <>
+            {`${formatInr(row.unitLandedCost)}${row.unit ? `/${row.unit}` : ""}`}
+            <div className="text-[11px] font-normal text-slate-400">
+              {row.dataGaps.includes("freight")
+                ? "Material price incl. GST"
+                : "Estimated delivered price"}
+            </div>
+          </>
+        )}
+        {needsFreightDisclosure(row.locality) && row.dataGaps.includes("freight") && (
+          <div className="mt-1 flex items-center justify-end gap-1 text-[11px] font-normal text-amber-600">
+            <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span>Additional freight may apply</span>
+          </div>
+        )}
       </td>
 
       <td className="px-4 py-3 text-slate-600">

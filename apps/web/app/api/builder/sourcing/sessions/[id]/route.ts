@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { loadGeographyIndex } from "@/lib/sourcing/sourcing-data";
 import { getRecommendations, getSession } from "@/lib/sourcing/session-store";
 import { classifyLocality } from "@/lib/sourcing/supplier-search";
 
@@ -26,6 +27,17 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
     const recommendations = await getRecommendations(user.id, session.id);
 
+    // Fails soft: if the geography lookup is unavailable, locality simply
+    // falls back to LOCAL/NON_LOCAL/UNKNOWN (never STATE) — same convention
+    // as the rest of the /sourcing pricing-intelligence integrations.
+    const geography = await loadGeographyIndex().catch((err) => {
+      console.warn(
+        "[sourcing] geography index unavailable on session read:",
+        err instanceof Error ? err.message : err
+      );
+      return undefined;
+    });
+
     return NextResponse.json({
       id: session.id,
       status: session.status,
@@ -45,7 +57,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
         // Disclosure only (never re-filters the already-persisted ranking) —
         // derived at read time from the persisted supplier region plus the
         // session's requested delivery location, no schema change required.
-        locality: classifyLocality(row.supplier.region, session.requirement.location),
+        locality: classifyLocality(row.supplier.region, session.requirement.location, geography),
         verifiedBadge: row.supplier.verifiedBadge,
         productId: row.productId,
         score: Number(row.score),

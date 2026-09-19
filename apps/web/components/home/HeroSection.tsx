@@ -18,9 +18,9 @@ export default function HeroSection() {
       className="relative flex items-center overflow-hidden"
       style={{ background: "var(--posh-bg)" }}
     >
-      {/* Hero background photograph. Previous opacity (0.25) reduced by
-          ~50% relative overlay strength — i.e. the image is now roughly
-          twice as visible — while the gradient below still keeps the
+      {/* Hero background photograph. Opacity increased from 75% to 95%
+          (i.e. made 20 percentage points less transparent) so the image
+          reads more strongly, while the gradient below still keeps the
           centered content readable. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -28,12 +28,12 @@ export default function HeroSection() {
         alt="Construction site background with cement bags, steel rebar, and tower cranes"
         width={1920}
         height={1200}
-        className="absolute inset-0 h-full w-full object-cover opacity-75"
+        className="absolute inset-0 h-full w-full object-cover opacity-95"
       />
 
       {/* Soft gradient overlay tuned for high legibility while ensuring 
           the cement bags (left), steel rebars (right) and construction site 
-          remain clearly visible at 75% opacity. */}
+          remain clearly visible at 95% opacity. */}
       <div
         className="absolute inset-0"
         style={{

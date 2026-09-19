@@ -114,12 +114,24 @@ export type ProductSearchOutcome = {
  * cheaper NON_LOCAL or UNKNOWN supplier must still compete on landed cost.
  *
  *   LOCAL     — SupplierProfile.region textually matches the requested
- *               delivery location.
- *   NON_LOCAL — the supplier has a region on file, but it does not match.
+ *               delivery location (same district/place).
+ *   STATE     — the supplier's pricing/region resolves, via the platform's
+ *               real PricingDistrict -> PricingState hierarchy, to the SAME
+ *               state as the requested delivery location, even though it is
+ *               not the same district. e.g. a "Tamilnadu"-region supplier's
+ *               price IS applicable when the customer requests "Erode",
+ *               because Erode is a Tamil Nadu district. This is a PRICING
+ *               APPLICABILITY signal, not a statement about physical
+ *               proximity or freight — see calculateLandedCost/dataGaps for
+ *               the (separate) freight-known-vs-unknown distinction.
+ *   NON_LOCAL — the supplier has a region on file, and it resolves to a
+ *               different state (or cannot be matched at all against the
+ *               requested location).
  *   UNKNOWN   — the supplier has no region on file at all. Never coerced
- *               into LOCAL or NON_LOCAL, and never a reason for exclusion.
+ *               into LOCAL, STATE or NON_LOCAL, and never a reason for
+ *               exclusion.
  */
-export type SourcingLocality = "LOCAL" | "NON_LOCAL" | "UNKNOWN";
+export type SourcingLocality = "LOCAL" | "STATE" | "NON_LOCAL" | "UNKNOWN";
 
 /**
  * A candidate supplier for the requirement. Every field here comes from the

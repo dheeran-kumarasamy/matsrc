@@ -23,6 +23,7 @@
 //     Null until the schema models it.
 
 import { effectiveTierForQuantity, type ResolutionCandidate } from "../resolution";
+import { resolveState, type GeographyIndex } from "./geography";
 import type {
   SourcingLocality,
   SourcingProductMatch,
@@ -66,6 +67,14 @@ export type FindSuppliersInput = {
   /** Products the requirement matched (from search_products). */
   productMatches: SourcingProductMatch[];
   listings: SupplierListingRow[];
+  /**
+   * The platform's real district/state hierarchy, used only to classify
+   * `locality` as STATE when a supplier's region is in the same state as the
+   * requested location (e.g. "Tamilnadu" for a request to "Erode"). Optional
+   * — omitting it simply means STATE is never assigned (falls back to
+   * NON_LOCAL), never an error and never a change to LOCAL/UNKNOWN behaviour.
+   */
+  geography?: GeographyIndex;
 };
 
 /** Normalizes a name for comparison ("Erode " / "erode" -> "erode"). */
@@ -85,13 +94,31 @@ function availabilityOf(
 /**
  * Classifies a supplier's locality relative to the requested delivery
  * location. DISCLOSURE ONLY — never used to exclude a candidate (§7/§8 of the
- * investigation). A supplier with no region on file is UNKNOWN, never
- * silently coerced into LOCAL (which would misrepresent it as serviceable
- * nearby) or NON_LOCAL (which would misrepresent it as confirmed distant).
+ * investigation, and the follow-up pricing-geography refinement). A supplier
+ * with no region on file is UNKNOWN, never silently coerced into LOCAL
+ * (which would misrepresent it as serviceable nearby) or NON_LOCAL (which
+ * would misrepresent it as confirmed distant).
+ *
+ * Resolution order:
+ *   1. LOCAL     — the free-text region textually matches the requested
+ *                  location (same district/place; the original substring
+ *                  match, unchanged).
+ *   2. STATE     — not the same place, but the platform's real
+ *                  PricingDistrict/PricingState hierarchy (`geography`, when
+ *                  supplied) shows the supplier's region and the requested
+ *                  location resolve to the SAME state — e.g. "Tamilnadu"
+ *                  is applicable to a request for "Erode" because Erode is a
+ *                  Tamil Nadu district. `geography` is optional so this
+ *                  function stays usable (and its LOCAL/UNKNOWN behaviour
+ *                  identical) anywhere the caller has not loaded it.
+ *   3. NON_LOCAL — a region is on file but resolves to a different state (or
+ *                  cannot be resolved against the requested location at all).
+ *   4. UNKNOWN   — no region on file.
  */
 export function classifyLocality(
   supplierRegion: string | null,
-  requestedLocation: string | null
+  requestedLocation: string | null,
+  geography?: GeographyIndex
 ): SourcingLocality {
   const target = normalizeKey(requestedLocation);
   if (!target) return "UNKNOWN";
@@ -99,7 +126,17 @@ export function classifyLocality(
   const region = normalizeKey(supplierRegion);
   if (!region) return "UNKNOWN";
 
-  return region.includes(target) || target.includes(region) ? "LOCAL" : "NON_LOCAL";
+  if (region.includes(target) || target.includes(region)) return "LOCAL";
+
+  if (geography) {
+    const supplierState = resolveState(supplierRegion, geography);
+    const requestedState = resolveState(requestedLocation, geography);
+    if (supplierState && requestedState && supplierState === requestedState) {
+      return "STATE";
+    }
+  }
+
+  return "NON_LOCAL";
 }
 
 /**
@@ -114,6 +151,7 @@ export function findSuppliers({
   requirement,
   productMatches,
   listings,
+  geography,
 }: FindSuppliersInput): SourcingSupplierCandidate[] {
   if (productMatches.length === 0 || listings.length === 0) return [];
 
@@ -158,7 +196,7 @@ export function findSuppliers({
       supplierId: row.supplierId,
       supplierName: row.supplierName,
       location: row.supplierRegion,
-      locality: classifyLocality(row.supplierRegion, requirement.location),
+      locality: classifyLocality(row.supplierRegion, requirement.location, geography),
       productId: row.productId,
       productName: row.productName,
       availability: availabilityOf(serviceable, requirement.quantity),

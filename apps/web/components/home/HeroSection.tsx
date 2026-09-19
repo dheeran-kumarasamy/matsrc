@@ -46,46 +46,46 @@ export default function HeroSection() {
           deliberately small so the CTAs sit close to the Verified Suppliers
           trust bar immediately below. */}
       <div className="relative mx-auto flex w-full max-w-4xl flex-col items-center px-6 pb-6 pt-16 text-center md:px-10 md:pb-8">
-        {/* Text container with 50% opacity background overlay to decrease hero picture transparency by 50% specifically where text appears */}
+        {/* Gradual overlay behind text area — decreases hero picture transparency by 50% at center and smoothly fades out without strict borders */}
         <div
-          className="flex w-full flex-col items-center rounded-2xl px-6 py-6 backdrop-blur-md md:px-10"
+          className="pointer-events-none absolute left-1/2 top-10 -z-10 h-72 w-full max-w-3xl -translate-x-1/2 rounded-full blur-xl"
           style={{
-            background: "rgba(248, 250, 252, 0.5)",
-            boxShadow: "0 4px 20px rgba(0, 0, 0, 0.03)",
+            background:
+              "radial-gradient(ellipse at center, rgba(248, 250, 252, 0.75) 0%, rgba(248, 250, 252, 0.4) 50%, rgba(248, 250, 252, 0) 80%)",
           }}
+        />
+
+        {/* Eyebrow */}
+        <p
+          className="mb-6 text-xs font-bold uppercase tracking-[0.35em]"
+          style={{ color: "var(--posh-olive)" }}
         >
-          {/* Eyebrow */}
-          <p
-            className="mb-6 text-xs font-bold uppercase tracking-[0.35em]"
-            style={{ color: "var(--posh-olive)" }}
-          >
-            Materials · India
-          </p>
+          Materials · India
+        </p>
 
-          {/* Main headline — "Procurement made easy" on one line on desktop:
-              charcoal "Procurement" + lowercase italic olive "made easy".
-              Sized to ~60% of the previous rendered size (was
-              text-4xl/5xl/6xl → 2.25/3/3.75rem; now 1.35/1.8/2.25rem) with
-              letter-spacing opened up to read clearly at the smaller size
-              (~1.2x more open than the previous tracking-tight treatment).
-              Wrapping is only allowed on narrow mobile widths where it's
-              required to avoid overflow. */}
-          <h1
-            className="max-w-full whitespace-normal font-extrabold leading-[1.15] md:whitespace-nowrap"
-            style={{ fontSize: "clamp(1.35rem, 1.05rem + 1.4vw, 2.25rem)", letterSpacing: "0.012em" }}
-          >
-            <span style={{ color: "var(--posh-fg)" }}>Procurement </span>
-            <span className="italic lowercase" style={{ color: "var(--posh-olive)" }}>made easy</span>
-          </h1>
+        {/* Main headline — "Procurement made easy" on one line on desktop:
+            charcoal "Procurement" + lowercase italic olive "made easy".
+            Sized to ~60% of the previous rendered size (was
+            text-4xl/5xl/6xl → 2.25/3/3.75rem; now 1.35/1.8/2.25rem) with
+            letter-spacing opened up to read clearly at the smaller size
+            (~1.2x more open than the previous tracking-tight treatment).
+            Wrapping is only allowed on narrow mobile widths where it's
+            required to avoid overflow. */}
+        <h1
+          className="max-w-full whitespace-normal font-extrabold leading-[1.15] md:whitespace-nowrap"
+          style={{ fontSize: "clamp(1.35rem, 1.05rem + 1.4vw, 2.25rem)", letterSpacing: "0.012em" }}
+        >
+          <span style={{ color: "var(--posh-fg)" }}>Procurement </span>
+          <span className="italic lowercase" style={{ color: "var(--posh-olive)" }}>made easy</span>
+        </h1>
 
-          <p
-            className="mt-6 max-w-xl text-base leading-relaxed md:text-lg"
-            style={{ color: "var(--posh-fg-muted)" }}
-          >
-            Live prices, verified suppliers, and tracked deliveries — one place
-            to procure cement, steel, and aggregates across India.
-          </p>
-        </div>
+        <p
+          className="mt-6 max-w-xl text-base leading-relaxed md:text-lg"
+          style={{ color: "var(--posh-fg-muted)" }}
+        >
+          Live prices, verified suppliers, and tracked deliveries — one place
+          to procure cement, steel, and aggregates across India.
+        </p>
 
         {/* Search bar */}
         <form

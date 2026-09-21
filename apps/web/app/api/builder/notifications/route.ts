@@ -14,10 +14,11 @@ export async function GET(request: Request) {
   try {
     const ctx = getUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
+    const userIds = Array.from(new Set([user.id, ctx.userId, ctx.email].filter(Boolean)));
 
     const [rows, unreadCount] = await Promise.all([
       prisma.notification.findMany({
-        where: { userId: user.id },
+        where: { userId: { in: userIds } },
         orderBy: { createdAt: "desc" },
         take: 30,
         select: {
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
           variables: true,
         },
       }),
-      prisma.notification.count({ where: { userId: user.id, read: false } }),
+      prisma.notification.count({ where: { userId: { in: userIds }, read: false } }),
     ]);
 
     // Order-status notifications (submitted/accepted/declined/dispatched/
@@ -65,11 +66,12 @@ export async function PATCH(request: Request) {
   try {
     const ctx = getUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
+    const userIds = Array.from(new Set([user.id, ctx.userId, ctx.email].filter(Boolean)));
     const body = await request.json().catch(() => ({}));
 
     if (body?.all) {
       await prisma.notification.updateMany({
-        where: { userId: user.id, read: false },
+        where: { userId: { in: userIds }, read: false },
         data: { read: true },
       });
       return NextResponse.json({ success: true });

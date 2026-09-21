@@ -13,9 +13,10 @@ export async function PATCH(
   try {
     const ctx = getUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
+    const userIds = Array.from(new Set([user.id, ctx.userId, ctx.email].filter(Boolean)));
 
     const existing = await prisma.notification.findFirst({
-      where: { id: params.id, userId: user.id },
+      where: { id: params.id, userId: { in: userIds } },
       select: { id: true },
     });
 

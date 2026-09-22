@@ -31,15 +31,21 @@ export default async function SupplierRfqsPage({ searchParams }: { searchParams?
   return (
     <section className="space-y-3">
       <div className="panel p-5">
-        <h3 className="text-xl font-extrabold text-slate-900">Open RFQs</h3>
+        <h3 className="text-xl font-extrabold text-slate-900">Open RFQs & Enquiries</h3>
         <p className="text-sm text-slate-600">Respond quickly to improve ranking in builder procurement decisions.</p>
       </div>
       <QuoteResponseForm rfqId={searchParams?.respond ?? null} />
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {rfqs.map((rfq: SupplierRfqCard) => (
-          <RfqCard key={rfq.id} rfq={rfq} marketGuidance={guidanceByRfqId.get(rfq.id) ?? null} />
-        ))}
-      </div>
+      {rfqs.length === 0 ? (
+        <div className="panel p-5">
+          <p className="text-sm text-slate-600">No open RFQs or enquiries right now.</p>
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {rfqs.map((rfq: SupplierRfqCard) => (
+            <RfqCard key={rfq.id} rfq={rfq} marketGuidance={guidanceByRfqId.get(rfq.id) ?? null} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

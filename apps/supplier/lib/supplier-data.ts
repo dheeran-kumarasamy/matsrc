@@ -1246,6 +1246,14 @@ export type SupplierRfqCard = {
     price: string;
     validUntil: string | null;
   } | null;
+  // "RFQ": a real QuickRequest row — respond via the existing Quote form
+  // (POST /api/supplier/rfqs/:id/quote).
+  // "ENQUIRY": a PLACED order/enquiry surfaced here so this page is never
+  // empty just because no builder-facing flow currently creates
+  // QuickRequest rows (see comment on getSupplierRfqs below) — the correct
+  // supplier action for these is Confirm/Decline on the order detail page,
+  // not the Quote form, so the UI must route these differently.
+  source: "RFQ" | "ENQUIRY";
 };
 
 export async function getSupplierOrderDetail(orderId: string, email: string): Promise<SupplierOrderDetail | null> {
@@ -1546,22 +1554,50 @@ export async function updateSupplierOrderStatus(
 
 
 
+// The "/rfqs" page is meant to show every open request awaiting this
+// supplier's response. In practice, however, the builder-facing "Quick
+// Material Request" form (apps/web/components/cart/QuickRequestForm.tsx)
+// was rewired to submit straight into the ordinary cart/checkout enquiry
+// pipeline (creating an Order/OrderItem, exactly like a normal cart
+// checkout) rather than creating a QuickRequest row — and no other
+// builder-facing UI calls POST /builder/rfqs either. So the QuickRequest
+// table stays empty even though real enquiries keep arriving, and this page
+// showed nothing while "Pending Enquiries" on the dashboard (sourced from
+// PLACED OrderItems) correctly showed them.
+//
+// Fix: surface both sources here so the page reflects everything actually
+// awaiting a supplier decision, exactly like "Pending Enquiries" already
+// does — genuine QuickRequest RFQs (source: "RFQ", respond via the Quote
+// form) alongside PLACED order enquiries (source: "ENQUIRY", respond via
+// Confirm/Decline on the order detail page). No data is invented — each
+// entry maps 1:1 to a real QuickRequest or a real pending OrderItem.
 export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]> {
   const { supplierProfile } = await ensureSupplierContext(email);
 
-  const rfqs = await prisma.quickRequest.findMany({
-    include: {
-      quotes: {
-        where: { supplierId: supplierProfile.id },
-        orderBy: { createdAt: "desc" },
-        take: 1,
+  const [rfqs, pendingEnquiryItems] = await Promise.all([
+    prisma.quickRequest.findMany({
+      include: {
+        quotes: {
+          where: { supplierId: supplierProfile.id },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
       },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 12,
-  });
+      orderBy: { createdAt: "desc" },
+      take: 12,
+    }),
+    prisma.orderItem.findMany({
+      where: {
+        supplierId: supplierProfile.id,
+        order: { status: "PLACED" },
+      },
+      include: { product: true, order: true },
+      orderBy: { order: { createdAt: "desc" } },
+      take: 12,
+    }),
+  ]);
 
-  return rfqs.map((rfq: any) => ({
+  const rfqCards: SupplierRfqCard[] = rfqs.map((rfq: any) => ({
     id: rfq.id,
     material: rfq.materialName,
     quantity: rfq.quantity,
@@ -1573,7 +1609,24 @@ export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]>
           validUntil: rfq.quotes[0].validUntil?.toISOString() ?? null,
         }
       : null,
+    source: "RFQ",
   }));
+
+  const enquiryCards: SupplierRfqCard[] = pendingEnquiryItems.map((item: any) => ({
+    id: item.orderId,
+    material: item.product.name,
+    quantity: `${item.quantity} ${item.product.unit}`,
+    // OrderItem/Order have no dedicated pincode field (see Order model in
+    // packages/db/prisma/schema.prisma — delivery location is captured via
+    // deliveryLat/deliveryLng/deliveryAddress instead) — fall back to the
+    // formatted delivery address rather than fabricating a pincode value.
+    pincode: item.order.deliveryAddress ?? "See order for delivery details",
+    dueBy: formatDate(item.deliveryDate ?? item.order.deliveryDate),
+    latestQuote: null,
+    source: "ENQUIRY",
+  }));
+
+  return [...rfqCards, ...enquiryCards];
 }
 
 export async function createSupplierQuote(

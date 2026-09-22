@@ -11,20 +11,36 @@ type Rfq = {
     price: string;
     validUntil: string | null;
   } | null;
+  // "RFQ": a real QuickRequest — respond via the Quote form on this page.
+  // "ENQUIRY": a PLACED order enquiry surfaced here so this page is never
+  // empty (see getSupplierRfqs in lib/supplier-data.ts) — respond via
+  // Confirm/Decline on the order detail page instead, since that's the
+  // action that actually applies to an Order/OrderItem.
+  source?: "RFQ" | "ENQUIRY";
 };
 
 export function RfqCard({ rfq, marketGuidance }: { rfq: Rfq; marketGuidance?: RfqMarketGuidanceView }) {
+  const isEnquiry = rfq.source === "ENQUIRY";
+
   return (
     <article className="panel p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">RFQ #{rfq.id}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        {isEnquiry ? `Enquiry #${rfq.id.slice(0, 8)}` : `RFQ #${rfq.id}`}
+      </p>
       <h3 className="mt-2 text-lg font-extrabold text-slate-900">{rfq.material}</h3>
       <p className="mt-1 text-sm text-slate-700">Qty: {rfq.quantity}</p>
-      <p className="text-sm text-slate-700">Delivery PIN: {rfq.pincode}</p>
-      <p className="text-sm text-slate-500">Bid due: {rfq.dueBy}</p>
+      <p className="text-sm text-slate-700">Delivery: {rfq.pincode}</p>
+      <p className="text-sm text-slate-500">{isEnquiry ? "Delivery due" : "Bid due"}: {rfq.dueBy}</p>
       {rfq.latestQuote ? <p className="mt-2 text-sm font-semibold text-emerald-700">Quoted: ₹{rfq.latestQuote.price}</p> : null}
-      <Link href={`/rfqs?respond=${rfq.id}`} className="mt-4 inline-flex rounded-lg bg-orange-500 px-3 py-2 text-sm font-bold text-white">
-        Respond with Quote
-      </Link>
+      {isEnquiry ? (
+        <Link href={`/orders/${rfq.id}`} className="mt-4 inline-flex rounded-lg bg-orange-500 px-3 py-2 text-sm font-bold text-white">
+          Confirm or Decline
+        </Link>
+      ) : (
+        <Link href={`/rfqs?respond=${rfq.id}`} className="mt-4 inline-flex rounded-lg bg-orange-500 px-3 py-2 text-sm font-bold text-white">
+          Respond with Quote
+        </Link>
+      )}
       {marketGuidance ? <RfqQuoteAssistPanel rfqId={rfq.id} guidance={marketGuidance} /> : null}
     </article>
   );

@@ -19,22 +19,39 @@ export class RfqsService {
     private readonly whatsAppAlertService: WhatsAppAlertService
   ) {}
 
+  // Mirrors the equivalent fix in apps/supplier/lib/supplier-data.ts's
+  // getSupplierRfqs — the builder-facing "Quick Material Request" form
+  // submits into the ordinary cart/checkout enquiry pipeline (Order/
+  // OrderItem) rather than creating a QuickRequest row, and no builder UI
+  // calls POST /builder/rfqs, so QuickRequest stays empty while real PLACED
+  // enquiries keep arriving. Surface both sources here for the same reason.
   async findAll(user: any) {
     const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
 
-    const rfqs = await this.prisma.quickRequest.findMany({
-      include: {
-        quotes: {
-          where: { supplierId: supplierProfile.id },
-          orderBy: { createdAt: "desc" },
-          take: 1,
+    const [rfqs, pendingEnquiryItems] = await Promise.all([
+      this.prisma.quickRequest.findMany({
+        include: {
+          quotes: {
+            where: { supplierId: supplierProfile.id },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    });
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+      this.prisma.orderItem.findMany({
+        where: {
+          supplierId: supplierProfile.id,
+          order: { status: "PLACED" },
+        },
+        include: { product: true, order: true },
+        orderBy: { order: { createdAt: "desc" } },
+        take: 20,
+      }),
+    ]);
 
-    return rfqs.map((rfq) => ({
+    const rfqCards = rfqs.map((rfq) => ({
       id: rfq.id,
       material: rfq.materialName,
       quantity: rfq.quantity,
@@ -46,7 +63,20 @@ export class RfqsService {
             validUntil: rfq.quotes[0].validUntil?.toISOString() ?? null,
           }
         : null,
+      source: "RFQ" as const,
     }));
+
+    const enquiryCards = pendingEnquiryItems.map((item) => ({
+      id: item.orderId,
+      material: item.product.name,
+      quantity: `${item.quantity} ${item.product.unit}`,
+      pincode: item.order.deliveryAddress ?? "See order for delivery details",
+      dueBy: formatDate(item.deliveryDate ?? item.order.deliveryDate),
+      latestQuote: null,
+      source: "ENQUIRY" as const,
+    }));
+
+    return [...rfqCards, ...enquiryCards];
   }
 
   async findEnquiryQuotes(enquiryId: string, user: any) {

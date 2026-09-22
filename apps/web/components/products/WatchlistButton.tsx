@@ -44,6 +44,19 @@ export default function WatchlistButton({ productId, initialWatching = false }: 
 
   async function saveWatchlist() {
     setError("");
+
+    if (targetPrice !== "") {
+      const num = Number(targetPrice);
+      if (isNaN(num) || num < 0) {
+        setError("Target price cannot be negative");
+        return;
+      }
+      if (num === 0) {
+        setError("Target price must be greater than zero");
+        return;
+      }
+    }
+
     try {
       await add(productId, targetPrice || undefined);
       setShowTarget(false);
@@ -53,7 +66,7 @@ export default function WatchlistButton({ productId, initialWatching = false }: 
         router.push(`/auth/login?callbackUrl=${encodeURIComponent(window.location.pathname)}`);
         return;
       }
-      setError("Failed to save");
+      setError(err instanceof Error ? err.message : "Failed to save");
     }
   }
 
@@ -76,12 +89,28 @@ export default function WatchlistButton({ productId, initialWatching = false }: 
         <div className="mt-2 flex gap-2">
           <input
             type="number"
+            min="0"
             placeholder="Alert me below ₹..."
             value={targetPrice}
-            onChange={(e) => setTargetPrice(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setTargetPrice(val);
+              if (val !== "") {
+                const num = Number(val);
+                if (num < 0) {
+                  setError("Target price cannot be negative");
+                } else if (num === 0) {
+                  setError("Target price must be greater than zero");
+                } else {
+                  setError("");
+                }
+              } else {
+                setError("");
+              }
+            }}
             className="flex-1 rounded-xl border border-[color:var(--posh-border)] px-3 py-2 text-xs font-medium text-[color:var(--posh-fg)] focus:border-[color:var(--posh-primary)] focus:outline-none focus:ring-1 focus:ring-[color:var(--posh-primary)]"
           />
-          <button onClick={saveWatchlist} disabled={saving} className="posh-btn-solid rounded-full px-4 text-xs font-bold uppercase tracking-[0.14em] disabled:opacity-50">{saving ? "..." : "Save"}</button>
+          <button onClick={saveWatchlist} disabled={saving || (targetPrice !== "" && Number(targetPrice) <= 0)} className="posh-btn-solid rounded-full px-4 text-xs font-bold uppercase tracking-[0.14em] disabled:opacity-50">{saving ? "..." : "Save"}</button>
         </div>
       )}
       {error && <p className="mt-1 text-xs font-bold text-[color:var(--posh-fg)]">{error}</p>}

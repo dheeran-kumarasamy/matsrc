@@ -35,13 +35,23 @@ export class WatchlistService {
     const product = await this.prisma.product.findUnique({ where: { id: dto.productId } });
     if (!product) throw new NotFoundException("Product not found");
 
+    const targetPrice = dto.targetPrice !== undefined && dto.targetPrice !== null && dto.targetPrice !== "" ? Number(dto.targetPrice) : null;
+    if (targetPrice !== null) {
+      if (isNaN(targetPrice) || targetPrice < 0) {
+        throw new BadRequestException("Target price cannot be negative");
+      }
+      if (targetPrice === 0) {
+        throw new BadRequestException("Target price must be greater than zero");
+      }
+    }
+
     const item = await this.prisma.watchlist.upsert({
       where: { userId_productId: { userId: user.id, productId: dto.productId } },
-      update: { targetPrice: dto.targetPrice ? Number(dto.targetPrice) : null },
+      update: { targetPrice },
       create: {
         userId: user.id,
         productId: dto.productId,
-        targetPrice: dto.targetPrice ? Number(dto.targetPrice) : null,
+        targetPrice,
       },
     });
 

@@ -101,7 +101,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    const targetPrice = targetPriceRaw ? Number(targetPriceRaw) : null;
+    const targetPrice = targetPriceRaw !== undefined && targetPriceRaw !== null && targetPriceRaw !== "" ? Number(targetPriceRaw) : null;
+
+    if (targetPrice !== null) {
+      if (isNaN(targetPrice) || targetPrice < 0) {
+        return NextResponse.json({ error: "Target price cannot be negative" }, { status: 400 });
+      }
+      if (targetPrice === 0) {
+        return NextResponse.json({ error: "Target price must be greater than zero" }, { status: 400 });
+      }
+    }
 
     const item = await prisma.watchlist.upsert({
       where: { userId_productId: { userId: user.id, productId } },

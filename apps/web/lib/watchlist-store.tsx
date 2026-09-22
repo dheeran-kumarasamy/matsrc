@@ -100,6 +100,15 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const add = useCallback(
     async (productId: string, targetPrice?: string | number | null) => {
       if (!isAuthenticated) throw new ApiError("Not authenticated", 401);
+      if (targetPrice !== undefined && targetPrice !== null && targetPrice !== "") {
+        const num = Number(targetPrice);
+        if (isNaN(num) || num < 0) {
+          throw new Error("Target price cannot be negative");
+        }
+        if (num === 0) {
+          throw new Error("Target price must be greater than zero");
+        }
+      }
       setPending(productId, true);
       try {
         await builderApiPost("/watchlist", {

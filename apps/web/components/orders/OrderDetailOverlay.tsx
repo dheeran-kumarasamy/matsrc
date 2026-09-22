@@ -258,9 +258,11 @@ export default function OrderDetailOverlay({ order }: Props) {
                 <p className="text-sm text-slate-500">
                   {order.status === "CANCELLED"
                     ? "This enquiry was declined, so payment is not available."
+                    : order.status === "PLACED"
+                    ? "Waiting for supplier confirmation before payment becomes available."
                     : order.paymentLinkAvailable
                     ? "Supplier has confirmed this enquiry. The payment link is now enabled."
-                    : "Waiting for supplier confirmation before payment becomes available."}
+                    : "Supplier has confirmed this enquiry."}
                 </p>
                 <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                   Payment status: <span className="font-semibold text-slate-900">{order.paymentStatus}</span>

@@ -180,13 +180,29 @@ export async function PATCH(req: NextRequest) {
     if (orderMatch) {
       const orderId = orderMatch[1];
       const { supplierProfile } = await ensureSupplierContext(email);
-      const updated = await updateSupplierOrderStatus(
-        orderId,
-        body.status,
-        supplierProfile.id,
-        typeof body.reason === "string" ? body.reason : undefined
-      );
-      return NextResponse.json(updated);
+      try {
+        const updated = await updateSupplierOrderStatus(
+          orderId,
+          body.status,
+          supplierProfile.id,
+          typeof body.reason === "string" ? body.reason : undefined
+        );
+        return NextResponse.json(updated);
+      } catch (transitionError: any) {
+        // Reject invalid state transitions (e.g. dispatching before
+        // acceptance, confirming an already-accepted enquiry) with 400
+        // rather than falling through to the generic 500 handler below —
+        // this is a client error (stale UI / direct API call), not a
+        // server fault. See lib/order-status-transitions.ts and
+        // updateSupplierOrderStatus's guard in lib/supplier-data.ts.
+        if (typeof transitionError?.message === "string" && transitionError.message.startsWith("Invalid order status transition")) {
+          return NextResponse.json({ message: transitionError.message }, { status: 400 });
+        }
+        if (transitionError?.message === "Order not found") {
+          return NextResponse.json({ message: "Order not found" }, { status: 404 });
+        }
+        throw transitionError;
+      }
     }
 
 

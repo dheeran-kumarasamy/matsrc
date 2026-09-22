@@ -218,9 +218,11 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             <p className="posh-subtitle">
               {order.status === "CANCELLED"
                 ? "This enquiry was declined, so payment is not available."
+                : order.status === "PLACED"
+                ? "Waiting for supplier confirmation before payment becomes available."
                 : order.paymentLinkAvailable
                 ? "Supplier has confirmed this enquiry. The payment link is now enabled."
-                : "Waiting for supplier confirmation before payment becomes available."}
+                : "Supplier has confirmed this enquiry."}
             </p>
             <div
               className="rounded-xl border px-4 py-3 text-sm font-medium"

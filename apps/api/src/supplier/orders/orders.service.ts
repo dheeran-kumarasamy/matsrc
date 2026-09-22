@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from "@nestjs/common";
+import { Injectable, NotFoundException, BadRequestException, Logger } from "@nestjs/common";
 import { OrderStatus } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
@@ -6,6 +6,25 @@ import { formatDate, humanizeToken } from "src/supplier/utils";
 import { NotificationService } from "src/notifications/notification.service";
 import { WhatsAppAlertService } from "src/notifications/whatsapp-alerts/whatsapp-alert.service";
 import { WhatsAppLifecycleService } from "src/whatsapp/lifecycle/whatsapp-lifecycle.service";
+
+// Valid supplier-triggered transitions between the existing OrderStatus enum
+// values (packages/db/prisma/schema.prisma) — mirrors the equivalent table
+// in apps/supplier/lib/order-status-transitions.ts (the Next.js supplier
+// portal's own backend, used by its order detail page actions). Both apps
+// call into the same underlying database/business rules; this local copy
+// exists because apps/api (NestJS) and apps/supplier (Next.js) are separate
+// deployables that don't currently share application code beyond
+// @matsrc/db, but the *rule* — PLACED -> PROCESSING|CANCELLED,
+// PROCESSING -> DISPATCHED, DISPATCHED|OUT_FOR_DELIVERY -> DELIVERED,
+// DELIVERED|CANCELLED terminal — must stay identical in both places.
+const VALID_SUPPLIER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  [OrderStatus.PLACED]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
+  [OrderStatus.PROCESSING]: [OrderStatus.DISPATCHED],
+  [OrderStatus.DISPATCHED]: [OrderStatus.DELIVERED],
+  [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED],
+  [OrderStatus.DELIVERED]: [],
+  [OrderStatus.CANCELLED]: [],
+};
 
 @Injectable()
 export class OrdersService {
@@ -74,7 +93,18 @@ export class OrdersService {
 
   async updateStatus(id: string, status: OrderStatus, user: any, note?: string): Promise<{ id: string; status: OrderStatus }> {
     const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
-    await this.findOne(id, user);
+    const current = await this.findOne(id, user);
+
+    // Backend transition guard — reject any transition not in
+    // VALID_SUPPLIER_TRANSITIONS even if the caller (WhatsApp flow or a
+    // direct API request) bypasses whatever UI gating exists. Keeps this
+    // service from ever allowing e.g. dispatching an order that hasn't been
+    // accepted yet, or re-confirming/declining an already-accepted enquiry.
+    if (!VALID_SUPPLIER_TRANSITIONS[current.status]?.includes(status)) {
+      throw new BadRequestException(
+        `Invalid order status transition: cannot move from ${current.status} to ${status}`
+      );
+    }
 
     // Multi-supplier fan-out: a decline must not immediately cancel the whole
     // enquiry if other eligible candidate suppliers are still pending for any

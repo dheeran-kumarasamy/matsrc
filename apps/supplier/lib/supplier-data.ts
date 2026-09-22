@@ -9,6 +9,7 @@ import {
 } from "./resolution";
 import { notifyBuilderOrderStatusUpdate } from "./notify";
 import { sendWhatsAppMessage } from "./twilio-whatsapp";
+import { isValidOrderStatusTransition } from "./order-status-transitions";
 
 
 
@@ -1456,6 +1457,26 @@ export async function updateSupplierOrderStatus(
   actingSupplierId?: string,
   reason?: string
 ) {
+  // Backend transition guard — mirrors the same state machine used to decide
+  // which action buttons are shown on the order detail page
+  // (components/supplier/OrderStatusActions.tsx), so an invalid transition
+  // is rejected here even if the request bypasses the UI and hits this
+  // function (or the underlying API route) directly. See
+  // lib/order-status-transitions.ts for the single source of truth on valid
+  // supplier-triggered transitions between the existing OrderStatus values.
+  const current = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { status: true },
+  });
+  if (!current) {
+    throw new Error("Order not found");
+  }
+  if (!isValidOrderStatusTransition(current.status, status)) {
+    throw new Error(
+      `Invalid order status transition: cannot move from ${current.status} to ${status}`
+    );
+  }
+
   // Decline path: run the multi-supplier fan-out promote-or-cascade logic
   // instead of blindly setting Order.status = CANCELLED, so the builder only
   // sees a rejection once every eligible supplier has declined (per spec).

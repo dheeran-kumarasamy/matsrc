@@ -91,7 +91,8 @@ export async function GET(
       paymentStatus: order.paymentStatus,
       paymentLinkAvailable:
         order.status === OrderStatus.PROCESSING &&
-        order.paymentStatus === PaymentStatus.PENDING,
+        (order.paymentStatus === PaymentStatus.PENDING ||
+          order.paymentStatus === PaymentStatus.PENDING_VERIFICATION),
       paymentLink: `/orders/${order.id}/payment`,
       bankGuaranteeAvailable,
 
@@ -222,6 +223,12 @@ export async function PATCH(
     if (order.paymentStatus === PaymentStatus.PAID) {
       return NextResponse.json(
         { error: "Payment method cannot be changed after payment is completed" },
+        { status: 400 }
+      );
+    }
+    if (order.paymentStatus === PaymentStatus.PENDING_VERIFICATION) {
+      return NextResponse.json(
+        { error: "Payment method cannot be changed while a payment proof is awaiting admin verification" },
         { status: 400 }
       );
     }

@@ -7,6 +7,7 @@ export const MENU_CONFIG = [
   { key: "vendors", href: "/vendors", label: "Vendor Approval" },
   { key: "kyc", href: "/kyc", label: "KYC Queue" },
   { key: "disputes", href: "/disputes", label: "Disputes" },
+  { key: "payments", href: "/payments", label: "Payment Verification" },
   { key: "aggregation", href: "/aggregation", label: "Aggregation Pools" },
   { key: "catalog", href: "/catalog", label: "Catalog Master Data" },
   { key: "pricing", href: "/pricing", label: "Price Intelligence" },

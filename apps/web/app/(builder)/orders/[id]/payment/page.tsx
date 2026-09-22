@@ -3,12 +3,14 @@ import { notFound } from "next/navigation";
 import { builderApiGet } from "@/lib/api";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import PaymentMethodSelector from "@/components/orders/PaymentMethodSelector";
+import BankTransferPaymentPanel from "@/components/orders/BankTransferPaymentPanel";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
+import { getBankAccountDetails } from "@/lib/bank-account-config";
 
 type OrderPayment = {
   id: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
-  paymentStatus: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
+  paymentStatus: "PENDING" | "PENDING_VERIFICATION" | "PAID" | "FAILED" | "REFUNDED";
   paymentMethod: "UPI" | "CARD" | "NET_BANKING" | "COD" | "CREDIT" | "BANK_TRANSFER";
   paymentLinkAvailable: boolean;
   bankGuaranteeAvailable: boolean;
@@ -63,12 +65,25 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
         {/* REQ-10: Standard vs Bank Guarantee payment method selector, gated by
             REQ-09's bank guarantee approval flag. Only editable while payment
             is still pending. */}
-        {order.paymentStatus === "PENDING" && order.status !== "CANCELLED" ? (
+        {(order.paymentStatus === "PENDING" || order.paymentStatus === "PENDING_VERIFICATION") &&
+        order.status !== "CANCELLED" ? (
           <PaymentMethodSelector
             orderId={order.id}
             currentMethod={order.paymentMethod}
             bankGuaranteeAvailable={order.bankGuaranteeAvailable}
           />
+        ) : null}
+
+        {/* Standard (bank-transfer) payment proof upload + admin verification flow.
+            Shown whenever Standard is the selected method and payment hasn't
+            already succeeded — covers both the initial PENDING state and the
+            PENDING_VERIFICATION state once a screenshot has been submitted, so
+            the customer can always see/track their submission on this page. */}
+        {order.paymentMethod === "BANK_TRANSFER" &&
+        order.paymentStatus !== "PAID" &&
+        order.status !== "CANCELLED" &&
+        (order.paymentLinkAvailable || order.paymentStatus === "PENDING_VERIFICATION") ? (
+          <BankTransferPaymentPanel orderId={order.id} amount={order.total} bank={getBankAccountDetails()} />
         ) : null}
 
         <div className="flex flex-wrap gap-3">

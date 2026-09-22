@@ -161,6 +161,29 @@ export async function builderApiPost<TResponse>(path: string, body: unknown): Pr
   return response.json() as Promise<TResponse>;
 }
 
+// Multipart/form-data POST helper (payment-proof screenshot upload etc).
+// Deliberately does NOT set a Content-Type header — the browser must set it
+// itself (including the multipart boundary) when the body is a FormData.
+export async function builderApiUpload<TResponse>(path: string, formData: FormData): Promise<TResponse> {
+  const userHeaders = await getCurrentUserHeaders();
+  if (!userHeaders["X-User-Email"]) {
+    throw new ApiError("Not authenticated", 401);
+  }
+
+  const response = await fetch(buildApiUrl(path), {
+    method: "POST",
+    headers: userHeaders,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const message = await extractErrorMessage(response, `Builder API upload failed: ${response.status}`);
+    throw new ApiError(message, response.status);
+  }
+
+  return response.json() as Promise<TResponse>;
+}
+
 export async function builderApiPatch<TResponse>(path: string, body: unknown): Promise<TResponse> {
   const userHeaders = await getCurrentUserHeaders();
   if (!userHeaders["X-User-Email"]) {

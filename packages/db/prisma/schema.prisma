@@ -60,6 +60,7 @@ model User {
   notifications               Notification[]
   aggregationParticipations   AggregationParticipant[]
   pendingContactVerifications PendingContactVerification[]
+  paymentVerifications        PaymentVerification[]
 
   notificationPreference NotificationPreference?
   creditProfile          CreditProfile?
@@ -557,9 +558,25 @@ enum PaymentMethod {
 
 enum PaymentStatus {
   PENDING
+  // Bank-transfer ("Standard") payment proof has been uploaded by the
+  // customer and is awaiting admin review — the order must NOT be
+  // confirmed/sent for supplier processing while in this state. See
+  // PaymentVerification model below for the full proof/review record.
+  PENDING_VERIFICATION
   PAID
   FAILED
   REFUNDED
+}
+
+// Bank-transfer payment proof + admin verification (REQ: bank-transfer
+// payment proof & admin verification flow). One row per Order (a
+// resubmission after rejection overwrites the same row's screenshot/status
+// rather than creating a new order or a parallel payment record), reusing
+// the existing PaymentMethod/PaymentStatus enums and Order/User models.
+enum PaymentVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model Order {
@@ -616,12 +633,51 @@ model Order {
   supplierRating         SupplierRating?
   purchaseOrders         PurchaseOrder[]
   aggregationParticipant AggregationParticipant?
+  paymentVerification    PaymentVerification?
 
   @@index([userId])
   @@index([status])
   @@index([selectedSupplierId])
   @@index([aggregationPoolId])
   @@index([siteId])
+}
+
+// Bank-transfer ("Standard") payment proof + admin verification record.
+// One-to-one with Order — a rejected proof can be resubmitted by
+// overwriting the screenshot fields and resetting status back to PENDING
+// (idempotent; never creates a second Order or a parallel payment record).
+// The screenshot bytes are stored directly in the database (private column,
+// never a public URL/static file) since this repo has no existing object
+// storage integration to reuse; access is gated entirely by the
+// owner-or-admin authorization checks in the API routes that read it.
+model PaymentVerification {
+  id      String @id @default(cuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+
+  paymentMethod PaymentMethod
+  amount        Decimal       @db.Decimal(12, 2)
+
+  screenshotData     Bytes
+  screenshotMimeType String
+  screenshotFileName String
+  screenshotSize     Int
+
+  status PaymentVerificationStatus @default(PENDING)
+
+  submittedAt DateTime  @default(now())
+  reviewedAt  DateTime?
+  reviewedBy  String?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([userId])
+  @@index([status])
 }
 
 model OrderItem {

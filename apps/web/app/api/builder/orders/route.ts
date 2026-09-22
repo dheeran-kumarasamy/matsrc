@@ -107,7 +107,8 @@ export async function GET(request: Request) {
 
         paymentLinkAvailable:
           order.status === OrderStatus.PROCESSING &&
-          order.paymentStatus === PaymentStatus.PENDING,
+          (order.paymentStatus === PaymentStatus.PENDING ||
+            order.paymentStatus === PaymentStatus.PENDING_VERIFICATION),
         paymentLink: `/orders/${order.id}/payment`,
       }))
     );

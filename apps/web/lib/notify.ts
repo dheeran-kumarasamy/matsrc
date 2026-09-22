@@ -105,6 +105,70 @@ export async function notifySupplierOrderSubmitted(orderId: string): Promise<voi
 }
 
 
+// Best-effort WhatsApp notification fired when a customer submits a bank-transfer
+// payment screenshot for admin verification. Mirrors notifySupplierOrderSubmitted's
+// pattern (idempotency key + Notification row + real Twilio send), but targets the
+// builder/customer who owns the order instead of the supplier.
+export async function notifyPaymentProofSubmitted(orderId: string): Promise<void> {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { user: true },
+    });
+    if (!order) return;
+
+    const idempotencyKey = `payment-proof-submitted:${order.id}:${order.updatedAt.getTime()}`;
+    const existing = await prisma.notification.findFirst({
+      where: { idempotencyKey },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    const title = "Payment proof submitted";
+    const body = `Your payment proof for order #${order.id.slice(0, 8)} has been submitted and is awaiting verification.`;
+
+    const notification = await prisma.notification.create({
+      data: {
+        userId: order.userId,
+        audience: "builder",
+        channel: "WHATSAPP",
+        title,
+        body,
+        status: "queued",
+        idempotencyKey,
+        variables: JSON.stringify({ orderId: order.id, orderNumber: order.id.slice(0, 8) }),
+        retryCount: 0,
+      },
+    });
+
+    const recipient = order.user.whatsappNumber?.trim() || order.user.phone?.trim();
+    const result = recipient
+      ? await sendWhatsAppMessage(recipient, body)
+      : { error: "Customer has no WhatsApp/phone number on file" };
+
+    const success = "externalId" in result;
+    await prisma.notification.update({
+      where: { id: notification.id },
+      data: success
+        ? { status: "sent", externalId: result.externalId, deliveredAt: new Date() }
+        : { status: "failed", failureReason: result.error, failedAt: new Date() },
+    });
+
+    await prisma.notificationDeliveryLog.create({
+      data: {
+        notificationId: notification.id,
+        previousStatus: "queued",
+        newStatus: success ? "sent" : "failed",
+        provider: "twilio-whatsapp",
+        errorMessage: success ? null : result.error,
+        metadata: JSON.stringify({ recipient }),
+      },
+    });
+  } catch (error) {
+    console.error("notifyPaymentProofSubmitted error:", error);
+  }
+}
+
 // Best-effort WhatsApp notification fired when a builder generates a Purchase Order.
 // Lets the supplier know a PO is ready to view/acknowledge in their portal, following the
 // same mock-provider pattern as notifySupplierOrderSubmitted above.

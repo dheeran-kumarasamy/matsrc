@@ -4,7 +4,7 @@ import Link from "next/link";
 // logo everywhere it appears (marketing header, mobile drawer, auth pages,
 // builder sidebar/nav, footer, dashboards, …). Renders as plain CSS/text
 // (no image asset) so it stays crisp and theme-aware at any size, matching
-// the official artwork: "Build" + a hollow/ring "O" in the olive brand
+// the official artwork: "Build" + a solid "O" in the olive brand
 // accent (--posh-olive) + "hub" in the app's charcoal foreground token
 // (--posh-fg), followed by a small olive ".in" suffix.
 //
@@ -37,16 +37,13 @@ export default function BuildOHubLogo({ href = "/", size = "default", className 
     <>
       Build
       <span
-        aria-hidden="true"
         style={{
-          color: "transparent",
-          WebkitTextStroke: "1.5px var(--posh-olive)",
+          color: "var(--posh-olive)",
           fontWeight: 700,
         }}
       >
         O
       </span>
-      <span className="sr-only">O</span>
       hub
       <span style={{ color: "var(--posh-olive)", fontSize: "0.5em", fontWeight: 700, marginLeft: "0.06em" }}>
         .in

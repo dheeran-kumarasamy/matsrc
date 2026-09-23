@@ -163,6 +163,13 @@ export default function CheckoutPage() {
       return;
     }
 
+    // A Site must be selected before an enquiry can be placed — see
+    // components/orders/SiteSelector.tsx (checkout requirement #6).
+    if (!siteId) {
+      setError("Please select a site to continue.");
+      return;
+    }
+
     // Ordering is only allowed for signed-in users.
     if (sessionStatus !== "authenticated") {
       router.push(`/auth/login?callbackUrl=${encodeURIComponent("/checkout")}`);
@@ -176,7 +183,7 @@ export default function CheckoutPage() {
       const listingIds = Array.from(new Set(remainingItems.map((item) => item.productId)));
       await builderApiPost("/orders/checkout", {
         deliveryDate: deliveryDate || undefined,
-        siteId: siteId || undefined,
+        siteId,
       });
 
       await Promise.allSettled(listingIds.map((listingId) => recordInterestEvent(listingId, "ORDER_PLACED")));
@@ -334,8 +341,8 @@ export default function CheckoutPage() {
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />
         </div>
-        <div className="mt-3 max-w-xs">
-          <SiteSelector value={siteId} onChange={setSiteId} />
+        <div className="mt-4 max-w-xs">
+          <SiteSelector value={siteId} onChange={setSiteId} required autoOpenAddSiteWhenEmpty />
         </div>
       </div>
 
@@ -355,7 +362,7 @@ export default function CheckoutPage() {
         </div>
         <button
           onClick={handleSubmitEnquiry}
-          disabled={loading || cart.items.filter((item) => !poolingItemIds.has(item.id)).length === 0}
+          disabled={loading || !siteId || cart.items.filter((item) => !poolingItemIds.has(item.id)).length === 0}
           className="posh-btn-solid w-full rounded-lg py-3 text-sm font-medium disabled:opacity-50"
         >
           {loading ? "Submitting..." : "Submit Enquiry"}

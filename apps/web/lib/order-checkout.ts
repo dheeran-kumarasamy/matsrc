@@ -158,6 +158,13 @@ export type CreateOrdersOptions = {
   // (or passing null) leaves the order "Unassigned", the existing default
   // behaviour for every checkout flow that doesn't pass this.
   siteId?: string | null;
+  // Cart/checkout enquiry basket flow now REQUIRES a Site to be selected
+  // before an enquiry can be placed (checkout overlay "Select Site" step —
+  // replaces the old optional delivery-location/map/address capture).
+  // Defaults to false so other callers of this shared pipeline (e.g. the
+  // Quick Material Request nearest-match flow, which doesn't collect a
+  // site) are unaffected.
+  requireSiteId?: boolean;
 };
 
 
@@ -204,6 +211,26 @@ export async function createOrdersFromCart(
 
   if (!cartItems.length) {
     return { ok: false, error: "Cart is empty", status: 400 };
+  }
+
+  // Checkout requirement #6: a valid, builder-owned Site must be selected
+  // before an enquiry can be placed. Validated server-side (not just in the
+  // UI) so the enquiry can never be created/persisted without one.
+  const requestedSiteId =
+    typeof options.siteId === "string" && options.siteId ? options.siteId : null;
+
+  if (options.requireSiteId) {
+    if (!requestedSiteId) {
+      return { ok: false, error: "Please select a site to continue.", status: 400 };
+    }
+
+    const site = await prisma.site.findFirst({
+      where: { id: requestedSiteId, builderId: userId },
+      select: { id: true },
+    });
+    if (!site) {
+      return { ok: false, error: "Selected site was not found.", status: 400 };
+    }
   }
 
   // Re-resolve each cart item's canonical group fresh against the latest

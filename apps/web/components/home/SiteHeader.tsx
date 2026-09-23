@@ -40,7 +40,7 @@ export default function SiteHeader() {
         {/* Wordmark — shared BuildOHubLogo component (see
             components/shared/BuildOHubLogo.tsx) so every surface renders an
             identical "BuildOHub" mark. */}
-        <BuildOHubLogo />
+        <BuildOHubLogo size="lg" />
 
         {/* Live Price Scroller — replaces the old header search bar and
             Browse Materials link in this position (see LivePriceScroller.tsx).
@@ -90,7 +90,7 @@ export default function SiteHeader() {
         >
           <SheetHeader className="border-b px-6 py-5" style={{ borderColor: "var(--posh-border)" }}>
             <SheetTitle className="text-left">
-              <BuildOHubLogo href={null} />
+              <BuildOHubLogo href={null} size="lg" />
             </SheetTitle>
           </SheetHeader>
           <div className="flex-1 space-y-2 p-6">

@@ -6,8 +6,9 @@
 // (nav cart icon, quick-view "Add to Enquiry Basket", product cards) without
 // the PLP (or any page) underneath ever unmounting.
 //
-// Steps: review (line items) -> delivery (geolocation) -> confirm (submit)
-// -> success (mocked confirmation + payment-link messaging).
+// Steps: review (line items) -> delivery (select/add a Site — required)
+// -> confirm (submit) -> success (mocked confirmation + payment-link
+// messaging).
 
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
@@ -15,7 +16,7 @@ import type { ChangeEvent, KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { Trash2, CheckCircle2, ChevronLeft, Minus, Plus, MapPin, LocateFixed } from "lucide-react";
+import { Trash2, CheckCircle2, ChevronLeft, Minus, Plus } from "lucide-react";
 
 
 
@@ -30,7 +31,6 @@ import {
 import { useOverlayStore } from "@/lib/store/overlay-store";
 import { useCartStore } from "@/lib/store/cart-store";
 import { builderApiPost } from "@/lib/api";
-import MapLocationPicker from "./MapLocationPicker";
 import SiteSelector from "@/components/orders/SiteSelector";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 
@@ -38,7 +38,7 @@ import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 const STEP_LABELS = [
   { key: "review", label: "Review" },
-  { key: "delivery", label: "Delivery" },
+  { key: "delivery", label: "Site" },
   { key: "confirm", label: "Confirm" },
 ] as const;
 
@@ -158,38 +158,14 @@ export default function CartDrawer() {
   const updateQuantity = useCartStore((state) => state.updateQuantity);
 
 
-  // REQ-07: delivery date input removed from checkout; pincode replaced with
-  // browser-geolocation-based lat/lng capture (+ optional free-text address).
-  const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
-  const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [locating, setLocating] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
+  // Site selection replaces the old delivery-location/map/address capture —
+  // the enquiry is now tagged to one of the builder's Sites instead (see
+  // components/orders/SiteSelector.tsx). A site is REQUIRED before an
+  // enquiry can be submitted (Section 2/6 of the checkout requirements).
   const [siteId, setSiteId] = useState<string>("");
+  const [siteName, setSiteName] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  function handleUseMyLocation() {
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setLocationError("Geolocation is not supported on this device/browser.");
-      return;
-    }
-    setLocating(true);
-    setLocationError(null);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setDeliveryLat(position.coords.latitude);
-        setDeliveryLng(position.coords.longitude);
-        setLocating(false);
-      },
-      () => {
-        setLocationError("Unable to fetch your location. You can still continue without it.");
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  }
-
 
   useEffect(() => {
     if (isCartOpen && !hasLoaded) {
@@ -222,6 +198,13 @@ export default function CartDrawer() {
   async function handleSubmitEnquiry() {
     if (items.length === 0) return;
 
+    // A Site must be selected before an enquiry can be placed — see
+    // components/orders/SiteSelector.tsx (checkout requirement #6).
+    if (!siteId) {
+      setSubmitError("Please select a site to continue.");
+      return;
+    }
+
     // Ordering is only allowed for signed-in users — redirect to login and
     // return to this same flow once authenticated.
     if (sessionStatus !== "authenticated") {
@@ -235,10 +218,7 @@ export default function CartDrawer() {
     try {
 
       const response = await builderApiPost<{ orders: Array<{ id: string }> }>("/orders/checkout", {
-        deliveryLat: deliveryLat ?? undefined,
-        deliveryLng: deliveryLng ?? undefined,
-        deliveryAddress: deliveryAddress.trim() || undefined,
-        siteId: siteId || undefined,
+        siteId,
       });
 
       const reference = response.orders?.[0]?.id ?? "submitted";
@@ -352,50 +332,15 @@ export default function CartDrawer() {
 
           {checkoutStep === "delivery" ? (
             <div className="space-y-4">
-              <div>
-                <label className="mb-1 block text-xs font-medium" style={{ color: "var(--posh-fg-muted)" }}>Delivery location (optional)</label>
-                <button type="button" onClick={handleUseMyLocation} disabled={locating}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition disabled:opacity-50"
-                  style={{ borderColor: "rgba(var(--posh-wash-rgb),0.15)", color: "var(--posh-fg-muted)", background: "rgba(var(--posh-wash-rgb),0.05)" }}>
-                  <LocateFixed size={14} />
-                  {locating ? "Fetching location..." : "Use my current location"}
-                </button>
-                {deliveryLat !== null && deliveryLng !== null ? (
-                  <p className="mt-2 flex items-center gap-1 text-xs" style={{ color: "#4ade80" }}>
-                    <MapPin size={12} />
-                    Location captured ({deliveryLat.toFixed(4)}, {deliveryLng.toFixed(4)})
-                  </p>
-                ) : null}
-                {locationError ? <p className="mt-2 text-xs font-bold" style={{ color: "#f87171" }}>{locationError}</p> : null}
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium" style={{ color: "var(--posh-fg-muted)" }}>
-                  Select on map (optional)
-                </label>
-                <MapLocationPicker
-                  lat={deliveryLat}
-                  lng={deliveryLng}
-                  onLocationSelect={(lat, lng) => {
-                    setDeliveryLat(lat);
-                    setDeliveryLng(lng);
-                    setLocationError(null);
-                  }}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-[0.18em]" style={{ color: "var(--posh-fg-muted)" }}>Delivery address (optional)</label>
-
-                <input
-                  placeholder="e.g. Site name, street, area"
-                  value={deliveryAddress}
-                  onChange={(event) => setDeliveryAddress(event.target.value)}
-                  className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none"
-                  style={{ borderColor: "rgba(var(--posh-wash-rgb),0.15)", background: "rgba(var(--posh-wash-rgb),0.05)", color: "var(--posh-fg)" }}
-                />
-              </div>
-              <SiteSelector value={siteId} onChange={setSiteId} />
+              <SiteSelector
+                value={siteId}
+                onChange={setSiteId}
+                onSelectSite={(site) => setSiteName(site?.name ?? "")}
+                required
+                autoOpenAddSiteWhenEmpty
+              />
               <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
-                This is used to route your enquiry to nearby suppliers and estimate freight — it does not commit you to a payment.
+                Your enquiry is tagged to the selected site so suppliers and your team can track which project it&apos;s for. It does not commit you to a payment.
               </p>
             </div>
           ) : null}
@@ -418,12 +363,13 @@ export default function CartDrawer() {
                   </div>
                 </div>
               </div>
-              {deliveryLat !== null && deliveryLng !== null ? (
+              {siteId ? (
                 <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
-                  Delivery location: <span className="font-medium" style={{ color: "var(--posh-fg)" }}>{deliveryLat.toFixed(4)}, {deliveryLng.toFixed(4)}</span>
-                  {deliveryAddress ? ` · ${deliveryAddress}` : ""}
+                  Site: <span className="font-medium" style={{ color: "var(--posh-fg)" }}>{siteName || "Selected"}</span>
                 </p>
-              ) : null}
+              ) : (
+                <p className="text-xs font-bold" style={{ color: "#f87171" }}>Please select a site to continue.</p>
+              )}
               <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
                 Submitting will send a separate enquiry to each supplier represented in your basket. No payment is collected now.
               </p>
@@ -448,7 +394,7 @@ export default function CartDrawer() {
           {checkoutStep === "review" ? (
             <button onClick={() => setCheckoutStep("delivery")} disabled={items.length === 0}
               className="posh-btn-solid w-full rounded-2xl py-2.5 text-sm font-semibold disabled:opacity-50">
-              Continue to delivery
+              Continue to site selection
             </button>
           ) : null}
 
@@ -459,8 +405,8 @@ export default function CartDrawer() {
                 style={{ borderColor: "rgba(var(--posh-wash-rgb),0.15)", color: "var(--posh-fg-muted)", background: "rgba(var(--posh-wash-rgb),0.05)" }}>
                 <ChevronLeft size={14} /> Back
               </button>
-              <button onClick={goToNextStep}
-                className="posh-btn-solid flex-1 rounded-2xl py-2.5 text-sm font-semibold">
+              <button onClick={goToNextStep} disabled={!siteId}
+                className="posh-btn-solid flex-1 rounded-2xl py-2.5 text-sm font-semibold disabled:opacity-50">
                 Continue to confirm
               </button>
             </div>
@@ -473,7 +419,7 @@ export default function CartDrawer() {
                 style={{ borderColor: "rgba(var(--posh-wash-rgb),0.15)", color: "var(--posh-fg-muted)", background: "rgba(var(--posh-wash-rgb),0.05)" }}>
                 <ChevronLeft size={14} /> Back
               </button>
-              <button onClick={() => void handleSubmitEnquiry()} disabled={submitting || items.length === 0}
+              <button onClick={() => void handleSubmitEnquiry()} disabled={submitting || items.length === 0 || !siteId}
                 className="posh-btn-solid flex-1 rounded-2xl py-2.5 text-sm font-semibold disabled:opacity-50">
                 {submitting ? "Submitting..." : "Submit Enquiry"}
               </button>

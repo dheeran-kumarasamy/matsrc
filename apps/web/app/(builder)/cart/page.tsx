@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { builderApiDelete, builderApiGet, builderApiPost } from "@/lib/api";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
+import SiteSelector from "@/components/orders/SiteSelector";
 
 // BUG-06 fix: this input keeps its own local editable string state, synced
 // from the `quantity` prop via useEffect (so +/- button clicks and cart
@@ -92,6 +93,7 @@ export default function CartPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [siteId, setSiteId] = useState<string>("");
 
 
   useEffect(() => {
@@ -173,11 +175,18 @@ export default function CartPage() {
       return;
     }
 
+    // A Site must be selected before an enquiry can be placed — see
+    // components/orders/SiteSelector.tsx (checkout requirement #6).
+    if (!siteId) {
+      setSubmitError("Please select a site to continue.");
+      return;
+    }
+
     setSubmitting(true);
     setSubmitError(null);
 
     try {
-      await builderApiPost("/orders/checkout", {});
+      await builderApiPost("/orders/checkout", { siteId });
       router.push("/orders");
       router.refresh();
     } catch {
@@ -287,9 +296,10 @@ export default function CartPage() {
                 <span>Total</span><span>₹{total.toLocaleString("en-IN")}</span>
               </div>
             </div>
+            <SiteSelector value={siteId} onChange={setSiteId} required autoOpenAddSiteWhenEmpty />
             <button
               onClick={() => void handleSubmitEnquiry()}
-              disabled={data.items.length === 0 || submitting}
+              disabled={data.items.length === 0 || submitting || !siteId}
               className="posh-btn block w-full text-center"
             >
               {submitting ? "Submitting..." : "Submit Enquiry"}

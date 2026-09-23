@@ -133,6 +133,13 @@ export async function POST(request: Request) {
       deliveryLng: typeof body.deliveryLng === "number" ? body.deliveryLng : null,
       deliveryAddress: typeof body.deliveryAddress === "string" ? body.deliveryAddress : null,
       siteId: typeof body.siteId === "string" && body.siteId ? body.siteId : null,
+      // Standard cart/checkout enquiry submission (both the cart drawer
+      // overlay and the standalone /checkout page) now requires a Site —
+      // see components/orders/SiteSelector.tsx. Not enforced for the
+      // separate Quick Material Request flow (apps/web/app/api/builder/
+      // quick-request/route.ts), which calls createOrdersFromCart directly
+      // without this flag.
+      requireSiteId: true,
     });
 
     if (!result.ok) {

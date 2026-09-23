@@ -165,6 +165,19 @@ export class BuilderOrdersService {
       throw new BadRequestException("Cart is empty");
     }
 
+    // Site-wise purchase reporting: if a siteId was supplied, it must be a
+    // real ACTIVE-or-not site owned by this builder — never trust the raw
+    // id from the client without checking builderId ownership.
+    if (dto.siteId) {
+      const site = await this.prisma.site.findFirst({
+        where: { id: dto.siteId, builderId: user.id },
+        select: { id: true },
+      });
+      if (!site) {
+        throw new BadRequestException("Selected site was not found.");
+      }
+    }
+
     const groupedItems = new Map<
       string,
       {
@@ -204,6 +217,7 @@ export class BuilderOrdersService {
           paymentStatus: PaymentStatus.PENDING,
           totalAmount,
           deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : null,
+          siteId: dto.siteId ?? undefined,
           items: {
             create: group.items.map((item) => ({
               productId: item.productId,

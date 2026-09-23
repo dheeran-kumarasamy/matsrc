@@ -42,11 +42,26 @@ const emptyNewSiteForm: NewSiteForm = {
 export default function SiteSelector({
   value,
   onChange,
+  onSelectSite,
   label = "Tag this order to a site (optional)",
+  required = false,
+  autoOpenAddSiteWhenEmpty = false,
 }: {
   value: string;
   onChange: (siteId: string) => void;
+  // Optional: also receive the full SiteOption (e.g. to display the site's
+  // name elsewhere in the checkout flow without a second lookup).
+  onSelectSite?: (site: SiteOption | null) => void;
   label?: string;
+  // Checkout (enquiry basket) flow requires a Site to be selected before
+  // placing an enquiry — see components/cart/CartDrawer.tsx and
+  // app/(builder)/checkout/page.tsx. Other (non-checkout) usages of this
+  // component keep the original optional "Unassigned" dropdown behaviour.
+  required?: boolean;
+  // When true (checkout flow) and the builder has zero sites, the
+  // "Add New Site" form opens automatically instead of showing an empty
+  // dropdown with nothing to select.
+  autoOpenAddSiteWhenEmpty?: boolean;
 }) {
   const [sites, setSites] = useState<SiteOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,10 +74,17 @@ export default function SiteSelector({
     let active = true;
     builderApiGet<SiteOption[]>("/sites")
       .then((data) => {
-        if (active) setSites(data.filter((s) => s.status === "ACTIVE"));
+        if (!active) return;
+        const activeSites = data.filter((s) => s.status === "ACTIVE");
+        setSites(activeSites);
+        if (autoOpenAddSiteWhenEmpty && activeSites.length === 0) {
+          setShowNewSiteForm(true);
+        }
       })
       .catch(() => {
-        if (active) setSites([]);
+        if (!active) return;
+        setSites([]);
+        if (autoOpenAddSiteWhenEmpty) setShowNewSiteForm(true);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -70,7 +92,7 @@ export default function SiteSelector({
     return () => {
       active = false;
     };
-  }, []);
+  }, [autoOpenAddSiteWhenEmpty]);
 
   function handleSelectChange(next: string) {
     if (next === "__new__") {
@@ -79,6 +101,7 @@ export default function SiteSelector({
       return;
     }
     onChange(next);
+    onSelectSite?.(sites.find((s) => s.id === next) ?? null);
   }
 
   async function handleCreateSite() {
@@ -101,8 +124,10 @@ export default function SiteSelector({
           lng: form.lng ?? undefined,
         }
       );
-      setSites((prev) => [...prev, { id: created.id, name: created.name, status: "ACTIVE" }]);
+      const newSite: SiteOption = { id: created.id, name: created.name, status: "ACTIVE" };
+      setSites((prev) => [...prev, newSite]);
       onChange(created.id);
+      onSelectSite?.(newSite);
       setShowNewSiteForm(false);
       setForm(emptyNewSiteForm);
     } catch (err: any) {
@@ -133,42 +158,105 @@ export default function SiteSelector({
     return <p className="text-xs text-slate-400">Loading sites…</p>;
   }
 
+  // Checkout flow (required=true): builder has no sites yet — force the
+  // "Add New Site" form with no way to dismiss it (a site is mandatory to
+  // place an enquiry), instead of showing the generic dropdown UI.
+  const noSitesYet = required && sites.length === 0;
+  const canCancelNewSiteForm = !noSitesYet;
+
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-slate-500">{label}</label>
+      <label className="mb-1 block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+        {required ? "Select Site" : label}
+      </label>
 
-      {!showNewSiteForm ? (
-        <div className="flex flex-wrap gap-2">
-          <select
-            value={value}
-            onChange={(event) => handleSelectChange(event.target.value)}
-            className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
+      {!showNewSiteForm && noSitesYet ? (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-4 text-center">
+          <p className="text-sm font-semibold text-slate-700">No sites added yet</p>
+          <p className="mt-1 text-xs text-slate-500">Add a site to continue with your enquiry.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setShowNewSiteForm(true);
+              setError(null);
+            }}
+            className="posh-btn-solid mt-3 inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold"
           >
-            <option value="">Unassigned</option>
-            {sites.map((site) => (
-              <option key={site.id} value={site.id}>
-                {site.name}
-              </option>
-            ))}
-            <option value="__new__">+ Add new site…</option>
-          </select>
+            <Plus size={14} /> Add New Site
+          </button>
         </div>
+      ) : !showNewSiteForm ? (
+        required ? (
+          <div className="space-y-2">
+            {sites.map((site) => (
+              <label
+                key={site.id}
+                className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition"
+                style={{
+                  borderColor: value === site.id ? "var(--posh-primary)" : "var(--posh-border, #e2e8f0)",
+                  background: value === site.id ? "rgba(var(--posh-wash-rgb, 15,23,42),0.05)" : "transparent",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="checkout-site-selector"
+                  value={site.id}
+                  checked={value === site.id}
+                  onChange={() => {
+                    onChange(site.id);
+                    onSelectSite?.(site);
+                  }}
+                  className="accent-current"
+                />
+                <span className="font-medium text-slate-800">{site.name}</span>
+              </label>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setShowNewSiteForm(true);
+                setError(null);
+              }}
+              className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800"
+            >
+              <Plus size={14} /> Add New Site
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <select
+              value={value}
+              onChange={(event) => handleSelectChange(event.target.value)}
+              className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              <option value="">Unassigned</option>
+              {sites.map((site) => (
+                <option key={site.id} value={site.id}>
+                  {site.name}
+                </option>
+              ))}
+              <option value="__new__">+ Add new site…</option>
+            </select>
+          </div>
+        )
       ) : (
         <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-slate-800">New site</p>
-            <button
-              type="button"
-              onClick={() => {
-                setShowNewSiteForm(false);
-                setForm(emptyNewSiteForm);
-                setError(null);
-              }}
-              className="text-slate-400 hover:text-slate-600"
-              aria-label="Cancel new site"
-            >
-              <X size={16} />
-            </button>
+            {canCancelNewSiteForm ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNewSiteForm(false);
+                  setForm(emptyNewSiteForm);
+                  setError(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+                aria-label="Cancel new site"
+              >
+                <X size={16} />
+              </button>
+            ) : null}
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2">

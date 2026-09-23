@@ -85,7 +85,7 @@ export default function HomeEditorialSections() {
         className="mx-auto flex max-w-7xl flex-col justify-between gap-4 px-6 py-10 text-sm md:flex-row md:px-10"
         style={{ color: "var(--posh-fg-muted)" }}
       >
-        <BuildOHubLogo href={null} className="text-lg" />
+        <BuildOHubLogo href={null} size="lg" />
         <span>© {new Date().getFullYear()} BuildOHub · Coimbatore, India</span>
       </footer>
     </>

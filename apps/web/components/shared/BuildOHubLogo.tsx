@@ -1,63 +1,78 @@
-import Image from "next/image";
 import Link from "next/link";
 
 // Shared BuildOHub wordmark — the single source of truth for the brand
 // logo everywhere it appears (marketing header, mobile drawer, auth pages,
-// builder sidebar/nav, footer, dashboards, …). Renders the official
-// "logo-full.png" artwork (apps/web/public/icons/logo-full.png — the same
-// asset used by the admin and supplier apps) via next/image, so every
-// surface stays in sync with a single image file instead of a hand-rolled
-// text/CSS reproduction that can drift out of date (e.g. missing the
-// ".in" suffix in the current mark).
+// builder sidebar/nav, footer, dashboards, …). Renders as plain CSS/text
+// (no image asset) so it stays crisp and theme-aware at any size, matching
+// the official artwork: "Build" + a hollow/ring "O" in the olive brand
+// accent (--posh-olive) + "hub" in the app's charcoal foreground token
+// (--posh-fg), followed by a small olive ".in" suffix.
+//
+// The ring "O" is a hollow letterform (transparent fill + colored stroke
+// via -webkit-text-stroke) rather than a filled circle, to match the
+// uploaded logo's outlined-ring style exactly.
 //
 // `href` defaults to "/" (linking home); pass `href={null}` to render the
-// wordmark without a link for surfaces where a link isn't wanted.
-// `size` controls the rendered height — default 28px, with `sm` (22px) for
-// tightly-constrained layouts (e.g. compact mobile headers) and `lg` (42px)
-// for larger standalone surfaces such as the centred auth-page wordmark.
+// wordmark as plain text (no link) for surfaces where a link isn't wanted.
+// `size` controls font-size — default 20px per the design system, with a
+// `sm` variant for tightly-constrained layouts (e.g. compact mobile
+// headers) where 20px doesn't fit.
 type BuildOHubLogoProps = {
   href?: string | null;
   size?: "default" | "sm" | "lg";
   className?: string;
 };
 
-const HEIGHT: Record<NonNullable<BuildOHubLogoProps["size"]>, number> = {
-  default: 28,
-  sm: 22,
-  lg: 42,
+// "lg" (1.875rem / 30px) is used by larger standalone surfaces such as the
+// centred auth-page wordmark, where the homepage/header's 20px default
+// would read too small against the surrounding whitespace.
+const FONT_SIZE: Record<NonNullable<BuildOHubLogoProps["size"]>, string> = {
+  default: "20px",
+  sm: "16px",
+  lg: "1.875rem",
 };
 
-// Source artwork is 1600x736px — preserve that aspect ratio at every size
-// so the mark never stretches or distorts.
-const ASPECT_RATIO = 1600 / 736;
-
 export default function BuildOHubLogo({ href = "/", size = "default", className = "" }: BuildOHubLogoProps) {
-  const height = HEIGHT[size];
-  const width = Math.round(height * ASPECT_RATIO);
-
   const content = (
-    <Image
-      src="/icons/logo-full.png"
-      alt="BuildOhub.in"
-      width={width}
-      height={height}
-      style={{ height, width: "auto" }}
-      priority
-    />
+    <>
+      Build
+      <span
+        aria-hidden="true"
+        style={{
+          color: "transparent",
+          WebkitTextStroke: "1.5px var(--posh-olive)",
+          fontWeight: 700,
+        }}
+      >
+        O
+      </span>
+      <span className="sr-only">O</span>
+      hub
+      <span style={{ color: "var(--posh-olive)", fontSize: "0.5em", fontWeight: 700, marginLeft: "0.06em" }}>
+        .in
+      </span>
+    </>
   );
+
+  const style: React.CSSProperties = {
+    color: "var(--posh-fg)",
+    fontSize: FONT_SIZE[size],
+    letterSpacing: "-0.01em",
+  };
 
   if (href === null) {
     return (
-      <span className={`inline-flex shrink-0 items-center ${className}`}>
+      <span className={`posh-heading ${className}`} style={style}>
         {content}
       </span>
     );
   }
 
   return (
-    <Link href={href} className={`inline-flex shrink-0 items-center ${className}`}>
+    <Link href={href} className={`posh-heading shrink-0 ${className}`} style={style}>
       {content}
     </Link>
   );
 }
+
 

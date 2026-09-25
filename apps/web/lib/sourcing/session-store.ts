@@ -204,6 +204,60 @@ export async function updateSession(
 }
 
 /**
+ * Tags (or clears) the Site a sourcing session is for — the AI-ordering
+ * equivalent of checkout's "select a site" step (see components/orders/
+ * SiteSelector.tsx). This is how the assistant records the customer's
+ * answer to "Which site is this order for?" as the authoritative siteId,
+ * never as free-form text.
+ *
+ * SECURITY: identical ownership check to createSession() — a siteId is only
+ * ever persisted after confirming it belongs to THIS builder AND is
+ * currently ACTIVE. An unowned or archived siteId is silently dropped
+ * (returns null) rather than persisted, so a client cannot tag a session to
+ * another customer's site, and a session can never be silently left pointed
+ * at a site that has since been archived.
+ */
+export async function setSessionSite(
+  userId: string,
+  sessionId: string,
+  siteId: string | null
+): Promise<SourcingSessionView | null> {
+  let verifiedSiteId: string | null = null;
+  if (siteId) {
+    const site = await prisma.site.findFirst({
+      where: { id: siteId, builderId: userId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (!site) return null;
+    verifiedSiteId = site.id;
+  }
+
+  const result = await prisma.sourcingSession.updateMany({
+    where: { id: sessionId, userId },
+    data: { siteId: verifiedSiteId },
+  });
+
+  if (result.count === 0) return null;
+  return getSession(userId, sessionId);
+}
+
+/** Returns the caller's ACTIVE sites only, for the AI's site-selection step. */
+export async function listActiveSites(
+  userId: string
+): Promise<Array<{ id: string; name: string; location: string | null }>> {
+  const sites = await prisma.site.findMany({
+    where: { builderId: userId, status: "ACTIVE" },
+    select: { id: true, name: true, city: true, state: true },
+    orderBy: { name: "asc" },
+  });
+  return sites.map((site) => ({
+    id: site.id,
+    name: site.name,
+    location: [site.city, site.state].filter(Boolean).join(", ") || null,
+  }));
+}
+
+/**
  * Replaces the stored recommendations for a session with a freshly computed
  * ranking. Ownership is verified BEFORE any write.
  *

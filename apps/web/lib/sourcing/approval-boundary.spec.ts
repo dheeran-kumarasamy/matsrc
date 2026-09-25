@@ -116,6 +116,19 @@ describe("the confirm route enforces the approval boundary", () => {
   it("reuses the existing shared enquiry pipeline rather than a forked one", () => {
     expect(confirmRoute).toContain("createOrdersFromCart");
   });
+
+  // §8 of the "ask which site the order is for" feature: an AI-assisted
+  // order cannot be confirmed without a valid site, and the ID actually
+  // used for order creation is server-verified (requireSiteId), never a
+  // client-supplied value taken on faith.
+  it("refuses to confirm without a known site", () => {
+    expect(confirmRoute).toContain("Please select a site this order is for before confirming.");
+    expect(confirmRoute).toContain("if (!siteId)");
+  });
+
+  it("passes requireSiteId so createOrdersFromCart re-verifies ownership/active status", () => {
+    expect(confirmRoute).toContain("requireSiteId: true");
+  });
 });
 
 describe("the message route performs no consequential write", () => {

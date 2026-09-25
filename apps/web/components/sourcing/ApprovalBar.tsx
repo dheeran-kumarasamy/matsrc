@@ -21,6 +21,10 @@ type Props = {
   onProceed: () => void;
   onViewAlternatives: () => void;
   onCancel: () => void;
+  /** Human-readable "Name – Location" label for the site this order is for,
+   * or null while none is selected yet. Required before Proceed is enabled
+   * (§7/§8 of the site-selection requirement). */
+  siteLabel: string | null;
 };
 
 export default function ApprovalBar({
@@ -29,6 +33,7 @@ export default function ApprovalBar({
   onProceed,
   onViewAlternatives,
   onCancel,
+  siteLabel,
 }: Props) {
   const hasVerifiedCost = recommendation.estimatedLandedCost !== null;
   const supplierLabel = getSupplierDisplayName(recommendation.supplierName);
@@ -53,6 +58,16 @@ export default function ApprovalBar({
       </p>
 
       <p className="mt-1 text-xs text-slate-500">
+        {siteLabel ? (
+          <>
+            Site: <span className="font-semibold text-slate-700">{siteLabel}</span>
+          </>
+        ) : (
+          "Select a site above before confirming — this order cannot be placed without one."
+        )}
+      </p>
+
+      <p className="mt-1 text-xs text-slate-500">
         Proceeding sends an enquiry to this supplier. It does not place an order or make any payment.
       </p>
 
@@ -60,7 +75,7 @@ export default function ApprovalBar({
         <button
           type="button"
           onClick={onProceed}
-          disabled={submitting || !hasVerifiedCost}
+          disabled={submitting || !hasVerifiedCost || !siteLabel}
           className="posh-btn-solid rounded-xl px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
         >
           {submitting ? "Submitting…" : "Proceed"}

@@ -97,6 +97,12 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           <p className="posh-subtitle mt-2">
             {getSupplierDisplayName(order.supplierName, order.supplierId)} · Delivery: {order.deliveryDate}
           </p>
+          {/* Site the order is for — see components/orders/OrderSiteAssignment.tsx.
+              Rendering this here matches the @modal overlay variant
+              (components/orders/OrderDetailOverlay.tsx), which already shows it. */}
+          <div className="mt-2">
+            <OrderSiteAssignment orderId={order.id} siteId={order.siteId} />
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <OrderStatusBadge status={order.status} />

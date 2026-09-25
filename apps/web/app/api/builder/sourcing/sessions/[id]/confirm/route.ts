@@ -107,13 +107,30 @@ export async function POST(request: Request, { params }: { params: { id: string 
       );
     }
 
+    // §8/§14: a site must be known and valid BEFORE an AI-assisted order can
+    // be confirmed — mirrors checkout's requireSiteId rule (see
+    // components/orders/SiteSelector.tsx / lib/order-checkout.ts). The
+    // session's own siteId (set via PATCH .../sessions/[id] once the
+    // customer answered "which site is this for?") is authoritative; a
+    // request-body siteId is only accepted as a fallback for callers that
+    // pass it directly, and is re-validated identically either way inside
+    // createOrdersFromCart's requireSiteId check below.
+    const requestedSiteId = typeof body.siteId === "string" && body.siteId.trim() ? body.siteId.trim() : null;
+    const siteId = session.siteId || requestedSiteId;
+
+    if (!siteId) {
+      return NextResponse.json(
+        { message: "Please select a site this order is for before confirming." },
+        { status: 400 }
+      );
+    }
+
     return await performApprovedSourcing({
       userId: user.id,
       sessionId: session.id,
-      sessionSiteId: session.siteId,
+      siteId,
       recommendationId,
       approved,
-      requestedSiteId: typeof body.siteId === "string" ? body.siteId.trim() : null,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {
@@ -137,12 +154,11 @@ type ApprovedRecommendation = Awaited<ReturnType<typeof getRecommendations>>[num
 async function performApprovedSourcing(params: {
   userId: string;
   sessionId: string;
-  sessionSiteId: string | null;
+  siteId: string;
   recommendationId: string;
   approved: ApprovedRecommendation;
-  requestedSiteId: string | null;
 }): Promise<NextResponse> {
-  const { userId, sessionId, recommendationId, approved } = params;
+  const { userId, sessionId, recommendationId, approved, siteId } = params;
   const started = Date.now();
 
   // Record the approval BEFORE acting, so the audit trail always shows the
@@ -171,8 +187,10 @@ async function performApprovedSourcing(params: {
     create: { userId, productId: approved.productId as string, quantity: approved.quantity },
   });
 
-  const siteId = params.requestedSiteId || params.sessionSiteId;
-  const result = await createOrdersFromCart(userId, { siteId });
+  // §8: requireSiteId enforces the same server-side validation as cart
+  // checkout — siteId must belong to this builder and be ACTIVE, or order
+  // creation is refused outright (never created with a null/invalid site).
+  const result = await createOrdersFromCart(userId, { siteId, requireSiteId: true });
 
   if (!result.ok) {
     await recordToolInvocation({

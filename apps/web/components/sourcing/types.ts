@@ -170,6 +170,9 @@ export type TurnResponse = {
 export type SessionResponse = {
   id: string;
   status: string;
+  siteId: string | null;
+  siteName: string | null;
+  siteLocation: string | null;
   requirement: RequirementView;
   conversation: Array<{ role: "user" | "assistant"; content: string; at: string }>;
   candidateProducts: ProductMatchView[];
@@ -177,6 +180,15 @@ export type SessionResponse = {
   confirmedOrderId: string | null;
   confirmedAt: string | null;
   recommendations: StoredRecommendationView[];
+};
+
+/** A customer's construction Site/Project — reused from the existing Site
+ * model (see components/orders/SiteSelector.tsx) for the AI ordering flow's
+ * "which site is this order for?" step. Only ACTIVE sites are ever offered. */
+export type SiteChoice = {
+  id: string;
+  name: string;
+  location: string | null;
 };
 
 /** Indian-format currency. Renders a genuine "no data" marker for null. */

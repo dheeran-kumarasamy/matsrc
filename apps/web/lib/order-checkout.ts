@@ -224,12 +224,21 @@ export async function createOrdersFromCart(
       return { ok: false, error: "Please select a site to continue.", status: 400 };
     }
 
+    // Ownership AND active-status are both re-verified here, server-side,
+    // regardless of which flow (cart checkout or the AI Sourcing Assistant's
+    // confirm step) supplied the siteId. An archived site (e.g. one the
+    // customer selected earlier in a session that has since become
+    // inactive) must never be attached to a new order.
     const site = await prisma.site.findFirst({
-      where: { id: requestedSiteId, builderId: userId },
+      where: { id: requestedSiteId, builderId: userId, status: "ACTIVE" },
       select: { id: true },
     });
     if (!site) {
-      return { ok: false, error: "Selected site was not found.", status: 400 };
+      return {
+        ok: false,
+        error: "Selected site was not found or is no longer active. Please choose another site.",
+        status: 400,
+      };
     }
   }
 

@@ -1232,6 +1232,10 @@ export type SupplierOrderDetail = {
   // time — the only price figure surfaced to the supplier. Falls back to
   // unitPrice for legacy orders created before this field existed.
   askPrice: string;
+  // The builder's construction Site this order is for, reused from the
+  // existing Site model (Order.siteId) — null for legacy/untagged orders,
+  // which must render as "Unassigned" rather than break.
+  siteName: string | null;
 };
 
 
@@ -1266,6 +1270,7 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
         include: {
           user: true,
           tracking: { orderBy: { recordedAt: "asc" } },
+          site: { select: { name: true } },
         },
       },
       product: true,
@@ -1289,6 +1294,7 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     material: item.product.name,
     status: item.order.status,
     askPrice: `${formatCurrency((item as any).askPrice ?? item.unitPrice)} / ${item.product.unit}`,
+    siteName: item.order.site?.name ?? null,
     tracking: item.order.tracking.map((entry: any) => ({
       id: entry.id,
       label: entry.note ?? humanizeToken(entry.status),

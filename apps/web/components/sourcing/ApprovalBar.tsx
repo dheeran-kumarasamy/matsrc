@@ -1,6 +1,6 @@
 "use client";
 
-import { formatInr, type StoredRecommendationView } from "./types";
+import { formatInr, type SiteSelectionReason, type StoredRecommendationView } from "./types";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 // §14 human-approval boundary, in the UI.
@@ -25,6 +25,13 @@ type Props = {
    * or null while none is selected yet. Required before Proceed is enabled
    * (§7/§8 of the site-selection requirement). */
   siteLabel: string | null;
+  /** Distinguishes an automatic, location-matched selection from an explicit
+   * customer override — drives the mismatch warning below (§20/§21 of the
+   * location-aware selection change). */
+  siteSelectionReason: SiteSelectionReason;
+  /** The delivery location resolved from the requirement, for the override
+   * warning's wording. Null when none could be determined. */
+  requestedLocation: string | null;
 };
 
 export default function ApprovalBar({
@@ -34,6 +41,8 @@ export default function ApprovalBar({
   onViewAlternatives,
   onCancel,
   siteLabel,
+  siteSelectionReason,
+  requestedLocation,
 }: Props) {
   const hasVerifiedCost = recommendation.estimatedLandedCost !== null;
   const supplierLabel = getSupplierDisplayName(recommendation.supplierName);
@@ -66,6 +75,18 @@ export default function ApprovalBar({
           "Select a site above before confirming — this order cannot be placed without one."
         )}
       </p>
+
+      {/* §20/§21: the customer must never be able to accidentally confirm a
+          mismatched site without having explicitly selected it — the
+          selection UI (SiteStep) already requires an explicit override
+          action to reach this state, but the warning is repeated here so it
+          is visible at the exact moment of confirmation too. */}
+      {siteLabel && siteSelectionReason === "USER_OVERRIDE" && requestedLocation ? (
+        <p className="mt-1 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-800">
+          ⚠ The requirement mentions <span className="font-semibold">{requestedLocation}</span>, but
+          you selected <span className="font-semibold">{siteLabel}</span>. Continue with this site?
+        </p>
+      ) : null}
 
       <p className="mt-1 text-xs text-slate-500">
         Proceeding sends an enquiry to this supplier. It does not place an order or make any payment.

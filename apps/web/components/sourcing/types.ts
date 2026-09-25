@@ -167,12 +167,36 @@ export type TurnResponse = {
   decision: SourcingDecisionView | null;
 };
 
+/**
+ * Distinguishes an automatic, location-appropriate site selection from an
+ * explicit customer override — see site-location-matcher.ts (server) for the
+ * single authoritative source of this classification. The UI must render
+ * these differently (§14/§19-20 of the location-aware selection change):
+ *   NO_SITE          — nothing selected yet
+ *   MATCHED_LOCATION — the selected site matches the requested location
+ *   USER_SELECTED    — no delivery location could be determined; the
+ *                      selection carries no location claim either way
+ *   USER_OVERRIDE    — a location WAS requested and the selected site does
+ *                      NOT match it — the customer explicitly overrode it
+ */
+export type SiteSelectionReason = "MATCHED_LOCATION" | "USER_SELECTED" | "USER_OVERRIDE" | "NO_SITE";
+
 export type SessionResponse = {
   id: string;
   status: string;
   siteId: string | null;
   siteName: string | null;
   siteLocation: string | null;
+  siteSelectionReason: SiteSelectionReason;
+  /** The delivery location resolved from the requirement, or null when none
+   * could be determined — never conflated with "no site matches". */
+  requestedLocation: string | null;
+  /** Active sites whose location matches `requestedLocation`. Always empty
+   * when `requestedLocation` is null. */
+  matchingSites: SiteChoice[];
+  /** Every active site, regardless of location match — used to offer an
+   * explicit "use an existing site instead" override. */
+  allSites: SiteChoice[];
   requirement: RequirementView;
   conversation: Array<{ role: "user" | "assistant"; content: string; at: string }>;
   candidateProducts: ProductMatchView[];

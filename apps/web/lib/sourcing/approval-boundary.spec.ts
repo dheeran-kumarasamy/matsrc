@@ -129,6 +129,17 @@ describe("the confirm route enforces the approval boundary", () => {
   it("passes requireSiteId so createOrdersFromCart re-verifies ownership/active status", () => {
     expect(confirmRoute).toContain("requireSiteId: true");
   });
+
+  // Test 7/§9/§17 of the location-aware site-selection change: an explicit
+  // override (any ACTIVE site the customer actually owns) must NEVER be
+  // rejected merely because its location differs from the requirement — the
+  // confirm route must not perform (or import) any location comparison at
+  // all, only ownership/ACTIVE-status validation via requireSiteId.
+  it("never rejects a site based on location — only ownership/active status", () => {
+    expect(confirmRoute).not.toContain("site-location-matcher");
+    expect(confirmRoute).not.toContain("isSiteLocationMatch");
+    expect(confirmRoute).not.toContain("findMatchingSites");
+  });
 });
 
 describe("the message route performs no consequential write", () => {

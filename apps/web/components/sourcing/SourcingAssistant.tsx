@@ -20,6 +20,7 @@ import type {
   RequirementView,
   SessionResponse,
   SiteChoice,
+  SiteSelectionReason,
   SourcingDecisionView,
   SourcingStage,
   StoredRecommendationView,
@@ -84,29 +85,64 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
   // Phase 8 — sourcing intelligence decision
   const [decision, setDecision] = useState<SourcingDecisionView | null>(null);
 
-  // Site the order is for (feature: "Ask which site the order is for" — §1-9).
-  // siteId is the authoritative id persisted on the session/order; siteName/
-  // siteLocation are display-only, always re-derived server-side (never
-  // trusted from client state alone at confirm time).
-  const [sites, setSites] = useState<SiteChoice[]>([]);
+  // Site the order is for — now LOCATION-AWARE ("Make AI Site Selection
+  // Location-Aware"). siteId is the authoritative id persisted on the
+  // session/order; every other site.* field is display-only and always
+  // re-derived server-side (never trusted from client state alone at
+  // confirm time). matchingSites/allSites/requestedLocation/
+  // siteSelectionReason all come from the SAME server response
+  // (GET /sourcing/sessions/[id]) — this component never decides matching
+  // independently (§24).
   const [sitesLoading, setSitesLoading] = useState(true);
   const [siteId, setSiteId] = useState<string | null>(initialSession?.siteId ?? null);
   const [siteName, setSiteName] = useState<string | null>(initialSession?.siteName ?? null);
   const [siteLocation, setSiteLocation] = useState<string | null>(
     initialSession?.siteLocation ?? null
   );
+  const [siteSelectionReason, setSiteSelectionReason] = useState<SiteSelectionReason>(
+    initialSession?.siteSelectionReason ?? "NO_SITE"
+  );
+  const [requestedLocation, setRequestedLocation] = useState<string | null>(
+    initialSession?.requestedLocation ?? null
+  );
+  const [matchingSites, setMatchingSites] = useState<SiteChoice[]>(
+    initialSession?.matchingSites ?? []
+  );
+  const [allSites, setAllSites] = useState<SiteChoice[]>(initialSession?.allSites ?? []);
   const [savingSiteId, setSavingSiteId] = useState<string | null>(null);
+  const [showSiteOverride, setShowSiteOverride] = useState(false);
 
-  // Load the customer's ACTIVE sites once. Reuses the same GET /sites
-  // endpoint the checkout SiteSelector uses — no parallel site API.
+  // Loads location-aware site data for a session that already exists, via
+  // the single authoritative server route. Used both right after a turn
+  // (fresh requirement -> fresh location) and after an explicit site pick.
+  const refreshSiteMatch = useCallback(async (id: string) => {
+    const session = await builderApiGet<SessionResponse>(`/sourcing/sessions/${id}`);
+    setSiteId(session.siteId);
+    setSiteName(session.siteName);
+    setSiteLocation(session.siteLocation);
+    setSiteSelectionReason(session.siteSelectionReason);
+    setRequestedLocation(session.requestedLocation);
+    setMatchingSites(session.matchingSites);
+    setAllSites(session.allSites);
+    return session;
+  }, []);
+
+  // Before any session exists, still show the customer's active sites (with
+  // no location context yet) so SiteStep isn't stuck on "loading" forever if
+  // the customer looks at the page before typing anything. Reuses the same
+  // GET /sites endpoint the checkout SiteSelector uses — no parallel site API.
   useEffect(() => {
+    if (sessionId) {
+      setSitesLoading(false);
+      return;
+    }
     let active = true;
     builderApiGet<Array<{ id: string; name: string; city: string | null; state: string | null; status: string }>>(
       "/sites"
     )
       .then((data) => {
         if (!active) return;
-        setSites(
+        setAllSites(
           data
             .filter((s) => s.status === "ACTIVE")
             .map((s) => ({
@@ -117,7 +153,7 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
         );
       })
       .catch(() => {
-        if (active) setSites([]);
+        if (active) setAllSites([]);
       })
       .finally(() => {
         if (active) setSitesLoading(false);
@@ -125,17 +161,17 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [sessionId]);
 
   /** Reloads the persisted session so the UI has the stored recommendation ids. */
-  const refreshSession = useCallback(async (id: string) => {
-    const session = await builderApiGet<SessionResponse>(`/sourcing/sessions/${id}`);
-    setRecommendations(session.recommendations);
-    setSelectedId((current) => current ?? session.recommendations[0]?.id ?? null);
-    setSiteId(session.siteId);
-    setSiteName(session.siteName);
-    setSiteLocation(session.siteLocation);
-  }, []);
+  const refreshSession = useCallback(
+    async (id: string) => {
+      const session = await refreshSiteMatch(id);
+      setRecommendations(session.recommendations);
+      setSelectedId((current) => current ?? session.recommendations[0]?.id ?? null);
+    },
+    [refreshSiteMatch]
+  );
 
   async function ensureSession(): Promise<string> {
     if (sessionId) return sessionId;
@@ -145,23 +181,27 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
   }
 
   /**
-   * Persists the customer's (or the auto-selected single-site) choice as the
-   * session's authoritative siteId. The server re-validates ownership and
-   * ACTIVE status (setSessionSite) — the client never writes siteId anywhere
-   * else, so the AI cannot bypass this check with a free-form site name.
+   * Persists the customer's explicit choice (a location-matched site, the
+   * sole no-location option, or an explicit override) as the session's
+   * authoritative siteId. The server re-validates ownership and ACTIVE
+   * status (setSessionSite) — the client never writes siteId anywhere else,
+   * so the AI cannot bypass this check with a free-form site name.
    */
   const selectSite = useCallback(
     async (chosenSiteId: string) => {
       setSavingSiteId(chosenSiteId);
       try {
         const id = await ensureSession();
-        const updated = await builderApiPatch<{ siteId: string | null; siteName: string | null }>(
-          `/sourcing/sessions/${id}`,
-          { siteId: chosenSiteId }
-        );
+        const updated = await builderApiPatch<{
+          siteId: string | null;
+          siteName: string | null;
+          siteSelectionReason: SiteSelectionReason;
+        }>(`/sourcing/sessions/${id}`, { siteId: chosenSiteId });
         setSiteId(updated.siteId);
         setSiteName(updated.siteName);
-        setSiteLocation(sites.find((s) => s.id === updated.siteId)?.location ?? null);
+        setSiteLocation(allSites.find((s) => s.id === updated.siteId)?.location ?? null);
+        setSiteSelectionReason(updated.siteSelectionReason);
+        if (updated.siteSelectionReason !== "USER_OVERRIDE") setShowSiteOverride(false);
       } catch {
         // Leave the previous selection in place; the ApprovalBar continues
         // to require a valid siteId before Proceed is enabled.
@@ -170,21 +210,34 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sessionId, sites]
+    [sessionId, allSites]
   );
 
-  // Case 2 of §12: exactly one ACTIVE site — auto-select it, but it must
-  // still be persisted (not just assumed) and remains visible before
-  // confirmation via SiteStep's "I'll place this order for" line. Gated on
-  // `sessionId` already existing (i.e. the customer has sent at least one
-  // message) so simply loading the page never creates an empty sourcing
-  // session just to tag a site nobody has asked for yet.
+  /**
+   * §7: exactly one MATCHING site — may be auto-selected, but it must still
+   * be persisted (not just assumed) and remains visible before confirmation
+   * via SiteStep's "Site detected for this order" line.
+   *
+   * CRITICAL RULE CHANGE from the previous (location-unaware) behaviour: the
+   * trigger is now `matchingSites.length === 1` (a requested location was
+   * resolved AND exactly one active site matches it) — NEVER
+   * `allSites.length === 1`. A single active site whose location does not
+   * match the requirement, or when no location could be determined at all,
+   * must NOT be auto-selected (§2/§4/§13).
+   */
   useEffect(() => {
-    if (sessionId && !sitesLoading && sites.length === 1 && !siteId && savingSiteId === null) {
-      void selectSite(sites[0].id);
+    if (
+      sessionId &&
+      !sitesLoading &&
+      requestedLocation &&
+      matchingSites.length === 1 &&
+      siteId !== matchingSites[0].id &&
+      savingSiteId === null
+    ) {
+      void selectSite(matchingSites[0].id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, sitesLoading, sites, siteId, savingSiteId]);
+  }, [sessionId, sitesLoading, requestedLocation, matchingSites, siteId, savingSiteId]);
 
   /**
    * Clears every piece of client state back to its pre-search default and
@@ -213,11 +266,16 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
     setConfirmedMessage(null);
     setShowAllOptions(false);
     setDecision(null);
-    // A new session starts with no site tagged yet — the single-site
-    // auto-select effect (or the multi-site SiteStep) re-runs against it.
+    // A new session starts with no site tagged yet — the location-match
+    // auto-select effect (or SiteStep) re-runs against it once the next
+    // message resolves a fresh requirement/location.
     setSiteId(null);
     setSiteName(null);
     setSiteLocation(null);
+    setSiteSelectionReason("NO_SITE");
+    setRequestedLocation(null);
+    setMatchingSites([]);
+    setShowSiteOverride(false);
   }
 
   async function send(message: string) {
@@ -245,12 +303,17 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
       setShowAllOptions(false);
 
       // Recommendations carry DB ids (needed for approval), so re-read them.
+      // Either way, the requirement's location may have changed THIS turn
+      // (e.g. the customer just said "for my Chennai project"), so the
+      // location match must always be re-resolved — never left stale from
+      // a previous turn's location (or lack thereof).
       if (result.options.length > 0) {
         setSelectedId(null);
         await refreshSession(id);
       } else {
         setRecommendations([]);
         setSelectedId(null);
+        await refreshSiteMatch(id);
       }
     } catch (caught) {
       // §24: show a normal application-level error, never provider internals.
@@ -382,9 +445,14 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
           {!confirmedMessage && (
             <SiteStep
               loading={sitesLoading}
-              sites={sites}
+              requestedLocation={requestedLocation}
+              matchingSites={matchingSites}
+              allSites={allSites}
               selectedSiteId={siteId}
+              siteSelectionReason={siteSelectionReason}
               savingSiteId={savingSiteId}
+              showOverride={showSiteOverride}
+              onToggleOverride={() => setShowSiteOverride((v) => !v)}
               onSelect={selectSite}
             />
           )}
@@ -444,6 +512,8 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
               onViewAlternatives={() => setShowAllOptions(true)}
               onCancel={() => setSelectedId(null)}
               siteLabel={siteLabel}
+              siteSelectionReason={siteSelectionReason}
+              requestedLocation={requestedLocation}
             />
           )}
 

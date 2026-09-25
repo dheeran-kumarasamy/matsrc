@@ -256,6 +256,64 @@ describe("listActiveSites only ever returns the caller's own ACTIVE sites", () =
   });
 });
 
+// "Make AI Site Selection Location-Aware" — findMatchingSitesForBuilder is
+// the single server-side entry point for location matching. These tests
+// verify it (a) stays scoped to the caller's own ACTIVE sites exactly like
+// listActiveSites, and (b) actually defers to the shared pure matcher rather
+// than reimplementing its own comparison.
+describe("findMatchingSitesForBuilder — Test 8/9: scoping + location matching", () => {
+  it("queries only the caller's own ACTIVE sites (never another builder's)", async () => {
+    const { findMatchingSitesForBuilder } = await import("./session-store");
+    siteFindMany.mockResolvedValue([
+      { id: "site-erode", name: "Erode Site", city: "Erode", state: "Tamil Nadu" },
+    ]);
+
+    await findMatchingSitesForBuilder(OWNER, "Erode");
+
+    expect(siteFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { builderId: OWNER, status: "ACTIVE" } })
+    );
+  });
+
+  it("Test 3 — returns only the location-matching subset in `matches`, all sites in `allSites`", async () => {
+    const { findMatchingSitesForBuilder } = await import("./session-store");
+    siteFindMany.mockResolvedValue([
+      { id: "site-erode", name: "Erode Site", city: "Erode", state: "Tamil Nadu" },
+      { id: "site-chennai", name: "Chennai Site", city: "Chennai", state: "Tamil Nadu" },
+    ]);
+
+    const result = await findMatchingSitesForBuilder(OWNER, "Chennai");
+
+    expect(result.requestedLocation).toBe("Chennai");
+    expect(result.matches.map((s) => s.id)).toEqual(["site-chennai"]);
+    expect(result.allSites.map((s) => s.id).sort()).toEqual(["site-chennai", "site-erode"]);
+  });
+
+  it("Test 2/4 — returns empty matches (never a fallback site) when nothing matches", async () => {
+    const { findMatchingSitesForBuilder } = await import("./session-store");
+    siteFindMany.mockResolvedValue([
+      { id: "site-erode", name: "Erode Site", city: "Erode", state: "Tamil Nadu" },
+    ]);
+
+    const result = await findMatchingSitesForBuilder(OWNER, "Chennai");
+
+    expect(result.matches).toEqual([]);
+    expect(result.allSites).toHaveLength(1);
+  });
+
+  it("Test 5/6 — no requestable location -> empty matches regardless of site count", async () => {
+    const { findMatchingSitesForBuilder } = await import("./session-store");
+    siteFindMany.mockResolvedValue([
+      { id: "site-erode", name: "Erode Site", city: "Erode", state: "Tamil Nadu" },
+    ]);
+
+    const result = await findMatchingSitesForBuilder(OWNER, null);
+
+    expect(result.requestedLocation).toBeNull();
+    expect(result.matches).toEqual([]);
+  });
+});
+
 describe("createSession will not tag a session to someone else's Site", () => {
   it("drops a siteId that does not belong to the caller", async () => {
     const { createSession } = await import("./session-store");

@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 
 import { getOrCreateBuilder, getUserCtx, prisma } from "@/lib/builder-db";
 import { loadGeographyIndex } from "@/lib/sourcing/sourcing-data";
-import { getRecommendations, getSession, setSessionSite } from "@/lib/sourcing/session-store";
+import {
+  findMatchingSitesForBuilder,
+  getRecommendations,
+  getSession,
+  setSessionSite,
+} from "@/lib/sourcing/session-store";
+import { isSiteLocationMatch } from "@/lib/sourcing/site-location-matcher";
 import { classifyLocality } from "@/lib/sourcing/supplier-search";
 
 export const dynamic = "force-dynamic";
@@ -47,12 +53,58 @@ export async function GET(request: Request, { params }: { params: { id: string }
         })
       : null;
 
+    // Location-aware site selection: resolve which of the builder's ACTIVE
+    // sites match the requirement's requested delivery location, through the
+    // SINGLE authoritative matcher (site-location-matcher.ts) — the UI must
+    // never decide this independently. `allSites` is also returned so the
+    // client can offer an explicit "use an existing site instead" override
+    // without a second round trip.
+    const siteMatch = await findMatchingSitesForBuilder(
+      user.id,
+      session.requirement.location,
+      geography
+    );
+
+    // Derived (not stored) — distinguishes an automatic, location-appropriate
+    // selection from an explicit customer override, purely from data already
+    // on hand (no schema change required, per the feature spec's "extend
+    // state only if necessary"):
+    //   NO_SITE          — nothing selected yet
+    //   MATCHED_LOCATION — the selected site matches the requested location
+    //                      (whether it was auto-selected as the sole match,
+    //                      or chosen from several matching options)
+    //   USER_SELECTED    — no delivery location could be determined at all,
+    //                      so the selection carries no location claim either
+    //                      way — this is NOT proof the site is correct.
+    //   USER_OVERRIDE    — a location WAS requested, and the selected site
+    //                      does not match it: the customer explicitly chose
+    //                      an existing site anyway.
+    type SiteSelectionReason = "MATCHED_LOCATION" | "USER_SELECTED" | "USER_OVERRIDE" | "NO_SITE";
+    let siteSelectionReason: SiteSelectionReason;
+    if (!session.siteId || !site) {
+      siteSelectionReason = "NO_SITE";
+    } else if (!siteMatch.requestedLocation) {
+      siteSelectionReason = "USER_SELECTED";
+    } else {
+      siteSelectionReason = isSiteLocationMatch(
+        { id: site.id, name: site.name, city: site.city, state: site.state },
+        siteMatch.requestedLocation,
+        geography
+      )
+        ? "MATCHED_LOCATION"
+        : "USER_OVERRIDE";
+    }
+
     return NextResponse.json({
       id: session.id,
       status: session.status,
       siteId: session.siteId,
       siteName: site?.name ?? null,
       siteLocation: site ? [site.city, site.state].filter(Boolean).join(", ") || null : null,
+      siteSelectionReason,
+      requestedLocation: siteMatch.requestedLocation,
+      matchingSites: siteMatch.matches,
+      allSites: siteMatch.allSites,
       requirement: session.requirement,
       conversation: session.conversation,
       candidateProducts: session.candidateProducts,
@@ -149,11 +201,30 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     const site = updated.siteId
       ? await prisma.site.findUnique({
           where: { id: updated.siteId },
-          select: { name: true },
+          select: { id: true, name: true, city: true, state: true },
         })
       : null;
 
-    return NextResponse.json({ siteId: updated.siteId, siteName: site?.name ?? null });
+    // Immediate location-match feedback so the UI can show an override
+    // warning right after selection, without a second round trip.
+    const requestedLocation = updated.requirement.location;
+    const siteSelectionReason: "MATCHED_LOCATION" | "USER_SELECTED" | "USER_OVERRIDE" | "NO_SITE" =
+      !site
+        ? "NO_SITE"
+        : !requestedLocation
+          ? "USER_SELECTED"
+          : isSiteLocationMatch(
+                { id: site.id, name: site.name, city: site.city, state: site.state },
+                requestedLocation
+              )
+            ? "MATCHED_LOCATION"
+            : "USER_OVERRIDE";
+
+    return NextResponse.json({
+      siteId: updated.siteId,
+      siteName: site?.name ?? null,
+      siteSelectionReason,
+    });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });

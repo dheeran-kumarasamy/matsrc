@@ -24,6 +24,8 @@ import type {
 } from "./types";
 import { EMPTY_REQUIREMENT } from "./types";
 import { validateRequirement } from "./requirement-schema";
+import { findMatchingSites } from "./site-location-matcher";
+import type { GeographyIndex } from "./geography";
 
 /** Max conversation turns retained per session (bounds row growth). */
 export const MAX_TURNS = 40;
@@ -255,6 +257,56 @@ export async function listActiveSites(
     name: site.name,
     location: [site.city, site.state].filter(Boolean).join(", ") || null,
   }));
+}
+
+/**
+ * Location-aware site retrieval (§5/§24 of the "make AI site selection
+ * location-aware" change) — the SINGLE server-side entry point used by both
+ * the message and session-read routes to determine which of the builder's
+ * ACTIVE sites match a requested delivery location.
+ *
+ * Reuses:
+ *   - the caller's ACTIVE sites exactly as listActiveSites() does (same
+ *     builderId + status scoping — never a parallel query)
+ *   - the shared, pure findMatchingSites()/isSiteLocationMatch() matcher, so
+ *     no route/component re-implements its own "does this match" logic
+ *   - the platform's real PricingDistrict/PricingState hierarchy via the
+ *     optional `geography` param (loadGeographyIndex()), exactly as
+ *     classifyLocality() does for supplier-locality disclosure
+ *
+ * Returns EVERY active site (`allSites`) alongside the subset that matches
+ * (`matches`) so callers can offer an explicit "use an existing site
+ * instead" override without a second query.
+ */
+export async function findMatchingSitesForBuilder(
+  userId: string,
+  requestedLocation: string | null,
+  geography?: GeographyIndex
+): Promise<{
+  requestedLocation: string | null;
+  allSites: Array<{ id: string; name: string; location: string | null }>;
+  matches: Array<{ id: string; name: string; location: string | null }>;
+}> {
+  const rows = await prisma.site.findMany({
+    where: { builderId: userId, status: "ACTIVE" },
+    select: { id: true, name: true, city: true, state: true },
+    orderBy: { name: "asc" },
+  });
+
+  const { matches } = findMatchingSites(rows, requestedLocation, geography);
+  const matchIds = new Set(matches.map((site) => site.id));
+
+  const toChoice = (site: (typeof rows)[number]) => ({
+    id: site.id,
+    name: site.name,
+    location: [site.city, site.state].filter(Boolean).join(", ") || null,
+  });
+
+  return {
+    requestedLocation: requestedLocation && requestedLocation.trim() ? requestedLocation : null,
+    allSites: rows.map(toChoice),
+    matches: rows.filter((site) => matchIds.has(site.id)).map(toChoice),
+  };
 }
 
 /**

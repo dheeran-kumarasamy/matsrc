@@ -33,6 +33,7 @@ import { useCartStore } from "@/lib/store/cart-store";
 import { builderApiPost } from "@/lib/api";
 import SiteSelector from "@/components/orders/SiteSelector";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
+import OrderConfirmationBanner from "@/components/orders/OrderConfirmationBanner";
 
 
 
@@ -217,11 +218,16 @@ export default function CartDrawer() {
     setSubmitError(null);
     try {
 
-      const response = await builderApiPost<{ orders: Array<{ id: string }> }>("/orders/checkout", {
-        siteId,
-      });
+      const response = await builderApiPost<{ orders: Array<{ id: string; enquiryId?: string }> }>(
+        "/orders/checkout",
+        { siteId }
+      );
 
-      const reference = response.orders?.[0]?.id ?? "submitted";
+      // Prefer the human-readable enquiry ID (e.g. "ABC-SITE01-000123") so
+      // the confirmation banner shows a meaningful reference — see
+      // packages/db/lib/enquiry-id.ts and components/orders/
+      // OrderConfirmationBanner.tsx.
+      const reference = response.orders?.[0]?.enquiryId ?? response.orders?.[0]?.id ?? "submitted";
       completeCheckout(reference);
       void fetchCart();
     } catch {
@@ -378,14 +384,8 @@ export default function CartDrawer() {
           ) : null}
 
           {checkoutStep === "success" ? (
-            <div className="flex flex-col items-center gap-3 py-10 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: "rgba(74,222,128,0.15)", color: "#4ade80" }}>
-                <CheckCircle2 size={28} />
-              </div>
-              <p className="text-sm font-semibold" style={{ color: "var(--posh-fg)" }}>Enquiry {lastOrderReference} submitted</p>
-              <p className="max-w-xs text-xs" style={{ color: "var(--posh-fg-muted)" }}>
-                Suppliers have been notified. Once a supplier confirms, a payment link will appear on the order detail page — no payment is required yet.
-              </p>
+            <div className="py-6">
+              <OrderConfirmationBanner enquiryId={lastOrderReference} />
             </div>
           ) : null}
         </div>

@@ -1242,6 +1242,11 @@ export type SupplierOrderDetail = {
 
 export type SupplierRfqCard = {
   id: string;
+  // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — only set for
+  // source==="ENQUIRY" cards (real QuickRequest rows have no equivalent
+  // human-readable id). See packages/db/lib/enquiry-id.ts. Falls back to
+  // `id` for pre-migration orders.
+  enquiryId?: string;
   material: string;
   quantity: string;
   pincode: string;
@@ -1597,7 +1602,7 @@ export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]>
         supplierId: supplierProfile.id,
         order: { status: "PLACED" },
       },
-      include: { product: true, order: true },
+      include: { product: true, order: { select: { id: true, enquiryId: true, deliveryAddress: true, deliveryDate: true } } },
       orderBy: { order: { createdAt: "desc" } },
       take: 12,
     }),
@@ -1620,6 +1625,7 @@ export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]>
 
   const enquiryCards: SupplierRfqCard[] = pendingEnquiryItems.map((item: any) => ({
     id: item.orderId,
+    enquiryId: item.order.enquiryId ?? item.orderId,
     material: item.product.name,
     quantity: `${item.quantity} ${item.product.unit}`,
     // OrderItem/Order have no dedicated pincode field (see Order model in

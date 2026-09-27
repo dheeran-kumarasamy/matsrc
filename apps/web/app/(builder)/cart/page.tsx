@@ -8,6 +8,7 @@ import { Minus, Plus, Trash2 } from "lucide-react";
 import { builderApiDelete, builderApiGet, builderApiPost } from "@/lib/api";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import SiteSelector from "@/components/orders/SiteSelector";
+import { buildConfirmedOrdersUrl } from "@/lib/order-confirmation";
 
 // BUG-06 fix: this input keeps its own local editable string state, synced
 // from the `quantity` prop via useEffect (so +/- button clicks and cart
@@ -186,8 +187,12 @@ export default function CartPage() {
     setSubmitError(null);
 
     try {
-      await builderApiPost("/orders/checkout", { siteId });
-      router.push("/orders");
+      const response = await builderApiPost<{ orders: Array<{ enquiryId?: string; id: string }> }>("/orders/checkout", { siteId });
+
+      // Confirmation message is shown only after this backend call has
+      // resolved successfully — never merely on button click. See
+      // lib/order-confirmation.ts buildConfirmedOrdersUrl().
+      router.push(buildConfirmedOrdersUrl(response));
       router.refresh();
     } catch {
       setSubmitError("Unable to submit enquiry right now.");

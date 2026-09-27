@@ -4,6 +4,10 @@ import { builderApiGet } from "@/lib/api";
 type Dispute = {
   id: string;
   orderId: string;
+  // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+  // packages/db/lib/enquiry-id.ts. Falls back to `orderId` for
+  // pre-migration orders.
+  enquiryId?: string;
   issueType: string;
   description: string;
   status: "OPEN" | "UNDER_REVIEW" | "RESOLVED" | "ESCALATED";
@@ -56,7 +60,7 @@ export default async function DisputesPage() {
               <div>
                 <p className="text-base font-bold tracking-tight text-[color:var(--posh-fg)]">{d.issueType.replace(/_/g, " ")}</p>
                 <p className="posh-label mt-1">
-                  Order #{d.orderId.slice(0, 8)} · {new Date(d.createdAt).toLocaleDateString("en-IN")}
+                  Order #{d.enquiryId ?? d.orderId} · {new Date(d.createdAt).toLocaleDateString("en-IN")}
                 </p>
                 <p className="mt-2 line-clamp-2 text-sm font-medium text-[color:var(--posh-fg-muted)]">{d.description}</p>
               </div>

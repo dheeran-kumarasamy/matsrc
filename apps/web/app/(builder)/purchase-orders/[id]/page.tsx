@@ -11,6 +11,10 @@ type PurchaseOrderDetail = {
   approvedAt: string | null;
   approvedBy: string | null;
   orderId: string;
+  // Underlying Order.status — used to gate the "Cancel Order" action so it
+  // is only ever offered while the order is still in a builder-cancellable
+  // state (see lib/order-cancellation.ts's isBuilderCancellableOrderStatus).
+  orderStatus: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED" | null;
   supplier: { id: string; companyName: string };
   builder: { id: string; name: string; email: string };
   lineItems: Array<{

@@ -7,6 +7,10 @@ import { adminApiPatch } from "@/lib/api-client";
 type PendingPayment = {
   id: string;
   orderId: string;
+  // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+  // packages/db/lib/enquiry-id.ts. Falls back to `orderId` for
+  // pre-migration orders.
+  enquiryId?: string;
   orderStatus: string;
   orderTotal: number;
   paymentAmount: number;
@@ -72,7 +76,7 @@ export function PaymentVerificationQueue({ items }: { items: PendingPayment[] })
             <article key={item.id} className="rounded-xl border border-slate-200 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-bold text-slate-900">Order #{item.orderId.slice(0, 8)}</p>
+                  <p className="text-sm font-bold text-slate-900">Order #{item.enquiryId ?? item.orderId}</p>
                   <p className="text-sm text-slate-600">
                     {item.customer.name || item.customer.email || "Unknown customer"}
                     {item.customer.phone ? ` · ${item.customer.phone}` : ""}

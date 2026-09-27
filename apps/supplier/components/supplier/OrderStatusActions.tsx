@@ -8,6 +8,11 @@ import {
   getReadOnlyStatusLabel,
   type OrderStatus,
 } from "@/lib/order-status-transitions";
+import {
+  ORDER_CONFIRMATION_TITLE,
+  ORDER_CONFIRMATION_MESSAGE,
+  shouldShowSupplierConfirmationBanner,
+} from "@/lib/order-confirmation";
 
 // Visual treatment per action, keyed by the target status the action moves
 // the order *to* (not the current status) — kept separate from the
@@ -23,12 +28,18 @@ export function OrderStatusActions({ orderId, status }: { orderId: string; statu
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Only set right after a successful CONFIRM (PLACED -> PROCESSING)
+  // transition, and only rendered while the order is still in the
+  // resulting PROCESSING status — cleared on any other action/status so it
+  // can never resurface on an unrelated later visit to this same order.
+  const [justConfirmed, setJustConfirmed] = useState(false);
 
   async function updateStatus(nextStatus: OrderStatus) {
     setPending(nextStatus);
     setError(null);
     try {
       await axios.patch(`/api/supplier/orders/${orderId}`, { status: nextStatus });
+      setJustConfirmed(nextStatus === "PROCESSING");
       router.refresh();
     } catch (err: any) {
       // Backend re-validates every transition (see updateSupplierOrderStatus
@@ -36,6 +47,7 @@ export function OrderStatusActions({ orderId, status }: { orderId: string; statu
       // order's *current* status with a 400 — surface that message rather
       // than silently failing, e.g. if this page's data is stale.
       setError(err?.response?.data?.message ?? "Unable to update order status right now.");
+      setJustConfirmed(false);
     } finally {
       setPending(null);
     }
@@ -51,6 +63,13 @@ export function OrderStatusActions({ orderId, status }: { orderId: string; statu
     <aside className="panel p-5">
       <h4 className="text-lg font-bold text-slate-900">Update Status</h4>
       <p className="mt-1 text-sm text-slate-600">Current status: {status}</p>
+
+      {shouldShowSupplierConfirmationBanner({ justConfirmed, currentStatus: status }) ? (
+        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          <p className="text-sm font-semibold text-emerald-700">{ORDER_CONFIRMATION_TITLE}</p>
+          <p className="mt-1 text-xs text-emerald-700">{ORDER_CONFIRMATION_MESSAGE}</p>
+        </div>
+      ) : null}
 
       {error ? <p className="mt-2 text-sm font-semibold text-rose-600">{error}</p> : null}
 

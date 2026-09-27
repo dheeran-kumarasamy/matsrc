@@ -532,9 +532,14 @@ export class NotificationService {
       }))
     );
 
+    // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+    // packages/db/lib/enquiry-id.ts. Falls back to the raw order id for
+    // pre-migration orders.
+    const enquiryDisplayId = order.enquiryId ?? order.id;
+
     const content = {
       title: "New order received",
-      body: `Enquiry ${order.id.slice(0, 8)} from ${order.user.name ?? order.user.phone ?? "a builder"}. Items: ${lineItemSummary}. Quote here: ${deepLink}`,
+      body: `Enquiry ${enquiryDisplayId} from ${order.user.name ?? order.user.phone ?? "a builder"}. Items: ${lineItemSummary}. Quote here: ${deepLink}`,
     };
 
     return {
@@ -544,9 +549,9 @@ export class NotificationService {
       templateType: "ENQUIRY_SUBMITTED_TO_SUPPLIER" as NotificationTemplateType,
       variables: {
         orderId: order.id,
-        orderNumber: order.id.slice(0, 8),
+        orderNumber: enquiryDisplayId,
         enquiryId: order.id,
-        enquiryNumber: order.id.slice(0, 8),
+        enquiryNumber: enquiryDisplayId,
         deepLink,
         builderName: order.user.name ?? order.user.phone,
         itemCount: order.items.length,
@@ -580,6 +585,10 @@ export class NotificationService {
     const deepLink = this.getBuilderEnquiryDeepLink(order.id);
     const tentativeDeliveryDate = params.tentativeDeliveryDate.toISOString().slice(0, 10);
     const bestPriceLabel = Number(params.bestPriceTotal).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+    // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+    // packages/db/lib/enquiry-id.ts. Falls back to the raw order id for
+    // pre-migration orders.
+    const enquiryDisplayId = order.enquiryId ?? order.id;
 
     return {
       userId: order.userId,
@@ -588,9 +597,9 @@ export class NotificationService {
       templateType: "ENQUIRY_BEST_PRICE_TO_BUILDER" as NotificationTemplateType,
       variables: {
         orderId: order.id,
-        orderNumber: order.id.slice(0, 8),
+        orderNumber: enquiryDisplayId,
         enquiryId: order.id,
-        enquiryNumber: order.id.slice(0, 8),
+        enquiryNumber: enquiryDisplayId,
         supplierName: params.selectedSupplierName ?? null,
         bestPriceTotal: params.bestPriceTotal,
         tentativeDeliveryDate,
@@ -599,7 +608,7 @@ export class NotificationService {
       },
       content: {
         title: "Best quote ready",
-        body: `Enquiry ${order.id.slice(0, 8)} accepted. Best price: ₹${bestPriceLabel}. Tentative delivery: ${tentativeDeliveryDate}. Details: ${deepLink}`,
+        body: `Enquiry ${enquiryDisplayId} accepted. Best price: ₹${bestPriceLabel}. Tentative delivery: ${tentativeDeliveryDate}. Details: ${deepLink}`,
       },
       idempotencyKey: `builder-best-price:${order.id}`,
     };
@@ -639,7 +648,10 @@ export class NotificationService {
       templateType: statusConfig.templateType,
       variables: {
         orderId: order.id,
-        orderNumber: order.id.slice(0, 8),
+        // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+        // packages/db/lib/enquiry-id.ts. Falls back to the raw order id for
+        // pre-migration orders.
+        orderNumber: order.enquiryId ?? order.id,
         supplierName: order.items[0]?.supplier.companyName,
         builderName: order.user.name ?? order.user.phone,
         status,

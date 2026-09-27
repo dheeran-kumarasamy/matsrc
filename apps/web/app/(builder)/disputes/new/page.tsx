@@ -6,6 +6,10 @@ import { builderApiGet, builderApiPost } from "@/lib/api";
 
 type OrderOption = {
   id: string;
+  // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+  // packages/db/lib/enquiry-id.ts. Falls back to `id` for pre-migration
+  // orders (see the API route's `enquiryId ?? id` fallback).
+  enquiryId?: string;
   status: string;
   total: number;
   totalLabel: string;
@@ -148,7 +152,7 @@ function NewDisputeForm() {
             </option>
             {filteredOrders.map((o) => (
               <option key={o.id} value={o.id}>
-                #{o.id.slice(0, 8)} · {o.supplierName} · {o.totalLabel} · {new Date(o.createdAt).toLocaleDateString("en-IN")}
+                #{o.enquiryId ?? o.id} · {o.supplierName} · {o.totalLabel} · {new Date(o.createdAt).toLocaleDateString("en-IN")}
               </option>
             ))}
           </select>

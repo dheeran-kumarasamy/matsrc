@@ -188,7 +188,7 @@ export class OrderStatusFlow {
     });
 
     const body =
-      `Order #${orderId.slice(0, 8)}\n` +
+      `Order #${detail.enquiryId ?? orderId}\n` +
       `Buyer: ${detail.buyer}\n` +
       `Material: ${detail.material}\n` +
       `Qty: ${detail.quantity}\n` +
@@ -284,8 +284,19 @@ export class OrderStatusFlow {
       });
     });
 
+    // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+    // packages/db/lib/enquiry-id.ts. Falls back to the raw order id for
+    // pre-migration orders.
+    const deliveredOrder = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { enquiryId: true },
+    });
+
     this.sessionService.resetToMainMenu(session.phone);
-    return { kind: "text", text: `✅ Order #${orderId.slice(0, 8)} marked as delivered (${dateLabel}).\n\n${MENU_FOOTER}` };
+    return {
+      kind: "text",
+      text: `✅ Order #${deliveredOrder?.enquiryId ?? orderId} marked as delivered (${dateLabel}).\n\n${MENU_FOOTER}`,
+    };
   }
 
   private async resolveOrderId(orderRef: string, supplierProfileId: string): Promise<string | null> {

@@ -34,10 +34,22 @@ describe("BuilderOrdersService.create", () => {
       order: {
         create: vi
           .fn()
-          .mockResolvedValueOnce({ id: "ord-1", totalAmount: 500, items: [{ id: "i-1" }], status: "PLACED" })
-          .mockResolvedValueOnce({ id: "ord-2", totalAmount: 400, items: [{ id: "i-2" }], status: "PLACED" }),
+          .mockResolvedValueOnce({ id: "ord-1", enquiryId: "BLD-UNSITED-000001", totalAmount: 500, items: [{ id: "i-1" }], status: "PLACED" })
+          .mockResolvedValueOnce({ id: "ord-2", enquiryId: "BLD-UNSITED-000002", totalAmount: 400, items: [{ id: "i-2" }], status: "PLACED" }),
       },
+      // Meaningful Enquiry ID support (see packages/db/lib/enquiry-id.ts) —
+      // generateEnquiryId() is called from inside a $transaction callback
+      // and touches user.findUnique/update + enquirySequence.update.
+      user: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        update: vi.fn().mockResolvedValue({ builderCode: "BLD" }),
+      },
+      enquirySequence: {
+        update: vi.fn().mockResolvedValue({ value: 1 }),
+      },
+      $queryRaw: vi.fn().mockResolvedValue([]),
     };
+    (prisma as any).$transaction = vi.fn(async (callback: any) => callback(prisma));
 
     const builderContext = {
       getOrCreateBuilder: vi.fn().mockResolvedValue({ user: { id: "builder-1" } }),

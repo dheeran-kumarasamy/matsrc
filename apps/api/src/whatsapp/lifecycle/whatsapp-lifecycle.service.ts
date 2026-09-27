@@ -59,7 +59,7 @@ export class WhatsAppLifecycleService {
 
       await this.sendTemplateToBuilder(order, "builder_order_placed", [
         order.user.name ?? "Builder",
-        order.id.slice(0, 8),
+        order.enquiryId ?? order.id,
         this.lineItemSummary(order.items),
       ]);
     });
@@ -72,7 +72,7 @@ export class WhatsAppLifecycleService {
 
       await this.sendTemplateToBuilder(order, "builder_enquiry_pending_update", [
         order.user.name ?? "Builder",
-        order.id.slice(0, 8),
+        order.enquiryId ?? order.id,
       ]);
 
       await this.prisma.order.update({
@@ -89,7 +89,7 @@ export class WhatsAppLifecycleService {
 
       await this.sendTemplateToBuilder(order, "builder_order_accepted", [
         order.user.name ?? "Builder",
-        order.id.slice(0, 8),
+        order.enquiryId ?? order.id,
         order.items[0]?.supplier.companyName ?? "Supplier",
       ]);
     });
@@ -190,7 +190,7 @@ export class WhatsAppLifecycleService {
       const order = await this.loadOrderForBuilderNotification(orderId);
       if (!order) return;
 
-      await this.sendTemplateToBuilder(order, "builder_order_dispatched", [order.user.name ?? "Builder", order.id.slice(0, 8)]);
+      await this.sendTemplateToBuilder(order, "builder_order_dispatched", [order.user.name ?? "Builder", order.enquiryId ?? order.id]);
     });
   }
 
@@ -199,7 +199,7 @@ export class WhatsAppLifecycleService {
       const order = await this.loadOrderForBuilderNotification(orderId);
       if (!order) return;
 
-      await this.sendTemplateToBuilder(order, "builder_order_out_for_delivery", [order.user.name ?? "Builder", order.id.slice(0, 8)]);
+      await this.sendTemplateToBuilder(order, "builder_order_out_for_delivery", [order.user.name ?? "Builder", order.enquiryId ?? order.id]);
     });
   }
 
@@ -208,7 +208,7 @@ export class WhatsAppLifecycleService {
       const order = await this.loadOrderForBuilderNotification(orderId);
       if (!order) return;
 
-      await this.sendTemplateToBuilder(order, "builder_order_delivered", [order.user.name ?? "Builder", order.id.slice(0, 8)]);
+      await this.sendTemplateToBuilder(order, "builder_order_delivered", [order.user.name ?? "Builder", order.enquiryId ?? order.id]);
     });
   }
 
@@ -350,13 +350,22 @@ export class WhatsAppLifecycleService {
       });
       if (!supplierProfile) return;
 
+      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+      // packages/db/lib/enquiry-id.ts. Falls back to the raw order id for
+      // pre-migration orders.
+      const orderForInvoice = await this.prisma.order.findUnique({
+        where: { id: params.orderId },
+        select: { enquiryId: true },
+      });
+      const enquiryDisplayId = orderForInvoice?.enquiryId ?? params.orderId;
+
       const message: BotMessage = {
         kind: "template",
         name: this.config.getTemplateName("supplier_invoice_generated"),
         languageCode: this.config.languageCode(),
         components: [
-          documentHeaderComponent(params.invoiceUrl, `invoice-${params.orderId.slice(0, 8)}.pdf`),
-          bodyComponent([supplierProfile.companyName, params.orderId.slice(0, 8)]),
+          documentHeaderComponent(params.invoiceUrl, `invoice-${enquiryDisplayId}.pdf`),
+          bodyComponent([supplierProfile.companyName, enquiryDisplayId]),
         ],
       };
 
@@ -386,7 +395,7 @@ export class WhatsAppLifecycleService {
   }
 
   private async sendTemplateToBuilder(
-    order: { id: string; user: { id: string; whatsappNumber: string | null; phone: string | null } },
+    order: { id: string; enquiryId?: string | null; user: { id: string; whatsappNumber: string | null; phone: string | null } },
     templateKey: LifecycleTemplateKey,
     bodyValues: string[]
   ): Promise<void> {

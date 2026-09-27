@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException, Logger } from "@nestjs/common";
-import { OrderStatus, PaymentMethod, PaymentStatus } from "@matsrc/db";
+import { OrderStatus, PaymentMethod, PaymentStatus, generateEnquiryId } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { formatCurrency, formatDate, humanizeToken } from "src/supplier/utils";
 import { BuilderContextService } from "src/builder/builder-context.service";
@@ -37,6 +37,7 @@ export class BuilderOrdersService {
       where: { userId: user.id },
       select: {
         id: true,
+        enquiryId: true,
         status: true,
         paymentStatus: true,
         totalAmount: true,
@@ -61,6 +62,10 @@ export class BuilderOrdersService {
 
     return orders.map((order) => ({
       id: order.id,
+      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — falls back to
+      // the raw order id for pre-migration orders. See
+      // packages/db/lib/enquiry-id.ts.
+      enquiryId: order.enquiryId ?? order.id,
       status: order.status,
       paymentStatus: order.paymentStatus,
       itemCount: order.items.length,
@@ -80,6 +85,7 @@ export class BuilderOrdersService {
       where: { id, userId: user.id },
       select: {
         id: true,
+        enquiryId: true,
         status: true,
         paymentMethod: true,
         paymentStatus: true,
@@ -121,6 +127,10 @@ export class BuilderOrdersService {
 
     return {
       id: order.id,
+      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — falls back to
+      // the raw order id for pre-migration orders. See
+      // packages/db/lib/enquiry-id.ts.
+      enquiryId: order.enquiryId ?? order.id,
       status: order.status,
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus,
@@ -204,50 +214,74 @@ export class BuilderOrdersService {
       groupedItems.set(item.product.supplierId, currentGroup);
     }
 
-    const createdOrders: Array<{ id: string; supplierId: string; supplierName: string; total: number; itemCount: number; status: OrderStatus }> = [];
+    const createdOrders: Array<{
+      id: string;
+      enquiryId: string;
+      supplierId: string;
+      supplierName: string;
+      total: number;
+      itemCount: number;
+      status: OrderStatus;
+    }> = [];
 
     for (const group of groupedItems.values()) {
       const totalAmount = group.items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
 
-      const order = await this.prisma.order.create({
-        data: {
-          userId: user.id,
-          paymentMethod: dto.paymentMethod ?? PaymentMethod.BANK_TRANSFER,
-          status: OrderStatus.PLACED,
-          paymentStatus: PaymentStatus.PENDING,
-          totalAmount,
-          deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : null,
-          siteId: dto.siteId ?? undefined,
-          items: {
-            create: group.items.map((item) => ({
-              productId: item.productId,
-              supplierId: group.supplierId,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : null,
-            })),
-          },
-          tracking: {
-            create: {
-              status: OrderStatus.PLACED,
-              note: "Pending supplier confirmation",
+      // Meaningful Enquiry ID (Order.enquiryId): generated inside the same
+      // transaction as the Order row so the resolved builder/site codes and
+      // the incremented global sequence commit atomically with the enquiry
+      // itself — see packages/db/lib/enquiry-id.ts.
+      const order = await this.prisma.$transaction(async (tx) => {
+        const enquiryId = await generateEnquiryId(tx, {
+          builderId: user.id,
+          builderName: user.name,
+          builderEmail: user.email,
+          siteId: dto.siteId ?? null,
+        });
+
+        return tx.order.create({
+          data: {
+            userId: user.id,
+            enquiryId,
+            paymentMethod: dto.paymentMethod ?? PaymentMethod.BANK_TRANSFER,
+            status: OrderStatus.PLACED,
+            paymentStatus: PaymentStatus.PENDING,
+            totalAmount,
+            deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : null,
+            siteId: dto.siteId ?? undefined,
+            items: {
+              create: group.items.map((item) => ({
+                productId: item.productId,
+                supplierId: group.supplierId,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : null,
+              })),
+            },
+            tracking: {
+              create: {
+                status: OrderStatus.PLACED,
+                note: "Pending supplier confirmation",
+              },
             },
           },
-        },
-        select: {
-          id: true,
-          totalAmount: true,
-          status: true,
-          items: {
-            select: {
-              id: true,
+          select: {
+            id: true,
+            enquiryId: true,
+            totalAmount: true,
+            status: true,
+            items: {
+              select: {
+                id: true,
+              },
             },
           },
-        },
+        });
       });
 
       createdOrders.push({
         id: order.id,
+        enquiryId: order.enquiryId ?? order.id,
         supplierId: group.supplierId,
         supplierName: group.supplierName,
         total: Number(order.totalAmount),

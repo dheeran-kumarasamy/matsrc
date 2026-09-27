@@ -53,6 +53,10 @@ export class PurchaseOrdersService {
       createdAt: po.createdAt,
       updatedAt: po.updatedAt,
       orderId: po.orderId,
+      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — only present
+      // when the caller's query included the `order` relation. See
+      // packages/db/lib/enquiry-id.ts.
+      enquiryId: po.order?.enquiryId ?? po.orderId,
       supplier: {
         id: po.supplier.id,
         companyName: po.supplier.companyName,
@@ -235,8 +239,9 @@ export class PurchaseOrdersService {
           throw new BadRequestException(`Line item ${lineItem.id} does not belong to this purchase order`);
         }
 
+        // Quantity is deliberately excluded — it is not user-editable on the PO (it
+        // must always mirror the confirmed OrderItem.quantity from PO creation time).
         const data: any = {};
-        if (lineItem.quantity !== undefined) data.quantity = lineItem.quantity;
         if (lineItem.deliveryDate !== undefined) data.deliveryDate = new Date(lineItem.deliveryDate);
 
         if (Object.keys(data).length) {
@@ -283,6 +288,7 @@ export class PurchaseOrdersService {
         supplier: true,
         builder: true,
         lineItems: { include: { product: true } },
+        order: { select: { enquiryId: true } },
       },
     });
 
@@ -310,7 +316,7 @@ export class PurchaseOrdersService {
       .sendWhatsApp({
         to: po.supplier.user?.whatsappNumber || po.supplier.user?.phone || "",
         title: "New Purchase Order issued",
-        body: `PO ${po.poNumber} has been issued for enquiry ${po.orderId.slice(0, 8)}. Please acknowledge in your supplier portal.`,
+        body: `PO ${po.poNumber} has been issued for enquiry ${updated.order.enquiryId ?? po.orderId}. Please acknowledge in your supplier portal.`,
         context: { poId: po.id, poNumber: po.poNumber },
         idempotencyKey: `po-issued:${po.id}`,
       })

@@ -11,6 +11,7 @@ import {
   OrderStatus,
   PaymentMethod,
   PaymentStatus,
+  generateEnquiryId,
 } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationService } from "src/notifications/notification.service";
@@ -218,9 +219,28 @@ export class AggregationService {
           },
         });
       } else {
+        // Meaningful Enquiry ID (Order.enquiryId): generated inside this
+        // same transaction so the resolved builder code and the
+        // incremented global sequence commit atomically with the enquiry
+        // itself — see packages/db/lib/enquiry-id.ts. Group & Save orders
+        // aren't tied to a specific builder Site, so the site segment
+        // falls back to the fixed "UNSITED" placeholder (never invented
+        // from arbitrary data).
+        const builderForEnquiryId = await tx.user.findUnique({
+          where: { id: params.builderId },
+          select: { name: true, email: true },
+        });
+        const enquiryId = await generateEnquiryId(tx, {
+          builderId: params.builderId,
+          builderName: builderForEnquiryId?.name,
+          builderEmail: builderForEnquiryId?.email,
+          siteId: null,
+        });
+
         const order = await tx.order.create({
           data: {
             userId: params.builderId,
+            enquiryId,
             status: OrderStatus.PLACED,
             paymentMethod: PaymentMethod.BANK_TRANSFER,
             paymentStatus: PaymentStatus.PENDING,

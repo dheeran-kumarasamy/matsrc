@@ -94,7 +94,10 @@ export async function notifyBuilderOrderStatusUpdate(orderId: string, status: Bu
         templateType: copy.templateType as any,
         variables: JSON.stringify({
           orderId,
-          orderNumber: orderId.slice(0, 8),
+          // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+          // packages/db/lib/enquiry-id.ts. Falls back to the raw order id
+          // for pre-migration orders.
+          orderNumber: order.enquiryId ?? orderId,
           deepLink,
           supplierName,
           status,

@@ -24,6 +24,7 @@ export async function GET(
       where: { id: params.id, userId: user.id },
       select: {
         id: true,
+        enquiryId: true,
         status: true,
         paymentMethod: true,
         paymentStatus: true,
@@ -86,6 +87,10 @@ export async function GET(
 
     return NextResponse.json({
       id: order.id,
+      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — falls back to
+      // the raw order id for pre-migration orders. See
+      // packages/db/lib/enquiry-id.ts.
+      enquiryId: order.enquiryId ?? order.id,
       status: order.status,
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus,

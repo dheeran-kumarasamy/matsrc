@@ -73,6 +73,7 @@ export async function getSiteWiseReportData(
       order: {
         select: {
           id: true,
+          enquiryId: true,
           status: true,
           createdAt: true,
           siteId: true,
@@ -129,6 +130,10 @@ export async function getSiteWiseReportData(
 
     return {
       orderId: item.order.id,
+      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+      // packages/db/lib/enquiry-id.ts. Falls back to the raw order id for
+      // pre-migration orders.
+      enquiryId: item.order.enquiryId ?? item.order.id,
       orderDate: item.order.createdAt.toISOString(),
       orderDateLabel: formatDate(item.order.createdAt) ?? "",
       status: item.order.status,

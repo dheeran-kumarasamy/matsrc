@@ -9,6 +9,10 @@ import { getBankAccountDetails } from "@/lib/bank-account-config";
 
 type OrderPayment = {
   id: string;
+  // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+  // packages/db/lib/enquiry-id.ts. Falls back to `id` for pre-migration
+  // orders (see the API route's `enquiryId ?? id` fallback).
+  enquiryId: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
   paymentStatus: "PENDING" | "PENDING_VERIFICATION" | "PAID" | "FAILED" | "REFUNDED";
   paymentMethod: "UPI" | "CARD" | "NET_BANKING" | "COD" | "CREDIT" | "BANK_TRANSFER";
@@ -39,7 +43,7 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
     <div className="posh-body mx-auto max-w-2xl space-y-5">
       <header>
         <p className="posh-eyebrow">Payment Link</p>
-        <h1 className="posh-page-title mt-2">Order #{order.id.slice(0, 8)}</h1>
+        <h1 className="posh-page-title mt-2">Order #{order.enquiryId}</h1>
         <p className="posh-subtitle mt-2">{getSupplierDisplayName(order.supplierName)}</p>
       </header>
 

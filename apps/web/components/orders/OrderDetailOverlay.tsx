@@ -21,6 +21,10 @@ import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
 
 export type OverlayOrderDetail = {
   id: string;
+  // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+  // packages/db/lib/enquiry-id.ts. Falls back to `id` for pre-migration
+  // orders (see the API route's `enquiryId ?? id` fallback).
+  enquiryId: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
   paymentStatus: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
   paymentLinkAvailable: boolean;
@@ -131,7 +135,7 @@ export default function OrderDetailOverlay({ order }: Props) {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-400">My Orders</p>
-              <DialogTitle>Order #{order.id.slice(0, 8)}</DialogTitle>
+              <DialogTitle>Order #{order.enquiryId}</DialogTitle>
               <p className="mt-1 text-sm text-slate-500">
                 {order.supplierName} · Delivery: {order.deliveryDate}
               </p>

@@ -163,6 +163,10 @@ export type SiteWiseSummary = {
 
 export type SiteWiseDetailRow = {
   orderId: string;
+  // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+  // packages/db/lib/enquiry-id.ts. Falls back to `orderId` for
+  // pre-migration orders.
+  enquiryId: string;
   orderDate: string;
   orderDateLabel: string;
   status: string;

@@ -1,10 +1,16 @@
 import Link from "next/link";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
+import OrderConfirmationBanner from "@/components/orders/OrderConfirmationBanner";
+import { resolveConfirmedReference } from "@/lib/order-confirmation";
 import { builderApiGet } from "@/lib/api";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 type OrderItem = {
   id: string;
+  // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+  // packages/db/lib/enquiry-id.ts. Falls back to `id` for pre-migration
+  // orders (see the API route's `enquiryId ?? id` fallback).
+  enquiryId: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
   paymentStatus?: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
   itemCount: number;
@@ -62,9 +68,22 @@ const FILTER_LABELS: Record<string, string> = {
 const ACTIVE_STATUS_FILTER = "ACTIVE";
 const DELIVERED_OR_CLOSED_STATUS_FILTER = "DELIVERED_CLOSED";
 
-export default async function OrdersPage({ searchParams }: { searchParams: { status?: string | string[] } }) {
+export default async function OrdersPage({
+  searchParams,
+}: {
+  searchParams: { status?: string | string[]; confirmed?: string | string[] };
+}) {
   let orders: OrderItem[] = [];
   let apiError = false;
+
+  // Set only by the standalone /checkout and /cart pages, immediately after
+  // their own POST /orders/checkout call has already resolved successfully
+  // (see app/(builder)/checkout/page.tsx and app/(builder)/cart/page.tsx) —
+  // never shown merely from navigating here, and never shown again on a
+  // later, unrelated visit to this same already-confirmed order's page
+  // since the query param is one-time/ephemeral (dropped as soon as the
+  // user navigates or refreshes without it).
+  const confirmedReference = resolveConfirmedReference(searchParams);
 
   const rawStatus = Array.isArray(searchParams.status) ? searchParams.status[0] : searchParams.status;
   const normalized = rawStatus?.toUpperCase() ?? "All";
@@ -104,6 +123,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
           My Group Orders →
         </Link>
       </header>
+
+      {confirmedReference ? <OrderConfirmationBanner enquiryId={confirmedReference} /> : null}
 
       {/* Filters — "Dispatched" and "Active" chips removed from the UI per
           request. Both remain fully functional via direct URL
@@ -158,7 +179,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: { sta
             <div key={order.id} className="group flex flex-wrap items-center justify-between gap-3 p-5 transition-colors">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-base font-bold tracking-tight text-[color:var(--posh-fg)] transition-colors group-hover:text-[color:var(--posh-olive)]">Order #{order.id.slice(0, 8)}</p>
+                  <p className="text-base font-bold tracking-tight text-[color:var(--posh-fg)] transition-colors group-hover:text-[color:var(--posh-olive)]">Order #{order.enquiryId}</p>
                   {order.isAggregated ? <span className="posh-status">Group Order</span> : null}
                 </div>
                 <p className="mt-1 text-xs font-semibold text-[color:var(--posh-fg-muted)] transition-colors group-hover:text-[color:var(--posh-olive)]">

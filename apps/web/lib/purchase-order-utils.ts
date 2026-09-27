@@ -31,6 +31,15 @@ export function serializePurchaseOrder(po: any) {
     createdAt: po.createdAt,
     updatedAt: po.updatedAt,
     orderId: po.orderId,
+    // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — only present when
+    // the caller's query included the `order` relation (see
+    // `purchaseOrderInclude` below). See packages/db/lib/enquiry-id.ts.
+    enquiryId: po.order?.enquiryId ?? po.orderId,
+    // Underlying Order.status (PLACED/PROCESSING/.../CANCELLED) — surfaced so
+    // the PO screen can offer "Cancel Order" only when the order is still in
+    // a builder-cancellable state, without a second round-trip. Only present
+    // when the caller's query included the `order` relation.
+    orderStatus: po.order?.status ?? null,
     supplier: {
       id: po.supplier.id,
       companyName: po.supplier.companyName,
@@ -64,6 +73,7 @@ export const purchaseOrderInclude = {
   supplier: true,
   builder: true,
   lineItems: { include: { product: true } },
+  order: { select: { enquiryId: true, status: true } },
 } as const;
 
 export { PurchaseOrderStatus };

@@ -369,7 +369,7 @@ export default function SiteWiseReportPage() {
                           href={`/orders/${row.orderId}`}
                           className="font-semibold text-[color:var(--posh-primary)] hover:underline"
                         >
-                          {row.orderId.slice(0, 8)}
+                          {row.enquiryId ?? row.orderId}
                         </Link>
                       </td>
                       <td className="py-3 pr-3 font-semibold text-slate-800">{row.siteName}</td>

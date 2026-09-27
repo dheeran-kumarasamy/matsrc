@@ -31,6 +31,15 @@ function createFakeDb() {
     orders: new Map<string, any>(),
     orderItems: new Map<string, any>(),
     orderTracking: [] as any[],
+    // Meaningful Enquiry ID support: users (for resolveBuilderCode) and a
+    // single global sequence counter row (for nextEnquirySequence) — see
+    // packages/db/lib/enquiry-id.ts. Tests reference arbitrary builder ids
+    // ("builder-1" etc.) that are never separately seeded as User rows, so
+    // userApi.findUnique below simply returns null for those, which
+    // generateEnquiryId()/resolveBuilderCode() already handle by falling
+    // back to deriving a code from the builder id itself.
+    users: new Map<string, any>(),
+    enquirySequenceValue: 0,
     idCounter: 0,
   };
 
@@ -152,6 +161,29 @@ function createFakeDb() {
     }),
   };
 
+  // Meaningful Enquiry ID support (see comment on `db` above).
+  const userApi = {
+    findUnique: vi.fn(async ({ where, select }: any) => {
+      const user = where.id ? db.users.get(where.id) : [...db.users.values()].find((u) => u.builderCode === where.builderCode);
+      if (!user) return null;
+      if (select?.builderCode) return { builderCode: user.builderCode ?? null };
+      return user;
+    }),
+    update: vi.fn(async ({ where, data }: any) => {
+      const user = db.users.get(where.id) ?? { id: where.id };
+      Object.assign(user, data);
+      db.users.set(where.id, user);
+      return { builderCode: user.builderCode };
+    }),
+  };
+
+  const enquirySequenceApi = {
+    update: vi.fn(async () => {
+      db.enquirySequenceValue += 1;
+      return { value: db.enquirySequenceValue };
+    }),
+  };
+
   // Row-lock emulation: $queryRaw is only ever used for `SELECT * FROM "AggregationPool"
   // WHERE "id" = ${poolId} FOR UPDATE` in this service, so we can special-case it here.
   const $queryRaw = vi.fn(async (strings: TemplateStringsArray, ...values: any[]) => {
@@ -167,6 +199,8 @@ function createFakeDb() {
     order: orderApi,
     orderItem: orderItemApi,
     orderTracking: orderTrackingApi,
+    user: userApi,
+    enquirySequence: enquirySequenceApi,
     $queryRaw,
   };
 

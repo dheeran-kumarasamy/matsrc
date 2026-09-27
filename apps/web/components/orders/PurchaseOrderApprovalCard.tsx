@@ -1,8 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { builderApiPatch, builderApiPost } from "@/lib/api";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { isBuilderCancellableOrderStatus, type OrderStatus } from "@/lib/order-cancellation";
 
 type PurchaseOrderLineItem = {
   id: string;
@@ -26,6 +29,9 @@ type PurchaseOrderDetail = {
   approvedAt: string | null;
   approvedBy: string | null;
   orderId: string;
+  // Underlying Order.status — gates whether "Cancel Order" is offered (see
+  // lib/order-cancellation.ts's isBuilderCancellableOrderStatus).
+  orderStatus?: OrderStatus | null;
   supplier: { id: string; companyName: string };
   builder: { id: string; name: string; email: string };
   lineItems: PurchaseOrderLineItem[];
@@ -58,10 +64,32 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
   const [approverDesignation, setApproverDesignation] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const isDraft = po.status === "DRAFT";
+  // "Need to change the quantity?" flow (§ create new enquiry / cancel order)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelledOrderStatus, setCancelledOrderStatus] = useState<OrderStatus | null>(null);
 
-  function updateQuantity(id: string, quantity: number) {
-    setLineItems((prev) => prev.map((li) => (li.id === id ? { ...li, quantity } : li)));
+  const isDraft = po.status === "DRAFT";
+  const currentOrderStatus = cancelledOrderStatus ?? po.orderStatus ?? null;
+  const canCancelOrder = currentOrderStatus !== null && isBuilderCancellableOrderStatus(currentOrderStatus);
+
+  async function cancelOrder() {
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      const result = await builderApiPost<{ id: string; status: OrderStatus }>(
+        `/orders/${po.orderId}/cancel`,
+        {}
+      );
+      setCancelledOrderStatus(result.status);
+      setShowCancelConfirm(false);
+      router.refresh();
+    } catch {
+      setCancelError("Could not cancel this order right now. Please try again.");
+    } finally {
+      setCancelling(false);
+    }
   }
 
   function updateDeliveryDate(id: string, deliveryDate: string) {
@@ -74,9 +102,10 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
     try {
       const updated = await builderApiPatch<PurchaseOrderDetail>(`/purchase-orders/${po.id}`, {
         notes,
+        // Quantity is not sent — it is read-only on the PO and always mirrors the
+        // confirmed order quantity. The backend ignores/rejects it regardless.
         lineItems: lineItems.map((li) => ({
           id: li.id,
-          quantity: li.quantity,
           deliveryDate: li.deliveryDate,
         })),
       });
@@ -138,7 +167,8 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
           <h3 className="font-semibold text-slate-800">Line Items</h3>
           {isDraft ? (
             <p className="text-xs text-slate-500">
-              Adjust quantity/delivery date within supplier-allowed limits before approval.
+              Quantity is based on the confirmed order and cannot be changed here. Adjust the
+              delivery date within supplier-allowed limits before approval.
             </p>
           ) : null}
         </div>
@@ -158,19 +188,12 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                 <tr key={li.id} className="border-t border-slate-100">
                   <td className="px-4 py-2 text-slate-800">{li.productName}</td>
                   <td className="px-4 py-2">
-                    {isDraft ? (
-                      <input
-                        type="number"
-                        min={1}
-                        value={li.quantity}
-                        onChange={(e) => updateQuantity(li.id, Math.max(1, Number(e.target.value) || 1))}
-                        className="w-20 rounded-md border border-slate-300 px-2 py-1 text-sm"
-                      />
-                    ) : (
-                      <span className="text-slate-700">
-                        {li.quantity} {li.unit}
-                      </span>
-                    )}
+                    {/* Quantity is read-only on the PO — it always mirrors the confirmed
+                        order quantity and cannot be edited directly here. To change it,
+                        modify the order through the order modification process. */}
+                    <span className="text-slate-700">
+                      {li.quantity} {li.unit}
+                    </span>
                   </td>
                   <td className="px-4 py-2 text-slate-700">₹{li.unitPrice.toLocaleString("en-IN")}</td>
                   <td className="px-4 py-2">
@@ -200,6 +223,70 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
           <span className="text-lg font-extrabold text-slate-900">₹{po.total.toLocaleString("en-IN")}</span>
         </div>
       </div>
+
+      {/* Quantity is read-only end to end — instead of an edit control, offer
+          the two sanctioned paths to change it: start a fresh enquiry through
+          the existing sourcing flow, or cancel this order (subject to the
+          existing cancellation rules) so a new one can be placed. Neither
+          action ever modifies this PO's historical quantity. */}
+      <div className="panel space-y-3 p-4">
+        <h4 className="font-semibold text-slate-800">Need to change the quantity?</h4>
+        <p className="text-sm text-slate-600">
+          The quantity on a confirmed order cannot be edited. Create a new enquiry with the required quantity to
+          place a new order.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/sourcing"
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
+          >
+            Create New Enquiry
+          </Link>
+          {canCancelOrder ? (
+            <button
+              onClick={() => setShowCancelConfirm(true)}
+              className="rounded-md border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-700"
+            >
+              Cancel Order
+            </button>
+          ) : null}
+        </div>
+        {cancelledOrderStatus === "CANCELLED" ? (
+          <p className="text-sm font-semibold text-slate-700">This order has been cancelled.</p>
+        ) : null}
+        {cancelError ? <p className="text-sm text-rose-600">{cancelError}</p> : null}
+      </div>
+
+      <Dialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancel this order?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 p-5">
+            <p className="text-sm text-slate-600">
+              This will cancel the current order. The confirmed quantity on the existing Purchase Order will remain
+              unchanged. If you need a different quantity, you can create a new enquiry after cancelling.
+            </p>
+            {cancelError ? <p className="text-sm text-rose-600">{cancelError}</p> : null}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowCancelConfirm(false)}
+                disabled={cancelling}
+                className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
+              >
+                Keep Order
+              </button>
+              <button
+                onClick={cancelOrder}
+                disabled={cancelling}
+                className="flex-1 rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 disabled:opacity-60"
+              >
+                {cancelling ? "Cancelling..." : "Cancel Order"}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {isDraft ? (
         <div className="panel p-4">

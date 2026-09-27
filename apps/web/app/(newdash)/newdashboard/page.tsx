@@ -12,6 +12,10 @@ import { getFirstName } from "@/lib/user-display";
 // ── Live-data types ───────────────────────────────────────────────────────────
 type Order = {
   id: string;
+  // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+  // packages/db/lib/enquiry-id.ts. Falls back to `id` for pre-migration
+  // orders (see the API route's `enquiryId ?? id` fallback).
+  enquiryId?: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
   total: number;
   itemCount: number;
@@ -384,7 +388,7 @@ export default function NewDashboardPage() {
                           className="flex items-start justify-between gap-3 py-2.5 transition-colors hover:bg-[rgba(var(--posh-wash-rgb),0.03)]">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.siteName ?? "Unassigned"}</p>
-                            <p className="posh-label mt-0.5">#{o.id.slice(0, 8)} · {fmtOrderDate(o.createdAt)}</p>
+                            <p className="posh-label mt-0.5">#{o.enquiryId ?? o.id} · {fmtOrderDate(o.createdAt)}</p>
                           </div>
                           <div className="shrink-0 text-right">
                             <p className="posh-card-title text-base">{fmtInr(o.total)}</p>
@@ -512,7 +516,7 @@ export default function NewDashboardPage() {
                           >
                             <div className="min-w-0">
                               <p className="truncate text-sm font-bold" style={{ color: FG }}>{o.siteName ?? "Unassigned"}</p>
-                              <p className="posh-label mt-0.5">#{o.id.slice(0, 8)} · {fmtOrderDate(o.createdAt)}</p>
+                              <p className="posh-label mt-0.5">#{o.enquiryId ?? o.id} · {fmtOrderDate(o.createdAt)}</p>
                             </div>
                             <div className="shrink-0 text-right">
                               <p className="posh-card-title text-base">{fmtInr(o.total)}</p>

@@ -71,6 +71,17 @@ model User {
   tallyLedgerMapping     TallyLedgerMapping?
   sourcingSessions       SourcingSession[]       @relation("UserSourcingSessions")
 
+  // Meaningful Enquiry ID (contractor prefix): a short, stable,
+  // human-readable code identifying this builder/contractor in generated
+  // enquiry IDs (e.g. "ABC" in "ABC-SITE01-000123"). Generated once, on
+  // first use, from a normalized slug of the builder's name/email — never
+  // regenerated afterwards, so it stays stable for all historical
+  // enquiries even if the builder later changes their display name.
+  // Nullable/additive: existing users and non-BUILDER roles simply have no
+  // code until/unless one is resolved for them (see
+  // packages/db/lib/enquiry-id.ts resolveBuilderCode()).
+  builderCode String? @unique
+
   @@index([email])
   @@index([phone])
 }
@@ -583,6 +594,23 @@ model Order {
   id                 String        @id @default(cuid())
   userId             String
   user               User          @relation(fields: [userId], references: [id])
+
+  // Meaningful Enquiry ID (display-only): "<CONTRACTOR_CODE>-<SITE_CODE>-
+  // <SEQUENCE>", e.g. "ABC-SITE01-000123" — see packages/db/lib/enquiry-id.ts.
+  // Generated once at Order-creation time in the same transaction that
+  // creates the row, using a global, transaction-safe sequence
+  // (EnquirySequence) so the numeric part is unique and strictly
+  // increasing regardless of contractor/site.
+  //
+  // Nullable/additive and NEVER backfilled by rewriting `id` — `id` (the
+  // cuid PK above) remains the real, unchanged database identifier, FK
+  // target, API path segment, and URL param for every order, old and new.
+  // `enquiryId` is purely an additional, human-readable label shown
+  // wherever the enquiry ID is displayed; existing (pre-migration) rows
+  // have this backfilled once, in original createdAt order, by the
+  // 20260926000000_add_enquiry_id migration, using each row's own siteId/
+  // userId at the time of migration — never invented from arbitrary data.
+  enquiryId          String?       @unique
   status             OrderStatus   @default(PLACED)
   paymentMethod      PaymentMethod
   paymentStatus      PaymentStatus @default(PENDING)
@@ -1257,6 +1285,16 @@ model Site {
   builderId   String
   builder     User       @relation("BuilderSites", fields: [builderId], references: [id])
   name        String
+  // Meaningful Enquiry ID (site prefix): a short, stable, human-readable
+  // code for this site (e.g. "SITE01" in "ABC-SITE01-000123"). Free-text
+  // today (set by the builder at site-creation time, see
+  // apps/web/app/api/builder/sites/route.ts), normalized/uppercased for
+  // display in generated enquiry IDs. If left blank, a stable fallback code
+  // is auto-derived once (from the site's own id) the first time an
+  // enquiry needs it — never from the mutable site `name`/address — so the
+  // enquiry-ID prefix always exists and never changes afterwards even if
+  // the site is later renamed. See packages/db/lib/enquiry-id.ts
+  // resolveSiteCode().
   code        String?
   addressLine String?
   city        String?
@@ -1279,6 +1317,29 @@ model Site {
   @@unique([builderId, name])
   @@index([builderId])
   @@index([builderId, status])
+}
+
+// Meaningful Enquiry ID — global sequence counter.
+//
+// Single-row ("singleton") table that holds the next numeric sequence to
+// use in a generated enquiry ID (format
+// "<CONTRACTOR_CODE>-<SITE_CODE>-<SEQUENCE>", e.g. "ABC-SITE01-000123" —
+// see packages/db/lib/enquiry-id.ts). The counter is GLOBAL (never scoped
+// per contractor/site) so the numeric part alone stays unique and strictly
+// increasing across every enquiry ever created, matching the existing
+// architecture's reliance on a single global identifier space (previously
+// Order.id's cuid()).
+//
+// Concurrency safety: every read-increment-write of `value` MUST happen
+// inside a `SELECT ... FOR UPDATE` row lock within the same
+// `prisma.$transaction` that creates the Order row (see
+// nextEnquirySequence() in packages/db/lib/enquiry-id.ts and the existing
+// `lockPoolRow` pattern in apps/api/src/aggregation/aggregation.service.ts),
+// so concurrent enquiry creation can never hand out the same sequence
+// number twice.
+model EnquirySequence {
+  id    String @id @default("singleton")
+  value Int    @default(0)
 }
 
 // Per-builder Tally ledger mapping configuration used when generating

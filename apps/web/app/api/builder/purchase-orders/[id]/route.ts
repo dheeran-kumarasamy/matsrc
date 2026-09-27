@@ -27,7 +27,12 @@ export async function GET(request: Request, { params }: { params: { id: string }
   }
 }
 
-// PATCH /api/builder/purchase-orders/[id] — edit quantity/delivery date/notes while in Draft state only.
+// PATCH /api/builder/purchase-orders/[id] — edit delivery date/notes while in Draft state only.
+// NOTE: Quantity is intentionally NOT editable here. The PO quantity must always mirror the
+// confirmed/agreed order quantity (OrderItem.quantity) captured when the supplier quote was
+// accepted (see POST /api/builder/purchase-orders). Any `lineItems[].quantity` sent in the
+// request body is ignored — there is currently no order-modification workflow to change an
+// already-placed order's quantity, so quantity changes are out of scope for this endpoint.
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   try {
     const ctx = getUserCtx(request);
@@ -68,10 +73,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
           );
         }
 
+        // Quantity is deliberately excluded from the mutable fields below — it is not
+        // user-editable on the PO (see NOTE on the PATCH handler above).
         const data: any = {};
-        if (typeof lineItem.quantity === "number" && Number.isInteger(lineItem.quantity) && lineItem.quantity >= 1) {
-          data.quantity = lineItem.quantity;
-        }
         if (typeof lineItem.deliveryDate === "string" && lineItem.deliveryDate) {
           data.deliveryDate = new Date(lineItem.deliveryDate);
         }

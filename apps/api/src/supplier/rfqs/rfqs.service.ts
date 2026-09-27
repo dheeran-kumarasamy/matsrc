@@ -68,6 +68,10 @@ export class RfqsService {
 
     const enquiryCards = pendingEnquiryItems.map((item) => ({
       id: item.orderId,
+      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+      // packages/db/lib/enquiry-id.ts. Falls back to the raw order id for
+      // pre-migration orders.
+      enquiryId: item.order.enquiryId ?? item.orderId,
       material: item.product.name,
       quantity: `${item.quantity} ${item.product.unit}`,
       pincode: item.order.deliveryAddress ?? "See order for delivery details",

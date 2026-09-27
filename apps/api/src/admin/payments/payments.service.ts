@@ -18,7 +18,7 @@ export class PaymentsService {
     const verifications = await this.prisma.paymentVerification.findMany({
       where: { status: PaymentVerificationStatus.PENDING },
       include: {
-        order: { select: { id: true, status: true, totalAmount: true, paymentMethod: true } },
+        order: { select: { id: true, enquiryId: true, status: true, totalAmount: true, paymentMethod: true } },
         user: { select: { id: true, name: true, email: true, phone: true } },
       },
       orderBy: { submittedAt: "asc" },
@@ -34,7 +34,7 @@ export class PaymentsService {
     const verification = await this.prisma.paymentVerification.findUnique({
       where: { orderId },
       include: {
-        order: { select: { id: true, status: true, totalAmount: true, paymentMethod: true, paymentStatus: true } },
+        order: { select: { id: true, enquiryId: true, status: true, totalAmount: true, paymentMethod: true, paymentStatus: true } },
         user: { select: { id: true, name: true, email: true, phone: true } },
       },
     });
@@ -135,7 +135,7 @@ export class PaymentsService {
         .sendWhatsApp({
           to: recipient,
           title: "Payment approved",
-          body: `Your payment for order #${orderId.slice(0, 8)} has been verified. Your order is now being processed.`,
+          body: `Your payment for order #${verification.order.enquiryId ?? orderId} has been verified. Your order is now being processed.`,
           idempotencyKey: `payment-approved:${orderId}`,
         })
         .catch(() => undefined);
@@ -204,7 +204,7 @@ export class PaymentsService {
           .sendWhatsApp({
             to: recipient,
             title: "Payment verification failed",
-            body: `Your payment proof for order #${orderId.slice(0, 8)} could not be verified. Reason: ${reason}`,
+            body: `Your payment proof for order #${verification.order.enquiryId ?? orderId} could not be verified. Reason: ${reason}`,
             idempotencyKey: `payment-rejected:${orderId}:${now.getTime()}`,
           })
           .catch(() => undefined);
@@ -241,12 +241,16 @@ export class PaymentsService {
     reviewedAt: Date | null;
     reviewedBy: string | null;
     rejectionReason: string | null;
-    order: { id: string; status: OrderStatus; totalAmount: any; paymentMethod: string; paymentStatus?: PaymentStatus };
+    order: { id: string; enquiryId?: string | null; status: OrderStatus; totalAmount: any; paymentMethod: string; paymentStatus?: PaymentStatus };
     user: { id: string; name: string | null; email: string | null; phone: string | null };
   }) {
     return {
       id: v.id,
       orderId: v.orderId,
+      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+      // packages/db/lib/enquiry-id.ts. Falls back to the raw order id for
+      // pre-migration orders.
+      enquiryId: v.order.enquiryId ?? v.orderId,
       orderStatus: v.order.status,
       orderTotal: Number(v.order.totalAmount),
       paymentAmount: Number(v.amount),

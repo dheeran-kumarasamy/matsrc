@@ -78,6 +78,10 @@ export class OrdersService {
 
     return {
       id: item.orderId,
+      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+      // packages/db/lib/enquiry-id.ts. Falls back to the raw order id for
+      // pre-migration orders.
+      enquiryId: item.order.enquiryId ?? item.orderId,
       buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
       deliveryDate: formatDate(item.deliveryDate ?? item.order.deliveryDate),
       quantity: `${item.quantity} ${item.product.unit}`,

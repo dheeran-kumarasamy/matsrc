@@ -28,6 +28,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       include: {
         supplier: { include: { user: true } },
         lineItems: { include: { product: true } },
+        order: { select: { enquiryId: true } },
       },
     });
 
@@ -85,7 +86,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         body: JSON.stringify({
           to: po.supplier.user?.whatsappNumber || po.supplier.user?.phone || "",
           title: "New Purchase Order issued",
-          body: `PO ${po.poNumber} has been issued for enquiry ${po.orderId.slice(0, 8)}. Please acknowledge in your supplier portal.`,
+          body: `PO ${po.poNumber} has been issued for enquiry ${po.order.enquiryId ?? po.orderId}. Please acknowledge in your supplier portal.`,
           context: { poId: po.id, poNumber: po.poNumber },
           idempotencyKey: `po-issued:${po.id}`,
         }),

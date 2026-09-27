@@ -15,7 +15,7 @@
 // is also exactly the "multi-supplier grouping" logic quick-request must
 // reuse rather than reimplement.
 
-import { OrderStatus, PaymentStatus, PaymentMethod } from "@matsrc/db";
+import { OrderStatus, PaymentStatus, PaymentMethod, generateEnquiryId } from "@matsrc/db";
 import { prisma, resolveUnitPrice } from "@/lib/builder-db";
 import { notifySupplierOrderSubmitted } from "@/lib/notify";
 import {
@@ -170,6 +170,10 @@ export type CreateOrdersOptions = {
 
 export type CreatedOrderSummary = {
   id: string;
+  // Meaningful Enquiry ID (display-only, e.g. "ABC-SITE01-000123") — see
+  // packages/db/lib/enquiry-id.ts. `id` above remains the real order
+  // identifier used for routing/URLs; `enquiryId` is only for display.
+  enquiryId: string;
   supplierName: string;
   total: number;
   itemCount: number;
@@ -355,13 +359,37 @@ export async function createOrdersFromCart(
   const siteId = typeof options.siteId === "string" && options.siteId ? options.siteId : null;
 
 
+  // Fetched once, outside the per-supplier-group loop below, since the
+  // builder's own name/email never change across the multiple grouped
+  // Orders created from a single checkout — used only to resolve/derive
+  // the stable contractor code for the Meaningful Enquiry ID (see
+  // packages/db/lib/enquiry-id.ts).
+  const builderForEnquiryId = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true },
+  });
+
   for (const group of groups.values()) {
     const totalAmount = group.items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
     const resolvedAt = new Date();
 
-    const order = await prisma.order.create({
+    // Meaningful Enquiry ID (Order.enquiryId): generated inside the same
+    // transaction as the Order row so the resolved builder/site codes and
+    // the incremented global sequence commit atomically with the enquiry
+    // itself — see packages/db/lib/enquiry-id.ts for the concurrency-
+    // safety guarantee (row-locked sequence counter).
+    const order = await prisma.$transaction(async (tx) => {
+      const enquiryId = await generateEnquiryId(tx, {
+        builderId: userId,
+        builderName: builderForEnquiryId?.name,
+        builderEmail: builderForEnquiryId?.email,
+        siteId,
+      });
+
+      return tx.order.create({
       data: {
         userId,
+        enquiryId,
         paymentMethod: PaymentMethod.BANK_TRANSFER,
         status: OrderStatus.PLACED,
         paymentStatus: PaymentStatus.PENDING,
@@ -419,6 +447,7 @@ export async function createOrdersFromCart(
       },
       select: {
         id: true,
+        enquiryId: true,
         status: true,
         totalAmount: true,
         items: {
@@ -427,10 +456,12 @@ export async function createOrdersFromCart(
           },
         },
       },
+      });
     });
 
     createdOrders.push({
       id: order.id,
+      enquiryId: order.enquiryId ?? order.id,
       supplierName: group.supplierName,
       total: totalAmount,
       itemCount: group.items.length,

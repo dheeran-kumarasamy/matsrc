@@ -7,6 +7,7 @@ import { builderApiGet, builderApiPost } from "@/lib/api";
 import { recordInterestEvent } from "@/lib/interest-events";
 import SiteSelector from "@/components/orders/SiteSelector";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
+import { buildConfirmedOrdersUrl } from "@/lib/order-confirmation";
 
 
 async function builderAggregationPost<T>(path: string, body: unknown): Promise<T> {
@@ -181,13 +182,17 @@ export default function CheckoutPage() {
     setError(null);
     try {
       const listingIds = Array.from(new Set(remainingItems.map((item) => item.productId)));
-      await builderApiPost("/orders/checkout", {
+      const response = await builderApiPost<{ orders: Array<{ enquiryId?: string; id: string }> }>("/orders/checkout", {
         deliveryDate: deliveryDate || undefined,
         siteId,
       });
 
       await Promise.allSettled(listingIds.map((listingId) => recordInterestEvent(listingId, "ORDER_PLACED")));
-      router.push("/orders");
+
+      // Confirmation message is shown only after this backend call has
+      // resolved successfully — never merely on button click. See
+      // lib/order-confirmation.ts buildConfirmedOrdersUrl().
+      router.push(buildConfirmedOrdersUrl(response));
     } catch {
       setError("Unable to submit enquiry right now.");
     } finally {

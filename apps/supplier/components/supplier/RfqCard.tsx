@@ -3,6 +3,9 @@ import { RfqQuoteAssistPanel, type RfqMarketGuidanceView } from "./RfqQuoteAssis
 
 type Rfq = {
   id: string;
+  // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — only set for
+  // source==="ENQUIRY" cards. See packages/db/lib/enquiry-id.ts.
+  enquiryId?: string;
   material: string;
   quantity: string;
   pincode: string;
@@ -25,7 +28,7 @@ export function RfqCard({ rfq, marketGuidance }: { rfq: Rfq; marketGuidance?: Rf
   return (
     <article className="panel p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-        {isEnquiry ? `Enquiry #${rfq.id.slice(0, 8)}` : `RFQ #${rfq.id}`}
+        {isEnquiry ? `Enquiry #${rfq.enquiryId ?? rfq.id}` : `RFQ #${rfq.id}`}
       </p>
       <h3 className="mt-2 text-lg font-extrabold text-slate-900">{rfq.material}</h3>
       <p className="mt-1 text-sm text-slate-700">Qty: {rfq.quantity}</p>

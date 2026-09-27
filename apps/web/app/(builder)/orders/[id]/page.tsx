@@ -13,6 +13,10 @@ import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
 
 type OrderDetail = {
   id: string;
+  // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+  // packages/db/lib/enquiry-id.ts. Falls back to `id` for pre-migration
+  // orders (see the API route's `enquiryId ?? id` fallback).
+  enquiryId: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
   paymentStatus: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
   paymentLinkAvailable: boolean;
@@ -93,7 +97,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="posh-eyebrow">My Orders</p>
-          <h1 className="posh-page-title mt-2">Order #{order.id.slice(0, 8)}</h1>
+          <h1 className="posh-page-title mt-2">Order #{order.enquiryId}</h1>
           <p className="posh-subtitle mt-2">
             {getSupplierDisplayName(order.supplierName, order.supplierId)} · Delivery: {order.deliveryDate}
           </p>

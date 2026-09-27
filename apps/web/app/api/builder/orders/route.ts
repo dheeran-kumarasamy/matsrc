@@ -63,6 +63,7 @@ export async function GET(request: Request) {
       },
       select: {
         id: true,
+        enquiryId: true,
         status: true,
         paymentStatus: true,
         totalAmount: true,
@@ -89,6 +90,10 @@ export async function GET(request: Request) {
     return NextResponse.json(
       orders.map((order, idx) => ({
         id: order.id,
+        // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — falls back to
+        // the raw order id for pre-migration orders that predate this
+        // field. See packages/db/lib/enquiry-id.ts.
+        enquiryId: order.enquiryId ?? order.id,
         status: order.status,
         paymentStatus: order.paymentStatus,
         itemCount: order.items.length,

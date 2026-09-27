@@ -76,7 +76,7 @@ export class EnquiryDecisionFlow {
     return {
       kind: "buttons",
       body:
-        `Enquiry #${item.orderId.slice(0, 8)}\n` +
+        `Enquiry #${item.order.enquiryId ?? item.orderId}\n` +
         `Builder: ${item.order.user.name ?? item.order.user.phone ?? "Builder"}\n` +
         `Product: ${item.product.name}\n` +
         `Qty: ${item.quantity} ${item.product.unit}\n` +

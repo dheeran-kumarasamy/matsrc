@@ -1,0 +1,69 @@
+import { NextResponse } from "next/server";
+import { OrderStatus } from "@matsrc/db";
+import { getOrCreateBuilder, getUserCtx, prisma } from "@/lib/builder-db";
+import { builderCancellationRejectionReason, isBuilderCancellableOrderStatus } from "@/lib/order-cancellation";
+
+export const dynamic = "force-dynamic";
+
+// POST /api/builder/orders/[id]/cancel
+//
+// Builder-initiated order cancellation. This is the ONLY sanctioned way for a
+// builder to change an order's confirmed quantity requirement without editing
+// a Purchase Order directly: cancel the current order (if eligible) and start
+// a fresh enquiry (via the existing sourcing/cart flow) for the new quantity.
+//
+// Cancellation eligibility (see lib/order-cancellation.ts) mirrors the
+// existing, already-established transition rules for this enum — no new
+// cancellation policy is introduced here, this only lets the *builder*
+// trigger the same PLACED -> CANCELLED transition the supplier's own
+// "Decline Enquiry" action already performs.
+//
+// This never touches the order's PurchaseOrder/PurchaseOrderLineItem rows —
+// a confirmed PO's quantity remains exactly as issued, and payment fields are
+// left untouched (see note below).
+export async function POST(request: Request, { params }: { params: { id: string } }) {
+  try {
+    const ctx = getUserCtx(request);
+    const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
+
+    const order = await prisma.order.findFirst({
+      where: { id: params.id, userId: user.id },
+      select: { id: true, status: true, paymentStatus: true },
+    });
+
+    if (!order) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    if (!isBuilderCancellableOrderStatus(order.status)) {
+      return NextResponse.json(
+        { error: builderCancellationRejectionReason(order.status) },
+        { status: 400 }
+      );
+    }
+
+    // No payment transfer/refund logic is invoked here — a PLACED order (the
+    // only status this endpoint accepts) is, by definition, still awaiting
+    // supplier confirmation and therefore has no completed payment to
+    // reconcile (see PaymentStatus.PAID/REFUNDED handling elsewhere, e.g.
+    // app/api/builder/orders/[id]/route.ts's paymentMethod guard).
+    const updated = await prisma.order.update({
+      where: { id: order.id },
+      data: { status: OrderStatus.CANCELLED },
+      select: { id: true, status: true },
+    });
+
+    await prisma.orderTracking.create({
+      data: {
+        orderId: order.id,
+        status: OrderStatus.CANCELLED,
+        note: "Cancelled by builder",
+      },
+    });
+
+    return NextResponse.json({ id: updated.id, status: updated.status });
+  } catch (error) {
+    console.error("Order cancel POST error:", error);
+    return NextResponse.json({ error: "Failed to cancel order" }, { status: 500 });
+  }
+}

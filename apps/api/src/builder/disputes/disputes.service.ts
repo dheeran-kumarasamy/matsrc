@@ -23,6 +23,10 @@ export class BuilderDisputesService {
     return disputes.map((d) => ({
       id: d.id,
       orderId: d.orderId,
+      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
+      // packages/db/lib/enquiry-id.ts. Falls back to the raw order id for
+      // pre-migration orders.
+      enquiryId: d.order.enquiryId ?? d.orderId,
       issueType: d.issueType,
       description: d.description,
       status: d.status,

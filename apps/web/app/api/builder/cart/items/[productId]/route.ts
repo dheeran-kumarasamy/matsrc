@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { prisma, getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,7 @@ export async function DELETE(
   { params }: { params: { productId: string } }
 ) {
   try {
-    const ctx = getUserCtx(request);
+    const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
     await prisma.cartItem.deleteMany({
@@ -16,7 +16,10 @@ export async function DELETE(
     });
 
     return NextResponse.json({ productId: params.productId, removed: true });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    }
     console.error("Cart item DELETE error:", error);
     return NextResponse.json(
       { error: "Failed to remove cart item" },

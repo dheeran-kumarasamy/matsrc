@@ -4,7 +4,7 @@ import {
   resolveUnitPrice,
   formatCurrency,
   getOrCreateBuilder,
-  getUserCtx,
+  resolveUserCtx,
 } from "@/lib/builder-db";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import {
@@ -137,12 +137,19 @@ async function ensureMarketplaceProduct(listing: SupplierListing) {
     create: { userId: supplierUser.id, companyName: "Verified Supplier" },
   });
 
+  const categoryName = listing.category || "General";
+  const categorySlug =
+    categoryName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "general";
+
   const category = await prisma.category.upsert({
-    where: { slug: listing.category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") },
-    update: { name: listing.category },
+    where: { slug: categorySlug },
+    update: { name: categoryName },
     create: {
-      name: listing.category,
-      slug: listing.category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
+      name: categoryName,
+      slug: categorySlug,
     },
   });
 
@@ -179,7 +186,7 @@ async function ensureMarketplaceProduct(listing: SupplierListing) {
 
 export async function GET(request: Request) {
   try {
-    const ctx = getUserCtx(request);
+    const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
     const items = await prisma.cartItem.findMany({
@@ -240,7 +247,10 @@ export async function GET(request: Request) {
         subtotalLabel: formatCurrency(subtotal),
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    }
     console.error("Cart items GET error:", error);
     return NextResponse.json({ error: "Failed to fetch cart" }, { status: 500 });
   }
@@ -248,7 +258,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const ctx = getUserCtx(request);
+    const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
     const body = await request.json().catch(() => ({}));
     const productId = typeof body.productId === "string" ? body.productId : "";
@@ -325,7 +335,10 @@ export async function POST(request: Request) {
       resolvedSupplierId: item.resolvedSupplierId,
       resolvedUnitPrice: item.resolvedUnitPrice != null ? Number(item.resolvedUnitPrice) : null,
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    }
     console.error("Cart items POST error:", error);
     return NextResponse.json(
       { error: "Failed to update cart" },

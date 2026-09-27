@@ -4,7 +4,7 @@ import {
   resolveUnitPrice,
   formatCurrency,
   getOrCreateBuilder,
-  getUserCtx,
+  resolveUserCtx,
 } from "@/lib/builder-db";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    const ctx = getUserCtx(request);
+    const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
     const items = await prisma.cartItem.findMany({
@@ -79,7 +79,10 @@ export async function GET(request: Request) {
         subtotalLabel: formatCurrency(subtotal),
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    }
     console.error("Cart GET error:", error);
     return NextResponse.json({ error: "Failed to fetch cart" }, { status: 500 });
   }

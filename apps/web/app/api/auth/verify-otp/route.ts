@@ -49,8 +49,9 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true, email: user.email, name: user.name ?? "" });
-  } catch (error) {
+  } catch (error: any) {
     console.error("verify-otp error:", error);
-    return NextResponse.json({ message: "Invalid OTP" }, { status: 400 });
+    const message = error?.message || "Failed to verify OTP";
+    return NextResponse.json({ message }, { status: 400 });
   }
 }

@@ -45,7 +45,16 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
         </div>
       </section>
 
-      <OrderStatusActions orderId={order.id} status={order.status} />
+      <OrderStatusActions
+        orderId={order.id}
+        status={order.status}
+        // `label` already mirrors OrderTracking.note verbatim whenever a note
+        // was recorded (see getSupplierOrderDetail's `label: entry.note ??
+        // humanizeToken(entry.status)`), so it doubles as the `note` input
+        // getCancellationActor needs to distinguish a builder cancellation
+        // from a supplier decline — no extra field/query required.
+        tracking={order.tracking.map((step) => ({ status: step.status, note: step.label }))}
+      />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   getAvailableActions,
   getReadOnlyStatusLabel,
   type OrderStatus,
+  type TrackingEntryLike,
 } from "@/lib/order-status-transitions";
 import {
   ORDER_CONFIRMATION_TITLE,
@@ -24,7 +25,19 @@ const ACTION_STYLES: Record<string, string> = {
 };
 const DEFAULT_ACTION_STYLE = "border-slate-300 text-slate-700 hover:bg-slate-50";
 
-export function OrderStatusActions({ orderId, status }: { orderId: string; status: OrderStatus }) {
+export function OrderStatusActions({
+  orderId,
+  status,
+  tracking = [],
+}: {
+  orderId: string;
+  status: OrderStatus;
+  // Persisted OrderTracking rows for this order (ascending by recordedAt),
+  // used only to distinguish a builder cancellation ("Cancelled by
+  // Builder") from a supplier decline ("Declined by Supplier") when
+  // status === "CANCELLED" — see lib/order-status-transitions.ts.
+  tracking?: TrackingEntryLike[];
+}) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +70,7 @@ export function OrderStatusActions({ orderId, status }: { orderId: string; statu
   // rendered — never a fixed list of all four possible actions. See
   // lib/order-status-transitions.ts for the underlying state machine.
   const actions = getAvailableActions(status);
-  const readOnlyLabel = getReadOnlyStatusLabel(status);
+  const readOnlyLabel = getReadOnlyStatusLabel(status, tracking);
 
   return (
     <aside className="panel p-5">

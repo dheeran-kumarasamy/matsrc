@@ -49,19 +49,67 @@ export function isValidOrderStatusTransition(current: OrderStatus, next: OrderSt
   return (NEXT_ACTIONS[current] ?? []).some((action) => action.nextStatus === next);
 }
 
+// Minimal shape of a persisted OrderTracking row needed to distinguish WHO
+// cancelled a CANCELLED order — the builder (via the existing
+// POST /api/builder/orders/[id]/cancel action) or the supplier (via
+// "Decline Enquiry" / the multi-supplier fan-out cascade in
+// declineOrderForSupplier, both in this app's lib/supplier-data.ts). Deliberately
+// generic over "note" (rather than requiring the full SupplierTrackingStep
+// shape) so callers can pass either the raw OrderTracking.note or the
+// already-humanized `label` field (which mirrors note verbatim whenever a
+// note was recorded — see getSupplierOrderDetail's `label: entry.note ??
+// humanizeToken(entry.status)`). No new database field is introduced —
+// this reuses the note text already being persisted by every code path that
+// cancels an order.
+export type TrackingEntryLike = { status: OrderStatus; note?: string | null };
+
+export type CancellationActor = "BUILDER" | "SUPPLIER" | "UNKNOWN";
+
+// Inspects the most recent CANCELLED tracking entry's note to determine who
+// cancelled the order. Every existing cancellation code path already writes
+// a distinguishing note:
+//   - builder-initiated: "Cancelled by builder"
+//     (apps/web/app/api/builder/orders/[id]/cancel/route.ts) or
+//     "Builder opted out of aggregation pool" (aggregation opt-out)
+//   - supplier-initiated: "All eligible suppliers declined this enquiry" or
+//     the legacy fallback "Supplier marked order as cancelled"
+//     (apps/supplier/lib/supplier-data.ts / apps/api's mirrored service)
+// `tracking` is expected ordered ascending by recordedAt (as every existing
+// query already does, e.g. `orderBy: { recordedAt: "asc" }` in
+// getSupplierOrderDetail) so the LAST matching entry is the most recent one.
+// A legacy/unknown record (no matching keyword, or no CANCELLED entry at
+// all) is never guessed — it resolves to "UNKNOWN" rather than being
+// misattributed to either actor.
+export function getCancellationActor(tracking: TrackingEntryLike[]): CancellationActor {
+  for (let i = tracking.length - 1; i >= 0; i--) {
+    const entry = tracking[i];
+    if (entry.status !== "CANCELLED") continue;
+    const note = (entry.note ?? "").toLowerCase();
+    if (note.includes("builder")) return "BUILDER";
+    if (note.includes("supplier") || note.includes("declined")) return "SUPPLIER";
+    return "UNKNOWN";
+  }
+  return "UNKNOWN";
+}
+
 // Human-readable read-only status shown in place of action buttons once no
 // further supplier action is available (terminal states, or any status not
 // covered above — e.g. a future status added to the enum that this table
 // hasn't been taught about yet, which we treat conservatively as read-only
 // rather than exposing a possibly-invalid action).
-export function getReadOnlyStatusLabel(status: OrderStatus): string | null {
+//
+// `tracking` is optional (defaults to empty) so existing callers that don't
+// have it handy still get a safe, non-misleading label for CANCELLED
+// ("Cancelled") rather than a compile error.
+export function getReadOnlyStatusLabel(status: OrderStatus, tracking: TrackingEntryLike[] = []): string | null {
   if (status === "DELIVERED") return "Order Delivered";
-  // CANCELLED covers both a direct decline by this supplier and the
-  // multi-supplier fan-out case where every eligible candidate declined
-  // (see declineOrderForSupplier in this same lib) — from the acting
-  // supplier's perspective on this page both read the same: no further
-  // action is possible on a declined/cancelled enquiry.
-  if (status === "CANCELLED") return "Enquiry Declined";
+  if (status === "CANCELLED") {
+    const actor = getCancellationActor(tracking);
+    if (actor === "BUILDER") return "Cancelled by Builder";
+    if (actor === "SUPPLIER") return "Declined by Supplier";
+    // Legacy/unknown-actor cancellation — never guess, use the safe generic.
+    return "Cancelled";
+  }
   if (getAvailableActions(status).length === 0) return `Order status: ${status}`;
   return null;
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   getAvailableActions,
+  getCancellationActor,
   getReadOnlyStatusLabel,
   isValidOrderStatusTransition,
 } from "./order-status-transitions";
@@ -47,8 +48,30 @@ describe("getReadOnlyStatusLabel", () => {
     expect(getReadOnlyStatusLabel("DELIVERED")).toBe("Order Delivered");
   });
 
-  it("returns 'Enquiry Declined' for CANCELLED", () => {
-    expect(getReadOnlyStatusLabel("CANCELLED")).toBe("Enquiry Declined");
+  it("returns 'Cancelled by Builder' for a builder-initiated cancellation", () => {
+    expect(
+      getReadOnlyStatusLabel("CANCELLED", [{ status: "CANCELLED", note: "Cancelled by builder" }])
+    ).toBe("Cancelled by Builder");
+  });
+
+  it("returns 'Declined by Supplier' for a genuine supplier decline", () => {
+    expect(
+      getReadOnlyStatusLabel("CANCELLED", [
+        { status: "CANCELLED", note: "All eligible suppliers declined this enquiry" },
+      ])
+    ).toBe("Declined by Supplier");
+  });
+
+  it("returns the safe generic 'Cancelled' for a legacy/unknown cancellation actor", () => {
+    // No tracking rows at all (legacy order predating OrderTracking, or the
+    // caller didn't have tracking handy) — must never be misattributed to
+    // the builder.
+    expect(getReadOnlyStatusLabel("CANCELLED")).toBe("Cancelled");
+    expect(getReadOnlyStatusLabel("CANCELLED", [])).toBe("Cancelled");
+    // A CANCELLED tracking row whose note doesn't mention either actor.
+    expect(getReadOnlyStatusLabel("CANCELLED", [{ status: "CANCELLED", note: "Order cancelled" }])).toBe(
+      "Cancelled"
+    );
   });
 
   it("returns null for statuses that still have an available action", () => {
@@ -56,6 +79,47 @@ describe("getReadOnlyStatusLabel", () => {
     expect(getReadOnlyStatusLabel("PROCESSING")).toBeNull();
     expect(getReadOnlyStatusLabel("DISPATCHED")).toBeNull();
     expect(getReadOnlyStatusLabel("OUT_FOR_DELIVERY")).toBeNull();
+  });
+
+  it("other status labels (Order Delivered, Order status: X) remain unchanged", () => {
+    expect(getReadOnlyStatusLabel("DELIVERED")).toBe("Order Delivered");
+  });
+});
+
+describe("getCancellationActor", () => {
+  it("attributes a note mentioning 'builder' to BUILDER", () => {
+    expect(getCancellationActor([{ status: "CANCELLED", note: "Cancelled by builder" }])).toBe("BUILDER");
+    expect(
+      getCancellationActor([{ status: "CANCELLED", note: "Builder opted out of aggregation pool" }])
+    ).toBe("BUILDER");
+  });
+
+  it("attributes a note mentioning 'supplier'/'declined' to SUPPLIER", () => {
+    expect(
+      getCancellationActor([{ status: "CANCELLED", note: "All eligible suppliers declined this enquiry" }])
+    ).toBe("SUPPLIER");
+    expect(
+      getCancellationActor([{ status: "CANCELLED", note: "Supplier marked order as cancelled" }])
+    ).toBe("SUPPLIER");
+  });
+
+  it("uses only the most recent CANCELLED tracking entry, ignoring earlier ones", () => {
+    expect(
+      getCancellationActor([
+        { status: "PLACED", note: "Order placed" },
+        { status: "CANCELLED", note: "Supplier marked order as cancelled" },
+      ])
+    ).toBe("SUPPLIER");
+  });
+
+  it("returns UNKNOWN for an empty tracking list or an unrecognized note", () => {
+    expect(getCancellationActor([])).toBe("UNKNOWN");
+    expect(getCancellationActor([{ status: "CANCELLED", note: "Order cancelled" }])).toBe("UNKNOWN");
+    expect(getCancellationActor([{ status: "CANCELLED", note: null }])).toBe("UNKNOWN");
+  });
+
+  it("returns UNKNOWN when there is no CANCELLED entry at all", () => {
+    expect(getCancellationActor([{ status: "PLACED", note: "Order placed" }])).toBe("UNKNOWN");
   });
 });
 

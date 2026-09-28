@@ -48,6 +48,14 @@ export type SupplierListing = {
   // unresolvable (no active candidates in the group).
   minPrice?: number | null;
   maxPrice?: number | null;
+  // PLP "Starting from ₹Xxx" display price (product-listing price display
+  // change) — the true minimum valid price across ALL suppliers in the
+  // canonical group AND ALL of their price tiers (not just each supplier's
+  // quantity=1 tier, unlike minPrice/maxPrice above) — see
+  // apps/supplier/lib/supplier-data.ts `getPublicSupplierListings()` /
+  // `resolveMinimumDisplayPrice()`. Null when unresolvable (no active
+  // candidates with a valid price).
+  startingPrice?: number | null;
 };
 
 

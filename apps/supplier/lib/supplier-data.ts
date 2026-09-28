@@ -5,6 +5,7 @@ import {
   groupByCanonicalProduct,
   resolveHeadlinePrice,
   resolvePriceRange,
+  resolveMinimumDisplayPrice,
   type ResolutionCandidate,
 } from "./resolution";
 import { notifyBuilderOrderStatusUpdate } from "./notify";
@@ -640,6 +641,13 @@ export async function getPublicSupplierListings() {
 
     const headline = resolveHeadlinePrice(candidates);
     const range = resolvePriceRange(candidates);
+    // PLP "Starting from ₹Xxx" display price (REQ: product-listing price
+    // display change) — the true minimum valid price across every supplier
+    // in the group AND every one of their price tiers, so a lower price that
+    // only exists in a higher-quantity tier is still surfaced. Deliberately
+    // separate from `range`/`headline` above, which are quantity=1-only and
+    // continue to drive order/checkout/quotation pricing unchanged.
+    const startingPrice = resolveMinimumDisplayPrice(candidates);
 
     const {
       _basePriceRaw,
@@ -680,6 +688,11 @@ export async function getPublicSupplierListings() {
       // candidates), mirroring headline's fallback behavior.
       minPrice: range ? range.minPrice : null,
       maxPrice: range ? range.maxPrice : null,
+      // "Starting from ₹Xxx" PLP display price — see resolveMinimumDisplayPrice()
+      // doc comment. Null when unresolvable (no active candidates/no valid
+      // tier price), mirroring headline/range's fallback behavior — the PLP
+      // must show the existing "price unavailable" state rather than ₹0.
+      startingPrice,
     };
   });
 }

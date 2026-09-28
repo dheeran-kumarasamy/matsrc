@@ -171,6 +171,9 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
     price: parseListingPrice(listing.price),
     minPrice: listing.minPrice ?? undefined,
     maxPrice: listing.maxPrice ?? undefined,
+    // "Starting from ₹Xxx" PLP display price — see lib/listings.ts doc
+    // comment / apps/supplier/lib/resolution.ts resolveMinimumDisplayPrice().
+    startingPrice: listing.startingPrice ?? undefined,
     unit: listing.unit,
     supplier: "Verified Supplier",
     supplierCount: listing.groupedListingIds?.length || 1,

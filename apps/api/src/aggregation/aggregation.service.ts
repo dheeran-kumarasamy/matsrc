@@ -144,6 +144,15 @@ export class AggregationService {
     let previousUnitPriceForNotify = 0;
     let productNameForNotify = "";
 
+    // maxWait/timeout raised above Prisma's 2000ms/5000ms defaults: this
+    // transaction conditionally calls generateEnquiryId() (builder-code
+    // resolve/collision-check, row-locked sequence increment) on top of
+    // its own several sequential round-trips, which has been observed in
+    // production to occasionally exceed the 5s default against a
+    // serverless connection and abort mid-flight with Prisma error P2028
+    // ("Transaction already closed") — mirrors the identical fix applied
+    // to apps/web/lib/order-checkout.ts and
+    // apps/api/src/builder/orders/orders.service.ts.
     const result = await this.prisma.$transaction(async (tx) => {
       const pool = await this.lockPoolRow(tx, params.poolId);
 
@@ -276,7 +285,7 @@ export class AggregationService {
         pool: this.toPoolSummary(updatedPool, product.basePrice),
         participant: this.toParticipantSummary(participant),
       };
-    });
+    }, { maxWait: 10000, timeout: 15000 });
 
     // Fire-and-forget notifications after successful commit.
     if (isNewParticipant) {

@@ -378,6 +378,15 @@ export async function createOrdersFromCart(
     // the incremented global sequence commit atomically with the enquiry
     // itself — see packages/db/lib/enquiry-id.ts for the concurrency-
     // safety guarantee (row-locked sequence counter).
+    //
+    // maxWait/timeout raised above Prisma's 2000ms/5000ms defaults: this
+    // transaction does several sequential round-trips (builder-code
+    // resolve/collision-check, site-code resolve, row-locked sequence
+    // increment, then the nested Order/OrderItem/candidates/tracking
+    // create) against a serverless Neon connection, which observed
+    // real-world latency occasionally exceeding the 5s default and
+    // aborting mid-flight with Prisma error P2028 ("Transaction already
+    // closed") — surfaced to the client as a 500 on checkout.
     const order = await prisma.$transaction(async (tx) => {
       const enquiryId = await generateEnquiryId(tx, {
         builderId: userId,
@@ -457,7 +466,7 @@ export async function createOrdersFromCart(
         },
       },
       });
-    });
+    }, { maxWait: 10000, timeout: 15000 });
 
     createdOrders.push({
       id: order.id,

@@ -231,6 +231,16 @@ export class BuilderOrdersService {
       // transaction as the Order row so the resolved builder/site codes and
       // the incremented global sequence commit atomically with the enquiry
       // itself — see packages/db/lib/enquiry-id.ts.
+      //
+      // maxWait/timeout raised above Prisma's 2000ms/5000ms defaults: this
+      // transaction does several sequential round-trips (builder-code
+      // resolve/collision-check, site-code resolve, row-locked sequence
+      // increment, then the nested Order/OrderItem/tracking create)
+      // against a serverless connection, where real-world latency has been
+      // observed to exceed the 5s default and abort mid-flight with
+      // Prisma error P2028 ("Transaction already closed") — surfaced to
+      // the client as a 500 on checkout (mirrors the identical fix in
+      // apps/web/lib/order-checkout.ts).
       const order = await this.prisma.$transaction(async (tx) => {
         const enquiryId = await generateEnquiryId(tx, {
           builderId: user.id,
@@ -277,7 +287,7 @@ export class BuilderOrdersService {
             },
           },
         });
-      });
+      }, { maxWait: 10000, timeout: 15000 });
 
       createdOrders.push({
         id: order.id,

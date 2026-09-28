@@ -26,7 +26,11 @@ export const metadata = {
     "Tell us what material you need. Our AI Sourcing Assistant will help you find the best sourcing option.",
 };
 
-export default async function SourcingPage() {
+export default async function SourcingPage({
+  searchParams,
+}: {
+  searchParams?: { fromPo?: string; material?: string; siteId?: string };
+}) {
   const session = await auth();
   const isSignedIn = !!session?.user?.email;
 
@@ -67,9 +71,28 @@ export default async function SourcingPage() {
   // only repeated what SourcingAssistant's own composer ("What material are
   // you looking for?") already says, so the working surface now starts
   // immediately without a redundant title above it.
+  // §1/§2: when arrived at from a confirmed order/PO's "Create New Enquiry"
+  // action (see PurchaseOrderApprovalCard.tsx), `?fromPo=1` shows a short
+  // explanatory banner and `material`/`siteId` carry forward useful context
+  // into the composer/session — quantity is deliberately never one of these
+  // params, so the composer still starts with no quantity typed and the
+  // builder must enter/select it explicitly.
+  const fromPo = searchParams?.fromPo === "1";
+  const material = typeof searchParams?.material === "string" ? searchParams.material : null;
+  const siteId = typeof searchParams?.siteId === "string" ? searchParams.siteId : null;
+
   return (
-    <div className="posh-body">
-      <SourcingAssistant />
+    <div className="posh-body space-y-4">
+      {fromPo ? (
+        <div className="panel space-y-1 p-4">
+          <h1 className="text-base font-semibold text-slate-900">Create a New Enquiry</h1>
+          <p className="text-sm text-slate-600">
+            The quantity on this confirmed order cannot be changed. Create a new enquiry with the
+            required quantity to place a new order.
+          </p>
+        </div>
+      ) : null}
+      <SourcingAssistant prefill={fromPo ? { material, siteId } : null} />
     </div>
   );
 }

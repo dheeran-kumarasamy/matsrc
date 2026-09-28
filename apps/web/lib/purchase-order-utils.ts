@@ -40,6 +40,13 @@ export function serializePurchaseOrder(po: any) {
     // a builder-cancellable state, without a second round-trip. Only present
     // when the caller's query included the `order` relation.
     orderStatus: po.order?.status ?? null,
+    // The order's tagged construction Site (nullable — "Unassigned" is
+    // valid). Surfaced ONLY so the PO screen's "Create New Enquiry" action
+    // can carry the same site forward into a fresh /sourcing session as a
+    // convenience — it is never written back to this PO, and the sourcing
+    // flow still fully re-validates ownership/ACTIVE status server-side
+    // before ever persisting it (see session-store.ts's createSession).
+    orderSiteId: po.order?.siteId ?? null,
     supplier: {
       id: po.supplier.id,
       companyName: po.supplier.companyName,
@@ -73,7 +80,7 @@ export const purchaseOrderInclude = {
   supplier: true,
   builder: true,
   lineItems: { include: { product: true } },
-  order: { select: { enquiryId: true, status: true } },
+  order: { select: { enquiryId: true, status: true, siteId: true } },
 } as const;
 
 export { PurchaseOrderStatus };

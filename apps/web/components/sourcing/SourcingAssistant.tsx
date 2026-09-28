@@ -45,11 +45,25 @@ const EXAMPLES = [
 type Props = {
   /** Existing session to resume, when the customer returns to one. */
   initialSession?: SessionResponse | null;
+  /**
+   * Optional context carried forward from a confirmed order/PO's "Create New
+   * Enquiry" action (see PurchaseOrderApprovalCard.tsx). Deliberately narrow:
+   * only the product/material name and the site are ever prefilled —
+   * quantity is NEVER carried forward, so the builder must explicitly
+   * type/select the new required quantity in the composer below. Ignored
+   * once an initialSession is being resumed (that session already has its
+   * own state).
+   */
+  prefill?: { material?: string | null; siteId?: string | null } | null;
 };
 
-export default function SourcingAssistant({ initialSession = null }: Props) {
+export default function SourcingAssistant({ initialSession = null, prefill = null }: Props) {
   const [sessionId, setSessionId] = useState<string | null>(initialSession?.id ?? null);
-  const [input, setInput] = useState("");
+  // The material/product name (never quantity) may be pre-populated into the
+  // composer as a starting point when arriving from "Create New Enquiry" —
+  // the builder still explicitly reviews/edits it and must add their own
+  // quantity before sending.
+  const [input, setInput] = useState(!initialSession && prefill?.material ? prefill.material : "");
   const [busy, setBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -175,7 +189,15 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
 
   async function ensureSession(): Promise<string> {
     if (sessionId) return sessionId;
-    const created = await builderApiPost<{ id: string }>("/sourcing/sessions", {});
+    // Carry the prefilled site forward (§1: "carry forward useful context...
+    // site") as a starting point only — POST /sourcing/sessions independently
+    // re-verifies this Site actually belongs to the caller before persisting
+    // it (see createSession in session-store.ts), and the existing
+    // site-selection UI (SiteStep) still runs on top of it, so none of the
+    // existing site-selection rules are bypassed.
+    const created = await builderApiPost<{ id: string }>("/sourcing/sessions", {
+      siteId: prefill?.siteId ?? undefined,
+    });
     setSessionId(created.id);
     return created.id;
   }
@@ -348,10 +370,19 @@ export default function SourcingAssistant({ initialSession = null }: Props) {
         `/sourcing/sessions/${sessionId}/confirm`,
         { recommendationId: selectedId, siteId }
       );
+      const baseMessage = result.supplierName
+        ? `Enquiry submitted to ${result.supplierName}. You can track it under My Orders.`
+        : result.message;
+      // §2/§9: creating a new enquiry from a PO/order's "Create New Enquiry"
+      // action must NEVER be mistaken for cancelling the original order — the
+      // original order is never touched by this confirm call (it only ever
+      // creates a brand-new Order/enquiry through the existing checkout
+      // pipeline, see createOrdersFromCart). Make that explicit right here,
+      // using the same success-notification surface already shown above.
       setConfirmedMessage(
-        result.supplierName
-          ? `Enquiry submitted to ${result.supplierName}. You can track it under My Orders.`
-          : result.message
+        prefill?.material || prefill?.siteId
+          ? `${baseMessage} Your existing order is still active. If you no longer need it, you can cancel it from the order page, provided cancellation is available.`
+          : baseMessage
       );
     } catch (caught) {
       setError(

@@ -62,6 +62,12 @@ model User {
   pendingContactVerifications PendingContactVerification[]
   paymentVerifications        PaymentVerification[]
 
+  // Invoice Generation & Management (Admin-only generation — see Invoice
+  // model below). A builder/contractor can be the invoiced party on many
+  // invoices; an admin/super-admin can be the generator of many invoices.
+  invoicesAsBuilder Invoice[] @relation("InvoiceBuilder")
+  invoicesGenerated Invoice[] @relation("InvoiceGeneratedBy")
+
   notificationPreference NotificationPreference?
   creditProfile          CreditProfile?
   supplierProfile        SupplierProfile?
@@ -192,6 +198,7 @@ model SupplierProfile {
   aggregationPools    AggregationPool[]
   orderItemCandidates OrderItemSupplierCandidate[]
   priceSnapshots      PriceSnapshot[]
+  invoices            Invoice[]
 
   sourcingRecommendations SourcingRecommendation[] @relation("SupplierSourcingRecommendations")
 
@@ -591,9 +598,9 @@ enum PaymentVerificationStatus {
 }
 
 model Order {
-  id                 String        @id @default(cuid())
-  userId             String
-  user               User          @relation(fields: [userId], references: [id])
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
   // Meaningful Enquiry ID (display-only): "<CONTRACTOR_CODE>-<SITE_CODE>-
   // <SEQUENCE>", e.g. "ABC-SITE01-000123" — see packages/db/lib/enquiry-id.ts.
@@ -663,6 +670,11 @@ model Order {
   aggregationParticipant AggregationParticipant?
   paymentVerification    PaymentVerification?
 
+  // Invoice Generation & Management: one-to-one — an order has at most one
+  // (non-cancelled) invoice. Nullable/additive; existing orders simply have
+  // no invoice until an Admin explicitly generates one (see Invoice model).
+  invoice Invoice?
+
   @@index([userId])
   @@index([status])
   @@index([selectedSupplierId])
@@ -695,9 +707,9 @@ model PaymentVerification {
 
   status PaymentVerificationStatus @default(PENDING)
 
-  submittedAt DateTime  @default(now())
-  reviewedAt  DateTime?
-  reviewedBy  String?
+  submittedAt     DateTime  @default(now())
+  reviewedAt      DateTime?
+  reviewedBy      String?
   rejectionReason String?
 
   createdAt DateTime @default(now())
@@ -706,6 +718,133 @@ model PaymentVerification {
   @@index([orderId])
   @@index([userId])
   @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// Invoice Generation & Management
+//
+// Business rule (see project spec): only an Admin/Super Admin may generate
+// an invoice, and only after the order's bank-transfer payment proof has
+// been verified/approved by an Admin (PaymentVerification.status ===
+// APPROVED, mirroring the exact same gate already enforced by
+// PaymentsService.approve — see that model's doc comment above). Uploading
+// a payment screenshot (PaymentVerification created/PENDING) never by
+// itself generates an invoice.
+//
+// One invoice per Order (one-to-one, see Order.invoice above) — generation
+// is idempotent: a second "generate" call for an order that already has an
+// invoice returns the existing invoice instead of creating a duplicate
+// (enforced by the @@unique orderId column + a check in the service layer,
+// mirroring PaymentsService.approve's idempotent early-return pattern).
+//
+// Historical accuracy / immutability: every financial figure below (and
+// every InvoiceLineItem row) is a frozen SNAPSHOT captured at generation
+// time from the order's final, approved OrderItem rows — never recomputed
+// from live Product/SupplierProfile pricing when the invoice is later
+// viewed/exported. This mirrors PurchaseOrderLineItem's existing snapshot
+// pattern (quantity/unitPrice/tax copied once at PO-creation time, never
+// re-derived — see PurchaseOrdersService.create's doc comments).
+enum InvoiceStatus {
+  GENERATED
+  CANCELLED
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  // Unique, server-generated, human-readable invoice number
+  // ("INV-<YEAR>-<6-digit sequence>", e.g. "INV-2026-000001"). Generated
+  // once at Invoice-creation time inside the same transaction that creates
+  // the row, using a global, transaction-safe sequence (InvoiceSequence)
+  // so the numeric part is unique and strictly increasing — mirrors the
+  // existing Meaningful Enquiry ID sequence pattern (see
+  // packages/db/lib/enquiry-id.ts / EnquirySequence). Never editable by
+  // users; immutable once generated.
+  invoiceNumber String        @unique
+  invoiceDate   DateTime      @default(now())
+  status        InvoiceStatus @default(GENERATED)
+
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  // Denormalized, display-only reference to the order's Meaningful Enquiry
+  // ID at generation time (Order.enquiryId is itself immutable once set —
+  // see Order.enquiryId's own doc comment — so copying it here is purely
+  // for a fast/independent read path, never a second source of truth).
+  enquiryId String?
+
+  builderId String
+  builder   User   @relation("InvoiceBuilder", fields: [builderId], references: [id])
+
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id])
+
+  supplierId String
+  supplier   SupplierProfile @relation(fields: [supplierId], references: [id])
+
+  // Frozen financial snapshot — see model doc comment above. Subtotal + Tax
+  // = Total, following the existing application's Decimal(12,2) convention
+  // (see Order.totalAmount / PurchaseOrderLineItem.unitPrice above). Never
+  // recomputed from live pricing after generation.
+  subtotal    Decimal @db.Decimal(12, 2)
+  taxAmount   Decimal @db.Decimal(12, 2)
+  totalAmount Decimal @db.Decimal(12, 2)
+  currency    String  @default("INR")
+
+  // Payment status snapshot, derived from the application's existing
+  // PaymentStatus (Order.paymentStatus) at generation time — never a
+  // parallel/duplicate payment-state enum. Re-fetched at generation time
+  // only; not live-linked afterwards, so a later payment status change on
+  // the order does not silently rewrite an already-issued invoice.
+  paymentStatus PaymentStatus
+  amountPaid    Decimal?      @db.Decimal(12, 2)
+  amountDue     Decimal?      @db.Decimal(12, 2)
+
+  // Auditability: who generated this invoice and when — immutable once set.
+  generatedById String
+  generatedBy   User     @relation("InvoiceGeneratedBy", fields: [generatedById], references: [id])
+  generatedAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lineItems InvoiceLineItem[]
+
+  @@index([orderId])
+  @@index([builderId])
+  @@index([siteId])
+  @@index([supplierId])
+  @@index([status])
+}
+
+// Immutable invoice line item snapshot — one row per OrderItem at the
+// moment of invoice generation, copying the FINAL approved
+// quantity/unitPrice/tax rate (never re-read from live Product pricing
+// afterwards). Mirrors PurchaseOrderLineItem's existing snapshot shape.
+model InvoiceLineItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId   String?
+  productName String
+  description String?
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  taxRate     Decimal? @db.Decimal(5, 2)
+  taxAmount   Decimal  @db.Decimal(12, 2)
+  subtotal    Decimal  @db.Decimal(12, 2)
+  total       Decimal  @db.Decimal(12, 2)
+
+  @@index([invoiceId])
+}
+
+// Invoice number — global sequence counter, mirroring EnquirySequence's
+// singleton-row + row-lock pattern above (see nextEnquirySequence()).
+// Concurrency safety: every read-increment-write of `value` MUST happen
+// inside a `SELECT ... FOR UPDATE` row lock within the same
+// `prisma.$transaction` that creates the Invoice row.
+model InvoiceSequence {
+  id    String @id @default("singleton")
+  value Int    @default(0)
 }
 
 model OrderItem {
@@ -1313,6 +1452,7 @@ model Site {
 
   orders           Order[]
   sourcingSessions SourcingSession[] @relation("SiteSourcingSessions")
+  invoices         Invoice[]
 
   @@unique([builderId, name])
   @@index([builderId])

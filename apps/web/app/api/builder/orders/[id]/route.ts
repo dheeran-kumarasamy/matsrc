@@ -44,6 +44,12 @@ export async function GET(
           select: { id: true, poNumber: true, status: true, version: true },
           orderBy: { version: "desc" },
         },
+        // Invoice Generation & Management: read-only surface for the
+        // Contractor/Client order page — only present once an Admin has
+        // generated it (see apps/admin's Generate Invoice action /
+        // apps/api's admin/orders/:orderId/invoice controller). Never
+        // generated from this route.
+        invoice: { select: { id: true, invoiceNumber: true } },
         items: {
           select: {
             id: true,
@@ -132,6 +138,7 @@ export async function GET(
             version: order.purchaseOrders[0].version,
           }
         : null,
+      invoice: order.invoice ? { id: order.invoice.id, invoiceNumber: order.invoice.invoiceNumber } : null,
       items: order.items.map((item) => ({
         id: item.id,
         productId: item.product.id,

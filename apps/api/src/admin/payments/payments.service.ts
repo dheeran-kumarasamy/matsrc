@@ -27,6 +27,39 @@ export class PaymentsService {
     return verifications.map((v) => this.serializeSummary(v));
   }
 
+  // List every order whose bank-transfer payment proof has been APPROVED —
+  // i.e. every order that has satisfied the payment-verification
+  // prerequisite for invoice generation (see
+  // src/admin/invoices/invoices.service.ts's checkEligibility). Surfaced on
+  // the same Admin payments page as the pending queue above so the Admin
+  // has a single place to go from "verify payment" -> "generate invoice"
+  // for a given order (Order.invoice is included so the UI can render
+  // Generate Invoice vs View/Download Invoice without a second request).
+  async findApprovedWithInvoiceStatus() {
+    const verifications = await this.prisma.paymentVerification.findMany({
+      where: { status: PaymentVerificationStatus.APPROVED },
+      include: {
+        order: {
+          select: {
+            id: true,
+            enquiryId: true,
+            status: true,
+            totalAmount: true,
+            paymentMethod: true,
+            invoice: { select: { id: true, invoiceNumber: true } },
+          },
+        },
+        user: { select: { id: true, name: true, email: true, phone: true } },
+      },
+      orderBy: { reviewedAt: "desc" },
+    });
+
+    return verifications.map((v) => ({
+      ...this.serializeSummary(v as any),
+      invoice: v.order.invoice ? { id: v.order.invoice.id, invoiceNumber: v.order.invoice.invoiceNumber } : null,
+    }));
+  }
+
   // Full detail for a single order's payment verification, for the admin
   // review screen (excludes the raw screenshot bytes — those are only ever
   // served by the dedicated screenshot route below, gated the same way).

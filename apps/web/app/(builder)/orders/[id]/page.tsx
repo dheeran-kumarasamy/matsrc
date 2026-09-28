@@ -34,6 +34,7 @@ type OrderDetail = {
   priceBeforeAggregation?: number | null;
   priceAfterAggregation?: number | null;
   purchaseOrder?: { id: string; poNumber: string; status: string; version: number } | null;
+  invoice?: { id: string; invoiceNumber: string } | null;
   siteId?: string | null;
   siteName?: string;
 
@@ -246,6 +247,26 @@ export default async function OrderDetailPage({ params }: { params: { id: string
               </Link>
             ) : null}
           </div>
+
+          {order.invoice ? (
+            <div className="posh-card space-y-3 p-6">
+              <h2 className="posh-card-title">Invoice</h2>
+              <p className="posh-subtitle">{order.invoice.invoiceNumber}</p>
+              <div className="flex gap-2">
+                <Link href={`/orders/${order.id}/invoice`} className="posh-btn-ghost flex-1 text-center">
+                  View Invoice
+                </Link>
+                <a
+                  href={`/api/builder/orders/${order.id}/invoice/pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="posh-btn flex-1 text-center"
+                >
+                  Download
+                </a>
+              </div>
+            </div>
+          ) : null}
 
           {order.status === "DELIVERED" ? <OrderRatingForm orderId={order.id} /> : null}
         </aside>

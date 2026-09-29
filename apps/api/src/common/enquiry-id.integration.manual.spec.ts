@@ -1,4 +1,4 @@
-// Manual integration smoke test for Meaningful Enquiry ID generation against
+// Manual integration smoke test for Consolidated Enquiry ID generation against
 // a REAL database. Not part of the default `vitest run` suite (this file is
 // intentionally NOT named `*.spec.ts` in the standard sense picked up by
 // apps/api/vitest.config.ts's `include: ["src/**/*.spec.ts"]` glob — wait,
@@ -26,7 +26,7 @@ describe.skipIf(!RUN_INTEGRATION)("generateEnquiryId — real database integrati
           data: { email: `enquiry-id-test-${Date.now()}@example.com`, name: "Enquiry Id Test Builder", role: "BUILDER" },
         });
         const site = await tx.site.create({
-          data: { builderId: user.id, name: `Test Site ${Date.now()}`, code: "T01" },
+          data: { builderId: user.id, name: `Test Site ${Date.now()}`, code: "T01", city: "Chennai" },
         });
 
         // Concurrent generation: fire 10 generateEnquiryId calls in parallel
@@ -47,7 +47,7 @@ describe.skipIf(!RUN_INTEGRATION)("generateEnquiryId — real database integrati
         expect(uniqueIds.size).toBe(10);
 
         for (const id of results) {
-          expect(id).toMatch(/^[A-Z0-9]+-T01-\d{6}$/);
+          expect(id).toMatch(/^[A-Z]{3}-TESTS-CHE[A-Z0-9]-\d{5}$/);
         }
 
         // Force rollback — this integration test must never persist data.

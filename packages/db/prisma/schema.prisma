@@ -77,15 +77,13 @@ model User {
   tallyLedgerMapping     TallyLedgerMapping?
   sourcingSessions       SourcingSession[]       @relation("UserSourcingSessions")
 
-  // Meaningful Enquiry ID (contractor prefix): a short, stable,
-  // human-readable code identifying this builder/contractor in generated
-  // enquiry IDs (e.g. "ABC" in "ABC-SITE01-000123"). Generated once, on
-  // first use, from a normalized slug of the builder's name/email — never
-  // regenerated afterwards, so it stays stable for all historical
-  // enquiries even if the builder later changes their display name.
-  // Nullable/additive: existing users and non-BUILDER roles simply have no
-  // code until/unless one is resolved for them (see
-  // packages/db/lib/enquiry-id.ts resolveBuilderCode()).
+  // Legacy contractor-prefix code used only by pre-existing enquiry IDs in
+  // the previous "<CONTRACTOR_CODE>-<SITE_CODE>-<SEQUENCE>" format (e.g.
+  // "ABC" in "ABC-SITE01-000123"). No longer read/written by Consolidated
+  // Enquiry ID generation (see packages/db/lib/enquiry-id.ts), which
+  // derives its first-name component directly from the builder's `name`/
+  // `email` at generation time instead. Retained, unmodified, so
+  // historical enquiry IDs already using this code continue to resolve.
   builderCode String? @unique
 
   @@index([email])
@@ -602,21 +600,22 @@ model Order {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  // Meaningful Enquiry ID (display-only): "<CONTRACTOR_CODE>-<SITE_CODE>-
-  // <SEQUENCE>", e.g. "ABC-SITE01-000123" — see packages/db/lib/enquiry-id.ts.
-  // Generated once at Order-creation time in the same transaction that
-  // creates the row, using a global, transaction-safe sequence
-  // (EnquirySequence) so the numeric part is unique and strictly
-  // increasing regardless of contractor/site.
+  // Consolidated Enquiry ID (display-only): "<FIRSTNAME3>-<SITENAME5>-
+  // <CITY3><RANDOM1>-<SERIAL5>", e.g. "RAJ-CHENN-CHE7-00123" — see
+  // packages/db/lib/enquiry-id.ts. Generated once at Order-creation time
+  // in the same transaction that creates the row, using a global,
+  // transaction-safe sequence (EnquirySequence) so the 5-digit serial part
+  // is unique and strictly increasing regardless of contractor/site/city.
   //
   // Nullable/additive and NEVER backfilled by rewriting `id` — `id` (the
   // cuid PK above) remains the real, unchanged database identifier, FK
   // target, API path segment, and URL param for every order, old and new.
   // `enquiryId` is purely an additional, human-readable label shown
-  // wherever the enquiry ID is displayed; existing (pre-migration) rows
-  // have this backfilled once, in original createdAt order, by the
-  // 20260926000000_add_enquiry_id migration, using each row's own siteId/
-  // userId at the time of migration — never invented from arbitrary data.
+  // wherever the enquiry ID is displayed. Orders created before this
+  // format was introduced keep their original
+  // "<CONTRACTOR_CODE>-<SITE_CODE>-<SEQUENCE>" value (e.g.
+  // "ABC-SITE01-000123") unchanged and forever — only brand-new orders use
+  // this new format; nothing rewrites historical values.
   enquiryId          String?       @unique
   status             OrderStatus   @default(PLACED)
   paymentMethod      PaymentMethod
@@ -1424,16 +1423,12 @@ model Site {
   builderId   String
   builder     User       @relation("BuilderSites", fields: [builderId], references: [id])
   name        String
-  // Meaningful Enquiry ID (site prefix): a short, stable, human-readable
-  // code for this site (e.g. "SITE01" in "ABC-SITE01-000123"). Free-text
-  // today (set by the builder at site-creation time, see
-  // apps/web/app/api/builder/sites/route.ts), normalized/uppercased for
-  // display in generated enquiry IDs. If left blank, a stable fallback code
-  // is auto-derived once (from the site's own id) the first time an
-  // enquiry needs it — never from the mutable site `name`/address — so the
-  // enquiry-ID prefix always exists and never changes afterwards even if
-  // the site is later renamed. See packages/db/lib/enquiry-id.ts
-  // resolveSiteCode().
+  // Free-text site code, optionally set by the builder at site-creation
+  // time (see apps/web/app/api/builder/sites/route.ts). No longer used by
+  // Consolidated Enquiry ID generation (which derives its site-name
+  // component directly from `name`, and its city component from `city`
+  // below) — see packages/db/lib/enquiry-id.ts. Retained purely as a
+  // builder-facing free-text reference field.
   code        String?
   addressLine String?
   city        String?

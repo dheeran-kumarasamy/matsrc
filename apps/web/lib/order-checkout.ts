@@ -361,8 +361,8 @@ export async function createOrdersFromCart(
 
   // Fetched once, outside the per-supplier-group loop below, since the
   // builder's own name/email never change across the multiple grouped
-  // Orders created from a single checkout — used only to resolve/derive
-  // the stable contractor code for the Meaningful Enquiry ID (see
+  // Orders created from a single checkout — used to derive the first-name
+  // component of the Consolidated Enquiry ID (see
   // packages/db/lib/enquiry-id.ts).
   const builderForEnquiryId = await prisma.user.findUnique({
     where: { id: userId },
@@ -373,16 +373,16 @@ export async function createOrdersFromCart(
     const totalAmount = group.items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
     const resolvedAt = new Date();
 
-    // Meaningful Enquiry ID (Order.enquiryId): generated inside the same
-    // transaction as the Order row so the resolved builder/site codes and
-    // the incremented global sequence commit atomically with the enquiry
-    // itself — see packages/db/lib/enquiry-id.ts for the concurrency-
-    // safety guarantee (row-locked sequence counter).
+    // Consolidated Enquiry ID (Order.enquiryId): generated inside the same
+    // transaction as the Order row so the resolved builder/site/city data
+    // and the incremented global serial commit atomically with the
+    // enquiry itself — see packages/db/lib/enquiry-id.ts for the
+    // concurrency-safety guarantee (row-locked serial counter).
     //
     // maxWait/timeout raised above Prisma's 2000ms/5000ms defaults: this
-    // transaction does several sequential round-trips (builder-code
-    // resolve/collision-check, site-code resolve, row-locked sequence
-    // increment, then the nested Order/OrderItem/candidates/tracking
+    // transaction does several sequential round-trips (selected-site
+    // lookup, row-locked serial increment, then the nested
+    // Order/OrderItem/candidates/tracking
     // create) against a serverless Neon connection, which observed
     // real-world latency occasionally exceeding the 5s default and
     // aborting mid-flight with Prisma error P2028 ("Transaction already

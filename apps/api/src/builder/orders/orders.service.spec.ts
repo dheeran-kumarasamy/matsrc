@@ -34,15 +34,14 @@ describe("BuilderOrdersService.create", () => {
       order: {
         create: vi
           .fn()
-          .mockResolvedValueOnce({ id: "ord-1", enquiryId: "BLD-UNSITED-000001", totalAmount: 500, items: [{ id: "i-1" }], status: "PLACED" })
-          .mockResolvedValueOnce({ id: "ord-2", enquiryId: "BLD-UNSITED-000002", totalAmount: 400, items: [{ id: "i-2" }], status: "PLACED" }),
+          .mockResolvedValueOnce({ id: "ord-1", enquiryId: "BLD-UNSIT-X7K2-00001", totalAmount: 500, items: [{ id: "i-1" }], status: "PLACED" })
+          .mockResolvedValueOnce({ id: "ord-2", enquiryId: "BLD-UNSIT-X7K2-00002", totalAmount: 400, items: [{ id: "i-2" }], status: "PLACED" }),
       },
-      // Meaningful Enquiry ID support (see packages/db/lib/enquiry-id.ts) —
-      // generateEnquiryId() is called from inside a $transaction callback
-      // and touches user.findUnique/update + enquirySequence.update.
-      user: {
+      // Consolidated Enquiry ID support (see packages/db/lib/enquiry-id.ts)
+      // — generateEnquiryId() is called from inside a $transaction
+      // callback and touches site.findUnique + enquirySequence.update.
+      site: {
         findUnique: vi.fn().mockResolvedValue(null),
-        update: vi.fn().mockResolvedValue({ builderCode: "BLD" }),
       },
       enquirySequence: {
         update: vi.fn().mockResolvedValue({ value: 1 }),

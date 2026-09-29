@@ -2,8 +2,8 @@
 export { PrismaClient } from "@prisma/client";
 export * from "@prisma/client";
 
-// Meaningful Enquiry ID generation — central helper shared by every Order-
-// creation call site (apps/web/lib/order-checkout.ts,
+// Consolidated Enquiry ID generation — central helper shared by every
+// Order-creation call site (apps/web/lib/order-checkout.ts,
 // apps/api/src/builder/orders/orders.service.ts,
 // apps/api/src/aggregation/aggregation.service.ts). See
 // packages/db/lib/enquiry-id.ts for full documentation.

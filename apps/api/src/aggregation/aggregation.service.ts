@@ -15,6 +15,7 @@ import {
 } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationService } from "src/notifications/notification.service";
+import { CustomerOrderStatusNotificationService } from "src/notification-engine/whatsapp/customer-order-status-notification.service";
 import { AggregationConfigService } from "./aggregation-config.service";
 
 import {
@@ -50,7 +51,8 @@ export class AggregationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aggregationConfig: AggregationConfigService,
-    private readonly notificationService: NotificationService
+    private readonly notificationService: NotificationService,
+    private readonly customerOrderStatusNotificationService: CustomerOrderStatusNotificationService
   ) {}
 
   // ───────────────────────────────────────────────────────────
@@ -368,7 +370,14 @@ export class AggregationService {
         },
       });
 
+      let cancelledOrderTransition: { orderId: string; previousStatus: OrderStatus } | null = null;
+
       if (participant.orderId) {
+        const orderBeforeCancel = await tx.order.findUnique({
+          where: { id: participant.orderId },
+          select: { status: true },
+        });
+
         await tx.order.update({
           where: { id: participant.orderId },
           data: { status: OrderStatus.CANCELLED },
@@ -381,6 +390,10 @@ export class AggregationService {
             note: "Builder opted out of aggregation pool",
           },
         });
+
+        if (orderBeforeCancel) {
+          cancelledOrderTransition = { orderId: participant.orderId, previousStatus: orderBeforeCancel.status };
+        }
       }
 
       // Reconcile remaining participants' provisional pricing to reflect the recalculated
@@ -405,6 +418,7 @@ export class AggregationService {
       return {
         pool: this.toPoolSummary(updatedPool, product.basePrice),
         participant: this.toParticipantSummary(updatedParticipant),
+        cancelledOrderTransition,
       };
     });
 
@@ -415,6 +429,16 @@ export class AggregationService {
         productName: productNameForNotify,
       })
       .catch((error) => this.logger.warn(`Failed to send aggregation opt-out notification: ${this.errMsg(error)}`));
+
+    // Notification Engine — customer_order_status WhatsApp template, fired
+    // after the transaction committed (never inside it — never block/roll
+    // back the pool/participant/order mutation over a WhatsApp failure).
+    if (result.cancelledOrderTransition) {
+      const { orderId, previousStatus } = result.cancelledOrderTransition;
+      void this.customerOrderStatusNotificationService
+        .notifyIfTransitioned({ orderId, previousStatus, newStatus: OrderStatus.CANCELLED })
+        .catch((error) => this.logger.warn(`Failed to send customer_order_status notification for order ${orderId}: ${this.errMsg(error)}`));
+    }
 
     return result;
   }

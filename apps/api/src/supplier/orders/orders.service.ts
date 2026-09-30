@@ -6,6 +6,7 @@ import { formatDate, humanizeToken } from "src/supplier/utils";
 import { NotificationService } from "src/notifications/notification.service";
 import { WhatsAppAlertService } from "src/notifications/whatsapp-alerts/whatsapp-alert.service";
 import { WhatsAppLifecycleService } from "src/whatsapp/lifecycle/whatsapp-lifecycle.service";
+import { CustomerOrderStatusNotificationService } from "src/notification-engine/whatsapp/customer-order-status-notification.service";
 
 // Valid supplier-triggered transitions between the existing OrderStatus enum
 // values (packages/db/prisma/schema.prisma) — mirrors the equivalent table
@@ -35,7 +36,8 @@ export class OrdersService {
     private readonly supplierContext: SupplierContextService,
     private readonly notificationService: NotificationService,
     private readonly whatsAppAlertService: WhatsAppAlertService,
-    private readonly whatsAppLifecycleService: WhatsAppLifecycleService
+    private readonly whatsAppLifecycleService: WhatsAppLifecycleService,
+    private readonly customerOrderStatusNotificationService: CustomerOrderStatusNotificationService
   ) {}
 
   async findAll(user: any) {
@@ -166,6 +168,17 @@ export class OrdersService {
       this.logger.warn(`Failed to send WhatsApp lifecycle notification for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
     });
 
+    // Notification Engine — customer_order_status WhatsApp template (Meta
+    // template ID 1788249542353441). `current.status` was read before this
+    // update and the VALID_SUPPLIER_TRANSITIONS guard above already
+    // guarantees `current.status !== status`, so every call here is a real
+    // transition; never blocks/affects the order-status update above.
+    void this.customerOrderStatusNotificationService
+      .notifyIfTransitioned({ orderId: id, previousStatus: current.status, newStatus: order.status })
+      .catch((error) => {
+        this.logger.warn(`Failed to send customer_order_status notification for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
+      });
+
     return { id: order.id, status: order.status };
   }
 
@@ -254,6 +267,18 @@ export class OrdersService {
           `Failed to send builder notification for order ${orderId}: ${error instanceof Error ? error.message : String(error)}`
         );
       });
+
+      // Notification Engine — customer_order_status WhatsApp template.
+      // `order.status` above is the pre-fan-out status read at the top of
+      // this method, before any candidate/order mutation — a genuine
+      // transition into CANCELLED once every eligible supplier has declined.
+      void this.customerOrderStatusNotificationService
+        .notifyIfTransitioned({ orderId, previousStatus: order.status, newStatus: OrderStatus.CANCELLED })
+        .catch((error) => {
+          this.logger.warn(
+            `Failed to send customer_order_status notification for order ${orderId}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
 
       return { id: cancelled.id, status: cancelled.status };
     }

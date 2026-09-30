@@ -14,6 +14,12 @@ export * from "./lib/enquiry-id";
 // See packages/db/lib/invoice-number.ts for full documentation.
 export * from "./lib/invoice-number";
 
+// OrderStatus -> customer-friendly display label — single source of truth
+// for the Notification Engine's `customer_order_status` WhatsApp template
+// (and any other backend code needing the same label). See
+// packages/db/lib/order-status-labels.ts for full documentation.
+export * from "./lib/order-status-labels";
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

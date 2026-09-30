@@ -2,7 +2,6 @@ import { Module } from "@nestjs/common";
 import { WHATSAPP_SEND_PROVIDER } from "../adapters/whatsapp-send.interface";
 import { MockWhatsAppSendAdapter } from "../adapters/mock-whatsapp-send.adapter";
 import { MetaCloudApiSendAdapter } from "../adapters/meta-cloud-api-send.adapter";
-import { TwilioSupplierSendAdapter } from "../adapters/twilio-supplier-send.adapter";
 import { WhatsAppAuditHelper } from "../whatsapp-audit.helper";
 import { WhatsAppLifecycleConfigService } from "./whatsapp-lifecycle-config.service";
 import { WhatsAppLifecycleIdempotencyService } from "./whatsapp-lifecycle-idempotency.service";
@@ -30,20 +29,20 @@ import { WhatsAppLifecycleDailyDigestSchedulerService } from "./whatsapp-lifecyc
     WhatsAppAuditHelper,
     MockWhatsAppSendAdapter,
     MetaCloudApiSendAdapter,
-    TwilioSupplierSendAdapter,
     {
       provide: WHATSAPP_SEND_PROVIDER,
-      useFactory: (mock: MockWhatsAppSendAdapter, meta: MetaCloudApiSendAdapter, twilio: TwilioSupplierSendAdapter) => {
+      // Twilio supplier-bot adapter removed — Meta WhatsApp Cloud API
+      // (WHATSAPP_ADAPTER=meta) is the only real send provider now; `mock`
+      // remains the safe default for local/dev/test.
+      useFactory: (mock: MockWhatsAppSendAdapter, meta: MetaCloudApiSendAdapter) => {
         switch (process.env.WHATSAPP_ADAPTER) {
           case "meta":
             return meta;
-          case "twilio":
-            return twilio;
           default:
             return mock;
         }
       },
-      inject: [MockWhatsAppSendAdapter, MetaCloudApiSendAdapter, TwilioSupplierSendAdapter],
+      inject: [MockWhatsAppSendAdapter, MetaCloudApiSendAdapter],
     },
     WhatsAppLifecycleConfigService,
     WhatsAppLifecycleIdempotencyService,

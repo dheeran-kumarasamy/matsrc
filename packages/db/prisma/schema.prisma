@@ -1298,6 +1298,15 @@ model NotificationEventPolicy {
   eventType         String
   channel           String
   templateName      String
+  // Meta WhatsApp Business (Graph API) template ID for this eventType/channel
+  // mapping, e.g. "1788249542353441" for `customer_order_status`. Nullable —
+  // most existing rows predate this field and continue to send purely by
+  // `templateName` (Meta's send API only requires the template name, not its
+  // numeric ID). Stored here (the existing Template Registry) rather than in
+  // a second/new table or hardcoded in application code, so there is exactly
+  // ONE place per event/channel where the Meta-side identifiers live — see
+  // packages/db/scripts/seed-notification-templates.js.
+  metaTemplateId    String?
   displayName       String
   description       String?
   enabled           Boolean  @default(true)

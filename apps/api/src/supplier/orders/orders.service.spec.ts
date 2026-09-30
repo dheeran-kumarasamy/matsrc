@@ -33,13 +33,15 @@ function buildService(orderRow: { status: OrderStatus; items?: any[] }) {
   const notificationService = { notifyBuilderOrderDecision: vi.fn(async () => ({})) };
   const whatsAppAlertService = { sendOrderStatusUpdate: vi.fn(async () => ({})) };
   const whatsAppLifecycleService = { notifyBuilderOrderStatusTransition: vi.fn(async () => ({})) };
+  const customerOrderStatusNotificationService = { notifyIfTransitioned: vi.fn(async () => ({})) };
 
   const service = new OrdersService(
     prisma,
     supplierContext as any,
     notificationService as any,
     whatsAppAlertService as any,
-    whatsAppLifecycleService as any
+    whatsAppLifecycleService as any,
+    customerOrderStatusNotificationService as any
   );
 
   // findOne() drives the "current status" check inside updateStatus — stub
@@ -47,7 +49,7 @@ function buildService(orderRow: { status: OrderStatus; items?: any[] }) {
   // than the full order-item-lookup query shape.
   vi.spyOn(service, "findOne").mockResolvedValue({ status: orderRow.status } as any);
 
-  return { service, prisma };
+  return { service, prisma, customerOrderStatusNotificationService };
 }
 
 describe("OrdersService.updateStatus — backend transition guard", () => {

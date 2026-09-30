@@ -117,6 +117,7 @@ function createFakeDb() {
   };
 
   const orderApi = {
+    findUnique: vi.fn(async ({ where }: any) => db.orders.get(where.id) ?? null),
     create: vi.fn(async ({ data }: any) => {
       const id = nextId("order");
       const { items, tracking, ...rest } = data;
@@ -226,6 +227,10 @@ function makeFakeNotificationService() {
   } as any;
 }
 
+function makeFakeCustomerOrderStatusNotificationService() {
+  return { notifyIfTransitioned: vi.fn(async () => undefined) } as any;
+}
+
 function seedProduct(db: ReturnType<typeof createFakeDb>["db"], overrides: Partial<any> = {}) {
   const product = {
     id: "product-1",
@@ -253,11 +258,11 @@ describe("AggregationService.findOrCreatePool", () => {
     const fake = createFakeDb();
     db = fake.db;
     prisma = fake.prisma;
-    service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService());
+    service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService(), makeFakeCustomerOrderStatusNotificationService());
   });
 
   it("throws ForbiddenException when the feature flag is disabled", async () => {
-    service = new AggregationService(prisma as any, makeConfig(false), makeFakeNotificationService());
+    service = new AggregationService(prisma as any, makeConfig(false), makeFakeNotificationService(), makeFakeCustomerOrderStatusNotificationService());
     seedProduct(db);
 
     await expect(
@@ -366,7 +371,7 @@ describe("AggregationService.addParticipant (tier recalculation)", () => {
     const fake = createFakeDb();
     db = fake.db;
     prisma = fake.prisma;
-    service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService());
+    service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService(), makeFakeCustomerOrderStatusNotificationService());
     seedProduct(db);
   });
 
@@ -478,7 +483,7 @@ describe("AggregationService.lockPool", () => {
     const fake = createFakeDb();
     db = fake.db;
     prisma = fake.prisma;
-    service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService());
+    service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService(), makeFakeCustomerOrderStatusNotificationService());
     seedProduct(db);
   });
 
@@ -552,7 +557,7 @@ describe("AggregationService.cancelParticipant (opt-out)", () => {
     const fake = createFakeDb();
     db = fake.db;
     prisma = fake.prisma;
-    service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService());
+    service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService(), makeFakeCustomerOrderStatusNotificationService());
     seedProduct(db);
   });
 
@@ -613,7 +618,7 @@ describe("AggregationService.cancelParticipant (opt-out)", () => {
 describe("AggregationService concurrency: row-lock usage for atomicity", () => {
   it("acquires a SELECT ... FOR UPDATE row lock on the pool before mutating it in addParticipant", async () => {
     const { db, prisma } = createFakeDb();
-    const service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService());
+    const service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService(), makeFakeCustomerOrderStatusNotificationService());
     seedProduct(db);
 
     const pool = await service.findOrCreatePool({
@@ -635,7 +640,7 @@ describe("AggregationService concurrency: row-lock usage for atomicity", () => {
     // rather than true DB-level lock contention (which would require an integration
     // test against a real Postgres instance per the repo's transactional pattern).
     const { db, prisma } = createFakeDb();
-    const service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService());
+    const service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService(), makeFakeCustomerOrderStatusNotificationService());
     seedProduct(db, {
       aggregationPriceTiers: [{ minQty: 20, unitPrice: 80 }],
     });

@@ -30,7 +30,7 @@ const MAIN_MENU_ROWS: Array<{ id: MainFlow; title: string; description: string }
  * WhatsApp list rows are already visually numbered/ordered by the client itself, so row
  * `title`s must NOT also carry a manual "N. " prefix — that was the source of the
  * previous duplicate-numbering bug ("1. 1. Update Product Price") once flattened to
- * plain text by `TwilioSupplierSendAdapter`.
+ * plain text by a text-only send adapter.
  */
 const MAIN_MENU_NUMERIC_FALLBACK: Record<string, MainFlow> = {
   "1": "PRICE_UPDATE",

@@ -5,7 +5,6 @@ import { OrdersModule } from "src/supplier/orders/orders.module";
 import { RfqsModule } from "src/supplier/rfqs/rfqs.module";
 import { SupplierReportsModule } from "src/supplier/reports/reports.module";
 import { WhatsAppController } from "./whatsapp.controller";
-import { TwilioWhatsAppController } from "./twilio-whatsapp.controller";
 import { WhatsAppRouterService } from "./whatsapp-router.service";
 import { WhatsAppSessionService } from "./whatsapp-session.service";
 import { WhatsAppAuthService } from "./whatsapp-auth.service";
@@ -13,7 +12,6 @@ import { WhatsAppAuditHelper } from "./whatsapp-audit.helper";
 import { WHATSAPP_SEND_PROVIDER } from "./adapters/whatsapp-send.interface";
 import { MockWhatsAppSendAdapter } from "./adapters/mock-whatsapp-send.adapter";
 import { MetaCloudApiSendAdapter } from "./adapters/meta-cloud-api-send.adapter";
-import { TwilioSupplierSendAdapter } from "./adapters/twilio-supplier-send.adapter";
 
 import { PriceUpdateFlow } from "./flows/price-update.flow";
 import { EnquiryDecisionFlow } from "./flows/enquiry-decision.flow";
@@ -23,7 +21,7 @@ import { NotificationEngineModule } from "../notification-engine/notification-en
 
 @Module({
   imports: [SupplierModule, ListingsModule, OrdersModule, RfqsModule, SupplierReportsModule, NotificationEngineModule],
-  controllers: [WhatsAppController, TwilioWhatsAppController],
+  controllers: [WhatsAppController],
   providers: [
     WhatsAppRouterService,
     WhatsAppSessionService,
@@ -35,20 +33,20 @@ import { NotificationEngineModule } from "../notification-engine/notification-en
     DailyReportFlow,
     MockWhatsAppSendAdapter,
     MetaCloudApiSendAdapter,
-    TwilioSupplierSendAdapter,
     {
       provide: WHATSAPP_SEND_PROVIDER,
-      useFactory: (mock: MockWhatsAppSendAdapter, meta: MetaCloudApiSendAdapter, twilio: TwilioSupplierSendAdapter) => {
+      // Twilio supplier-bot adapter removed — Meta WhatsApp Cloud API
+      // (WHATSAPP_ADAPTER=meta) is the only real send provider now; `mock`
+      // remains the safe default for local/dev/test.
+      useFactory: (mock: MockWhatsAppSendAdapter, meta: MetaCloudApiSendAdapter) => {
         switch (process.env.WHATSAPP_ADAPTER) {
           case "meta":
             return meta;
-          case "twilio":
-            return twilio;
           default:
             return mock;
         }
       },
-      inject: [MockWhatsAppSendAdapter, MetaCloudApiSendAdapter, TwilioSupplierSendAdapter],
+      inject: [MockWhatsAppSendAdapter, MetaCloudApiSendAdapter],
     },
   ],
 })

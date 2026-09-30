@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { OrderStatus, PaymentStatus, PaymentVerificationStatus } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationService } from "src/notifications/notification.service";
+import { CustomerOrderStatusNotificationService } from "src/notification-engine/whatsapp/customer-order-status-notification.service";
 
 @Injectable()
 export class PaymentsService {
@@ -9,7 +10,8 @@ export class PaymentsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationService: NotificationService
+    private readonly notificationService: NotificationService,
+    private readonly customerOrderStatusNotificationService: CustomerOrderStatusNotificationService
   ) {}
 
   // List every order whose bank-transfer payment proof is currently
@@ -172,6 +174,20 @@ export class PaymentsService {
           idempotencyKey: `payment-approved:${orderId}`,
         })
         .catch(() => undefined);
+    }
+
+    // Notification Engine — customer_order_status WhatsApp template. The
+    // transaction above only actually moves status PLACED -> PROCESSING
+    // (see the conditional in the `order.update` data above) — a payment
+    // approval for an order already past PLACED leaves status unchanged, so
+    // only notify when a real transition happened.
+    const orderStatusActuallyChanged = verification.order.status === OrderStatus.PLACED;
+    if (orderStatusActuallyChanged) {
+      void this.customerOrderStatusNotificationService
+        .notifyIfTransitioned({ orderId, previousStatus: verification.order.status, newStatus: OrderStatus.PROCESSING })
+        .catch((error) => {
+          this.logger.warn(`Failed to send customer_order_status notification for order ${orderId}: ${error instanceof Error ? error.message : String(error)}`);
+        });
     }
 
     return this.serializeSummary({

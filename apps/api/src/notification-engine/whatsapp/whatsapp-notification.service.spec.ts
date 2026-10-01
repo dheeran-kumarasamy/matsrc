@@ -174,5 +174,29 @@ describe("WhatsappNotificationService", () => {
         { type: "text", text: "10 September 2026, 5:00 PM" },
       ]);
     });
+
+    it("supplier_price_update: sends the template name + exactly ONE body variable (the missing-product list), matching the approved Meta template's single {{1}}", async () => {
+      vi.spyOn(config, "getMode").mockReturnValue("live");
+      vi.spyOn(config, "getPhoneNumberId").mockReturnValue("PHONE_ID");
+      vi.spyOn(config, "getAccessToken").mockReturnValue("SECRET_TOKEN");
+      vi.spyOn(config, "getTemplateLanguage").mockReturnValue("en");
+      const fetchSpy = vi.fn().mockResolvedValue(jsonResponse({ messages: [{ id: "wamid.PRICE1" }] }));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const service = new WhatsappNotificationService(prisma as any, config);
+      const result = await service.sendTemplateAlert("919876543210", "supplier_price_update", ["TMT 10mm, TMT 12mm, M-Sand"]);
+
+      expect(result.status).toBe("sent");
+      expect(result.metaMessageId).toBe("wamid.PRICE1");
+      const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+      expect(sentBody.type).toBe("template");
+      expect(sentBody.template.name).toBe("supplier_price_update");
+      expect(sentBody.template.language).toEqual({ code: "en" });
+      expect(sentBody.template.components).toHaveLength(1);
+      expect(sentBody.template.components[0]).toEqual({
+        type: "body",
+        parameters: [{ type: "text", text: "TMT 10mm, TMT 12mm, M-Sand" }],
+      });
+    });
   });
 });

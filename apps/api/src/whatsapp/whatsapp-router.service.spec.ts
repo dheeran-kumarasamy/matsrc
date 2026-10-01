@@ -45,6 +45,7 @@ describe("WhatsAppRouterService", () => {
   let enquiryDecisionFlow: { start: ReturnType<typeof vi.fn>; handle: ReturnType<typeof vi.fn> };
   let orderStatusFlow: { start: ReturnType<typeof vi.fn>; handle: ReturnType<typeof vi.fn> };
   let dailyReportFlow: { start: ReturnType<typeof vi.fn>; handle: ReturnType<typeof vi.fn> };
+  let dailyPriceReplyFlow: { tryHandle: ReturnType<typeof vi.fn> };
   let router: WhatsAppRouterService;
   let session: WhatsAppSession;
 
@@ -80,6 +81,7 @@ describe("WhatsAppRouterService", () => {
     enquiryDecisionFlow = { start: vi.fn().mockResolvedValue({ kind: "text", text: "enquiry-decision-start" }), handle: vi.fn() };
     orderStatusFlow = { start: vi.fn().mockResolvedValue({ kind: "text", text: "order-status-start" }), handle: vi.fn() };
     dailyReportFlow = { start: vi.fn().mockResolvedValue({ kind: "text", text: "daily-report-start" }), handle: vi.fn() };
+    dailyPriceReplyFlow = { tryHandle: vi.fn().mockResolvedValue(null) };
 
     router = new WhatsAppRouterService(
       authService as any,
@@ -88,7 +90,8 @@ describe("WhatsAppRouterService", () => {
       priceUpdateFlow as any,
       enquiryDecisionFlow as any,
       orderStatusFlow as any,
-      dailyReportFlow as any
+      dailyReportFlow as any,
+      dailyPriceReplyFlow as any
     );
   });
 

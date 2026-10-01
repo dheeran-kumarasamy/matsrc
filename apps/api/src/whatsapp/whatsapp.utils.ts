@@ -86,3 +86,53 @@ export function matchDeliveredCommand(input: string): string | null {
   const match = /^DELIVERED\s+(.+)$/i.exec(input.trim());
   return match ? match[1].trim() : null;
 }
+
+/**
+ * Parses a free-text multi-line Daily Price Update reply (spec Phase 1 §13),
+ * e.g.:
+ *   TMT 10mm: 56000
+ *   TMT 12mm - 57500
+ *   M-Sand: 2100
+ *
+ * One line per product. Supports both `Name: Price` and `Name - Price`
+ * (with reasonable whitespace variations) — NOT a general NLP/fuzzy parser;
+ * a line that doesn't match either shape is simply omitted from the result
+ * (the caller treats "zero pairs parsed" as "this message isn't a daily
+ * price reply at all", and reports any still-unmatched *parsed* pairs back
+ * to the supplier rather than silently guessing).
+ *
+ * The colon form is tried first and splits on the LAST colon in the line —
+ * this deliberately allows product names that themselves contain a hyphen
+ * (e.g. "M-Sand") to still parse correctly with the colon separator. The
+ * dash form requires `<name> - <price>` with a space on both sides of the
+ * dash, so it does not misfire on hyphenated product names with no spaces
+ * around the hyphen.
+ */
+export function parseDailyPriceReplyInput(input: string): Array<{ product: string; price: string }> {
+  const lines = input
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const pairs: Array<{ product: string; price: string }> = [];
+
+  for (const line of lines) {
+    const lastColon = line.lastIndexOf(":");
+    if (lastColon > 0 && lastColon < line.length - 1) {
+      const product = line.slice(0, lastColon).trim();
+      const price = line.slice(lastColon + 1).trim();
+      if (product && price) {
+        pairs.push({ product, price });
+        continue;
+      }
+    }
+
+    const dashMatch = /^(.*\S)\s+-\s+(\S+)\s*$/.exec(line);
+    if (dashMatch) {
+      const [, product, price] = dashMatch;
+      pairs.push({ product: product.trim(), price: price.trim() });
+    }
+  }
+
+  return pairs;
+}

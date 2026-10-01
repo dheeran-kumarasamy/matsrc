@@ -31,7 +31,13 @@ function supplierPricingDeepLink(): string {
  * Phase 12), enforced at the database level via
  * `NotificationEvent.dedupeKey`'s unique constraint AND checked explicitly
  * by `NotificationPolicyService.evaluate()` before create, so at most one
- * WhatsApp reminder is ever sent per supplier per business date.
+ * WhatsApp reminder is ever sent per supplier per business date — this also
+ * makes the scheduler safe to execute more than once for the same business
+ * date (e.g. a retried/duplicate cron invocation): the second attempt's
+ * `NotificationPolicyService.evaluate()` call sees the already-created
+ * `NotificationEvent` row for the same dedupeKey and returns
+ * `DUPLICATE_DEDUPE_KEY`, so `NotificationEngineService.dispatch()` never
+ * reaches the Meta adapter a second time.
  *
  * Resolution: `resolveIfComplete()` is called after every listing price
  * update (see ListingsService hook) — once a supplier's daily list becomes
@@ -40,6 +46,14 @@ function supplierPricingDeepLink(): string {
  * the same business date from re-evaluating/reminding (the dedupe key
  * already blocks a duplicate send regardless, but marking resolved keeps
  * the NotificationEvent's status accurate for reporting).
+ *
+ * Meta template contract (`supplier_price_update`, Meta Template ID
+ * 1889118722523200, language "en", approved body: "Your Buildohub price
+ * list is missing today's update for {{1}}."): the approved template has
+ * EXACTLY ONE body variable. `parameters` below must therefore always be a
+ * single-element array — the full, untruncated, comma-separated list of
+ * missing product names (e.g. "TMT 10mm, TMT 12mm, M-Sand") — never one
+ * parameter per product and never a second/third parameter.
  */
 @Injectable()
 export class SupplierDailyPriceReminderService {
@@ -77,7 +91,10 @@ export class SupplierDailyPriceReminderService {
 
       const phone = supplierProfile.user.whatsappNumber?.trim() || supplierProfile.user.phone?.trim() || null;
       const missingNames = result.missingProducts.map((p) => p.name);
-      const preview = missingNames.slice(0, 5).join(", ") + (missingNames.length > 5 ? ` +${missingNames.length - 5} more` : "");
+      // Single Meta template variable {{1}} — the full, untruncated,
+      // comma-separated list (spec §5/§6: "Do NOT send one Meta variable per
+      // product. There is exactly ONE body variable.").
+      const missingProductsList = missingNames.join(", ");
 
       const dispatchResult = await this.engine.dispatch(
         {
@@ -87,10 +104,10 @@ export class SupplierDailyPriceReminderService {
           entityType: "SupplierProfile",
           entityId: result.supplierId,
           phone,
-          parameters: [supplierProfile.companyName, String(result.missingProducts.length), preview],
+          parameters: [missingProductsList],
           deepLink: supplierPricingDeepLink(),
           title: "Daily Price Update Reminder",
-          body: `Your Buildohub price list is missing today's update for: ${preview}. Please update today's prices to keep your products current.`,
+          body: `Your Buildohub price list is missing today's update for ${missingProductsList}. Please update your prices to keep your product information current.`,
           dedupeKey,
           payload: {
             supplierId: result.supplierId,
@@ -101,8 +118,24 @@ export class SupplierDailyPriceReminderService {
         "WHATSAPP"
       );
 
+      // Logging (spec §19): every reminder attempt is traceable by
+      // supplierId/businessDate/missingProducts/templateName/NotificationEvent
+      // id/Meta message id/final status — never the access token/credentials.
       if (dispatchResult.allowed) {
         notified += 1;
+        if (dispatchResult.sendResult?.success) {
+          this.logger.log(
+            `Daily price reminder sent: supplier=${result.supplierId} businessDate=${result.businessDate} ` +
+              `missingProducts=[${missingProductsList}] eventId=${dispatchResult.eventId} ` +
+              `metaMessageId=${dispatchResult.sendResult.externalId ?? "n/a"}`
+          );
+        } else {
+          this.logger.warn(
+            `Daily price reminder dispatch allowed but send failed: supplier=${result.supplierId} ` +
+              `businessDate=${result.businessDate} eventId=${dispatchResult.eventId} ` +
+              `error=${dispatchResult.sendResult?.error ?? "unknown"}`
+          );
+        }
       } else {
         this.logger.debug(
           `Reminder suppressed for supplier=${result.supplierId} businessDate=${result.businessDate} reason=${dispatchResult.reason}`

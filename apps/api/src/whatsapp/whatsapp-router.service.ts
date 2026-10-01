@@ -6,6 +6,7 @@ import { PriceUpdateFlow } from "./flows/price-update.flow";
 import { EnquiryDecisionFlow } from "./flows/enquiry-decision.flow";
 import { OrderStatusFlow } from "./flows/order-status.flow";
 import { DailyReportFlow } from "./flows/daily-report.flow";
+import { SupplierDailyPriceReplyFlow } from "./flows/supplier-daily-price-reply.flow";
 
 import {
   BotMessage,
@@ -64,7 +65,8 @@ export class WhatsAppRouterService {
     private readonly priceUpdateFlow: PriceUpdateFlow,
     private readonly enquiryDecisionFlow: EnquiryDecisionFlow,
     private readonly orderStatusFlow: OrderStatusFlow,
-    private readonly dailyReportFlow: DailyReportFlow
+    private readonly dailyReportFlow: DailyReportFlow,
+    private readonly dailyPriceReplyFlow: SupplierDailyPriceReplyFlow
   ) {}
 
   async handleInboundMessage(phone: string, rawText: string): Promise<BotMessage> {
@@ -80,6 +82,24 @@ export class WhatsAppRouterService {
 
 
     let session = this.sessionService.get(phone);
+
+    // Supplier Daily Price Update reply (Phase 1) — a SEPARATE inbound
+    // workflow from the interactive menu flows below (spec §21: "Keep the
+    // two concerns separate"). Only intercepted when the supplier is NOT
+    // already mid-way through an interactive menu flow (no session, or
+    // parked at the main menu) — this is deliberate: it must never hijack
+    // free-text entry inside an active flow (e.g. a rejection reason) that
+    // happens to contain a colon/dash. `tryHandle` itself is a safe no-op
+    // (returns null) whenever the text doesn't parse as a price list, the
+    // sender isn't a known supplier, or there is no active daily
+    // price-update session for them — in all of those cases this falls
+    // through to the normal menu handling unchanged.
+    if (!session || session.flow === "MAIN") {
+      const dailyPriceReply = await this.dailyPriceReplyFlow.tryHandle(phone, text, session);
+      if (dailyPriceReply) {
+        return dailyPriceReply;
+      }
+    }
 
     if (GLOBAL_RESET_KEYWORDS.has(upper)) {
       if (session) {

@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { OrderStatus } from "@matsrc/db";
 import { getOrCreateBuilder, getUserCtx, prisma } from "@/lib/builder-db";
-import { builderCancellationRejectionReason, isBuilderCancellableOrderStatus } from "@/lib/order-cancellation";
+import {
+  builderCancellationRejectionReason,
+  formatBuilderCancellationNote,
+  isBuilderCancellableOrderStatus,
+  isCancellationReasonKey,
+} from "@/lib/order-cancellation";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +31,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const ctx = getUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
+    // Optional cancellation reason (§5) — folded into OrderTracking.note
+    // below rather than a new column; an absent/invalid body still cancels
+    // the order exactly as before (backward compatible with any existing
+    // caller that posts no body).
+    const body = await request.json().catch(() => ({}));
+    const reasonKey = isCancellationReasonKey(body?.reason) ? body.reason : null;
+    const otherDetail = typeof body?.otherDetail === "string" ? body.otherDetail : null;
+
+    // Order lookup is scoped to `userId: user.id` — a builder can only ever
+    // find/cancel their OWN order. A mismatched id (another builder's order,
+    // or one that doesn't exist) yields the identical 404 below, so this
+    // never discloses whether the order exists for someone else.
     const order = await prisma.order.findFirst({
       where: { id: params.id, userId: user.id },
       select: { id: true, status: true, paymentStatus: true },
@@ -46,7 +63,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // only status this endpoint accepts) is, by definition, still awaiting
     // supplier confirmation and therefore has no completed payment to
     // reconcile (see PaymentStatus.PAID/REFUNDED handling elsewhere, e.g.
-    // app/api/builder/orders/[id]/route.ts's paymentMethod guard).
+    // app/api/builder/orders/[id]/route.ts's paymentMethod guard). The
+    // PurchaseOrder/PurchaseOrderLineItem rows for this order (if a PO was
+    // already issued) are never read or written here, so the confirmed PO
+    // quantity is guaranteed untouched by this action.
     const updated = await prisma.order.update({
       where: { id: order.id },
       data: { status: OrderStatus.CANCELLED },
@@ -57,7 +77,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       data: {
         orderId: order.id,
         status: OrderStatus.CANCELLED,
-        note: "Cancelled by builder",
+        note: formatBuilderCancellationNote(reasonKey, otherDetail),
       },
     });
 

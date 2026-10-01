@@ -31,3 +31,53 @@ export function builderCancellationRejectionReason(status: OrderStatus): string 
   }
   return "This order can no longer be cancelled — it has already moved past the stage where cancellation is allowed";
 }
+
+// Lightweight builder-cancellation reason mechanism (no existing one was
+// found in the codebase — see the search that preceded this addition: no
+// `cancellationReason`/`declineReason` field/enum exists anywhere). This is
+// intentionally NOT a new database column: the chosen reason is folded into
+// the existing OrderTracking.note free-text field already written by
+// app/api/builder/orders/[id]/cancel/route.ts, so no schema migration is
+// required and the existing "Cancelled by builder" audit convention (relied
+// on by apps/supplier/lib/order-status-transitions.ts's getCancellationActor,
+// which keys off the substring "builder") is preserved unconditionally.
+export type CancellationReasonKey =
+  | "QUANTITY_CHANGED"
+  | "NO_LONGER_REQUIRED"
+  | "CREATED_NEW_ENQUIRY"
+  | "OTHER";
+
+export const CANCELLATION_REASONS: ReadonlyArray<{ key: CancellationReasonKey; label: string }> = [
+  { key: "QUANTITY_CHANGED", label: "Quantity changed" },
+  { key: "NO_LONGER_REQUIRED", label: "No longer required" },
+  { key: "CREATED_NEW_ENQUIRY", label: "Created a new enquiry" },
+  { key: "OTHER", label: "Other" },
+];
+
+const CANCELLATION_REASON_LABELS: Record<CancellationReasonKey, string> = CANCELLATION_REASONS.reduce(
+  (acc, r) => ({ ...acc, [r.key]: r.label }),
+  {} as Record<CancellationReasonKey, string>
+);
+
+export function isCancellationReasonKey(value: unknown): value is CancellationReasonKey {
+  return typeof value === "string" && value in CANCELLATION_REASON_LABELS;
+}
+
+// Builds the OrderTracking.note text persisted for a builder-initiated
+// cancellation. ALWAYS contains the substring "builder" (case-insensitively)
+// so getCancellationActor() in apps/supplier/lib/order-status-transitions.ts
+// continues to correctly attribute the cancellation, whether or not a reason
+// was supplied — the pre-existing "Cancelled by builder" baseline is the
+// fallback when no (or an unrecognised) reason is given.
+export function formatBuilderCancellationNote(
+  reasonKey: CancellationReasonKey | null,
+  otherDetail?: string | null
+): string {
+  if (!reasonKey) {
+    return "Cancelled by builder";
+  }
+  const label = CANCELLATION_REASON_LABELS[reasonKey];
+  const trimmedDetail = (otherDetail ?? "").trim().slice(0, 200);
+  const suffix = reasonKey === "OTHER" && trimmedDetail ? `: ${trimmedDetail}` : "";
+  return `Cancelled by builder — Reason: ${label}${suffix}`;
+}

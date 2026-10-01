@@ -54,9 +54,10 @@ function buildService(overrides: Partial<any> = {}) {
   prisma.$transaction = vi.fn().mockImplementation((arg: any) => (Array.isArray(arg) ? Promise.all(arg) : arg(prisma)));
 
   const notificationService = { sendWhatsApp: vi.fn().mockResolvedValue(undefined) };
+  const customerOrderStatusNotificationService = { notifyIfTransitioned: vi.fn().mockResolvedValue(undefined) };
 
-  const service = new PaymentsService(prisma as any, notificationService as any);
-  return { service, prisma, notificationService, verification };
+  const service = new PaymentsService(prisma as any, notificationService as any, customerOrderStatusNotificationService as any);
+  return { service, prisma, notificationService, customerOrderStatusNotificationService, verification };
 }
 
 describe("PaymentsService.approve", () => {

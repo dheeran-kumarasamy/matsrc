@@ -62,6 +62,12 @@ model User {
   pendingContactVerifications PendingContactVerification[]
   paymentVerifications        PaymentVerification[]
 
+  // Invoice Generation & Management (Admin-only generation — see Invoice
+  // model below). A builder/contractor can be the invoiced party on many
+  // invoices; an admin/super-admin can be the generator of many invoices.
+  invoicesAsBuilder Invoice[] @relation("InvoiceBuilder")
+  invoicesGenerated Invoice[] @relation("InvoiceGeneratedBy")
+
   notificationPreference NotificationPreference?
   creditProfile          CreditProfile?
   supplierProfile        SupplierProfile?
@@ -71,15 +77,13 @@ model User {
   tallyLedgerMapping     TallyLedgerMapping?
   sourcingSessions       SourcingSession[]       @relation("UserSourcingSessions")
 
-  // Meaningful Enquiry ID (contractor prefix): a short, stable,
-  // human-readable code identifying this builder/contractor in generated
-  // enquiry IDs (e.g. "ABC" in "ABC-SITE01-000123"). Generated once, on
-  // first use, from a normalized slug of the builder's name/email — never
-  // regenerated afterwards, so it stays stable for all historical
-  // enquiries even if the builder later changes their display name.
-  // Nullable/additive: existing users and non-BUILDER roles simply have no
-  // code until/unless one is resolved for them (see
-  // packages/db/lib/enquiry-id.ts resolveBuilderCode()).
+  // Legacy contractor-prefix code used only by pre-existing enquiry IDs in
+  // the previous "<CONTRACTOR_CODE>-<SITE_CODE>-<SEQUENCE>" format (e.g.
+  // "ABC" in "ABC-SITE01-000123"). No longer read/written by Consolidated
+  // Enquiry ID generation (see packages/db/lib/enquiry-id.ts), which
+  // derives its first-name component directly from the builder's `name`/
+  // `email` at generation time instead. Retained, unmodified, so
+  // historical enquiry IDs already using this code continue to resolve.
   builderCode String? @unique
 
   @@index([email])
@@ -192,6 +196,7 @@ model SupplierProfile {
   aggregationPools    AggregationPool[]
   orderItemCandidates OrderItemSupplierCandidate[]
   priceSnapshots      PriceSnapshot[]
+  invoices            Invoice[]
 
   sourcingRecommendations SourcingRecommendation[] @relation("SupplierSourcingRecommendations")
 
@@ -591,25 +596,26 @@ enum PaymentVerificationStatus {
 }
 
 model Order {
-  id                 String        @id @default(cuid())
-  userId             String
-  user               User          @relation(fields: [userId], references: [id])
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  // Meaningful Enquiry ID (display-only): "<CONTRACTOR_CODE>-<SITE_CODE>-
-  // <SEQUENCE>", e.g. "ABC-SITE01-000123" — see packages/db/lib/enquiry-id.ts.
-  // Generated once at Order-creation time in the same transaction that
-  // creates the row, using a global, transaction-safe sequence
-  // (EnquirySequence) so the numeric part is unique and strictly
-  // increasing regardless of contractor/site.
+  // Consolidated Enquiry ID (display-only): "<FIRSTNAME3>-<SITENAME5>-
+  // <CITY3><RANDOM1>-<SERIAL5>", e.g. "RAJ-CHENN-CHE7-00123" — see
+  // packages/db/lib/enquiry-id.ts. Generated once at Order-creation time
+  // in the same transaction that creates the row, using a global,
+  // transaction-safe sequence (EnquirySequence) so the 5-digit serial part
+  // is unique and strictly increasing regardless of contractor/site/city.
   //
   // Nullable/additive and NEVER backfilled by rewriting `id` — `id` (the
   // cuid PK above) remains the real, unchanged database identifier, FK
   // target, API path segment, and URL param for every order, old and new.
   // `enquiryId` is purely an additional, human-readable label shown
-  // wherever the enquiry ID is displayed; existing (pre-migration) rows
-  // have this backfilled once, in original createdAt order, by the
-  // 20260926000000_add_enquiry_id migration, using each row's own siteId/
-  // userId at the time of migration — never invented from arbitrary data.
+  // wherever the enquiry ID is displayed. Orders created before this
+  // format was introduced keep their original
+  // "<CONTRACTOR_CODE>-<SITE_CODE>-<SEQUENCE>" value (e.g.
+  // "ABC-SITE01-000123") unchanged and forever — only brand-new orders use
+  // this new format; nothing rewrites historical values.
   enquiryId          String?       @unique
   orderNumber        String?       @unique
   status             OrderStatus   @default(PLACED)
@@ -664,6 +670,11 @@ model Order {
   aggregationParticipant AggregationParticipant?
   paymentVerification    PaymentVerification?
 
+  // Invoice Generation & Management: one-to-one — an order has at most one
+  // (non-cancelled) invoice. Nullable/additive; existing orders simply have
+  // no invoice until an Admin explicitly generates one (see Invoice model).
+  invoice Invoice?
+
   @@index([userId])
   @@index([status])
   @@index([selectedSupplierId])
@@ -696,9 +707,9 @@ model PaymentVerification {
 
   status PaymentVerificationStatus @default(PENDING)
 
-  submittedAt DateTime  @default(now())
-  reviewedAt  DateTime?
-  reviewedBy  String?
+  submittedAt     DateTime  @default(now())
+  reviewedAt      DateTime?
+  reviewedBy      String?
   rejectionReason String?
 
   createdAt DateTime @default(now())
@@ -707,6 +718,133 @@ model PaymentVerification {
   @@index([orderId])
   @@index([userId])
   @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// Invoice Generation & Management
+//
+// Business rule (see project spec): only an Admin/Super Admin may generate
+// an invoice, and only after the order's bank-transfer payment proof has
+// been verified/approved by an Admin (PaymentVerification.status ===
+// APPROVED, mirroring the exact same gate already enforced by
+// PaymentsService.approve — see that model's doc comment above). Uploading
+// a payment screenshot (PaymentVerification created/PENDING) never by
+// itself generates an invoice.
+//
+// One invoice per Order (one-to-one, see Order.invoice above) — generation
+// is idempotent: a second "generate" call for an order that already has an
+// invoice returns the existing invoice instead of creating a duplicate
+// (enforced by the @@unique orderId column + a check in the service layer,
+// mirroring PaymentsService.approve's idempotent early-return pattern).
+//
+// Historical accuracy / immutability: every financial figure below (and
+// every InvoiceLineItem row) is a frozen SNAPSHOT captured at generation
+// time from the order's final, approved OrderItem rows — never recomputed
+// from live Product/SupplierProfile pricing when the invoice is later
+// viewed/exported. This mirrors PurchaseOrderLineItem's existing snapshot
+// pattern (quantity/unitPrice/tax copied once at PO-creation time, never
+// re-derived — see PurchaseOrdersService.create's doc comments).
+enum InvoiceStatus {
+  GENERATED
+  CANCELLED
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  // Unique, server-generated, human-readable invoice number
+  // ("INV-<YEAR>-<6-digit sequence>", e.g. "INV-2026-000001"). Generated
+  // once at Invoice-creation time inside the same transaction that creates
+  // the row, using a global, transaction-safe sequence (InvoiceSequence)
+  // so the numeric part is unique and strictly increasing — mirrors the
+  // existing Meaningful Enquiry ID sequence pattern (see
+  // packages/db/lib/enquiry-id.ts / EnquirySequence). Never editable by
+  // users; immutable once generated.
+  invoiceNumber String        @unique
+  invoiceDate   DateTime      @default(now())
+  status        InvoiceStatus @default(GENERATED)
+
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  // Denormalized, display-only reference to the order's Meaningful Enquiry
+  // ID at generation time (Order.enquiryId is itself immutable once set —
+  // see Order.enquiryId's own doc comment — so copying it here is purely
+  // for a fast/independent read path, never a second source of truth).
+  enquiryId String?
+
+  builderId String
+  builder   User   @relation("InvoiceBuilder", fields: [builderId], references: [id])
+
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id])
+
+  supplierId String
+  supplier   SupplierProfile @relation(fields: [supplierId], references: [id])
+
+  // Frozen financial snapshot — see model doc comment above. Subtotal + Tax
+  // = Total, following the existing application's Decimal(12,2) convention
+  // (see Order.totalAmount / PurchaseOrderLineItem.unitPrice above). Never
+  // recomputed from live pricing after generation.
+  subtotal    Decimal @db.Decimal(12, 2)
+  taxAmount   Decimal @db.Decimal(12, 2)
+  totalAmount Decimal @db.Decimal(12, 2)
+  currency    String  @default("INR")
+
+  // Payment status snapshot, derived from the application's existing
+  // PaymentStatus (Order.paymentStatus) at generation time — never a
+  // parallel/duplicate payment-state enum. Re-fetched at generation time
+  // only; not live-linked afterwards, so a later payment status change on
+  // the order does not silently rewrite an already-issued invoice.
+  paymentStatus PaymentStatus
+  amountPaid    Decimal?      @db.Decimal(12, 2)
+  amountDue     Decimal?      @db.Decimal(12, 2)
+
+  // Auditability: who generated this invoice and when — immutable once set.
+  generatedById String
+  generatedBy   User     @relation("InvoiceGeneratedBy", fields: [generatedById], references: [id])
+  generatedAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lineItems InvoiceLineItem[]
+
+  @@index([orderId])
+  @@index([builderId])
+  @@index([siteId])
+  @@index([supplierId])
+  @@index([status])
+}
+
+// Immutable invoice line item snapshot — one row per OrderItem at the
+// moment of invoice generation, copying the FINAL approved
+// quantity/unitPrice/tax rate (never re-read from live Product pricing
+// afterwards). Mirrors PurchaseOrderLineItem's existing snapshot shape.
+model InvoiceLineItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId   String?
+  productName String
+  description String?
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  taxRate     Decimal? @db.Decimal(5, 2)
+  taxAmount   Decimal  @db.Decimal(12, 2)
+  subtotal    Decimal  @db.Decimal(12, 2)
+  total       Decimal  @db.Decimal(12, 2)
+
+  @@index([invoiceId])
+}
+
+// Invoice number — global sequence counter, mirroring EnquirySequence's
+// singleton-row + row-lock pattern above (see nextEnquirySequence()).
+// Concurrency safety: every read-increment-write of `value` MUST happen
+// inside a `SELECT ... FOR UPDATE` row lock within the same
+// `prisma.$transaction` that creates the Invoice row.
+model InvoiceSequence {
+  id    String @id @default("singleton")
+  value Int    @default(0)
 }
 
 model OrderItem {
@@ -1161,6 +1299,15 @@ model NotificationEventPolicy {
   eventType         String
   channel           String
   templateName      String
+  // Meta WhatsApp Business (Graph API) template ID for this eventType/channel
+  // mapping, e.g. "1788249542353441" for `customer_order_status`. Nullable —
+  // most existing rows predate this field and continue to send purely by
+  // `templateName` (Meta's send API only requires the template name, not its
+  // numeric ID). Stored here (the existing Template Registry) rather than in
+  // a second/new table or hardcoded in application code, so there is exactly
+  // ONE place per event/channel where the Meta-side identifiers live — see
+  // packages/db/scripts/seed-notification-templates.js.
+  metaTemplateId    String?
   displayName       String
   description       String?
   enabled           Boolean  @default(true)
@@ -1286,16 +1433,12 @@ model Site {
   builderId   String
   builder     User       @relation("BuilderSites", fields: [builderId], references: [id])
   name        String
-  // Meaningful Enquiry ID (site prefix): a short, stable, human-readable
-  // code for this site (e.g. "SITE01" in "ABC-SITE01-000123"). Free-text
-  // today (set by the builder at site-creation time, see
-  // apps/web/app/api/builder/sites/route.ts), normalized/uppercased for
-  // display in generated enquiry IDs. If left blank, a stable fallback code
-  // is auto-derived once (from the site's own id) the first time an
-  // enquiry needs it — never from the mutable site `name`/address — so the
-  // enquiry-ID prefix always exists and never changes afterwards even if
-  // the site is later renamed. See packages/db/lib/enquiry-id.ts
-  // resolveSiteCode().
+  // Free-text site code, optionally set by the builder at site-creation
+  // time (see apps/web/app/api/builder/sites/route.ts). No longer used by
+  // Consolidated Enquiry ID generation (which derives its site-name
+  // component directly from `name`, and its city component from `city`
+  // below) — see packages/db/lib/enquiry-id.ts. Retained purely as a
+  // builder-facing free-text reference field.
   code        String?
   addressLine String?
   city        String?
@@ -1314,6 +1457,7 @@ model Site {
 
   orders           Order[]
   sourcingSessions SourcingSession[] @relation("SiteSourcingSessions")
+  invoices         Invoice[]
 
   @@unique([builderId, name])
   @@index([builderId])

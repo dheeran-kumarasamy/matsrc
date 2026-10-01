@@ -15,6 +15,10 @@ type PurchaseOrderDetail = {
   // is only ever offered while the order is still in a builder-cancellable
   // state (see lib/order-cancellation.ts's isBuilderCancellableOrderStatus).
   orderStatus: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED" | null;
+  // The order's tagged construction Site (nullable) — carried forward as a
+  // convenience into a fresh /sourcing session when the builder starts a new
+  // enquiry from this PO screen (see PurchaseOrderApprovalCard.tsx).
+  orderSiteId?: string | null;
   supplier: { id: string; companyName: string };
   builder: { id: string; name: string; email: string };
   lineItems: Array<{

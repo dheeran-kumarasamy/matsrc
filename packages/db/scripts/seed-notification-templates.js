@@ -50,7 +50,11 @@ POLICIES.push(
   { eventType: "QUOTE_EXPIRY_REMINDER", channel: "WHATSAPP", templateName: "quote_expiry_reminder", displayName: "Quote Expiry Reminder", description: "Reminds a customer that a received quote is about to expire.", priority: "P1", cooldownMinutes: 240, maxPerDay: 1, businessHoursOnly: true },
   { eventType: "PAYMENT_REQUIRED", channel: "WHATSAPP", templateName: "payment_required", displayName: "Payment Required", description: "Notifies a customer that payment is required to proceed with an order.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   { eventType: "PAYMENT_FAILED", channel: "WHATSAPP", templateName: "payment_failed", displayName: "Payment Failed", description: "Notifies a customer that a payment attempt failed.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
-  { eventType: "ORDER_STATUS_CHANGED", channel: "WHATSAPP", templateName: "customer_order_status", displayName: "Order Status Update", description: "Notifies a customer whenever their order's status changes.", priority: "P1", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
+  // Meta template mapping: approved Utility/"Order Status" template, no
+  // header, no buttons, exactly 2 body variables ({{1}}=enquiry/order ID,
+  // {{2}}=human-readable current status) — see
+  // apps/api/src/notification-engine/whatsapp/customer-order-status-notification.service.ts.
+  { eventType: "ORDER_STATUS_CHANGED", channel: "WHATSAPP", templateName: "customer_order_status", metaTemplateId: "1788249542353441", displayName: "Order Status Update", description: "Notifies a customer whenever their order's status changes.", priority: "P1", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   { eventType: "DELIVERY_EXCEPTION", channel: "WHATSAPP", templateName: "delivery_exception", displayName: "Delivery Exception", description: "Alerts a customer of a delivery exception (delay, damage, failed attempt) on their order.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   { eventType: "ACTION_REQUIRED", channel: "WHATSAPP", templateName: "action_reminder_alert", displayName: "Action Required", description: "Generic action-required nudge for a customer (e.g. confirm delivery slot, upload document).", priority: "P1", cooldownMinutes: 240, maxPerDay: 1, businessHoursOnly: true }
 );
@@ -59,13 +63,14 @@ async function main() {
   for (const policy of POLICIES) {
     await prisma.notificationEventPolicy.upsert({
       where: { eventType_channel: { eventType: policy.eventType, channel: policy.channel } },
-      // templateName is the Meta-side mapping (never an admin-editable business
-      // decision — see UpdateNotificationPolicyDto, which deliberately excludes
-      // templateName), so it is always kept in sync with this registry on
-      // re-run. Admin-owned fields (enabled/priority/maxPerDay/cooldownMinutes/
-      // businessHoursOnly) are intentionally left untouched here so a prior
-      // admin decision is never clobbered by re-running this seed.
-      update: { templateName: policy.templateName },
+      // templateName/metaTemplateId are the Meta-side mapping (never an
+      // admin-editable business decision — see UpdateNotificationPolicyDto,
+      // which deliberately excludes both), so they are always kept in sync
+      // with this registry on re-run. Admin-owned fields
+      // (enabled/priority/maxPerDay/cooldownMinutes/businessHoursOnly) are
+      // intentionally left untouched here so a prior admin decision is never
+      // clobbered by re-running this seed.
+      update: { templateName: policy.templateName, metaTemplateId: policy.metaTemplateId ?? null },
       create: policy,
     });
     console.log(`  \u2713 ${policy.eventType} / ${policy.channel} -> ${policy.templateName}`);

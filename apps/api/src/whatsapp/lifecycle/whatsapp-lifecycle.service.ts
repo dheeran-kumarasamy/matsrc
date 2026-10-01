@@ -23,7 +23,7 @@ function documentHeaderComponent(link: string, filename?: string): BotTemplateCo
 /**
  * Orchestrates every outbound order/enquiry-lifecycle WhatsApp Utility template for
  * Builders and Suppliers (spec §A-D). Reuses:
- *  - `WhatsAppSendAdapter` (`WHATSAPP_SEND_PROVIDER`) — the same mock/meta/twilio send
+ *  - `WhatsAppSendAdapter` (`WHATSAPP_SEND_PROVIDER`) — the same mock/meta send
  *    abstraction the inbound supplier bot uses, via the `template` BotMessage kind
  *    (pre-approved WhatsApp Message Template sends, outside the 24h session window).
  *  - `WhatsAppAuditHelper` — every send is recorded to the same `AuditLog` table, tagged

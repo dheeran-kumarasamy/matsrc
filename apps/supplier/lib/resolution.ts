@@ -160,6 +160,52 @@ export function resolvePriceRange(candidates: ResolutionCandidate[]): PriceRange
 }
 
 
+/**
+ * True minimum VALID unit price across ALL suppliers in a canonical group AND
+ * ALL of each supplier's price tiers — used exclusively to power the PLP
+ * "Starting from ₹Xxx" discovery-card display (see apps/web's ProductCard.tsx
+ * / products/page.tsx). This is deliberately distinct from
+ * resolveHeadlinePrice()/resolvePriceRange() above, which only look at each
+ * candidate's quantity=1 effective tier — that basis misses a cheaper price
+ * that only exists in a higher-quantity tier (e.g. a supplier whose Tier 1 is
+ * ₹550 but whose Tier 2 is ₹520 for a bigger order quantity). Only `isActive`
+ * candidates participate, and a tier only counts if its price is a finite,
+ * strictly positive number — never a fabricated ₹0. Returns null when no
+ * eligible price exists (empty/no-active-candidates case), so callers can
+ * fall back to the existing "price unavailable" behaviour rather than ever
+ * inventing a price.
+ *
+ * NOT used by order/checkout/quotation pricing — those flows continue to
+ * resolve strictly by the builder's selected quantity via
+ * resolveLowestPriceForQuantity()/resolvePriceRange() above, unchanged.
+ */
+export function resolveMinimumDisplayPrice(candidates: ResolutionCandidate[]): number | null {
+  const eligible = candidates.filter((candidate) => candidate.isActive);
+  if (eligible.length === 0) return null;
+
+  let min: number | null = null;
+
+  for (const candidate of eligible) {
+    const tiers =
+      candidate.pricingTiers.length > 0
+        ? candidate.pricingTiers
+        : [
+            {
+              minQty: 1,
+              maxQty: candidate.maxServiceableQty || candidate.stock || 1,
+              tierPrice: candidate.basePrice,
+            },
+          ];
+
+    for (const tier of tiers) {
+      if (!Number.isFinite(tier.tierPrice) || tier.tierPrice <= 0) continue;
+      if (min === null || tier.tierPrice < min) min = tier.tierPrice;
+    }
+  }
+
+  return min;
+}
+
 export type GroupKeyedListing<T> = T & { canonicalProductId: string | null; id: string };
 
 /**

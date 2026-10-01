@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { builderApiPatch, builderApiPost } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { isBuilderCancellableOrderStatus, type OrderStatus } from "@/lib/order-cancellation";
+import {
+  CANCELLATION_REASONS,
+  isBuilderCancellableOrderStatus,
+  type CancellationReasonKey,
+  type OrderStatus,
+} from "@/lib/order-cancellation";
 
 type PurchaseOrderLineItem = {
   id: string;
@@ -32,6 +37,9 @@ type PurchaseOrderDetail = {
   // Underlying Order.status — gates whether "Cancel Order" is offered (see
   // lib/order-cancellation.ts's isBuilderCancellableOrderStatus).
   orderStatus?: OrderStatus | null;
+  // The order's tagged construction Site (nullable) — carried forward as a
+  // convenience into a fresh /sourcing session via "Create New Enquiry".
+  orderSiteId?: string | null;
   supplier: { id: string; companyName: string };
   builder: { id: string; name: string; email: string };
   lineItems: PurchaseOrderLineItem[];
@@ -69,10 +77,24 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [cancelledOrderStatus, setCancelledOrderStatus] = useState<OrderStatus | null>(null);
+  // Lightweight cancellation reason (§5) — persisted into OrderTracking.note
+  // by the API (see formatBuilderCancellationNote in lib/order-cancellation.ts).
+  const [cancelReason, setCancelReason] = useState<CancellationReasonKey | null>(null);
+  const [cancelOtherDetail, setCancelOtherDetail] = useState("");
 
   const isDraft = po.status === "DRAFT";
   const currentOrderStatus = cancelledOrderStatus ?? po.orderStatus ?? null;
   const canCancelOrder = currentOrderStatus !== null && isBuilderCancellableOrderStatus(currentOrderStatus);
+
+  // "Create New Enquiry" carries forward the product/material name and the
+  // order's tagged site as a convenience (§1) — quantity is deliberately
+  // NEVER included, so the builder must explicitly enter/select the new
+  // required quantity on the sourcing page itself.
+  const newEnquiryParams = new URLSearchParams({ fromPo: "1" });
+  const firstProductName = po.lineItems[0]?.productName;
+  if (firstProductName) newEnquiryParams.set("material", firstProductName);
+  if (po.orderSiteId) newEnquiryParams.set("siteId", po.orderSiteId);
+  const newEnquiryHref = `/sourcing?${newEnquiryParams.toString()}`;
 
   async function cancelOrder() {
     setCancelling(true);
@@ -80,7 +102,10 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
     try {
       const result = await builderApiPost<{ id: string; status: OrderStatus }>(
         `/orders/${po.orderId}/cancel`,
-        {}
+        {
+          reason: cancelReason,
+          otherDetail: cancelReason === "OTHER" ? cancelOtherDetail : undefined,
+        }
       );
       setCancelledOrderStatus(result.status);
       setShowCancelConfirm(false);
@@ -237,7 +262,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
         </p>
         <div className="flex flex-wrap gap-2">
           <Link
-            href="/sourcing"
+            href={newEnquiryHref}
             className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
           >
             Create New Enquiry
@@ -257,16 +282,59 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
         {cancelError ? <p className="text-sm text-rose-600">{cancelError}</p> : null}
       </div>
 
-      <Dialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
+      <Dialog
+        open={showCancelConfirm}
+        onOpenChange={(open) => {
+          setShowCancelConfirm(open);
+          if (!open) {
+            // Reset the reason picker each time the dialog is dismissed, so a
+            // stale choice from a previous open never silently carries over.
+            setCancelReason(null);
+            setCancelOtherDetail("");
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Cancel this order?</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 p-5">
             <p className="text-sm text-slate-600">
-              This will cancel the current order. The confirmed quantity on the existing Purchase Order will remain
-              unchanged. If you need a different quantity, you can create a new enquiry after cancelling.
+              This will cancel the current order. The confirmed quantity on the existing Purchase Order will
+              remain unchanged.
             </p>
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-slate-800">
+                Why are you cancelling? <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {CANCELLATION_REASONS.map((reason) => (
+                  <button
+                    key={reason.key}
+                    type="button"
+                    onClick={() => setCancelReason((current) => (current === reason.key ? null : reason.key))}
+                    disabled={cancelling}
+                    className={`rounded-md border px-3 py-1.5 text-xs font-semibold disabled:opacity-60 ${
+                      cancelReason === reason.key
+                        ? "border-slate-800 bg-slate-800 text-white"
+                        : "border-slate-300 text-slate-700"
+                    }`}
+                  >
+                    {reason.label}
+                  </button>
+                ))}
+              </div>
+              {cancelReason === "OTHER" ? (
+                <input
+                  type="text"
+                  value={cancelOtherDetail}
+                  onChange={(e) => setCancelOtherDetail(e.target.value)}
+                  maxLength={200}
+                  placeholder="Optional short explanation"
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                />
+              ) : null}
+            </div>
             {cancelError ? <p className="text-sm text-rose-600">{cancelError}</p> : null}
             <div className="flex gap-2">
               <button

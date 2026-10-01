@@ -5,6 +5,14 @@ import Google from "next-auth/providers/google";
 import { prisma } from "@matsrc/db";
 
 const authConfig: NextAuthConfig = {
+  // Matches the same pattern used in apps/web/auth.ts and apps/admin/auth.ts.
+  // NextAuth v5 auto-detects `process.env.AUTH_SECRET`, but if that env var
+  // isn't set in a deployment's environment (e.g. a UAT/preview environment
+  // where it was never configured), auth.js throws a generic "Configuration"
+  // error on every /api/auth/session call. Setting `secret` explicitly with a
+  // safe fallback keeps local/dev/preview environments from hard-failing while
+  // still respecting a real secret whenever one is configured.
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "matsrc-supplier-dev-secret",
   pages: {
     signIn: "/sign-in",
     error: "/sign-in",

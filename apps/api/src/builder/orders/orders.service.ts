@@ -63,6 +63,9 @@ export class BuilderOrdersService {
 
     return orders.map((order) => ({
       id: order.id,
+      // Business Number (e.g. "EQ/2604/00001") — falls back to the raw
+      // order id for pre-migration orders. See
+      // packages/db/lib/business-number.ts.
       enquiryId: order.enquiryId ?? order.id,
       orderNumber: order.orderNumber ?? null,
       status: order.status,
@@ -225,15 +228,15 @@ export class BuilderOrdersService {
     for (const group of groupedItems.values()) {
       const totalAmount = group.items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
 
-      // Meaningful Enquiry ID (Order.enquiryId): generated inside the same
-      // transaction as the Order row so the resolved builder/site codes and
-      // the incremented global sequence commit atomically with the enquiry
-      // itself — see packages/db/lib/enquiry-id.ts.
+      // Consolidated Enquiry ID (Order.enquiryId): generated inside the
+      // same transaction as the Order row so the resolved builder/site/
+      // city data and the incremented global serial commit atomically
+      // with the enquiry itself — see packages/db/lib/enquiry-id.ts.
       //
       // maxWait/timeout raised above Prisma's 2000ms/5000ms defaults: this
-      // transaction does several sequential round-trips (builder-code
-      // resolve/collision-check, site-code resolve, row-locked sequence
-      // increment, then the nested Order/OrderItem/tracking create)
+      // transaction does several sequential round-trips (selected-site
+      // lookup, row-locked serial increment, then the nested
+      // Order/OrderItem/tracking create)
       // against a serverless connection, where real-world latency has been
       // observed to exceed the 5s default and abort mid-flight with
       // Prisma error P2028 ("Transaction already closed") — surfaced to

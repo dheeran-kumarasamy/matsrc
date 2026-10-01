@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getCategoryEmoji } from "@/lib/category-images";
 import WatchlistToggleIcon from "@/components/products/WatchlistToggleIcon";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
+import { resolveStartingDisplayPrice, formatStartingPriceLabel } from "@/lib/product-price-display";
 
 interface Props {
   skeleton?: boolean;
@@ -9,10 +10,17 @@ interface Props {
     name: string;
     price: number;
     // Min–max price range across the canonical product's cross-supplier
-    // listings (REQ-02). Optional/backward compatible — when both are
-    // present and differ, the card shows a range instead of a single price.
+    // listings (REQ-02). Kept for backward compatibility / other consumers,
+    // but the PLP card itself no longer renders a range — see
+    // `startingPrice` below and product-price-display.ts.
     minPrice?: number | null;
     maxPrice?: number | null;
+    // PLP "Starting from ₹Xxx" display price — the minimum valid price
+    // across ALL suppliers offering this product AND ALL of their price
+    // tiers (see lib/product-price-display.ts /
+    // apps/supplier/lib/resolution.ts resolveMinimumDisplayPrice()). Null
+    // when there is no valid price to show.
+    startingPrice?: number | null;
     // Real unit label (e.g. "Bag", "Tonne") from the listing, used to show
     // "₹450 / Bag" style pricing instead of a bare number.
     unit?: string;
@@ -87,20 +95,31 @@ export default function ProductCard({ skeleton, product }: Props) {
         {getSupplierDisplayName(product.supplier)}
       </p>
 
-      {/* Price row — high-contrast charcoal price, real unit label */}
+      {/* Price row — "Starting from ₹Xxx" (the minimum valid price across
+          ALL suppliers and ALL price tiers), high-contrast charcoal price,
+          real unit label. No longer renders a min–max range — see
+          lib/product-price-display.ts. */}
       <div className="flex items-end justify-between mt-3">
         <div>
-          {product.minPrice != null && product.maxPrice != null && product.maxPrice > product.minPrice ? (
-            <div className="text-lg font-extrabold tracking-tight" style={{ color: "var(--posh-fg)" }}>
-              ₹{product.minPrice.toLocaleString("en-IN")} – ₹{product.maxPrice.toLocaleString("en-IN")}
-              {unitSuffix}
-            </div>
-          ) : (
-            <div className="text-xl font-extrabold tracking-tight" style={{ color: "var(--posh-fg)" }}>
-              ₹{product.price.toLocaleString("en-IN")}
-              {unitSuffix}
-            </div>
-          )}
+          {(() => {
+            const displayPrice = resolveStartingDisplayPrice(product);
+            if (displayPrice == null) {
+              return (
+                <div className="text-sm font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
+                  Price unavailable
+                </div>
+              );
+            }
+            return (
+              <div className="text-xl font-extrabold tracking-tight" style={{ color: "var(--posh-fg)" }}>
+                <span className="text-xs font-semibold uppercase tracking-wide block mb-0.5" style={{ color: "var(--posh-fg-muted)" }}>
+                  Starting from
+                </span>
+                {formatStartingPriceLabel(displayPrice)}
+                {unitSuffix}
+              </div>
+            );
+          })()}
         </div>
         <span className="text-[11px] font-medium" style={{ color: "var(--posh-fg-muted)" }}>
           {product.supplierCount > 1

@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { OrderStatus, PaymentStatus, PaymentVerificationStatus, generateOrderNumber } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationService } from "src/notifications/notification.service";
+import { CustomerOrderStatusNotificationService } from "src/notification-engine/whatsapp/customer-order-status-notification.service";
 
 @Injectable()
 export class PaymentsService {
@@ -9,7 +10,8 @@ export class PaymentsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationService: NotificationService
+    private readonly notificationService: NotificationService,
+    private readonly customerOrderStatusNotificationService: CustomerOrderStatusNotificationService
   ) {}
 
   // List every order whose bank-transfer payment proof is currently
@@ -25,6 +27,39 @@ export class PaymentsService {
     });
 
     return verifications.map((v) => this.serializeSummary(v));
+  }
+
+  // List every order whose bank-transfer payment proof has been APPROVED —
+  // i.e. every order that has satisfied the payment-verification
+  // prerequisite for invoice generation (see
+  // src/admin/invoices/invoices.service.ts's checkEligibility). Surfaced on
+  // the same Admin payments page as the pending queue above so the Admin
+  // has a single place to go from "verify payment" -> "generate invoice"
+  // for a given order (Order.invoice is included so the UI can render
+  // Generate Invoice vs View/Download Invoice without a second request).
+  async findApprovedWithInvoiceStatus() {
+    const verifications = await this.prisma.paymentVerification.findMany({
+      where: { status: PaymentVerificationStatus.APPROVED },
+      include: {
+        order: {
+          select: {
+            id: true,
+            enquiryId: true,
+            status: true,
+            totalAmount: true,
+            paymentMethod: true,
+            invoice: { select: { id: true, invoiceNumber: true } },
+          },
+        },
+        user: { select: { id: true, name: true, email: true, phone: true } },
+      },
+      orderBy: { reviewedAt: "desc" },
+    });
+
+    return verifications.map((v) => ({
+      ...this.serializeSummary(v as any),
+      invoice: v.order.invoice ? { id: v.order.invoice.id, invoiceNumber: v.order.invoice.invoiceNumber } : null,
+    }));
   }
 
   // Full detail for a single order's payment verification, for the admin
@@ -148,6 +183,20 @@ export class PaymentsService {
           idempotencyKey: `payment-approved:${orderId}`,
         })
         .catch(() => undefined);
+    }
+
+    // Notification Engine — customer_order_status WhatsApp template. The
+    // transaction above only actually moves status PLACED -> PROCESSING
+    // (see the conditional in the `order.update` data above) — a payment
+    // approval for an order already past PLACED leaves status unchanged, so
+    // only notify when a real transition happened.
+    const orderStatusActuallyChanged = verification.order.status === OrderStatus.PLACED;
+    if (orderStatusActuallyChanged) {
+      void this.customerOrderStatusNotificationService
+        .notifyIfTransitioned({ orderId, previousStatus: verification.order.status, newStatus: OrderStatus.PROCESSING })
+        .catch((error) => {
+          this.logger.warn(`Failed to send customer_order_status notification for order ${orderId}: ${error instanceof Error ? error.message : String(error)}`);
+        });
     }
 
     return this.serializeSummary({

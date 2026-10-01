@@ -195,6 +195,47 @@ export function resolvePriceRange(candidates: ResolutionCandidate[]): PriceRange
 }
 
 
+// True minimum VALID unit price across ALL suppliers in a canonical group AND
+// ALL of each supplier's price tiers — used exclusively to power the PLP
+// "Starting from ₹Xxx" discovery-card display (see ProductCard.tsx /
+// products/page.tsx). Distinct from resolveHeadlinePrice()/resolvePriceRange()
+// above, which only look at each candidate's quantity=1 effective tier and so
+// miss a cheaper price that only exists in a higher-quantity tier. Only
+// `isActive` candidates participate, and a tier only counts if its price is a
+// finite, strictly positive number — never a fabricated ₹0. Returns null when
+// no eligible price exists, so callers fall back to the existing "price
+// unavailable" behaviour rather than inventing a price.
+//
+// NOT used by order/checkout/quotation pricing — those flows continue to
+// resolve strictly by the builder's selected quantity via
+// resolveLowestPriceForQuantity()/resolvePriceRange() above, unchanged.
+export function resolveMinimumDisplayPrice(candidates: ResolutionCandidate[]): number | null {
+  const eligible = candidates.filter((candidate) => candidate.isActive);
+  if (eligible.length === 0) return null;
+
+  let min: number | null = null;
+
+  for (const candidate of eligible) {
+    const tiers =
+      candidate.pricingTiers.length > 0
+        ? candidate.pricingTiers
+        : [
+            {
+              minQty: 1,
+              maxQty: candidate.maxServiceableQty || candidate.stock || 1,
+              tierPrice: candidate.basePrice,
+            },
+          ];
+
+    for (const tier of tiers) {
+      if (!Number.isFinite(tier.tierPrice) || tier.tierPrice <= 0) continue;
+      if (min === null || tier.tierPrice < min) min = tier.tierPrice;
+    }
+  }
+
+  return min;
+}
+
 export type GroupKeyedListing<T> = T & { canonicalProductId: string | null; id: string };
 
 export function groupByCanonicalProduct<T>(

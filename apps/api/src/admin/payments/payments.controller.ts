@@ -24,6 +24,14 @@ export class PaymentsController {
     return this.paymentsService.findPendingVerifications();
   }
 
+  // Orders whose payment has been Admin-verified — i.e. eligible for
+  // "Generate Invoice" (or already invoiced). Feeds the same Admin
+  // payments page's "Ready for Invoice" section.
+  @Get("verified")
+  findVerified() {
+    return this.paymentsService.findApprovedWithInvoiceStatus();
+  }
+
   @Get(":orderId")
   findOne(@Param("orderId") orderId: string) {
     return this.paymentsService.findOne(orderId);

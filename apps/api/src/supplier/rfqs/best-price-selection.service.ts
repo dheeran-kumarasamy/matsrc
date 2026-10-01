@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { OrderStatus } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
+import { CustomerOrderStatusNotificationService } from "src/notification-engine/whatsapp/customer-order-status-notification.service";
 
 
 export type QuoteCandidate = {
@@ -49,7 +50,10 @@ export function selectLowestValidQuote(candidates: QuoteCandidate[]): QuoteCandi
 export class BestPriceSelectionService {
   private readonly logger = new Logger(BestPriceSelectionService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly customerOrderStatusNotificationService: CustomerOrderStatusNotificationService
+  ) {}
 
 
   async selectAndFinalizeIfEligible(enquiryId: string): Promise<{
@@ -149,16 +153,31 @@ export class BestPriceSelectionService {
       createdAt: order.createdAt,
     });
 
+    const previousStatus = order.status;
+    const newStatus = previousStatus === OrderStatus.PLACED ? OrderStatus.PROCESSING : previousStatus;
+
     await this.prisma.order.update({
       where: { id: enquiryId },
       data: {
-        status: order.status === OrderStatus.PLACED ? OrderStatus.PROCESSING : order.status,
+        status: newStatus,
         selectedSupplierId,
         bestPriceTotal,
         tentativeDeliveryDate,
         quoteSelectionCompletedAt: new Date(),
       },
     });
+
+    // Notification Engine — customer_order_status WhatsApp template. Only a
+    // real PLACED -> PROCESSING transition fires here — a re-run against an
+    // enquiry already past PLACED leaves status unchanged, which
+    // `notifyIfTransitioned` treats as a no-op (previousStatus === newStatus).
+    void this.customerOrderStatusNotificationService
+      .notifyIfTransitioned({ orderId: enquiryId, previousStatus, newStatus })
+      .catch((error) => {
+        this.logger.warn(
+          `Failed to send customer_order_status notification for order ${enquiryId}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
 
     // Price-discovery snapshot hook (additive, non-blocking): this is the
     // de facto "RFQ quote accepted" event in the codebase — capture one

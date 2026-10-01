@@ -2,15 +2,13 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { WhatsAppAlertTemplateKey } from "./whatsapp-alert-provider.interface";
 
 /**
- * The three logical template keys that currently exist. Used by startup validation to
- * enumerate "all template mappings used by existing hooks" without hardcoding the list
- * in more than one place.
+ * The logical template keys that currently exist on this Twilio-based alert
+ * channel. Used by startup validation to enumerate "all template mappings
+ * used by existing hooks" without hardcoding the list in more than one
+ * place. ("order_status_update" was removed — that notification now goes
+ * exclusively through the Meta WhatsApp Cloud API / Notification Engine.)
  */
-const ALL_TEMPLATE_KEYS: WhatsAppAlertTemplateKey[] = [
-  "watchlist_price_hit",
-  "order_status_update",
-  "rfq_quote_received",
-];
+const ALL_TEMPLATE_KEYS: WhatsAppAlertTemplateKey[] = ["watchlist_price_hit", "rfq_quote_received"];
 
 /** Twilio's well-known, public WhatsApp Sandbox number (same for every Twilio account). */
 export const KNOWN_TWILIO_SANDBOX_NUMBER = "+14155238886";
@@ -100,8 +98,6 @@ export class WhatsAppAlertConfigService implements OnModuleInit {
     switch (templateKey) {
       case "watchlist_price_hit":
         return process.env.TWILIO_CONTENT_SID_WATCHLIST_PRICE_HIT;
-      case "order_status_update":
-        return process.env.TWILIO_CONTENT_SID_ORDER_STATUS_UPDATE;
       case "rfq_quote_received":
         return process.env.TWILIO_CONTENT_SID_RFQ_QUOTE_RECEIVED;
       default: {

@@ -7,11 +7,12 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { orderRows, findUniqueCalls, updateCalls } = vi.hoisted(() => {
+const { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged } = vi.hoisted(() => {
   const orderRows = new Map<string, { id: string; status: string; items: any[] }>();
   const findUniqueCalls: any[] = [];
   const updateCalls: any[] = [];
-  return { orderRows, findUniqueCalls, updateCalls };
+  const notifyCustomerOrderStatusChanged = vi.fn(() => Promise.resolve());
+  return { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged };
 });
 
 vi.mock("@matsrc/db", () => {
@@ -47,12 +48,15 @@ vi.mock("@matsrc/db", () => {
         update: vi.fn(() => Promise.resolve({})),
       },
     },
+    // customer_order_status Meta WhatsApp notification (Notification Engine
+    // pipeline — see packages/db/lib/customer-order-status-notification.ts).
+    // Spied directly (not re-implemented) so these tests assert exactly
+    // what updateSupplierOrderStatus passes to it, without re-testing the
+    // notification pipeline's own internals (covered separately in
+    // packages/db/lib/customer-order-status-notification.spec.ts).
+    notifyCustomerOrderStatusChanged,
   };
 });
-
-vi.mock("./notify", () => ({
-  notifyBuilderOrderStatusUpdate: vi.fn(() => Promise.resolve()),
-}));
 
 vi.mock("./twilio-whatsapp", () => ({
   sendWhatsAppMessage: vi.fn(() => Promise.resolve({})),
@@ -64,6 +68,7 @@ beforeEach(() => {
   orderRows.clear();
   findUniqueCalls.length = 0;
   updateCalls.length = 0;
+  notifyCustomerOrderStatusChanged.mockClear();
 });
 
 function seedOrder(id: string, status: string) {
@@ -131,5 +136,66 @@ describe("updateSupplierOrderStatus — backend transition guard", () => {
     await expect(updateSupplierOrderStatus("missing-order", "PROCESSING" as any)).rejects.toThrow(
       /Order not found/
     );
+  });
+});
+
+// Task Test 1/2/3/4 — customer_order_status routing via the shared
+// Notification Engine pipeline (packages/db), never via Twilio.
+describe("updateSupplierOrderStatus — customer_order_status notification routing", () => {
+  it("Test 1: ACCEPTED (PROCESSING) -> DISPATCHED calls notifyCustomerOrderStatusChanged with the real previous/new status, and never touches Twilio", async () => {
+    const { sendWhatsAppMessage } = await import("./twilio-whatsapp");
+    seedOrder("order-10", "PROCESSING");
+
+    await updateSupplierOrderStatus("order-10", "DISPATCHED" as any);
+
+    expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledTimes(1);
+    expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ orderId: "order-10", previousStatus: "PROCESSING", newStatus: "DISPATCHED" })
+    );
+    expect(sendWhatsAppMessage).not.toHaveBeenCalled();
+  });
+
+  it("Test 2: a rejected same-status transition never reaches the notification call", async () => {
+    seedOrder("order-11", "DISPATCHED");
+
+    await expect(updateSupplierOrderStatus("order-11", "DISPATCHED" as any)).rejects.toThrow(
+      /Invalid order status transition/
+    );
+
+    expect(notifyCustomerOrderStatusChanged).not.toHaveBeenCalled();
+  });
+
+  it("Test 3: three distinct transitions each invoke the notification call exactly once with the correct pair", async () => {
+    seedOrder("order-12", "PLACED");
+
+    await updateSupplierOrderStatus("order-12", "PROCESSING" as any);
+    await updateSupplierOrderStatus("order-12", "DISPATCHED" as any);
+    await updateSupplierOrderStatus("order-12", "DELIVERED" as any);
+
+    expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledTimes(3);
+    const pairs = notifyCustomerOrderStatusChanged.mock.calls.map((call: any) => [call[1].previousStatus, call[1].newStatus]);
+    expect(pairs).toEqual([
+      ["PLACED", "PROCESSING"],
+      ["PROCESSING", "DISPATCHED"],
+      ["DISPATCHED", "DELIVERED"],
+    ]);
+  });
+
+  it("Test 4: retrying an already-applied transition is rejected by the transition guard before notifying again", async () => {
+    seedOrder("order-13", "PLACED");
+
+    await updateSupplierOrderStatus("order-13", "PROCESSING" as any);
+    expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledTimes(1);
+
+    // Retrying PLACED -> PROCESSING on an order already in PROCESSING is an
+    // invalid transition per the state machine — rejected before any
+    // further notification call is made (true duplicate-send prevention
+    // lives inside notifyCustomerOrderStatusChanged's own dedupe-key check,
+    // exercised directly in packages/db/lib/customer-order-status-notification.spec.ts).
+    await expect(updateSupplierOrderStatus("order-13", "PROCESSING" as any)).rejects.toThrow(
+      /Invalid order status transition/
+    );
+    expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledTimes(1);
   });
 });

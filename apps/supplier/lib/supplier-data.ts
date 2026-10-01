@@ -1,4 +1,4 @@
-import { prisma } from "@matsrc/db";
+import { prisma, notifyCustomerOrderStatusChanged } from "@matsrc/db";
 import { parsePhoneNumber } from "libphonenumber-js";
 import { getProductImage } from "./category-images";
 import {
@@ -8,7 +8,6 @@ import {
   resolveMinimumDisplayPrice,
   type ResolutionCandidate,
 } from "./resolution";
-import { notifyBuilderOrderStatusUpdate } from "./notify";
 import { sendWhatsAppMessage } from "./twilio-whatsapp";
 import { isValidOrderStatusTransition } from "./order-status-transitions";
 
@@ -1416,8 +1415,16 @@ async function declineOrderForSupplier(orderId: string, supplierId: string, reas
       },
     });
 
-    void notifyBuilderOrderStatusUpdate(orderId, "CANCELLED").catch((error) => {
-      console.error(`Failed to send builder notification for order ${orderId}:`, error);
+    // Notification Engine — customer_order_status Meta WhatsApp template.
+    // `order.status` above is the pre-fan-out status read at the top of
+    // this function, before any candidate/order mutation — a genuine
+    // transition into CANCELLED once every eligible supplier has declined.
+    void notifyCustomerOrderStatusChanged(prisma, {
+      orderId,
+      previousStatus: order.status as any,
+      newStatus: "CANCELLED" as any,
+    }).catch((error) => {
+      console.error(`Failed to send customer_order_status notification for order ${orderId}:`, error);
     });
 
     return cancelled;
@@ -1564,12 +1571,19 @@ export async function updateSupplierOrderStatus(
     },
   });
 
-  // REQ-08: Notify the builder/customer (best-effort, non-blocking) —
-  // WhatsApp notification for each order status transition. Never blocks or
-  // affects the status update above; failures are logged and swallowed
-  // inside notifyBuilderOrderStatusUpdate itself.
-  void notifyBuilderOrderStatusUpdate(orderId, status).catch((error) => {
-    console.error(`Failed to send builder notification for order ${orderId}:`, error);
+  // Notification Engine — customer_order_status Meta WhatsApp template
+  // (see packages/db/lib/customer-order-status-notification.ts, the single
+  // shared implementation also used by apps/api). Never blocks or affects
+  // the status update above; `current.status` was read before this update,
+  // so this is always a genuine transition. Replaces the previous
+  // Twilio-based notifyBuilderOrderStatusUpdate call — see that function's
+  // doc comment in ./notify.ts for why it was retired for this event.
+  void notifyCustomerOrderStatusChanged(prisma, {
+    orderId,
+    previousStatus: current.status as any,
+    newStatus: status as any,
+  }).catch((error) => {
+    console.error(`Failed to send customer_order_status notification for order ${orderId}:`, error);
   });
 
   return order;

@@ -1,14 +1,22 @@
 # WhatsApp Business Alerts
 
 This module (`apps/api/src/notifications/whatsapp-alerts/`) sends outbound
-WhatsApp notifications for three business events:
+WhatsApp notifications for two business events:
 
 - `watchlist_price_hit` — a builder's watched product hits their target price
   (triggered from `apps/api/src/supplier/listings/listings.service.ts`)
-- `order_status_update` — an order's status changes
-  (triggered from `apps/api/src/supplier/orders/orders.service.ts`)
 - `rfq_quote_received` — a best-price RFQ quote is finalized for a builder
   (triggered from `apps/api/src/supplier/rfqs/rfqs.service.ts`)
+
+**`order_status_update` was removed from this Twilio-based channel.** The
+customer-facing order-status-change WhatsApp notification is now sent
+exclusively via the Meta WhatsApp Cloud API / Notification Engine
+(`customer_order_status` template, Meta template ID `1788249542353441`) —
+see `apps/api/src/notification-engine/whatsapp/customer-order-status-notification.service.ts`
+and the shared, cross-app implementation in
+`packages/db/lib/customer-order-status-notification.ts`. This avoided a
+triple-send (Twilio + a `WhatsAppLifecycleService` duplicate + the
+Notification Engine) for the same customer notification.
 
 This is **additive** — it sits alongside the pre-existing notification channels
 (email/SMS/push/in-app via `NotificationService`) and the unrelated, pre-existing
@@ -37,8 +45,7 @@ management for suppliers). Nothing in either of those was changed.
 ## Architecture
 
 ```
-orders.service.ts ─┐
-rfqs.service.ts ────┼──► WhatsAppAlertService ──► WhatsAppProvider (interface)
+rfqs.service.ts ────┬──► WhatsAppAlertService ──► WhatsAppProvider (interface)
 listings.service.ts ┘         │                          │
                                │                          └── TwilioWhatsAppProvider (current)
                                │                          └── MetaWhatsAppAlertProvider (future)
@@ -56,7 +63,6 @@ Defined in `whatsapp-alert-provider.interface.ts`:
 ```ts
 type WhatsAppAlertTemplateKey =
   | "watchlist_price_hit"
-  | "order_status_update"
   | "rfq_quote_received";
 
 type WhatsAppSendTemplateParams = Record<string, string>;
@@ -184,7 +190,6 @@ See `.env.example` for the full list with placeholders:
 `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_NUMBER`, `TWILIO_MESSAGING_SERVICE_SID`,
 `TWILIO_SANDBOX_NUMBER_OVERRIDE`,
 `TWILIO_CONTENT_SID_WATCHLIST_PRICE_HIT`,
-`TWILIO_CONTENT_SID_ORDER_STATUS_UPDATE`,
 `TWILIO_CONTENT_SID_RFQ_QUOTE_RECEIVED`,
 `TWILIO_STATUS_CALLBACK_AUTH_TOKEN`.
 
@@ -199,7 +204,7 @@ time) fails loudly if the config doesn't match the declared mode.
 | | Sandbox (`WHATSAPP_MODE=sandbox`) | Production (`WHATSAPP_MODE=production`) |
 |---|---|---|
 | **Number** | Twilio's shared, public Sandbox number `+14155238886` for every Twilio account. Startup validation requires `TWILIO_WHATSAPP_NUMBER` to match this exactly, unless `TWILIO_SANDBOX_NUMBER_OVERRIDE=true` is explicitly set. | Any registered WhatsApp sender number. Startup validation fails if the configured number is the known sandbox number — this is the guardrail against deploying a sandbox config to production. |
-| **Templates** | Custom/approved Content Templates are **not available** in the Sandbox. If no `TWILIO_CONTENT_SID_*` is mapped for a `templateKey`, `TwilioWhatsAppProvider` falls back to a clearly-logged (`[twilio-whatsapp][sandbox-fallback]`) free-form text message instead of failing. | All three `TWILIO_CONTENT_SID_*` mappings (`watchlist_price_hit`, `order_status_update`, `rfq_quote_received`) are **required** — startup validation fails if any are missing. `sendTemplateMessage` never silently substitutes free-form text for a missing template; it logs a critical error and returns a failure result. |
+| **Templates** | Custom/approved Content Templates are **not available** in the Sandbox. If no `TWILIO_CONTENT_SID_*` is mapped for a `templateKey`, `TwilioWhatsAppProvider` falls back to a clearly-logged (`[twilio-whatsapp][sandbox-fallback]`) free-form text message instead of failing. | Both `TWILIO_CONTENT_SID_*` mappings (`watchlist_price_hit`, `rfq_quote_received`) are **required** — startup validation fails if either is missing. `sendTemplateMessage` never silently substitutes free-form text for a missing template; it logs a critical error and returns a failure result. |
 | **Webhook config location** | Twilio Console → **Messaging → Try it out → Send a WhatsApp message** ("Sandbox settings") — set the *"When a message comes in"* URL there. | Twilio Console → **your registered Sender's configuration** (Messaging Service or WhatsApp Sender settings) — same field, different page. |
 | **Opt-in handling** | The app-level opt-in check (`NotificationPreference.whatsappOptIn === true`, enforced in `WhatsAppAlertService.sendGated()`) is **not bypassed**. Sandbox testers must have `whatsappOptIn=true` seeded on their test user records — Twilio's own join-code mechanism (each tester texting the sandbox join code) is a separate, platform-level gate on top of this, not a replacement for it. | Same exact check, same code path — no divergence. |
 | **Webhook handler code** | Identical in both modes — `WhatsAppStatusController` and the send call sites (`orders.service.ts`, `rfqs.service.ts`, `listings.service.ts`) never branch on mode. Only `TwilioWhatsAppProvider.sendTemplateMessage`'s internal fallback-vs-fail behavior differs, and only when a template mapping is missing. | Same. |

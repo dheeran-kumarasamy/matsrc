@@ -4,8 +4,6 @@ import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
 import { formatDate, humanizeToken } from "src/supplier/utils";
 import { NotificationService } from "src/notifications/notification.service";
-import { WhatsAppAlertService } from "src/notifications/whatsapp-alerts/whatsapp-alert.service";
-import { WhatsAppLifecycleService } from "src/whatsapp/lifecycle/whatsapp-lifecycle.service";
 import { CustomerOrderStatusNotificationService } from "src/notification-engine/whatsapp/customer-order-status-notification.service";
 
 // Valid supplier-triggered transitions between the existing OrderStatus enum
@@ -35,8 +33,6 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly supplierContext: SupplierContextService,
     private readonly notificationService: NotificationService,
-    private readonly whatsAppAlertService: WhatsAppAlertService,
-    private readonly whatsAppLifecycleService: WhatsAppLifecycleService,
     private readonly customerOrderStatusNotificationService: CustomerOrderStatusNotificationService
   ) {}
 
@@ -163,32 +159,23 @@ export class OrdersService {
       this.logger.warn(`Failed to queue builder notification for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
     });
 
-
-    // Additive WhatsApp business alert — gated by WHATSAPP_ENABLED + per-user opt-in
-    // inside WhatsAppAlertService itself; never blocks/affects the order-status update
-    // above, and never throws.
-    void this.whatsAppAlertService
-      .sendOrderStatusUpdate({
-        userId: order.userId,
-        orderId: order.id,
-        status: order.status,
-        supplierName: order.items[0]?.supplier.companyName,
-      })
-      .catch((error) => {
-        this.logger.warn(`Failed to send WhatsApp order-status alert for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
-      });
-
-    // Additive WhatsApp lifecycle notifications (order-status template dispatcher) —
+    // Notification Engine — customer_order_status Meta WhatsApp template
+    // (Meta template ID 1788249542353441). This is the SINGLE authoritative
+    // customer-facing WhatsApp send for an order-status transition — the
+    // previous duplicate sends via WhatsAppAlertService (Twilio,
+    // "order_status_update" template) and WhatsAppLifecycleService
+    // (notifyBuilderOrderStatusTransition) have been removed from this call
+    // site; see docs/notifications/customer-order-status-meta-migration.md
+    // for the full audit of why those two were pure duplicates of this one
+    // notification (both WhatsAppAlertService and WhatsAppLifecycleService
+    // remain in use elsewhere in this codebase for unrelated notifications
+    // — only their `customer_order_status`-duplicating responsibility was
+    // removed here).
+    //
+    // `current.status` was read before this update and the
+    // VALID_SUPPLIER_TRANSITIONS guard above already guarantees
+    // `current.status !== status`, so every call here is a real transition;
     // never blocks/affects the order-status update above, and never throws.
-    void this.whatsAppLifecycleService.notifyBuilderOrderStatusTransition(id, order.status).catch((error) => {
-      this.logger.warn(`Failed to send WhatsApp lifecycle notification for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
-    });
-
-    // Notification Engine — customer_order_status WhatsApp template (Meta
-    // template ID 1788249542353441). `current.status` was read before this
-    // update and the VALID_SUPPLIER_TRANSITIONS guard above already
-    // guarantees `current.status !== status`, so every call here is a real
-    // transition; never blocks/affects the order-status update above.
     void this.customerOrderStatusNotificationService
       .notifyIfTransitioned({ orderId: id, previousStatus: current.status, newStatus: order.status })
       .catch((error) => {

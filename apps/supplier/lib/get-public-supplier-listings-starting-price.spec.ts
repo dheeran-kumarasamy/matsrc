@@ -27,10 +27,13 @@ vi.mock("@matsrc/db", () => {
         findMany: vi.fn(() => Promise.resolve(productRows)),
       },
     },
+    // supplier-data.ts imports this at module load time — not exercised by
+    // this test (no status transition occurs here), but must be present so
+    // the mocked @matsrc/db module satisfies the real import.
+    notifyCustomerOrderStatusChanged: vi.fn(() => Promise.resolve()),
   };
 });
 
-vi.mock("./notify", () => ({ notifyBuilderOrderStatusUpdate: vi.fn() }));
 vi.mock("./twilio-whatsapp", () => ({ sendWhatsAppMessage: vi.fn() }));
 
 import { getPublicSupplierListings } from "./supplier-data";

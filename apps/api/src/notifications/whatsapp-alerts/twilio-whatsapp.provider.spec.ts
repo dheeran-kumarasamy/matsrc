@@ -46,7 +46,7 @@ describe("TwilioWhatsAppProvider", () => {
   it("sends a template message and returns the provider message SID on success", async () => {
     createMock.mockResolvedValueOnce({ sid: "SM-success-123" });
 
-    const result = await provider.sendTemplateMessage("919876543210", "order_status_update", {
+    const result = await provider.sendTemplateMessage("919876543210", "watchlist_price_hit", {
       orderId: "order-1",
       status: "SHIPPED",
     });
@@ -85,7 +85,7 @@ describe("TwilioWhatsAppProvider", () => {
   it("fails fast with no retry on a permanent Twilio error code (invalid 'To' number)", async () => {
     createMock.mockRejectedValueOnce(Object.assign(new Error("Invalid To number"), { code: 21211, status: 400 }));
 
-    const result = await provider.sendTemplateMessage("not-a-number", "order_status_update", {});
+    const result = await provider.sendTemplateMessage("not-a-number", "watchlist_price_hit", {});
 
     expect(createMock).toHaveBeenCalledTimes(1);
     expect(result.success).toBe(false);
@@ -99,7 +99,7 @@ describe("TwilioWhatsAppProvider", () => {
       .mockRejectedValueOnce(Object.assign(new Error("Server error"), { status: 500 }))
       .mockResolvedValueOnce({ sid: "SM-after-retry" });
 
-    const sendPromise = provider.sendTemplateMessage("919876543210", "order_status_update", {});
+    const sendPromise = provider.sendTemplateMessage("919876543210", "watchlist_price_hit", {});
     await vi.runAllTimersAsync();
     const result = await sendPromise;
 
@@ -112,7 +112,7 @@ describe("TwilioWhatsAppProvider", () => {
     vi.useFakeTimers();
     createMock.mockRejectedValue(Object.assign(new Error("Server error"), { status: 500 }));
 
-    const sendPromise = provider.sendTemplateMessage("919876543210", "order_status_update", {});
+    const sendPromise = provider.sendTemplateMessage("919876543210", "watchlist_price_hit", {});
     await vi.runAllTimersAsync();
     const result = await sendPromise;
 
@@ -125,7 +125,7 @@ describe("TwilioWhatsAppProvider", () => {
   it("returns a structured failure when neither messagingServiceSid nor whatsappNumber is configured", async () => {
     provider = new TwilioWhatsAppProvider(buildConfig({ whatsappNumber: undefined, messagingServiceSid: undefined }));
 
-    const result = await provider.sendTemplateMessage("919876543210", "order_status_update", {});
+    const result = await provider.sendTemplateMessage("919876543210", "watchlist_price_hit", {});
 
     expect(createMock).not.toHaveBeenCalled();
     expect(result.success).toBe(false);
@@ -162,7 +162,7 @@ describe("TwilioWhatsAppProvider", () => {
       provider = new TwilioWhatsAppProvider(buildConfig({ contentSid: "HX-content-sid", mode: "sandbox" }));
       createMock.mockResolvedValueOnce({ sid: "SM-template-1" });
 
-      const result = await provider.sendTemplateMessage("919876543210", "order_status_update", { orderId: "o-1" });
+      const result = await provider.sendTemplateMessage("919876543210", "watchlist_price_hit", { orderId: "o-1" });
 
       const callArgs = createMock.mock.calls[0][0];
       expect(callArgs.contentSid).toBe("HX-content-sid");

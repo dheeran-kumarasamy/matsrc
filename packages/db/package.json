@@ -16,7 +16,9 @@
     "db:safe:migrate-diff": "node scripts/prisma-safe.js migrate-diff",
     "db:safe:db-execute": "node scripts/prisma-safe.js db-execute",
     "db:check-unsafe-patterns": "node scripts/check-unsafe-patterns.js",
-    "db:seed-notification-templates": "node scripts/seed-notification-templates.js"
+    "db:seed-notification-templates": "node scripts/seed-notification-templates.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",
@@ -24,6 +26,7 @@
   },
   "devDependencies": {
     "prisma": "^5.15.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^2.1.8"
   }
 }

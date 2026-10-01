@@ -27,6 +27,14 @@ export * from "./lib/business-number";
 // packages/db/lib/order-status-labels.ts for full documentation.
 export * from "./lib/order-status-labels";
 
+// customer_order_status WhatsApp notification (Meta WhatsApp Cloud API via
+// the Notification Engine tables) — the single shared, framework-agnostic
+// implementation both apps/api (NestJS wrapper) and apps/supplier (direct)
+// call so there is exactly one send path for this notification. See
+// packages/db/lib/customer-order-status-notification.ts for full
+// documentation.
+export * from "./lib/customer-order-status-notification";
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

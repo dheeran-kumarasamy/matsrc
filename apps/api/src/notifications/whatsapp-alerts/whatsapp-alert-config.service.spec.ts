@@ -8,7 +8,6 @@ const ENV_KEYS = [
   "TWILIO_MESSAGING_SERVICE_SID",
   "TWILIO_SANDBOX_NUMBER_OVERRIDE",
   "TWILIO_CONTENT_SID_WATCHLIST_PRICE_HIT",
-  "TWILIO_CONTENT_SID_ORDER_STATUS_UPDATE",
   "TWILIO_CONTENT_SID_RFQ_QUOTE_RECEIVED",
   "NODE_ENV",
 ] as const;
@@ -54,7 +53,6 @@ describe("WhatsAppAlertConfigService.validateAtStartup", () => {
       WHATSAPP_MODE: "production",
       TWILIO_WHATSAPP_NUMBER: "+15550009999",
       TWILIO_CONTENT_SID_WATCHLIST_PRICE_HIT: "HX-watchlist",
-      TWILIO_CONTENT_SID_ORDER_STATUS_UPDATE: "HX-order",
       // TWILIO_CONTENT_SID_RFQ_QUOTE_RECEIVED intentionally missing
     });
     const config = new WhatsAppAlertConfigService();
@@ -67,7 +65,6 @@ describe("WhatsAppAlertConfigService.validateAtStartup", () => {
       WHATSAPP_MODE: "production",
       TWILIO_WHATSAPP_NUMBER: "+15550009999",
       TWILIO_CONTENT_SID_WATCHLIST_PRICE_HIT: "HX-watchlist",
-      TWILIO_CONTENT_SID_ORDER_STATUS_UPDATE: "HX-order",
       TWILIO_CONTENT_SID_RFQ_QUOTE_RECEIVED: "HX-rfq",
     });
     const config = new WhatsAppAlertConfigService();
@@ -80,7 +77,6 @@ describe("WhatsAppAlertConfigService.validateAtStartup", () => {
       WHATSAPP_MODE: "production",
       TWILIO_WHATSAPP_NUMBER: "+14155238886",
       TWILIO_CONTENT_SID_WATCHLIST_PRICE_HIT: "HX-watchlist",
-      TWILIO_CONTENT_SID_ORDER_STATUS_UPDATE: "HX-order",
       TWILIO_CONTENT_SID_RFQ_QUOTE_RECEIVED: "HX-rfq",
     });
     const config = new WhatsAppAlertConfigService();

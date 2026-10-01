@@ -13,10 +13,15 @@
  * Content Template SID, or later a Meta template name) lives entirely in
  * `whatsapp-alert-config.service.ts`.
  */
-export type WhatsAppAlertTemplateKey =
-  | "watchlist_price_hit"
-  | "order_status_update"
-  | "rfq_quote_received";
+// "order_status_update" was removed from this union — the customer-facing
+// order-status-change WhatsApp notification is now sent exclusively via the
+// Meta WhatsApp Cloud API / Notification Engine ("customer_order_status"
+// template — see
+// apps/api/src/notification-engine/whatsapp/customer-order-status-notification.service.ts
+// and packages/db/lib/customer-order-status-notification.ts), not Twilio.
+// This Twilio-based alert channel remains in active use for the other two
+// templates below (watchlist price hits, RFQ quote-received notices).
+export type WhatsAppAlertTemplateKey = "watchlist_price_hit" | "rfq_quote_received";
 
 export type WhatsAppSendTemplateParams = Record<string, string>;
 

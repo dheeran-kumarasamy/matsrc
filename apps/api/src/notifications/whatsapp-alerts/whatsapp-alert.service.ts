@@ -30,18 +30,12 @@ export class WhatsAppAlertService {
     @Inject(WHATSAPP_ALERT_PROVIDER) private readonly provider: WhatsAppProvider
   ) {}
 
-  async sendOrderStatusUpdate(params: {
-    userId: string;
-    orderId: string;
-    status: string;
-    supplierName?: string | null;
-  }): Promise<void> {
-    await this.sendGated("order_status_update", params.userId, params.orderId, {
-      orderId: params.orderId,
-      status: params.status,
-      supplierName: params.supplierName ?? "",
-    });
-  }
+  // sendOrderStatusUpdate() was removed — the customer-facing order-status
+  // WhatsApp notification is now sent exclusively via the Meta WhatsApp
+  // Cloud API / Notification Engine ("customer_order_status" template, see
+  // apps/api/src/notification-engine/whatsapp/customer-order-status-notification.service.ts),
+  // not this Twilio-based alert channel. This service remains in active use
+  // for the two methods below.
 
   async sendWatchlistPriceHit(params: {
     userId: string;

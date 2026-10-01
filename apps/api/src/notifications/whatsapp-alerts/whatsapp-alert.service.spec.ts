@@ -42,7 +42,7 @@ describe("WhatsAppAlertService", () => {
     const config = buildConfig(false);
     const service = new WhatsAppAlertService(prisma as any, config, provider as any);
 
-    await service.sendOrderStatusUpdate({ userId: "u-1", orderId: "order-1", status: "SHIPPED" });
+    await service.sendRfqQuoteReceived({ userId: "u-1", enquiryId: "enq-1" });
 
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
     expect(provider.sendTemplateMessage).not.toHaveBeenCalled();
@@ -55,7 +55,7 @@ describe("WhatsAppAlertService", () => {
     const config = buildConfig(true);
     const service = new WhatsAppAlertService(prisma as any, config, provider as any);
 
-    await service.sendOrderStatusUpdate({ userId: "u-1", orderId: "order-1", status: "SHIPPED" });
+    await service.sendRfqQuoteReceived({ userId: "u-1", enquiryId: "enq-1" });
 
     expect(provider.sendTemplateMessage).not.toHaveBeenCalled();
   });
@@ -105,7 +105,7 @@ describe("WhatsAppAlertService", () => {
     const service = new WhatsAppAlertService(prisma as any, config, provider as any);
 
     await expect(
-      service.sendOrderStatusUpdate({ userId: "u-1", orderId: "order-1", status: "SHIPPED" })
+      service.sendRfqQuoteReceived({ userId: "u-1", enquiryId: "enq-1" })
     ).resolves.toBeUndefined();
 
     expect(prisma.notificationDeliveryLog.create).toHaveBeenCalledTimes(1);
@@ -118,7 +118,7 @@ describe("WhatsAppAlertService", () => {
     const service = new WhatsAppAlertService(prisma as any, config, provider as any);
 
     await expect(
-      service.sendOrderStatusUpdate({ userId: "u-1", orderId: "order-1", status: "SHIPPED" })
+      service.sendRfqQuoteReceived({ userId: "u-1", enquiryId: "enq-1" })
     ).resolves.toBeUndefined();
   });
 
@@ -129,7 +129,7 @@ describe("WhatsAppAlertService", () => {
     const service = new WhatsAppAlertService(prisma as any, config, provider as any);
 
     await expect(
-      service.sendOrderStatusUpdate({ userId: "u-1", orderId: "order-1", status: "SHIPPED" })
+      service.sendRfqQuoteReceived({ userId: "u-1", enquiryId: "enq-1" })
     ).resolves.toBeUndefined();
   });
 
@@ -138,7 +138,7 @@ describe("WhatsAppAlertService", () => {
     const config = buildConfig(true);
     const service = new WhatsAppAlertService(prisma as any, config, provider as any);
 
-    await service.sendOrderStatusUpdate({ userId: "missing", orderId: "order-1", status: "SHIPPED" });
+    await service.sendRfqQuoteReceived({ userId: "missing", enquiryId: "enq-1" });
 
     expect(provider.sendTemplateMessage).not.toHaveBeenCalled();
   });

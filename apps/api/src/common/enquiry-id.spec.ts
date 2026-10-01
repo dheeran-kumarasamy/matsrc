@@ -54,6 +54,16 @@ function createFakeTx() {
         return { value: sequenceValue };
       }),
     },
+    // Business Numbering (EQ/OD/IN) support (see
+    // packages/db/lib/business-number.ts) — generateEnquiryId() now routes
+    // through generateEnquiryNumber() -> businessSequence.upsert/update.
+    businessSequence: {
+      upsert: vi.fn(async () => ({})),
+      update: vi.fn(async () => {
+        sequenceValue += 1;
+        return { value: sequenceValue };
+      }),
+    },
   };
 
   return {
@@ -141,78 +151,16 @@ describe("nextEnquirySequence", () => {
 });
 
 describe("generateEnquiryId", () => {
-  it("produces the full CONTRACTOR-SITE-SEQUENCE id for a new builder/site", async () => {
-    const { tx, seedUser, seedSite } = createFakeTx();
-    seedUser("builder-1", null);
-    seedSite("site-1", "SITE01");
+  it("produces EQ/YYMM/SSSSS formatted enquiry numbers", async () => {
+    const { tx } = createFakeTx();
 
     const id = await generateEnquiryId(tx as any, {
       builderId: "builder-1",
-      builderName: "Acme Builders",
-      builderEmail: "acme@example.com",
+      builderName: "Rajesh",
+      builderEmail: "rajesh@example.com",
       siteId: "site-1",
     });
 
-    expect(id).toBe("ACM-SITE01-000001");
-  });
-
-  it("falls back to UNSITED when no siteId is provided", async () => {
-    const { tx, seedUser } = createFakeTx();
-    seedUser("builder-1", "ABC");
-
-    const id = await generateEnquiryId(tx as any, {
-      builderId: "builder-1",
-      builderName: "Acme",
-      builderEmail: "acme@example.com",
-      siteId: null,
-    });
-
-    expect(id).toBe("ABC-UNSITED-000001");
-  });
-
-  it("reuses the same contractor code across multiple enquiries for the same builder", async () => {
-    const { tx, seedUser, seedSite } = createFakeTx();
-    seedUser("builder-1", null);
-    seedSite("site-1", "SITE01");
-    seedSite("site-2", "SITE02");
-
-    const first = await generateEnquiryId(tx as any, {
-      builderId: "builder-1",
-      builderName: "Acme Builders",
-      builderEmail: "acme@example.com",
-      siteId: "site-1",
-    });
-    const second = await generateEnquiryId(tx as any, {
-      builderId: "builder-1",
-      builderName: "Acme Builders",
-      builderEmail: "acme@example.com",
-      siteId: "site-2",
-    });
-
-    expect(first).toBe("ACM-SITE01-000001");
-    expect(second).toBe("ACM-SITE02-000002");
-  });
-
-  it("keeps the numeric sequence globally increasing across different builders/sites", async () => {
-    const { tx, seedUser, seedSite } = createFakeTx();
-    seedUser("builder-1", "ABC");
-    seedUser("builder-2", "XYZ");
-    seedSite("site-1", "S01");
-
-    const first = await generateEnquiryId(tx as any, {
-      builderId: "builder-1",
-      builderName: "Builder One",
-      builderEmail: "one@example.com",
-      siteId: "site-1",
-    });
-    const second = await generateEnquiryId(tx as any, {
-      builderId: "builder-2",
-      builderName: "Builder Two",
-      builderEmail: "two@example.com",
-      siteId: "site-1",
-    });
-
-    expect(first).toBe("ABC-S01-000001");
-    expect(second).toBe("XYZ-S01-000002");
+    expect(id).toMatch(/^EQ\/[0-9]{4}\/00001$/);
   });
 });

@@ -20,10 +20,21 @@ function buildService(orderRow: { status: OrderStatus; items?: any[] }) {
       })),
       findUnique: vi.fn(async () => ({
         items: [{ candidates: [] }],
+        orderNumber: null,
       })),
     },
     orderItem: { findFirst: vi.fn(async () => ({ orderId: "order-1", supplierId: "sup-1" })) },
     orderTracking: { create: vi.fn(async () => ({})) },
+    businessSequence: {
+      upsert: vi.fn(async () => ({})),
+      update: vi.fn(async () => ({ value: 1 })),
+    },
+    $queryRaw: vi.fn(async () => ({})),
+    // Minimal $transaction stub: just invokes the callback with the same
+    // fake prisma object as `tx` (no real transaction semantics needed for
+    // these unit tests), matching the new orderNumber-generation flow in
+    // OrdersService.updateStatus.
+    $transaction: vi.fn(async (fn: any) => fn(prisma)),
   };
 
   const supplierContext = {

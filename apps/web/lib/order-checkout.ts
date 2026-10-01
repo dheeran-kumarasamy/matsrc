@@ -170,10 +170,8 @@ export type CreateOrdersOptions = {
 
 export type CreatedOrderSummary = {
   id: string;
-  // Meaningful Enquiry ID (display-only, e.g. "ABC-SITE01-000123") — see
-  // packages/db/lib/enquiry-id.ts. `id` above remains the real order
-  // identifier used for routing/URLs; `enquiryId` is only for display.
   enquiryId: string;
+  orderNumber?: string | null;
   supplierName: string;
   total: number;
   itemCount: number;
@@ -471,6 +469,7 @@ export async function createOrdersFromCart(
     createdOrders.push({
       id: order.id,
       enquiryId: order.enquiryId ?? order.id,
+      orderNumber: (order as any).orderNumber ?? null,
       supplierName: group.supplierName,
       total: totalAmount,
       itemCount: group.items.length,

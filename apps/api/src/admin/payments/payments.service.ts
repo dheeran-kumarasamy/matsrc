@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { OrderStatus, PaymentStatus, PaymentVerificationStatus } from "@matsrc/db";
+import { OrderStatus, PaymentStatus, PaymentVerificationStatus, generateOrderNumber } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationService } from "src/notifications/notification.service";
 
@@ -85,8 +85,17 @@ export class PaymentsService {
 
     const now = new Date();
 
-    const [updatedVerification] = await this.prisma.$transaction([
-      this.prisma.paymentVerification.update({
+    const updatedVerification = await this.prisma.$transaction(async (tx) => {
+      const existingOrder = await tx.order.findUnique({
+        where: { id: orderId },
+        select: { orderNumber: true },
+      });
+      let orderNumber = existingOrder?.orderNumber;
+      if (!orderNumber && verification.order.status === OrderStatus.PLACED) {
+        orderNumber = await generateOrderNumber(tx as any);
+      }
+
+      const ver = await tx.paymentVerification.update({
         where: { id: verification.id },
         data: {
           status: PaymentVerificationStatus.APPROVED,
@@ -94,28 +103,26 @@ export class PaymentsService {
           reviewedBy: actorId,
           rejectionReason: null,
         },
-      }),
-      this.prisma.order.update({
+      });
+
+      await tx.order.update({
         where: { id: orderId },
         data: {
           paymentStatus: PaymentStatus.PAID,
-          // Existing order-confirmation transition: a PLACED enquiry moves
-          // to PROCESSING once payment clears, which is what the existing
-          // supplier-facing order list/tracking already treats as
-          // "confirmed and being processed" (see
-          // apps/api/src/supplier/reports/reports.service.ts and
-          // BuilderOrdersService.paymentLinkAvailable).
           status: verification.order.status === OrderStatus.PLACED ? OrderStatus.PROCESSING : verification.order.status,
+          ...(orderNumber ? { orderNumber } : {}),
         },
-      }),
-      this.prisma.orderTracking.create({
+      });
+
+      await tx.orderTracking.create({
         data: {
           orderId,
           status: OrderStatus.PROCESSING,
           note: "Payment verified by admin — order confirmed for supplier processing",
         },
-      }),
-      this.prisma.auditLog.create({
+      });
+
+      await tx.auditLog.create({
         data: {
           actorId,
           action: "PAYMENT_VERIFICATION_APPROVED",
@@ -123,8 +130,10 @@ export class PaymentsService {
           entityId: verification.id,
           metadata: { orderId, amount: Number(verification.amount) },
         },
-      }),
-    ]);
+      });
+
+      return ver;
+    });
 
     const customer = await this.getUser(verification.userId);
 

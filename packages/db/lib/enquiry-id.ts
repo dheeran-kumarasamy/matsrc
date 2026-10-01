@@ -203,9 +203,8 @@ const NO_SITE_CODE = "UNSITED";
  * builder/site codes and the incremented sequence are all committed
  * atomically with the enquiry itself.
  */
-export async function generateEnquiryId(tx: any, params: GenerateEnquiryIdParams): Promise<string> {
-  const contractorCode = await resolveBuilderCode(tx, params.builderId, params.builderName, params.builderEmail);
-  const siteCode = params.siteId ? await resolveSiteCode(tx, params.siteId) : NO_SITE_CODE;
-  const sequence = await nextEnquirySequence(tx);
-  return formatEnquiryId(contractorCode, siteCode, sequence);
+import { generateEnquiryNumber } from "./business-number";
+
+export async function generateEnquiryId(tx: any, params?: GenerateEnquiryIdParams): Promise<string> {
+  return generateEnquiryNumber(tx);
 }

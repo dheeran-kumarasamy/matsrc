@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from "@nestjs/common";
-import { OrderStatus } from "@matsrc/db";
+import { OrderStatus, generateOrderNumber } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
 import { formatDate, humanizeToken } from "src/supplier/utils";
@@ -49,6 +49,8 @@ export class OrdersService {
 
     return items.map((item) => ({
       id: item.orderId,
+      enquiryId: item.order.enquiryId ?? item.orderId,
+      orderNumber: item.order.orderNumber ?? null,
       buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
       material: item.product.name,
       qty: `${item.quantity} ${item.product.unit}`,
@@ -78,10 +80,9 @@ export class OrdersService {
 
     return {
       id: item.orderId,
-      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
-      // packages/db/lib/enquiry-id.ts. Falls back to the raw order id for
-      // pre-migration orders.
+      // Meaningful Enquiry ID (e.g. "EQ/2601/00001")
       enquiryId: item.order.enquiryId ?? item.orderId,
+      orderNumber: item.order.orderNumber ?? null,
       buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
       deliveryDate: formatDate(item.deliveryDate ?? item.order.deliveryDate),
       quantity: `${item.quantity} ${item.product.unit}`,
@@ -120,16 +121,31 @@ export class OrdersService {
       if (result) return result;
     }
 
-    const order = await this.prisma.order.update({
-      where: { id },
-      data: { status },
-      include: {
-        items: {
-          include: {
-            supplier: true,
+    const order = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.order.findUnique({
+        where: { id },
+        select: { orderNumber: true },
+      });
+
+      let orderNumber = existing?.orderNumber;
+      if (!orderNumber && status === OrderStatus.PROCESSING) {
+        orderNumber = await generateOrderNumber(tx as any);
+      }
+
+      return tx.order.update({
+        where: { id },
+        data: {
+          status,
+          ...(orderNumber ? { orderNumber } : {}),
+        },
+        include: {
+          items: {
+            include: {
+              supplier: true,
+            },
           },
         },
-      },
+      });
     });
 
     await this.prisma.orderTracking.create({

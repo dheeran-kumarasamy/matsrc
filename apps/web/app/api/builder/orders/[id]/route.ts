@@ -25,6 +25,7 @@ export async function GET(
       select: {
         id: true,
         enquiryId: true,
+        orderNumber: true,
         status: true,
         paymentMethod: true,
         paymentStatus: true,
@@ -87,10 +88,8 @@ export async function GET(
 
     return NextResponse.json({
       id: order.id,
-      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — falls back to
-      // the raw order id for pre-migration orders. See
-      // packages/db/lib/enquiry-id.ts.
       enquiryId: order.enquiryId ?? order.id,
+      orderNumber: order.orderNumber ?? null,
       status: order.status,
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus,

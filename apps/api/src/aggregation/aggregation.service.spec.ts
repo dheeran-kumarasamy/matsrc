@@ -184,8 +184,25 @@ function createFakeDb() {
     }),
   };
 
-  // Row-lock emulation: $queryRaw is only ever used for `SELECT * FROM "AggregationPool"
-  // WHERE "id" = ${poolId} FOR UPDATE` in this service, so we can special-case it here.
+  // Business Numbering (EQ/OD/IN) support (see packages/db/lib/business-number.ts)
+  // — generateEnquiryId() (called from findOrCreatePool's order-creation path)
+  // now routes through generateEnquiryNumber() -> businessSequence.upsert/update
+  // instead of the legacy enquirySequence table.
+  const businessSequenceApi = {
+    upsert: vi.fn(async () => ({})),
+    update: vi.fn(async () => {
+      db.enquirySequenceValue += 1;
+      return { value: db.enquirySequenceValue };
+    }),
+  };
+
+  // Row-lock emulation: $queryRaw is used both for the pool row-lock
+  // (`SELECT * FROM "AggregationPool" WHERE "id" = ${poolId} FOR UPDATE`) and
+  // for the BusinessSequence row-lock (`SELECT "value" FROM
+  // "BusinessSequence" WHERE "id" = ${key} FOR UPDATE`, see
+  // nextBusinessSequence) — fall back to an empty result for any query that
+  // isn't the pool lookup, since generateEnquiryNumber() doesn't need the
+  // query's actual return value (only businessSequence.update()'s).
   const $queryRaw = vi.fn(async (strings: TemplateStringsArray, ...values: any[]) => {
     const poolId = values[0];
     const pool = db.pools.get(poolId);
@@ -201,6 +218,7 @@ function createFakeDb() {
     orderTracking: orderTrackingApi,
     user: userApi,
     enquirySequence: enquirySequenceApi,
+    businessSequence: businessSequenceApi,
     $queryRaw,
   };
 

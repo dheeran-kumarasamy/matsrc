@@ -611,6 +611,7 @@ model Order {
   // 20260926000000_add_enquiry_id migration, using each row's own siteId/
   // userId at the time of migration — never invented from arbitrary data.
   enquiryId          String?       @unique
+  orderNumber        String?       @unique
   status             OrderStatus   @default(PLACED)
   paymentMethod      PaymentMethod
   paymentStatus      PaymentStatus @default(PENDING)
@@ -1340,6 +1341,19 @@ model Site {
 model EnquirySequence {
   id    String @id @default("singleton")
   value Int    @default(0)
+}
+
+// Independent counter sequences for EQ, OD, and IN per financial year
+// (e.g. key: "EQ_26", "OD_26", "IN_26").
+model BusinessSequence {
+  id        String   @id
+  type      String
+  fy        String
+  value     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, fy])
 }
 
 // Per-builder Tally ledger mapping configuration used when generating

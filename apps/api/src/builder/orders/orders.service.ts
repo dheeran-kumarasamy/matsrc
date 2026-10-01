@@ -38,6 +38,7 @@ export class BuilderOrdersService {
       select: {
         id: true,
         enquiryId: true,
+        orderNumber: true,
         status: true,
         paymentStatus: true,
         totalAmount: true,
@@ -62,10 +63,8 @@ export class BuilderOrdersService {
 
     return orders.map((order) => ({
       id: order.id,
-      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — falls back to
-      // the raw order id for pre-migration orders. See
-      // packages/db/lib/enquiry-id.ts.
       enquiryId: order.enquiryId ?? order.id,
+      orderNumber: order.orderNumber ?? null,
       status: order.status,
       paymentStatus: order.paymentStatus,
       itemCount: order.items.length,
@@ -86,6 +85,7 @@ export class BuilderOrdersService {
       select: {
         id: true,
         enquiryId: true,
+        orderNumber: true,
         status: true,
         paymentMethod: true,
         paymentStatus: true,
@@ -127,10 +127,8 @@ export class BuilderOrdersService {
 
     return {
       id: order.id,
-      // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — falls back to
-      // the raw order id for pre-migration orders. See
-      // packages/db/lib/enquiry-id.ts.
       enquiryId: order.enquiryId ?? order.id,
+      orderNumber: order.orderNumber ?? null,
       status: order.status,
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus,

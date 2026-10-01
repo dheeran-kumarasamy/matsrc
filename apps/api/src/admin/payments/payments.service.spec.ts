@@ -19,7 +19,7 @@ function buildService(overrides: Partial<any> = {}) {
     ...overrides,
   };
 
-  const prisma = {
+  const prisma: any = {
     paymentVerification: {
       findUnique: vi.fn().mockResolvedValue(verification),
       findMany: vi.fn().mockResolvedValue([verification]),
@@ -27,6 +27,10 @@ function buildService(overrides: Partial<any> = {}) {
     },
     order: {
       update: vi.fn().mockResolvedValue({}),
+      // Business Numbering (EQ/OD/IN) support (see
+      // packages/db/lib/business-number.ts) — approve() reads the order's
+      // existing orderNumber before deciding whether to generate a new one.
+      findUnique: vi.fn().mockResolvedValue({ orderNumber: null }),
     },
     orderTracking: {
       create: vi.fn().mockResolvedValue({}),
@@ -37,8 +41,17 @@ function buildService(overrides: Partial<any> = {}) {
     user: {
       findUnique: vi.fn().mockResolvedValue({ id: "user-1", name: "Builder", email: "b@x.com", phone: "9876543210" }),
     },
-    $transaction: vi.fn().mockImplementation((ops: Promise<any>[]) => Promise.all(ops)),
+    businessSequence: {
+      upsert: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({ value: 1 }),
+    },
+    $queryRaw: vi.fn().mockResolvedValue([]),
   };
+  // approve() uses the callback-style $transaction((tx) => ...) shape (needs
+  // the same `tx` client for generateOrderNumber()); reject() still uses the
+  // older array-of-operations shape ($transaction([op1, op2, ...])) — this
+  // mock supports both so both methods' tests pass against the same fake.
+  prisma.$transaction = vi.fn().mockImplementation((arg: any) => (Array.isArray(arg) ? Promise.all(arg) : arg(prisma)));
 
   const notificationService = { sendWhatsApp: vi.fn().mockResolvedValue(undefined) };
 

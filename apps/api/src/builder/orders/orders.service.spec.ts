@@ -47,6 +47,13 @@ describe("BuilderOrdersService.create", () => {
       enquirySequence: {
         update: vi.fn().mockResolvedValue({ value: 1 }),
       },
+      // Business Numbering (EQ/OD/IN) support (see
+      // packages/db/lib/business-number.ts) — generateEnquiryId() now routes
+      // through generateEnquiryNumber() -> businessSequence.upsert/update.
+      businessSequence: {
+        upsert: vi.fn().mockResolvedValue({}),
+        update: vi.fn().mockResolvedValue({ value: 1 }),
+      },
       $queryRaw: vi.fn().mockResolvedValue([]),
     };
     (prisma as any).$transaction = vi.fn(async (callback: any) => callback(prisma));

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { waitUntil } from "@vercel/functions";
 import { OrderStatus } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { CustomerOrderStatusNotificationService } from "src/notification-engine/whatsapp/customer-order-status-notification.service";
@@ -171,13 +172,20 @@ export class BestPriceSelectionService {
     // real PLACED -> PROCESSING transition fires here — a re-run against an
     // enquiry already past PLACED leaves status unchanged, which
     // `notifyIfTransitioned` treats as a no-op (previousStatus === newStatus).
-    void this.customerOrderStatusNotificationService
-      .notifyIfTransitioned({ orderId: enquiryId, previousStatus, newStatus })
-      .catch((error) => {
-        this.logger.warn(
-          `Failed to send customer_order_status notification for order ${enquiryId}: ${error instanceof Error ? error.message : String(error)}`
-        );
-      });
+    // Scheduled via Vercel's waitUntil() — apps/api runs as a Vercel
+    // serverless function, so a detached `void` promise is not guaranteed
+    // to finish before the instance is frozen after the HTTP response is
+    // sent (see apps/supplier/lib/supplier-data.ts for the full
+    // explanation of the production issue this fixes).
+    waitUntil(
+      this.customerOrderStatusNotificationService
+        .notifyIfTransitioned({ orderId: enquiryId, previousStatus, newStatus })
+        .catch((error) => {
+          this.logger.warn(
+            `Failed to send customer_order_status notification for order ${enquiryId}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        })
+    );
 
     // Price-discovery snapshot hook (additive, non-blocking): this is the
     // de facto "RFQ quote accepted" event in the codebase — capture one

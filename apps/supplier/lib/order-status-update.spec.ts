@@ -7,13 +7,22 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged } = vi.hoisted(() => {
+const { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged, waitUntilMock } = vi.hoisted(() => {
   const orderRows = new Map<string, { id: string; status: string; items: any[] }>();
   const findUniqueCalls: any[] = [];
   const updateCalls: any[] = [];
   const notifyCustomerOrderStatusChanged = vi.fn(() => Promise.resolve());
-  return { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged };
+  // Mock of Vercel's waitUntil() — records every promise handed to it so
+  // tests can assert the notification work is *scheduled* (kept alive past
+  // the HTTP response) rather than fired off as a detached `void` promise
+  // that Vercel's serverless runtime may kill before it settles.
+  const waitUntilMock = vi.fn();
+  return { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged, waitUntilMock };
 });
+
+vi.mock("@vercel/functions", () => ({
+  waitUntil: waitUntilMock,
+}));
 
 vi.mock("@matsrc/db", () => {
   return {
@@ -69,6 +78,7 @@ beforeEach(() => {
   findUniqueCalls.length = 0;
   updateCalls.length = 0;
   notifyCustomerOrderStatusChanged.mockClear();
+  waitUntilMock.mockClear();
 });
 
 function seedOrder(id: string, status: string) {
@@ -197,5 +207,87 @@ describe("updateSupplierOrderStatus — customer_order_status notification routi
       /Invalid order status transition/
     );
     expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Vercel lifecycle fix — notifyCustomerOrderStatusChanged must be scheduled
+// via waitUntil() rather than a detached `void` promise, so the Vercel
+// serverless runtime keeps the function instance alive until the Meta
+// Graph API call settles, instead of potentially killing it the moment the
+// HTTP response for this request has been returned.
+describe("updateSupplierOrderStatus — Vercel-safe notification scheduling (waitUntil)", () => {
+  it("schedules the customer_order_status notification via waitUntil() instead of firing it detached", async () => {
+    seedOrder("order-20", "PROCESSING");
+
+    const result = await updateSupplierOrderStatus("order-20", "DISPATCHED" as any);
+
+    // The order update itself must succeed and return immediately —
+    // independent of whether/when the notification promise settles.
+    expect(result.status).toBe("DISPATCHED");
+
+    expect(waitUntilMock).toHaveBeenCalledTimes(1);
+    // The exact value handed to waitUntil() must be a Promise (the
+    // notification work), proving it is being kept alive rather than
+    // simply discarded.
+    const scheduled = waitUntilMock.mock.calls[0][0];
+    expect(scheduled).toBeInstanceOf(Promise);
+    await scheduled;
+
+    expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledTimes(1);
+    expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ orderId: "order-20", previousStatus: "PROCESSING", newStatus: "DISPATCHED" })
+    );
+  });
+
+  it("the order update and HTTP-facing response succeed even when the notification promise rejects", async () => {
+    seedOrder("order-21", "PROCESSING");
+    notifyCustomerOrderStatusChanged.mockImplementationOnce(() => Promise.reject(new Error("Meta API down")));
+
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await updateSupplierOrderStatus("order-21", "DISPATCHED" as any);
+
+    expect(result.status).toBe("DISPATCHED");
+    expect(updateCalls.some((call) => call.where.id === "order-21")).toBe(true);
+
+    // The rejection must be caught before being handed to waitUntil(), so
+    // no unhandled promise rejection escapes this call, and the error is
+    // still logged for observability.
+    const scheduled = waitUntilMock.mock.calls[0][0];
+    await expect(scheduled).resolves.toBeUndefined();
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("does not notify (and does not schedule anything) for a same-status update, since the transition guard rejects it first", async () => {
+    seedOrder("order-22", "DISPATCHED");
+
+    await expect(updateSupplierOrderStatus("order-22", "DISPATCHED" as any)).rejects.toThrow(
+      /Invalid order status transition/
+    );
+
+    expect(waitUntilMock).not.toHaveBeenCalled();
+    expect(notifyCustomerOrderStatusChanged).not.toHaveBeenCalled();
+  });
+
+  it("schedules one waitUntil-wrapped notification per genuine transition across a full PLACED -> PROCESSING -> DISPATCHED -> DELIVERED sequence", async () => {
+    seedOrder("order-23", "PLACED");
+
+    await updateSupplierOrderStatus("order-23", "PROCESSING" as any);
+    await updateSupplierOrderStatus("order-23", "DISPATCHED" as any);
+    await updateSupplierOrderStatus("order-23", "DELIVERED" as any);
+
+    expect(waitUntilMock).toHaveBeenCalledTimes(3);
+    await Promise.all(waitUntilMock.mock.calls.map((call) => call[0]));
+
+    expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledTimes(3);
+    const pairs = notifyCustomerOrderStatusChanged.mock.calls.map((call: any) => [call[1].previousStatus, call[1].newStatus]);
+    expect(pairs).toEqual([
+      ["PLACED", "PROCESSING"],
+      ["PROCESSING", "DISPATCHED"],
+      ["DISPATCHED", "DELIVERED"],
+    ]);
   });
 });

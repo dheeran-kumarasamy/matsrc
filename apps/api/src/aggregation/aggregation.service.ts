@@ -13,6 +13,7 @@ import {
   PaymentStatus,
   generateEnquiryId,
 } from "@matsrc/db";
+import { waitUntil } from "@vercel/functions";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationService } from "src/notifications/notification.service";
 import { CustomerOrderStatusNotificationService } from "src/notification-engine/whatsapp/customer-order-status-notification.service";
@@ -433,11 +434,18 @@ export class AggregationService {
     // Notification Engine — customer_order_status WhatsApp template, fired
     // after the transaction committed (never inside it — never block/roll
     // back the pool/participant/order mutation over a WhatsApp failure).
+    // Scheduled via Vercel's waitUntil() — apps/api runs as a Vercel
+    // serverless function, so a detached `void` promise here has no
+    // guarantee of finishing before the function instance is frozen once
+    // this request's HTTP response has been sent (see the equivalent fix
+    // in apps/supplier/lib/supplier-data.ts for the full explanation).
     if (result.cancelledOrderTransition) {
       const { orderId, previousStatus } = result.cancelledOrderTransition;
-      void this.customerOrderStatusNotificationService
-        .notifyIfTransitioned({ orderId, previousStatus, newStatus: OrderStatus.CANCELLED })
-        .catch((error) => this.logger.warn(`Failed to send customer_order_status notification for order ${orderId}: ${this.errMsg(error)}`));
+      waitUntil(
+        this.customerOrderStatusNotificationService
+          .notifyIfTransitioned({ orderId, previousStatus, newStatus: OrderStatus.CANCELLED })
+          .catch((error) => this.logger.warn(`Failed to send customer_order_status notification for order ${orderId}: ${this.errMsg(error)}`))
+      );
     }
 
     return result;

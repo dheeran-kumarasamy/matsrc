@@ -3,6 +3,17 @@ import { BadRequestException } from "@nestjs/common";
 import { OrderStatus } from "@matsrc/db";
 import { OrdersService } from "./orders.service";
 
+// Mock of Vercel's waitUntil() — records every promise handed to it so
+// tests can assert the customer_order_status notification work is
+// *scheduled* (kept alive past the HTTP response, per apps/api's
+// serverless deployment — see apps/api/api/index.ts / vercel.json) rather
+// than fired off as a detached `void` promise that the Vercel runtime may
+// kill before it settles.
+const { waitUntilMock } = vi.hoisted(() => ({ waitUntilMock: vi.fn() }));
+vi.mock("@vercel/functions", () => ({
+  waitUntil: waitUntilMock,
+}));
+
 // Backend transition guard test for OrdersService.updateStatus — verifies
 // invalid supplier-triggered status transitions are rejected with a
 // BadRequestException even if the request bypasses whatever UI gating
@@ -58,6 +69,10 @@ function buildService(orderRow: { status: OrderStatus; items?: any[] }) {
 
   return { service, prisma, customerOrderStatusNotificationService };
 }
+
+beforeEach(() => {
+  waitUntilMock.mockClear();
+});
 
 describe("OrdersService.updateStatus — backend transition guard", () => {
   it("allows Confirm Enquiry (PLACED -> PROCESSING)", async () => {
@@ -167,5 +182,50 @@ describe("OrdersService.updateStatus — customer_order_status notification rout
       [OrderStatus.PROCESSING, OrderStatus.DISPATCHED],
       [OrderStatus.DISPATCHED, OrderStatus.DELIVERED],
     ]);
+  });
+});
+
+// Vercel lifecycle fix — notifyIfTransitioned must be scheduled via
+// waitUntil() rather than a detached `void` promise, since apps/api also
+// runs as a Vercel serverless function (apps/api/api/index.ts).
+describe("OrdersService.updateStatus — Vercel-safe notification scheduling (waitUntil)", () => {
+  it("schedules the customer_order_status notification via waitUntil() instead of firing it detached", async () => {
+    const { service, customerOrderStatusNotificationService } = buildService({ status: OrderStatus.PROCESSING });
+
+    const result = await service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" });
+
+    // The order update returns immediately, independent of whether/when
+    // the notification promise settles.
+    expect(result.status).toBe(OrderStatus.DISPATCHED);
+
+    expect(waitUntilMock).toHaveBeenCalledTimes(1);
+    const scheduled = waitUntilMock.mock.calls[0][0];
+    expect(scheduled).toBeInstanceOf(Promise);
+    await scheduled;
+
+    expect(customerOrderStatusNotificationService.notifyIfTransitioned).toHaveBeenCalledTimes(1);
+  });
+
+  it("the status update succeeds even when the notification promise rejects, and the rejection never escapes unhandled", async () => {
+    const { service, customerOrderStatusNotificationService } = buildService({ status: OrderStatus.PROCESSING });
+    customerOrderStatusNotificationService.notifyIfTransitioned.mockRejectedValueOnce(new Error("Meta API down"));
+
+    const result = await service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" });
+
+    expect(result.status).toBe(OrderStatus.DISPATCHED);
+
+    const scheduled = waitUntilMock.mock.calls[0][0];
+    await expect(scheduled).resolves.toBeUndefined();
+  });
+
+  it("does not schedule anything for a rejected (same-status/invalid) transition", async () => {
+    const { customerOrderStatusNotificationService, service } = buildService({ status: OrderStatus.PLACED });
+
+    await expect(
+      service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" })
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(waitUntilMock).not.toHaveBeenCalled();
+    expect(customerOrderStatusNotificationService.notifyIfTransitioned).not.toHaveBeenCalled();
   });
 });

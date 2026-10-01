@@ -1,4 +1,5 @@
 import { prisma, notifyCustomerOrderStatusChanged } from "@matsrc/db";
+import { waitUntil } from "@vercel/functions";
 import { parsePhoneNumber } from "libphonenumber-js";
 import { getProductImage } from "./category-images";
 import {
@@ -1380,10 +1381,17 @@ async function declineOrderForSupplier(orderId: string, supplierId: string, reas
         },
       });
 
-      // Best-effort: let the newly-promoted supplier know they have a new enquiry.
-      void notifySupplierOrderSubmittedForCandidate(orderId, nextCandidate.supplierId).catch((error) => {
-        console.error(`Failed to notify promoted supplier for order ${orderId}:`, error);
-      });
+      // Best-effort: let the newly-promoted supplier know they have a new
+      // enquiry. Scheduled via waitUntil (see updateSupplierOrderStatus's
+      // doc comment below for why a detached `void` promise is unsafe on
+      // Vercel's serverless runtime) so this notification isn't killed by
+      // the platform tearing down the function right after the HTTP
+      // response for this request is sent.
+      waitUntil(
+        notifySupplierOrderSubmittedForCandidate(orderId, nextCandidate.supplierId).catch((error) => {
+          console.error(`Failed to notify promoted supplier for order ${orderId}:`, error);
+        })
+      );
     } else {
       // No more eligible candidates for this item.
       await prisma.orderItem.update({
@@ -1419,13 +1427,19 @@ async function declineOrderForSupplier(orderId: string, supplierId: string, reas
     // `order.status` above is the pre-fan-out status read at the top of
     // this function, before any candidate/order mutation — a genuine
     // transition into CANCELLED once every eligible supplier has declined.
-    void notifyCustomerOrderStatusChanged(prisma, {
-      orderId,
-      previousStatus: order.status as any,
-      newStatus: "CANCELLED" as any,
-    }).catch((error) => {
-      console.error(`Failed to send customer_order_status notification for order ${orderId}:`, error);
-    });
+    //
+    // Scheduled via waitUntil() rather than a detached `void` promise — see
+    // the doc comment on the equivalent call in updateSupplierOrderStatus
+    // below for the full explanation of why this matters on Vercel.
+    waitUntil(
+      notifyCustomerOrderStatusChanged(prisma, {
+        orderId,
+        previousStatus: order.status as any,
+        newStatus: "CANCELLED" as any,
+      }).catch((error) => {
+        console.error(`Failed to send customer_order_status notification for order ${orderId}:`, error);
+      })
+    );
 
     return cancelled;
   }
@@ -1578,13 +1592,28 @@ export async function updateSupplierOrderStatus(
   // so this is always a genuine transition. Replaces the previous
   // Twilio-based notifyBuilderOrderStatusUpdate call — see that function's
   // doc comment in ./notify.ts for why it was retired for this event.
-  void notifyCustomerOrderStatusChanged(prisma, {
-    orderId,
-    previousStatus: current.status as any,
-    newStatus: status as any,
-  }).catch((error) => {
-    console.error(`Failed to send customer_order_status notification for order ${orderId}:`, error);
-  });
+  //
+  // IMPORTANT — this is scheduled via Vercel's waitUntil() rather than a
+  // detached `void somePromise.catch(...)`. This route runs as a Vercel
+  // serverless function (apps/supplier/app/api/supplier/[...slug]/route.ts);
+  // once the handler returns its NextResponse, Vercel is free to freeze or
+  // tear down the invocation at any moment afterwards. A `void` promise
+  // keeps running on the same event loop but has no guarantee it will be
+  // given the chance to finish — in production this silently killed the
+  // Meta Graph API round-trip for the 2nd/3rd status transition on an
+  // order while the 1st happened to complete in time. waitUntil() tells
+  // the Vercel runtime to keep the function instance alive until the
+  // given promise settles, while still letting the HTTP response return
+  // immediately without waiting for it.
+  waitUntil(
+    notifyCustomerOrderStatusChanged(prisma, {
+      orderId,
+      previousStatus: current.status as any,
+      newStatus: status as any,
+    }).catch((error) => {
+      console.error(`Failed to send customer_order_status notification for order ${orderId}:`, error);
+    })
+  );
 
   return order;
 }

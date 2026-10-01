@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { waitUntil } from "@vercel/functions";
 import { OrderStatus, PaymentStatus, PaymentVerificationStatus, generateOrderNumber } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationService } from "src/notifications/notification.service";
@@ -192,11 +193,18 @@ export class PaymentsService {
     // only notify when a real transition happened.
     const orderStatusActuallyChanged = verification.order.status === OrderStatus.PLACED;
     if (orderStatusActuallyChanged) {
-      void this.customerOrderStatusNotificationService
-        .notifyIfTransitioned({ orderId, previousStatus: verification.order.status, newStatus: OrderStatus.PROCESSING })
-        .catch((error) => {
-          this.logger.warn(`Failed to send customer_order_status notification for order ${orderId}: ${error instanceof Error ? error.message : String(error)}`);
-        });
+      // Scheduled via Vercel's waitUntil() — apps/api runs as a Vercel
+      // serverless function, so a detached `void` promise is not guaranteed
+      // to finish before the instance is frozen after the HTTP response is
+      // sent (see apps/supplier/lib/supplier-data.ts for the full
+      // explanation of the production issue this fixes).
+      waitUntil(
+        this.customerOrderStatusNotificationService
+          .notifyIfTransitioned({ orderId, previousStatus: verification.order.status, newStatus: OrderStatus.PROCESSING })
+          .catch((error) => {
+            this.logger.warn(`Failed to send customer_order_status notification for order ${orderId}: ${error instanceof Error ? error.message : String(error)}`);
+          })
+      );
     }
 
     return this.serializeSummary({

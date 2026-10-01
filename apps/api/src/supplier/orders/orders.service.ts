@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from "@nestjs/common";
+import { waitUntil } from "@vercel/functions";
 import { OrderStatus, generateOrderNumber } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
@@ -176,11 +177,23 @@ export class OrdersService {
     // VALID_SUPPLIER_TRANSITIONS guard above already guarantees
     // `current.status !== status`, so every call here is a real transition;
     // never blocks/affects the order-status update above, and never throws.
-    void this.customerOrderStatusNotificationService
-      .notifyIfTransitioned({ orderId: id, previousStatus: current.status, newStatus: order.status })
-      .catch((error) => {
-        this.logger.warn(`Failed to send customer_order_status notification for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
-      });
+    //
+    // Scheduled via Vercel's waitUntil() rather than a detached `void`
+    // promise — apps/api runs as a Vercel serverless function (see
+    // apps/api/api/index.ts / vercel.json), so once this method returns and
+    // the HTTP response is sent, Vercel may freeze/terminate the invocation
+    // before a merely-`void`'d background promise gets a chance to finish
+    // its Meta Graph API round-trip. This is the exact same reliability gap
+    // diagnosed in apps/supplier's equivalent call site (see
+    // updateSupplierOrderStatus in apps/supplier/lib/supplier-data.ts) —
+    // fixed the same way here.
+    waitUntil(
+      this.customerOrderStatusNotificationService
+        .notifyIfTransitioned({ orderId: id, previousStatus: current.status, newStatus: order.status })
+        .catch((error) => {
+          this.logger.warn(`Failed to send customer_order_status notification for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
+        })
+    );
 
     return { id: order.id, status: order.status };
   }
@@ -275,13 +288,17 @@ export class OrdersService {
       // `order.status` above is the pre-fan-out status read at the top of
       // this method, before any candidate/order mutation — a genuine
       // transition into CANCELLED once every eligible supplier has declined.
-      void this.customerOrderStatusNotificationService
-        .notifyIfTransitioned({ orderId, previousStatus: order.status, newStatus: OrderStatus.CANCELLED })
-        .catch((error) => {
-          this.logger.warn(
-            `Failed to send customer_order_status notification for order ${orderId}: ${error instanceof Error ? error.message : String(error)}`
-          );
-        });
+      // Scheduled via waitUntil() — see the doc comment on the equivalent
+      // call in updateStatus() above for why.
+      waitUntil(
+        this.customerOrderStatusNotificationService
+          .notifyIfTransitioned({ orderId, previousStatus: order.status, newStatus: OrderStatus.CANCELLED })
+          .catch((error) => {
+            this.logger.warn(
+              `Failed to send customer_order_status notification for order ${orderId}: ${error instanceof Error ? error.message : String(error)}`
+            );
+          })
+      );
 
       return { id: cancelled.id, status: cancelled.status };
     }

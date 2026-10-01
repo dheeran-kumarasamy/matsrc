@@ -61,6 +61,14 @@ function buildService(overrides: Partial<any> = {}) {
           invoiceSequence: {
             update: vi.fn().mockResolvedValue({ value: 1 }),
           },
+          // Business Numbering (EQ/OD/IN) support (see
+          // packages/db/lib/business-number.ts) — generateInvoiceNumber() now
+          // routes through generateBusinessNumber() -> businessSequence.upsert/update
+          // instead of the legacy invoiceSequence table above.
+          businessSequence: {
+            upsert: vi.fn().mockResolvedValue({}),
+            update: vi.fn().mockResolvedValue({ value: 1 }),
+          },
           $queryRaw: vi.fn().mockResolvedValue([]),
           auditLog: prisma.auditLog,
         });

@@ -6,6 +6,7 @@ import { SupplierContextService } from "src/supplier/supplier-context.service";
 import { formatDate, humanizeToken } from "src/supplier/utils";
 import { NotificationService } from "src/notifications/notification.service";
 import { CustomerOrderStatusNotificationService } from "src/notification-engine/whatsapp/customer-order-status-notification.service";
+import { SupplierRfqReceivedNotificationService } from "src/notification-engine/whatsapp/supplier-rfq-received-notification.service";
 
 // Valid supplier-triggered transitions between the existing OrderStatus enum
 // values (packages/db/prisma/schema.prisma) — mirrors the equivalent table
@@ -34,7 +35,8 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly supplierContext: SupplierContextService,
     private readonly notificationService: NotificationService,
-    private readonly customerOrderStatusNotificationService: CustomerOrderStatusNotificationService
+    private readonly customerOrderStatusNotificationService: CustomerOrderStatusNotificationService,
+    private readonly supplierRfqReceivedNotificationService: SupplierRfqReceivedNotificationService
   ) {}
 
   async findAll(user: any) {
@@ -248,6 +250,21 @@ export class OrdersService {
             `Failed to notify promoted supplier for order ${orderId}: ${error instanceof Error ? error.message : String(error)}`
           );
         });
+
+        // Notification Engine — supplier_quote_alert WhatsApp template
+        // (SUPPLIER_RFQ_RECEIVED) for the newly-promoted supplier. This is a
+        // genuinely new assignment (different supplierId on the same
+        // OrderItem), so its dedupe key is distinct from the original
+        // supplier's — see supplier-rfq-received-notification.ts's doc
+        // comment. Scheduled via waitUntil() — see the doc comment on the
+        // equivalent call in updateStatus() above for why.
+        waitUntil(
+          this.supplierRfqReceivedNotificationService.notify(item.id).catch((error) => {
+            this.logger.warn(
+              `Failed to send supplier_quote_alert notification for promoted orderItem ${item.id}: ${error instanceof Error ? error.message : String(error)}`
+            );
+          })
+        );
       } else {
         await this.prisma.orderItem.update({
           where: { id: item.id },

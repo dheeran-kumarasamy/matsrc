@@ -70,11 +70,16 @@ describe("BuilderOrdersService.create", () => {
       notifySupplierNewEnquiry: vi.fn().mockResolvedValue(undefined),
     };
 
+    const supplierRfqReceivedNotificationService = {
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
     const service = new BuilderOrdersService(
       prisma as any,
       builderContext as any,
       notificationService as any,
-      whatsAppLifecycleService as any
+      whatsAppLifecycleService as any,
+      supplierRfqReceivedNotificationService as any
     );
 
     const result = await service.create(
@@ -134,11 +139,16 @@ describe("BuilderOrdersService.upsertRating", () => {
       notifySupplierNewEnquiry: vi.fn().mockResolvedValue(undefined),
     };
 
+    const supplierRfqReceivedNotificationService = {
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
     const service = new BuilderOrdersService(
       prisma as any,
       builderContext as any,
       notificationService as any,
-      whatsAppLifecycleService as any
+      whatsAppLifecycleService as any,
+      supplierRfqReceivedNotificationService as any
     );
     return { service, prisma };
   }

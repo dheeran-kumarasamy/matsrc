@@ -3,11 +3,12 @@ import { BuilderModule } from "src/builder/builder.module";
 import { NotificationsModule } from "src/notifications/notifications.module";
 import { WhatsAppLifecycleModule } from "src/whatsapp/lifecycle/whatsapp-lifecycle.module";
 import { InvoicesModule } from "src/admin/invoices/invoices.module";
+import { NotificationEngineModule } from "src/notification-engine/notification-engine.module";
 import { BuilderOrdersController } from "./orders.controller";
 import { BuilderOrdersService } from "./orders.service";
 
 @Module({
-  imports: [BuilderModule, NotificationsModule, WhatsAppLifecycleModule, InvoicesModule],
+  imports: [BuilderModule, NotificationsModule, WhatsAppLifecycleModule, InvoicesModule, NotificationEngineModule],
   controllers: [BuilderOrdersController],
   providers: [BuilderOrdersService],
 })

@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException, Logger } from "@nestjs/common";
+import { waitUntil } from "@vercel/functions";
 import { OrderStatus, PaymentMethod, PaymentStatus, generateEnquiryId } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { formatCurrency, formatDate, humanizeToken } from "src/supplier/utils";
@@ -7,6 +8,7 @@ import { CreateOrderDto } from "./dto/create-order.dto";
 import { NotificationService } from "src/notifications/notification.service";
 import { UpsertOrderRatingDto } from "./dto/upsert-order-rating.dto";
 import { WhatsAppLifecycleService } from "src/whatsapp/lifecycle/whatsapp-lifecycle.service";
+import { SupplierRfqReceivedNotificationService } from "src/notification-engine/whatsapp/supplier-rfq-received-notification.service";
 
 function resolveUnitPrice(product: any, quantity: number) {
   const tiers = Array.isArray(product.pricingTiers) ? product.pricingTiers : [];
@@ -27,7 +29,8 @@ export class BuilderOrdersService {
     private readonly prisma: PrismaService,
     private readonly builderContext: BuilderContextService,
     private readonly notificationService: NotificationService,
-    private readonly whatsAppLifecycleService: WhatsAppLifecycleService
+    private readonly whatsAppLifecycleService: WhatsAppLifecycleService,
+    private readonly supplierRfqReceivedNotificationService: SupplierRfqReceivedNotificationService
   ) {}
 
   async findAll(userCtx: any) {
@@ -223,6 +226,7 @@ export class BuilderOrdersService {
       total: number;
       itemCount: number;
       status: OrderStatus;
+      itemIds: string[];
     }> = [];
 
     for (const group of groupedItems.values()) {
@@ -298,6 +302,7 @@ export class BuilderOrdersService {
         total: Number(order.totalAmount),
         itemCount: order.items.length,
         status: order.status,
+        itemIds: order.items.map((item) => item.id),
       });
     }
 
@@ -315,6 +320,23 @@ export class BuilderOrdersService {
       void this.whatsAppLifecycleService.notifySupplierNewEnquiry(order.id, order.supplierId).catch((error) => {
         this.logger.warn(`Failed to send WhatsApp new-enquiry notification for order ${order.id}: ${error instanceof Error ? error.message : String(error)}`);
       });
+
+      // Notification Engine — supplier_quote_alert WhatsApp template
+      // (SUPPLIER_RFQ_RECEIVED). Fires once per newly-created OrderItem —
+      // each item is a distinct RFQ line the just-assigned (rank-0)
+      // supplier is now expected to quote. Scheduled via Vercel's
+      // waitUntil() rather than a detached `void` promise — see the doc
+      // comment on the equivalent customer_order_status call in
+      // OrdersService.updateStatus for why this matters on Vercel.
+      for (const itemId of order.itemIds) {
+        waitUntil(
+          this.supplierRfqReceivedNotificationService.notify(itemId).catch((error) => {
+            this.logger.warn(
+              `Failed to send supplier_quote_alert notification for orderItem ${itemId}: ${error instanceof Error ? error.message : String(error)}`
+            );
+          })
+        );
+      }
     }
 
     return { orders: createdOrders };

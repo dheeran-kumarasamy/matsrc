@@ -29,7 +29,11 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const POLICIES = [
-  { eventType: "SUPPLIER_RFQ_RECEIVED", channel: "WHATSAPP", templateName: "supplier_quote_alert", displayName: "New RFQ Received", description: "Notifies a supplier that a new RFQ/enquiry has been submitted for their listing.", priority: "P1", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
+  // Meta template mapping: approved Utility template, "Review RFQ" button,
+  // exactly 4 body variables ({{1}}=material, {{2}}=quantity,
+  // {{3}}=delivery location, {{4}}=quote deadline) — see
+  // packages/db/lib/supplier-rfq-received-notification.ts.
+  { eventType: "SUPPLIER_RFQ_RECEIVED", channel: "WHATSAPP", templateName: "supplier_quote_alert", metaTemplateId: "2046949149261282", displayName: "New RFQ Received", description: "Notifies a supplier that a new RFQ/enquiry has been submitted for their listing.", priority: "P1", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   // Meta template mapping updated: the original "supplier_quote_reminder" template was
   // accidentally created under the Marketing category and deleted. Meta imposes a 4-week
   // restriction preventing the same template name from being recreated under Utility, so

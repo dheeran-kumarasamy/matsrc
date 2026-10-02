@@ -15,7 +15,7 @@
 // is also exactly the "multi-supplier grouping" logic quick-request must
 // reuse rather than reimplement.
 
-import { OrderStatus, PaymentStatus, PaymentMethod, generateEnquiryId } from "@matsrc/db";
+import { OrderStatus, PaymentStatus, PaymentMethod, generateEnquiryId, notifySupplierRfqReceived } from "@matsrc/db";
 import { prisma, resolveUnitPrice } from "@/lib/builder-db";
 import { notifySupplierOrderSubmitted } from "@/lib/notify";
 import {
@@ -176,6 +176,7 @@ export type CreatedOrderSummary = {
   total: number;
   itemCount: number;
   status: OrderStatus;
+  itemIds: string[];
 };
 
 export type CreateOrdersResult =
@@ -474,6 +475,7 @@ export async function createOrdersFromCart(
       total: totalAmount,
       itemCount: group.items.length,
       status: order.status,
+      itemIds: order.items.map((item) => item.id),
     });
   }
 
@@ -485,6 +487,21 @@ export async function createOrdersFromCart(
     void notifySupplierOrderSubmitted(order.id).catch((error) => {
       console.error(`Failed to send supplier notification for order ${order.id}:`, error);
     });
+
+    // Notification Engine — supplier_quote_alert WhatsApp template
+    // (SUPPLIER_RFQ_RECEIVED). Fires once per newly-created OrderItem — each
+    // item is a distinct RFQ line the just-assigned (rank-0) supplier is now
+    // expected to quote. Uses the shared, framework-agnostic
+    // notifySupplierRfqReceived() (packages/db/lib/supplier-rfq-received-notification.ts)
+    // since this Next.js route cannot inject apps/api's NestJS
+    // NotificationEngineService — same reasoning as notifyCustomerOrderStatusChanged.
+    for (const itemId of order.itemIds) {
+      void notifySupplierRfqReceived(prisma as any, { orderItemId: itemId }, (message) => {
+        console.log(`[supplier-rfq-received] ${message}`);
+      }).catch((error) => {
+        console.error(`Failed to send supplier_quote_alert notification for orderItem ${itemId}:`, error);
+      });
+    }
   }
 
   // Price-discovery snapshot hook (additive, insert-only, non-blocking):

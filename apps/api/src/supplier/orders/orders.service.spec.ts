@@ -54,12 +54,14 @@ function buildService(orderRow: { status: OrderStatus; items?: any[] }) {
 
   const notificationService = { notifyBuilderOrderDecision: vi.fn(async () => ({})) };
   const customerOrderStatusNotificationService = { notifyIfTransitioned: vi.fn(async () => ({})) };
+  const supplierRfqReceivedNotificationService = { notify: vi.fn(async () => ({})) };
 
   const service = new OrdersService(
     prisma,
     supplierContext as any,
     notificationService as any,
-    customerOrderStatusNotificationService as any
+    customerOrderStatusNotificationService as any,
+    supplierRfqReceivedNotificationService as any
   );
 
   // findOne() drives the "current status" check inside updateStatus — stub

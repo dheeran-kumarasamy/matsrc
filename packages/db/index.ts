@@ -35,6 +35,16 @@ export * from "./lib/order-status-labels";
 // documentation.
 export * from "./lib/customer-order-status-notification";
 
+// supplier_quote_alert WhatsApp notification (SUPPLIER_RFQ_RECEIVED event,
+// Meta WhatsApp Cloud API via the Notification Engine tables) — the single
+// shared, framework-agnostic implementation apps/api (NestJS wrapper),
+// apps/web (cart/checkout + Quick Material Request) and apps/supplier
+// (candidate-promotion decline cascade) all call so there is exactly one
+// send path for this notification. See
+// packages/db/lib/supplier-rfq-received-notification.ts for full
+// documentation.
+export * from "./lib/supplier-rfq-received-notification";
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

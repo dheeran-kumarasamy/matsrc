@@ -45,6 +45,15 @@ export * from "./lib/customer-order-status-notification";
 // documentation.
 export * from "./lib/supplier-rfq-received-notification";
 
+// supplier_po_alert WhatsApp notification (SUPPLIER_PO_RECEIVED event, Meta
+// WhatsApp Cloud API via the Notification Engine tables) — the single
+// shared, framework-agnostic implementation apps/api (NestJS wrapper) and
+// apps/web (builder PO approval route) call so there is exactly one send
+// path for this notification. See
+// packages/db/lib/supplier-po-received-notification.ts for full
+// documentation.
+export * from "./lib/supplier-po-received-notification";
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

@@ -41,7 +41,12 @@ const POLICIES = [
   // business event (SUPPLIER_RFQ_REMINDER) is unchanged — only the Meta template name
   // this event maps to has changed. Do NOT reintroduce "supplier_quote_reminder" here.
   { eventType: "SUPPLIER_RFQ_REMINDER", channel: "WHATSAPP", templateName: "supplier_rfq_reminder", displayName: "RFQ Response Reminder", description: "Reminds a supplier of a pending RFQ they have not yet responded to.", priority: "P1", cooldownMinutes: 240, maxPerDay: 1, businessHoursOnly: true },
-  { eventType: "SUPPLIER_PO_RECEIVED", channel: "WHATSAPP", templateName: "supplier_po_alert", displayName: "Purchase Order Received", description: "Notifies a supplier that a new Purchase Order has been issued to them.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
+  // Meta template mapping: approved Utility template (ID 1999605497419495,
+  // language "en"), static "View Purchase Order" QUICK_REPLY button (not a
+  // dynamic URL button), exactly 3 body variables ({{1}}=PO/order ID,
+  // {{2}}=material, {{3}}=quantity) — see
+  // packages/db/lib/supplier-po-received-notification.ts.
+  { eventType: "SUPPLIER_PO_RECEIVED", channel: "WHATSAPP", templateName: "supplier_po_alert", metaTemplateId: "1999605497419495", displayName: "Purchase Order Received", description: "Notifies a supplier that a new Purchase Order has been issued to them.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   { eventType: "SUPPLIER_PO_ACCEPTANCE_REQUIRED", channel: "WHATSAPP", templateName: "po_acceptance_reminder", displayName: "PO Acceptance Required", description: "Reminds a supplier that a Purchase Order requires their acceptance.", priority: "P0", cooldownMinutes: 240, maxPerDay: 1, businessHoursOnly: true },
   { eventType: "SUPPLIER_DISPATCH_DUE", channel: "WHATSAPP", templateName: "dispatch_reminder", displayName: "Dispatch Due", description: "Reminds a supplier that a dispatch is due against an accepted PO.", priority: "P1", cooldownMinutes: 240, maxPerDay: 1, businessHoursOnly: true },
 ];

@@ -2,13 +2,16 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { waitUntil } from "@vercel/functions";
 import { PurchaseOrderStatus } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { BuilderContextService } from "src/builder/builder-context.service";
 import { NotificationService } from "src/notifications/notification.service";
 import { WhatsAppLifecycleService } from "src/whatsapp/lifecycle/whatsapp-lifecycle.service";
+import { SupplierPoReceivedNotificationService } from "src/notification-engine/whatsapp/supplier-po-received-notification.service";
 import { CreatePurchaseOrderDto } from "./dto/create-purchase-order.dto";
 import { UpdatePurchaseOrderDto } from "./dto/update-purchase-order.dto";
 import { ApprovePurchaseOrderDto } from "./dto/approve-purchase-order.dto";
@@ -19,11 +22,14 @@ function toNumber(value: unknown): number {
 
 @Injectable()
 export class PurchaseOrdersService {
+  private readonly logger = new Logger(PurchaseOrdersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly builderContext: BuilderContextService,
     private readonly notificationService: NotificationService,
-    private readonly whatsAppLifecycleService: WhatsAppLifecycleService
+    private readonly whatsAppLifecycleService: WhatsAppLifecycleService,
+    private readonly supplierPoReceivedNotificationService: SupplierPoReceivedNotificationService
   ) {}
 
   private async generatePoNumber(): Promise<string> {
@@ -332,6 +338,25 @@ export class PurchaseOrdersService {
         exportUrl: `/builder/purchase-orders/${updated.id}/export`,
       })
       .catch(() => undefined);
+
+    // Notification Engine — supplier_po_alert WhatsApp template
+    // (SUPPLIER_PO_RECEIVED). Fires exactly once the PO has actually
+    // transitioned DRAFT -> ISSUED above (never at PO creation/DRAFT).
+    // Scheduled via Vercel's waitUntil() rather than a detached `void`
+    // promise — apps/api runs as a Vercel serverless function, so a
+    // detached promise is not guaranteed to finish before the instance is
+    // frozen after the HTTP response is sent (see
+    // apps/supplier/lib/supplier-data.ts for the full explanation of the
+    // production issue this fixes; same pattern already used by
+    // OrdersService.updateStatus, BuilderOrdersService.create, and
+    // PaymentsService.approve).
+    waitUntil(
+      this.supplierPoReceivedNotificationService.notify(updated.id).catch((error) => {
+        this.logger.warn(
+          `Failed to send supplier_po_alert notification for purchaseOrder ${updated.id}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+    );
 
     return this.serialize(updated);
   }

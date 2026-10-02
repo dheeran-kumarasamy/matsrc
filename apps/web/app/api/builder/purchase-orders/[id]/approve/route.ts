@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PurchaseOrderStatus } from "@matsrc/db";
+import { PurchaseOrderStatus, notifySupplierPoReceived } from "@matsrc/db";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
 import { serializePurchaseOrder, purchaseOrderInclude } from "@/lib/purchase-order-utils";
 
@@ -94,6 +94,24 @@ export async function POST(request: Request, { params }: { params: { id: string 
     } catch {
       // Notification delivery must never block PO issuance.
     }
+
+    // Notification Engine — supplier_po_alert WhatsApp template
+    // (SUPPLIER_PO_RECEIVED). Fires exactly once the PO has actually
+    // transitioned DRAFT -> ISSUED above (never at PO creation/DRAFT). Uses
+    // the shared, framework-agnostic notifySupplierPoReceived()
+    // (packages/db/lib/supplier-po-received-notification.ts) since this
+    // Next.js route cannot inject apps/api's NestJS
+    // NotificationEngineService — same reasoning as
+    // notifySupplierRfqReceived's call site in order-checkout.ts. This app
+    // does not have @vercel/functions installed (unlike apps/api/apps/supplier),
+    // so this mirrors the existing detached `void` fire-and-forget pattern
+    // already used immediately above/elsewhere in this same route — never a
+    // newly-invented async architecture.
+    void notifySupplierPoReceived(prisma as any, { purchaseOrderId: po.id }, (message) => {
+      console.log(`[supplier-po-received] ${message}`);
+    }).catch((error) => {
+      console.error(`Failed to send supplier_po_alert notification for purchaseOrder ${po.id}:`, error);
+    });
 
     return NextResponse.json(serializePurchaseOrder(updated));
   } catch (error) {

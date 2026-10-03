@@ -1,8 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import { RfqsService } from "./rfqs.service";
 
+// Mock of Vercel's waitUntil() — records every promise handed to it so
+// tests can assert the quote_received notification work is *scheduled*
+// (kept alive past the HTTP response) rather than fired off as a detached
+// `void` promise that Vercel's serverless runtime may kill before it
+// settles. Mirrors the identical mock already used in
+// orders.service.spec.ts.
+const { waitUntilMock } = vi.hoisted(() => ({ waitUntilMock: vi.fn() }));
+vi.mock("@vercel/functions", () => ({
+  waitUntil: waitUntilMock,
+}));
+
 describe("RfqsService.createQuote", () => {
   it("persists line-item quotes, computes best price, and notifies builder", async () => {
+    waitUntilMock.mockClear();
     const createdRows: Array<any> = [];
 
     const prisma = {
@@ -65,12 +77,17 @@ describe("RfqsService.createQuote", () => {
       sendRfqQuoteReceived: vi.fn().mockResolvedValue(undefined),
     };
 
+    const quoteReceivedNotificationService = {
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
     const service = new RfqsService(
       prisma as any,
       supplierContext as any,
       bestPriceSelectionService as any,
       notificationService as any,
-      whatsAppAlertService as any
+      whatsAppAlertService as any,
+      quoteReceivedNotificationService as any
     );
 
 
@@ -101,5 +118,12 @@ describe("RfqsService.createQuote", () => {
         bestPriceTotal: 1200,
       })
     );
+
+    // quote_received (QUOTE_RECEIVED) notification is scheduled via
+    // waitUntil() immediately after the SupplierQuote row(s) commit —
+    // independent of best-price finalization above.
+    expect(waitUntilMock).toHaveBeenCalledTimes(1);
+    await waitUntilMock.mock.calls[0][0];
+    expect(quoteReceivedNotificationService.notify).toHaveBeenCalledWith("enq-1", "sup-1", ["sq-1"]);
   });
 });

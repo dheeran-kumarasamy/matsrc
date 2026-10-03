@@ -9,6 +9,7 @@ import { CustomerOrderStatusNotificationService } from "./whatsapp/customer-orde
 import { SupplierRfqReceivedNotificationService } from "./whatsapp/supplier-rfq-received-notification.service";
 import { SupplierPoReceivedNotificationService } from "./whatsapp/supplier-po-received-notification.service";
 import { PaymentRequiredNotificationService } from "./whatsapp/payment-required-notification.service";
+import { QuoteReceivedNotificationService } from "./whatsapp/quote-received-notification.service";
 import { WhatsAppEngineChannel } from "./channels/whatsapp-engine-channel.service";
 import { InAppEngineChannel } from "./channels/in-app-engine-channel.service";
 import { SupplierDailyPriceCompletenessService } from "./supplier-daily-price/supplier-daily-price-completeness.service";
@@ -42,6 +43,7 @@ import { CronSecretGuard } from "src/pricing/cron-secret.guard";
     SupplierRfqReceivedNotificationService,
     SupplierPoReceivedNotificationService,
     PaymentRequiredNotificationService,
+    QuoteReceivedNotificationService,
     WhatsAppEngineChannel,
     InAppEngineChannel,
     SupplierDailyPriceCompletenessService,
@@ -58,6 +60,7 @@ import { CronSecretGuard } from "src/pricing/cron-secret.guard";
     SupplierRfqReceivedNotificationService,
     SupplierPoReceivedNotificationService,
     PaymentRequiredNotificationService,
+    QuoteReceivedNotificationService,
     SupplierDailyPriceCompletenessService,
     SupplierDailyPriceReminderService,
   ],

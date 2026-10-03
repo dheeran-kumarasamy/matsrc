@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { waitUntil } from "@vercel/functions";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
 import { formatDate } from "src/supplier/utils";
@@ -6,6 +7,7 @@ import { CreateQuoteDto } from "./dto/create-quote.dto";
 import { BestPriceSelectionService } from "./best-price-selection.service";
 import { NotificationService } from "src/notifications/notification.service";
 import { WhatsAppAlertService } from "src/notifications/whatsapp-alerts/whatsapp-alert.service";
+import { QuoteReceivedNotificationService } from "src/notification-engine/whatsapp/quote-received-notification.service";
 
 @Injectable()
 export class RfqsService {
@@ -16,7 +18,8 @@ export class RfqsService {
     private readonly supplierContext: SupplierContextService,
     private readonly bestPriceSelectionService: BestPriceSelectionService,
     private readonly notificationService: NotificationService,
-    private readonly whatsAppAlertService: WhatsAppAlertService
+    private readonly whatsAppAlertService: WhatsAppAlertService,
+    private readonly quoteReceivedNotificationService: QuoteReceivedNotificationService
   ) {}
 
   // Mirrors the equivalent fix in apps/supplier/lib/supplier-data.ts's
@@ -182,6 +185,39 @@ export class RfqsService {
 
       return rows;
     });
+
+    // Notification Engine — quote_received WhatsApp template
+    // (QUOTE_RECEIVED event, Meta template ID 1055000930652376). Fires
+    // immediately after this supplier's SupplierQuote row(s) have
+    // committed — the actual "a supplier has submitted a quotation"
+    // business event — independent of whether best-price selection goes on
+    // to finalize below (that is a separate, cross-supplier "enough quotes
+    // in, auto-confirm" concern; this notification is per-submission). See
+    // QuoteReceivedNotificationService's doc comment for the full audit.
+    //
+    // Scheduled via Vercel's waitUntil() rather than a detached `void`
+    // promise — apps/api runs as a Vercel serverless function (see
+    // apps/api/api/index.ts / vercel.json), so once this method returns and
+    // the HTTP response is sent (or, for the WhatsApp-bot call site, once
+    // the bot's own response is sent), Vercel may freeze/terminate the
+    // invocation before a merely-`void`'d background promise gets a chance
+    // to finish its Meta Graph API round-trip. Mirrors the identical fix
+    // already applied to customer_order_status/payment_required at the
+    // other call sites in this codebase (see OrdersService.updateStatus /
+    // BestPriceSelectionService.selectAndFinalizeIfEligible).
+    waitUntil(
+      this.quoteReceivedNotificationService
+        .notify(
+          enquiryId,
+          supplierProfile.id,
+          created.map((row) => row.id)
+        )
+        .catch((error) => {
+          this.logger.warn(
+            `Failed to send quote_received notification for enquiry ${enquiryId} supplier ${supplierProfile.id}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        })
+    );
 
     const bestPriceResult = await this.bestPriceSelectionService.selectAndFinalizeIfEligible(enquiryId);
     if (bestPriceResult?.finalized) {

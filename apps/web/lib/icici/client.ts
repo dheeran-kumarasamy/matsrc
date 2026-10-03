@@ -20,6 +20,7 @@
 import "server-only";
 import { getIciciConfig, type IciciUatConfig } from "./config";
 import { generateICICIHash, verifyICICIHash, type IciciHashablePayload } from "./hash";
+import { formatIciciTxnDate } from "./txn-date";
 
 export type IciciInitiateSaleParams = {
   merchantTxnNo: string;
@@ -65,7 +66,10 @@ export async function initiateSale(
   config: IciciUatConfig,
   params: IciciInitiateSaleParams
 ): Promise<IciciGatewayCallResult<any>> {
-  const txnDate = new Date().toISOString();
+  // See ./txn-date.ts for why this specific format/timezone is required —
+  // confirmed against a real rejection from the live ICICI UAT sandbox
+  // (responseCode P1006 "Invalid Transaction Date").
+  const txnDate = formatIciciTxnDate(new Date());
 
   const payload: IciciHashablePayload = {
     merchantId: config.merchantId,

@@ -8,6 +8,9 @@ export const MENU_CONFIG = [
   { key: "kyc", href: "/kyc", label: "KYC Queue" },
   { key: "disputes", href: "/disputes", label: "Disputes" },
   { key: "payments", href: "/payments", label: "Payment Verification" },
+  // ICICI Bank Payment Gateway — UAT ONLY (read-only transaction visibility +
+  // refund). Additive menu entry, never affecting existing menus/DEFAULT_ADMIN_MENUS.
+  { key: "icici-payments", href: "/icici-payments", label: "ICICI Payments (UAT)" },
   { key: "aggregation", href: "/aggregation", label: "Aggregation Pools" },
   { key: "catalog", href: "/catalog", label: "Catalog Master Data" },
   { key: "pricing", href: "/pricing", label: "Price Intelligence" },

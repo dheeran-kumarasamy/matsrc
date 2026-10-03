@@ -4,8 +4,15 @@ import { builderApiGet } from "@/lib/api";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import PaymentMethodSelector from "@/components/orders/PaymentMethodSelector";
 import BankTransferPaymentPanel from "@/components/orders/BankTransferPaymentPanel";
+import ICICIPaymentPanel from "@/components/orders/ICICIPaymentPanel";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { getBankAccountDetails } from "@/lib/bank-account-config";
+// Server-side environment gate (task §9): the ICICI payment option is
+// decided here, on the server, using the same environment-variable-driven
+// detection used by every other ICICI code path — NEVER by checking the
+// request's hostname client-side. This guarantees the option is physically
+// absent from the rendered HTML on production, not merely hidden by CSS/JS.
+import { isIciciUatAvailable } from "@/lib/icici/environment";
 
 type OrderPayment = {
   id: string;
@@ -90,6 +97,22 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
         order.status !== "CANCELLED" &&
         (order.paymentLinkAvailable || order.paymentStatus === "PENDING_VERIFICATION") ? (
           <BankTransferPaymentPanel orderId={order.id} amount={order.total} bank={getBankAccountDetails()} />
+        ) : null}
+
+        {/* ICICI UAT online payment — additive alongside the existing
+            bank-transfer flow (task §12), never replacing it. Only ever
+            rendered when isIciciUatAvailable() resolves true on THIS
+            deployment's own environment variables, independent of
+            `paymentMethod` (the builder does not need to first select ICICI
+            via PaymentMethodSelector — Pay Now itself sets
+            Order.paymentMethod to ICICI_ONLINE once the payment actually
+            succeeds, see app/api/payment/callback/route.ts). */}
+        {isIciciUatAvailable() &&
+        order.paymentStatus !== "PAID" &&
+        order.paymentStatus !== "PENDING_VERIFICATION" &&
+        order.status !== "CANCELLED" &&
+        order.paymentLinkAvailable ? (
+          <ICICIPaymentPanel orderId={order.id} amount={order.total} />
         ) : null}
 
         <div className="flex flex-wrap gap-3">

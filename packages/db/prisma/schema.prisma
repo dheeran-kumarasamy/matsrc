@@ -61,6 +61,7 @@ model User {
   aggregationParticipations   AggregationParticipant[]
   pendingContactVerifications PendingContactVerification[]
   paymentVerifications        PaymentVerification[]
+  paymentTransactions         PaymentTransaction[]
 
   // Invoice Generation & Management (Admin-only generation — see Invoice
   // model below). A builder/contractor can be the invoiced party on many
@@ -570,6 +571,13 @@ enum PaymentMethod {
   COD
   CREDIT
   BANK_TRANSFER
+  // ICICI Bank online payment gateway — UAT-ONLY implementation (see
+  // apps/web/lib/icici/ and docs/payments/icici-uat.md). This value is
+  // additive; it must NEVER be selectable/initiated against a
+  // production-classified environment — see apps/web/lib/icici/environment.ts's
+  // isIciciUatAvailable() guard, which every initiation code path goes
+  // through before this method is ever used.
+  ICICI_ONLINE
 }
 
 enum PaymentStatus {
@@ -670,6 +678,14 @@ model Order {
   aggregationParticipant AggregationParticipant?
   paymentVerification    PaymentVerification?
 
+  // ICICI Bank online payment gateway — UAT-ONLY (see PaymentTransaction
+  // model below). One-to-many because a failed/cancelled/timed-out attempt
+  // must NEVER be overwritten or deleted (full audit trail per attempt) —
+  // a builder may retry payment multiple times for the same order, each
+  // retry creating its own PaymentTransaction row with its own unique
+  // merchantTxnNo.
+  paymentTransactions PaymentTransaction[]
+
   // Invoice Generation & Management: one-to-one — an order has at most one
   // (non-cancelled) invoice. Nullable/additive; existing orders simply have
   // no invoice until an Admin explicitly generates one (see Invoice model).
@@ -718,6 +734,110 @@ model PaymentVerification {
   @@index([orderId])
   @@index([userId])
   @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// ICICI Bank Payment Gateway — UAT ONLY
+//
+// IMPORTANT — PRODUCTION SAFETY: this entire feature is scoped to Buildohub's
+// UAT environment (https://uat.buildohub.in) against ICICI's UAT endpoints
+// (https://pgpayuat.icicibank.com/...). It is NEVER automatically usable in
+// production — see apps/web/lib/icici/environment.ts's isIciciUatAvailable(),
+// which every initiation/callback/status/refund code path checks before
+// doing anything. Enabling this in production requires a separate, explicit,
+// future instruction from the project owner (see docs/payments/icici-uat.md).
+//
+// A dedicated entity (rather than overloading PaymentVerification, which is
+// specifically the bank-transfer proof/review record) because the ICICI
+// gateway flow is fundamentally different: no screenshot, a bank-generated
+// transaction id/auth id, a request/response HMAC-signed API exchange, and
+// its own multi-state lifecycle (see PaymentTransactionStatus below).
+// ─────────────────────────────────────────────
+
+enum PaymentTransactionStatus {
+  INITIATED
+  REDIRECTED
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+  REFUND_INITIATED
+  REFUNDED
+  REFUND_FAILED
+}
+
+model PaymentTransaction {
+  id String @id @default(cuid())
+
+  // Buildohub's own business identifier remains the Order (see
+  // Order.orderNumber / enquiryId) — this row is purely an additional
+  // gateway-attempt record keyed off it. One-to-many: every retry (after a
+  // FAILED/CANCELLED attempt, a timeout, etc.) creates a brand-new row with
+  // its own merchantTxnNo rather than overwriting a previous attempt, so the
+  // full payment-attempt history for an order is always reconstructable.
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+
+  // Human-readable reference surfaced to the builder (e.g. on the payment
+  // result page) — distinct from both Buildohub's OD/.../ order number and
+  // ICICI's own merchantTxnNo, mirroring this schema's existing pattern of
+  // separate internal vs external identifiers (see Order.enquiryId doc).
+  paymentReference String @unique
+
+  gateway            String @default("ICICI") // Reserved for future multi-gateway support; always "ICICI" today.
+  gatewayEnvironment String // Always "uat" in this implementation — see PaymentTransactionStatus doc above. Never "production" here.
+
+  // ICICI's own merchant transaction number — generated per the ICICI UAT
+  // spec's uniqueness/format/length constraints (see
+  // apps/web/lib/icici/merchant-txn.ts). NEVER derived by simply reusing the
+  // full Buildohub order number, which may not satisfy ICICI's format rules.
+  merchantTxnNo String @unique
+
+  // Server-calculated at initiation time from the Order itself — NEVER
+  // trusts a browser-supplied amount (see initiate route's doc comment).
+  amount   Decimal @db.Decimal(12, 2)
+  currency String  @default("INR")
+
+  status PaymentTransactionStatus @default(INITIATED)
+
+  gatewayResponseCode        String?
+  gatewayResponseDescription String?
+  gatewayTxnId               String?
+  gatewayTxnAuthId           String?
+  paymentMode                String?
+  paymentSubInstrumentType   String?
+
+  // Raw request/response payloads for audit/debugging — ICICI_PG_SECRET_KEY
+  // and any other credential material are NEVER included in these (see
+  // apps/web/lib/icici/client.ts, which strips/omits secrets before
+  // persisting). JSON, not Bytes — these are small structured payloads, not
+  // binary files (contrast with PaymentVerification.screenshotData above).
+  initiationRequest  Json?
+  initiationResponse Json?
+  returnPayload      Json?
+  statusRequest      Json?
+  statusResponse     Json?
+
+  // Set true only after this row's own stored HMAC has been independently
+  // recomputed and found to match the gateway's signed response — the sole
+  // basis (together with a server-side STATUS call) for ever moving this row
+  // to SUCCESS. A callback or return payload alone, unverified, must never
+  // flip this to true.
+  secureHashVerified Boolean @default(false)
+
+  initiatedAt DateTime  @default(now())
+  completedAt DateTime?
+  failedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([userId])
+  @@index([status])
+  @@index([merchantTxnNo])
 }
 
 // ─────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { waitUntil } from "@vercel/functions";
 import { OrderStatus } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { CustomerOrderStatusNotificationService } from "src/notification-engine/whatsapp/customer-order-status-notification.service";
+import { PaymentRequiredNotificationService } from "src/notification-engine/whatsapp/payment-required-notification.service";
 
 
 export type QuoteCandidate = {
@@ -53,7 +54,8 @@ export class BestPriceSelectionService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly customerOrderStatusNotificationService: CustomerOrderStatusNotificationService
+    private readonly customerOrderStatusNotificationService: CustomerOrderStatusNotificationService,
+    private readonly paymentRequiredNotificationService: PaymentRequiredNotificationService
   ) {}
 
 
@@ -183,6 +185,24 @@ export class BestPriceSelectionService {
         .catch((error) => {
           this.logger.warn(
             `Failed to send customer_order_status notification for order ${enquiryId}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        })
+    );
+
+    // Notification Engine — payment_required WhatsApp template
+    // (PAYMENT_REQUIRED event). This is the de facto "payment now required"
+    // business event in this codebase — see
+    // packages/db/lib/payment-required-notification.ts's top doc comment for
+    // the full audit. `notifyIfTransitioned` itself re-checks
+    // Order.paymentStatus === PENDING fresh from the DB, so this is a safe
+    // no-op if the order is somehow already paid. Scheduled via Vercel's
+    // waitUntil() for the same reliability reason as the notification above.
+    waitUntil(
+      this.paymentRequiredNotificationService
+        .notifyIfTransitioned({ orderId: enquiryId, previousStatus, newStatus })
+        .catch((error) => {
+          this.logger.warn(
+            `Failed to send payment_required notification for order ${enquiryId}: ${error instanceof Error ? error.message : String(error)}`
           );
         })
     );

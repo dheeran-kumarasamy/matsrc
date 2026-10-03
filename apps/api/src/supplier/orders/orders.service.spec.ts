@@ -55,13 +55,15 @@ function buildService(orderRow: { status: OrderStatus; items?: any[] }) {
   const notificationService = { notifyBuilderOrderDecision: vi.fn(async () => ({})) };
   const customerOrderStatusNotificationService = { notifyIfTransitioned: vi.fn(async () => ({})) };
   const supplierRfqReceivedNotificationService = { notify: vi.fn(async () => ({})) };
+  const paymentRequiredNotificationService = { notifyIfTransitioned: vi.fn(async () => ({})) };
 
   const service = new OrdersService(
     prisma,
     supplierContext as any,
     notificationService as any,
     customerOrderStatusNotificationService as any,
-    supplierRfqReceivedNotificationService as any
+    supplierRfqReceivedNotificationService as any,
+    paymentRequiredNotificationService as any
   );
 
   // findOne() drives the "current status" check inside updateStatus — stub
@@ -69,7 +71,7 @@ function buildService(orderRow: { status: OrderStatus; items?: any[] }) {
   // than the full order-item-lookup query shape.
   vi.spyOn(service, "findOne").mockResolvedValue({ status: orderRow.status } as any);
 
-  return { service, prisma, customerOrderStatusNotificationService };
+  return { service, prisma, customerOrderStatusNotificationService, paymentRequiredNotificationService };
 }
 
 beforeEach(() => {
@@ -200,10 +202,16 @@ describe("OrdersService.updateStatus — Vercel-safe notification scheduling (wa
     // the notification promise settles.
     expect(result.status).toBe(OrderStatus.DISPATCHED);
 
-    expect(waitUntilMock).toHaveBeenCalledTimes(1);
+    // Two notifications are scheduled per transition now:
+    // customer_order_status (always) and payment_required (guarded inside
+    // the service itself — see PaymentRequiredNotificationService, a safe
+    // no-op here since this transition is PROCESSING -> DISPATCHED, not
+    // PLACED -> PROCESSING).
+    expect(waitUntilMock).toHaveBeenCalledTimes(2);
     const scheduled = waitUntilMock.mock.calls[0][0];
     expect(scheduled).toBeInstanceOf(Promise);
     await scheduled;
+    await waitUntilMock.mock.calls[1][0];
 
     expect(customerOrderStatusNotificationService.notifyIfTransitioned).toHaveBeenCalledTimes(1);
   });
@@ -229,5 +237,52 @@ describe("OrdersService.updateStatus — Vercel-safe notification scheduling (wa
 
     expect(waitUntilMock).not.toHaveBeenCalled();
     expect(customerOrderStatusNotificationService.notifyIfTransitioned).not.toHaveBeenCalled();
+  });
+});
+
+// payment_required WhatsApp notification (PAYMENT_REQUIRED event) — fired
+// via the same waitUntil()-scheduled pattern as customer_order_status, but
+// only for the supplier "Confirm Enquiry" (PLACED -> PROCESSING) action.
+describe("OrdersService.updateStatus — payment_required notification routing", () => {
+  it("schedules payment_required for PLACED -> PROCESSING (Confirm Enquiry)", async () => {
+    const { service, paymentRequiredNotificationService } = buildService({ status: OrderStatus.PLACED });
+
+    await service.updateStatus("order-1", OrderStatus.PROCESSING, { userId: "u1" });
+
+    expect(waitUntilMock).toHaveBeenCalledTimes(2);
+    await Promise.all(waitUntilMock.mock.calls.map((call: any) => call[0]));
+
+    expect(paymentRequiredNotificationService.notifyIfTransitioned).toHaveBeenCalledTimes(1);
+    expect(paymentRequiredNotificationService.notifyIfTransitioned).toHaveBeenCalledWith({
+      orderId: "order-1",
+      previousStatus: OrderStatus.PLACED,
+      newStatus: OrderStatus.PROCESSING,
+    });
+  });
+
+  it("still invokes the (internally-guarded) payment_required service for unrelated transitions, but never for a rejected transition", async () => {
+    const { service, paymentRequiredNotificationService } = buildService({ status: OrderStatus.PROCESSING });
+
+    await service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" });
+    await Promise.all(waitUntilMock.mock.calls.map((call: any) => call[0]));
+
+    // The call site always schedules it (the PLACED/PENDING guard lives
+    // inside PaymentRequiredNotificationService itself, exercised directly
+    // in payment-required-notification.service.spec.ts) — but a rejected
+    // transition must never schedule anything at all.
+    expect(paymentRequiredNotificationService.notifyIfTransitioned).toHaveBeenCalledTimes(1);
+
+    waitUntilMock.mockClear();
+    paymentRequiredNotificationService.notifyIfTransitioned.mockClear();
+
+    const { service: rejectedService, paymentRequiredNotificationService: rejectedDep } = buildService({
+      status: OrderStatus.PLACED,
+    });
+    await expect(
+      rejectedService.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" })
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(waitUntilMock).not.toHaveBeenCalled();
+    expect(rejectedDep.notifyIfTransitioned).not.toHaveBeenCalled();
   });
 });

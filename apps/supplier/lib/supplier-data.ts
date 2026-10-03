@@ -1,4 +1,4 @@
-import { prisma, notifyCustomerOrderStatusChanged } from "@matsrc/db";
+import { prisma, notifyCustomerOrderStatusChanged, notifyPaymentRequired } from "@matsrc/db";
 import { waitUntil } from "@vercel/functions";
 import { parsePhoneNumber } from "libphonenumber-js";
 import { getProductImage } from "./category-images";
@@ -1612,6 +1612,26 @@ export async function updateSupplierOrderStatus(
       newStatus: status as any,
     }).catch((error) => {
       console.error(`Failed to send customer_order_status notification for order ${orderId}:`, error);
+    })
+  );
+
+  // Notification Engine — payment_required WhatsApp template
+  // (PAYMENT_REQUIRED event, Meta template ID 1457666726425273), via the
+  // same shared, framework-agnostic notifyPaymentRequired()
+  // (packages/db/lib/payment-required-notification.ts) also used by
+  // apps/api — see that module's top doc comment for the full audit of why
+  // this supplier-portal "Confirm Enquiry" transition is the correct,
+  // narrow trigger (only PLACED -> PROCESSING while paymentStatus is still
+  // PENDING; a safe no-op for every other transition/already-paid order,
+  // re-checked fresh from the DB inside the function itself). Scheduled via
+  // waitUntil() for the same Vercel-safety reason as the notification above.
+  waitUntil(
+    notifyPaymentRequired(prisma, {
+      orderId,
+      previousStatus: current.status as any,
+      newStatus: status as any,
+    }).catch((error) => {
+      console.error(`Failed to send payment_required notification for order ${orderId}:`, error);
     })
   );
 

@@ -54,6 +54,15 @@ export * from "./lib/supplier-rfq-received-notification";
 // documentation.
 export * from "./lib/supplier-po-received-notification";
 
+// payment_required WhatsApp notification (PAYMENT_REQUIRED event, Meta
+// WhatsApp Cloud API via the Notification Engine tables) — the single
+// shared, framework-agnostic implementation apps/api (NestJS wrapper),
+// apps/api's BestPriceSelectionService/supplier OrdersService, and
+// apps/supplier (direct, supplier-portal "Confirm Enquiry" action) all call
+// so there is exactly one send path for this notification. See
+// packages/db/lib/payment-required-notification.ts for full documentation.
+export * from "./lib/payment-required-notification";
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

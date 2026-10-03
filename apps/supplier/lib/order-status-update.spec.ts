@@ -7,17 +7,18 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged, waitUntilMock } = vi.hoisted(() => {
+const { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged, notifyPaymentRequired, waitUntilMock } = vi.hoisted(() => {
   const orderRows = new Map<string, { id: string; status: string; items: any[] }>();
   const findUniqueCalls: any[] = [];
   const updateCalls: any[] = [];
   const notifyCustomerOrderStatusChanged = vi.fn(() => Promise.resolve());
+  const notifyPaymentRequired = vi.fn(() => Promise.resolve());
   // Mock of Vercel's waitUntil() — records every promise handed to it so
   // tests can assert the notification work is *scheduled* (kept alive past
   // the HTTP response) rather than fired off as a detached `void` promise
   // that Vercel's serverless runtime may kill before it settles.
   const waitUntilMock = vi.fn();
-  return { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged, waitUntilMock };
+  return { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged, notifyPaymentRequired, waitUntilMock };
 });
 
 vi.mock("@vercel/functions", () => ({
@@ -64,6 +65,12 @@ vi.mock("@matsrc/db", () => {
     // notification pipeline's own internals (covered separately in
     // packages/db/lib/customer-order-status-notification.spec.ts).
     notifyCustomerOrderStatusChanged,
+    // payment_required Meta WhatsApp notification (PAYMENT_REQUIRED event —
+    // see packages/db/lib/payment-required-notification.ts). Spied directly
+    // for the same reason as notifyCustomerOrderStatusChanged above; its own
+    // internals (PLACED -> PROCESSING + paymentStatus PENDING guard) are
+    // covered separately in packages/db/lib/payment-required-notification.spec.ts.
+    notifyPaymentRequired,
   };
 });
 
@@ -78,6 +85,7 @@ beforeEach(() => {
   findUniqueCalls.length = 0;
   updateCalls.length = 0;
   notifyCustomerOrderStatusChanged.mockClear();
+  notifyPaymentRequired.mockClear();
   waitUntilMock.mockClear();
 });
 
@@ -225,13 +233,18 @@ describe("updateSupplierOrderStatus — Vercel-safe notification scheduling (wai
     // independent of whether/when the notification promise settles.
     expect(result.status).toBe("DISPATCHED");
 
-    expect(waitUntilMock).toHaveBeenCalledTimes(1);
+    // Two notifications are now scheduled per transition:
+    // customer_order_status (always) and payment_required (guarded inside
+    // the shared payment-required-notification.ts module itself — a safe
+    // no-op here since this transition is PROCESSING -> DISPATCHED, not
+    // PLACED -> PROCESSING).
+    expect(waitUntilMock).toHaveBeenCalledTimes(2);
     // The exact value handed to waitUntil() must be a Promise (the
     // notification work), proving it is being kept alive rather than
     // simply discarded.
     const scheduled = waitUntilMock.mock.calls[0][0];
     expect(scheduled).toBeInstanceOf(Promise);
-    await scheduled;
+    await Promise.all(waitUntilMock.mock.calls.map((call) => call[0]));
 
     expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledTimes(1);
     expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledWith(
@@ -279,7 +292,9 @@ describe("updateSupplierOrderStatus — Vercel-safe notification scheduling (wai
     await updateSupplierOrderStatus("order-23", "DISPATCHED" as any);
     await updateSupplierOrderStatus("order-23", "DELIVERED" as any);
 
-    expect(waitUntilMock).toHaveBeenCalledTimes(3);
+    // Two notifications (customer_order_status + payment_required) per
+    // transition, three transitions = 6 scheduled calls.
+    expect(waitUntilMock).toHaveBeenCalledTimes(6);
     await Promise.all(waitUntilMock.mock.calls.map((call) => call[0]));
 
     expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledTimes(3);
@@ -289,5 +304,15 @@ describe("updateSupplierOrderStatus — Vercel-safe notification scheduling (wai
       ["PROCESSING", "DISPATCHED"],
       ["DISPATCHED", "DELIVERED"],
     ]);
+
+    // payment_required is scheduled on every transition (its own internal
+    // guard decides whether to actually notify), but only the first
+    // PLACED -> PROCESSING call here is the genuine trigger.
+    expect(notifyPaymentRequired).toHaveBeenCalledTimes(3);
+    expect(notifyPaymentRequired).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({ orderId: "order-23", previousStatus: "PLACED", newStatus: "PROCESSING" })
+    );
   });
 });

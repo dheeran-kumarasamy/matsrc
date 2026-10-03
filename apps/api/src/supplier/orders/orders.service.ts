@@ -7,6 +7,7 @@ import { formatDate, humanizeToken } from "src/supplier/utils";
 import { NotificationService } from "src/notifications/notification.service";
 import { CustomerOrderStatusNotificationService } from "src/notification-engine/whatsapp/customer-order-status-notification.service";
 import { SupplierRfqReceivedNotificationService } from "src/notification-engine/whatsapp/supplier-rfq-received-notification.service";
+import { PaymentRequiredNotificationService } from "src/notification-engine/whatsapp/payment-required-notification.service";
 
 // Valid supplier-triggered transitions between the existing OrderStatus enum
 // values (packages/db/prisma/schema.prisma) — mirrors the equivalent table
@@ -36,7 +37,8 @@ export class OrdersService {
     private readonly supplierContext: SupplierContextService,
     private readonly notificationService: NotificationService,
     private readonly customerOrderStatusNotificationService: CustomerOrderStatusNotificationService,
-    private readonly supplierRfqReceivedNotificationService: SupplierRfqReceivedNotificationService
+    private readonly supplierRfqReceivedNotificationService: SupplierRfqReceivedNotificationService,
+    private readonly paymentRequiredNotificationService: PaymentRequiredNotificationService
   ) {}
 
   async findAll(user: any) {
@@ -194,6 +196,23 @@ export class OrdersService {
         .notifyIfTransitioned({ orderId: id, previousStatus: current.status, newStatus: order.status })
         .catch((error) => {
           this.logger.warn(`Failed to send customer_order_status notification for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
+        })
+    );
+
+    // Notification Engine — payment_required WhatsApp template
+    // (PAYMENT_REQUIRED event, Meta template ID 1457666726425273). Fires
+    // only on a genuine PLACED -> PROCESSING transition while the order's
+    // paymentStatus is still PENDING (re-checked fresh from the DB inside
+    // the service itself) — see
+    // packages/db/lib/payment-required-notification.ts's top doc comment
+    // for the full audit of why this supplier "Confirm Enquiry" transition
+    // is the correct, narrow trigger. Scheduled via Vercel's waitUntil() for
+    // the same reliability reason as the notification above.
+    waitUntil(
+      this.paymentRequiredNotificationService
+        .notifyIfTransitioned({ orderId: id, previousStatus: current.status, newStatus: order.status })
+        .catch((error) => {
+          this.logger.warn(`Failed to send payment_required notification for order ${id}: ${error instanceof Error ? error.message : String(error)}`);
         })
     );
 

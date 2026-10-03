@@ -61,7 +61,12 @@ POLICIES.push(
   { eventType: "QUOTE_RECEIVED", channel: "WHATSAPP", templateName: "quote_received", displayName: "Quote Received", description: "Notifies a customer that a supplier has responded to their RFQ with a quote.", priority: "P1", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   { eventType: "QUOTE_COMPARISON_READY", channel: "WHATSAPP", templateName: "quote_comparison_ready", displayName: "Quote Comparison Ready", description: "Notifies a customer that enough quotes have been received to compare and select.", priority: "P1", cooldownMinutes: null, maxPerDay: 1, businessHoursOnly: false },
   { eventType: "QUOTE_EXPIRY_REMINDER", channel: "WHATSAPP", templateName: "quote_expiry_reminder", displayName: "Quote Expiry Reminder", description: "Reminds a customer that a received quote is about to expire.", priority: "P1", cooldownMinutes: 240, maxPerDay: 1, businessHoursOnly: true },
-  { eventType: "PAYMENT_REQUIRED", channel: "WHATSAPP", templateName: "payment_required", displayName: "Payment Required", description: "Notifies a customer that payment is required to proceed with an order.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
+  // Meta template mapping: approved Utility template (ID 1457666726425273,
+  // language "en"), static "Make Payment" QUICK_REPLY button (not a dynamic
+  // URL button), exactly 3 body variables ({{1}}=order/enquiry ID,
+  // {{2}}=amount payable, {{3}}=payment deadline) — see
+  // packages/db/lib/payment-required-notification.ts.
+  { eventType: "PAYMENT_REQUIRED", channel: "WHATSAPP", templateName: "payment_required", metaTemplateId: "1457666726425273", displayName: "Payment Required", description: "Notifies a customer that payment is required to proceed with an order.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   { eventType: "PAYMENT_FAILED", channel: "WHATSAPP", templateName: "payment_failed", displayName: "Payment Failed", description: "Notifies a customer that a payment attempt failed.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   // Meta template mapping: approved Utility/"Order Status" template, no
   // header, no buttons, exactly 2 body variables ({{1}}=enquiry/order ID,

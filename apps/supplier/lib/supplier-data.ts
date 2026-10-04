@@ -657,6 +657,38 @@ export async function getPublicSupplierListings() {
       ...publicFields
     } = listing;
 
+    // S04/S09 FIX — root cause of the base-price/tier-pricing inconsistency
+    // between the Product page, Cart, and Order: this function's internal
+    // raw numeric fields are named with an underscore prefix
+    // (_basePriceRaw/_stockRaw/_maxServiceableQtyRaw/_pricingTiersRaw,
+    // destructured and stripped out above), but apps/web's cart-add
+    // (app/api/builder/cart/items/route.ts) and checkout re-resolution
+    // (lib/order-checkout.ts) — the ONLY code that determines the
+    // authoritative unit price written into CartItem.resolvedUnitPrice and
+    // OrderItem.unitPrice — reads these same values under the NON-prefixed
+    // names basePriceRaw/stockRaw/maxServiceableQtyRaw/pricingTiersRaw.
+    // Since this public API response never emitted those exact field
+    // names, they were always `undefined` on the apps/web side, so
+    // toResolutionCandidate() there silently fell back to treating every
+    // listing as having NO pricing tiers at all (an implicit single
+    // "1..maxServiceableQty" tier at basePrice) — meaning every
+    // Add-to-Cart and checkout/order price resolution completely bypassed
+    // whatever tier pricing the supplier actually configured, while the
+    // PLP "Starting from ₹X" price (startingPrice below) stayed correct
+    // because it is computed server-side, here, BEFORE this stripping step.
+    //
+    // Fix: republish the exact same already-computed raw values under the
+    // field names apps/web already expects, instead of only using them
+    // internally and discarding them. This does NOT change tier-pricing
+    // selection/calculation in any way (resolveLowestPriceForQuantity /
+    // effectiveTierForQuantity are untouched) — it only ensures the data
+    // those existing functions need to run correctly is actually present
+    // once this response crosses the network boundary into apps/web.
+    const basePriceRaw = _basePriceRaw;
+    const stockRaw = _stockRaw;
+    const maxServiceableQtyRaw = _maxServiceableQtyRaw;
+    const pricingTiersRaw = _pricingTiersRaw;
+
     // Cross-supplier photo resolution: when multiple suppliers share this
     // canonical group, prefer a genuinely supplier-uploaded photo over the
     // generic category fallback whenever *any* group member has one — so a
@@ -693,6 +725,21 @@ export async function getPublicSupplierListings() {
       // tier price), mirroring headline/range's fallback behavior — the PLP
       // must show the existing "price unavailable" state rather than ₹0.
       startingPrice,
+      // S04/S09 FIX: raw numeric pricing fields (THIS listing's own
+      // supplier/product values — unrelated to the cross-supplier
+      // headline/range/startingPrice above), exposed under the exact field
+      // names apps/supplier's own ResolutionCandidate construction uses
+      // internally (see `candidates` above) and apps/web's
+      // toResolutionCandidate() in app/api/builder/cart/items/route.ts and
+      // lib/order-checkout.ts already expect. This is the single
+      // authoritative Product.basePrice/PricingTier data for cart-add and
+      // checkout/order unit-price resolution to consume — no new price
+      // field, no duplicated calculation, just making the existing
+      // server-computed values actually reach the consumer that needs them.
+      basePriceRaw,
+      stockRaw,
+      maxServiceableQtyRaw,
+      pricingTiersRaw,
     };
   });
 }

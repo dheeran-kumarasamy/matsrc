@@ -7,7 +7,6 @@
 // (spec section 5A).
 
 import { useRouter, usePathname } from "next/navigation";
-import Link from "next/link";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import EnquiryPanel from "@/components/products/EnquiryPanel";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
@@ -111,9 +110,24 @@ export default function ProductQuickView({ product }: Props) {
                 </div>
               </div>
 
-              <Link href={`/products/${product.id}`} className="inline-block text-xs text-[color:var(--posh-primary)] hover:underline">
+              {/* C14 fix: this previously used next/link, whose href
+                  (`/products/${product.id}`) is identical to the CURRENT
+                  browser URL — the Next.js intercepting-route convention
+                  ((.)products/[slug]) that renders this very overlay only
+                  ever activates on a *client-side* navigation to that URL;
+                  the URL here never actually changes (we're already on it,
+                  the overlay is just layered over the PLP underneath), so
+                  next/link's client-side router saw "same URL" and did
+                  nothing at all when clicked. A plain <a> forces a real
+                  hard navigation, which (per this file's own top doc
+                  comment and app/(builder)/products/[slug]/page.tsx)
+                  bypasses route interception entirely and renders the full
+                  standalone Product Detail page — the same canonical
+                  id/slug-based URL used everywhere else (direct links,
+                  refresh, sharing). */}
+              <a href={`/products/${product.id}`} className="inline-block text-xs text-[color:var(--posh-primary)] hover:underline">
                 View full product page →
-              </Link>
+              </a>
             </div>
           </section>
 

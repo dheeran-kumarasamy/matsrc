@@ -29,6 +29,7 @@ export function OrderStatusActions({
   orderId,
   status,
   tracking = [],
+  paymentStatus,
 }: {
   orderId: string;
   status: OrderStatus;
@@ -37,6 +38,14 @@ export function OrderStatusActions({
   // Builder") from a supplier decline ("Declined by Supplier") when
   // status === "CANCELLED" — see lib/order-status-transitions.ts.
   tracking?: TrackingEntryLike[];
+  // C34 (UI-level prevention only): when present and not "PAID", the
+  // "Mark Delivered" action is disabled with an explanatory message
+  // instead of being submitted and rejected by the server. The actual,
+  // mandatory enforcement lives server-side in updateSupplierOrderStatus
+  // (lib/supplier-data.ts) / OrdersService.updateStatus (apps/api) — this
+  // prop only avoids a round-trip for the common case of a supplier
+  // attempting delivery through this UI before payment is confirmed.
+  paymentStatus?: "PENDING" | "PENDING_VERIFICATION" | "PAID" | "FAILED" | "REFUNDED";
 }) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
@@ -72,6 +81,14 @@ export function OrderStatusActions({
   const actions = getAvailableActions(status);
   const readOnlyLabel = getReadOnlyStatusLabel(status, tracking);
 
+  // C34 (UI-level prevention): a "DELIVER" action is disabled whenever
+  // paymentStatus is known and isn't "PAID" — mirrors (but does not
+  // replace) the mandatory server-side guard in updateSupplierOrderStatus.
+  // `paymentStatus === undefined` (caller didn't pass it) never disables
+  // anything, so this stays backward-compatible with any other caller of
+  // this component.
+  const paymentBlocksDelivery = paymentStatus !== undefined && paymentStatus !== "PAID";
+
   return (
     <aside className="panel p-5">
       <h4 className="text-lg font-bold text-slate-900">Update Status</h4>
@@ -88,18 +105,29 @@ export function OrderStatusActions({
 
       {actions.length > 0 ? (
         <div className="mt-3 space-y-2">
-          {actions.map((action) => (
-            <button
-              key={action.key}
-              disabled={pending !== null}
-              onClick={() => updateStatus(action.nextStatus)}
-              className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-60 ${
-                ACTION_STYLES[action.nextStatus] ?? DEFAULT_ACTION_STYLE
-              }`}
-            >
-              {pending === action.nextStatus ? "Updating..." : action.label}
-            </button>
-          ))}
+          {actions.map((action) => {
+            // C34: only the DELIVER action is gated on payment — Confirm/
+            // Decline/Dispatch are unaffected.
+            const disabledForPayment = action.key === "DELIVER" && paymentBlocksDelivery;
+            return (
+              <button
+                key={action.key}
+                disabled={pending !== null || disabledForPayment}
+                onClick={() => updateStatus(action.nextStatus)}
+                title={disabledForPayment ? "Payment must be confirmed before this order can be marked delivered." : undefined}
+                className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-60 ${
+                  ACTION_STYLES[action.nextStatus] ?? DEFAULT_ACTION_STYLE
+                }`}
+              >
+                {pending === action.nextStatus ? "Updating..." : action.label}
+              </button>
+            );
+          })}
+          {paymentBlocksDelivery && actions.some((action) => action.key === "DELIVER") ? (
+            <p className="text-xs font-semibold text-amber-600">
+              Payment must be confirmed before this order can be marked delivered.
+            </p>
+          ) : null}
         </div>
       ) : (
         // Terminal state (Delivered/Cancelled) or an order status this table

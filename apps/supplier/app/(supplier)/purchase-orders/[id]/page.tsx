@@ -96,10 +96,15 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
       ) : null}
 
       <div className="panel flex flex-wrap items-center justify-between gap-4 p-4">
+        {/* C39 fix: the export endpoint (apps/web's
+            /api/builder/purchase-orders/[id]/export, shared across both
+            portals via po.exportUrl) now returns a real PDF with
+            Content-Disposition: attachment, so the browser downloads it
+            directly — target="_blank" is no longer needed and previously
+            contributed to this always opening a new tab instead of
+            downloading. */}
         <a
           href={`${po.exportUrl}?format=pdf`}
-          target="_blank"
-          rel="noreferrer"
           className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
         >
           Download PO (PDF)

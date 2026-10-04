@@ -1,14 +1,24 @@
 import { NextResponse } from "next/server";
+import PDFDocument from "pdfkit";
 import { prisma, getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
 import { serializePurchaseOrder, purchaseOrderInclude } from "@/lib/purchase-order-utils";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 // GET /api/builder/purchase-orders/[id]/export
 // Auto-generates a downloadable JSON representation of the PO for record-keeping.
 // Kept async/on-demand (only computed when requested) so it never blocks the approval flow.
-// ?format=pdf returns a simple print-ready HTML document the browser can "Save as PDF" —
-// this still requires zero manual upload/print/scan steps in the core PO flow.
+//
+// C39 fix: ?format=pdf previously returned a print-ready HTML document with
+// `Content-Disposition: inline`. The browser has no PDF renderer for
+// text/html, so it always opened that HTML in a new tab instead of ever
+// downloading a .pdf file — "Download PO (PDF)" never actually produced a
+// PDF. This now reuses the same pdfkit library already used by the
+// equivalent builder invoice PDF endpoint
+// (app/api/builder/orders/[id]/invoice/pdf/route.ts) to generate a real PDF
+// buffer, served with `application/pdf` + `Content-Disposition: attachment`
+// so the browser downloads it directly rather than opening a tab.
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
     const ctx = await resolveUserCtx(request);
@@ -33,11 +43,15 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const format = url.searchParams.get("format");
 
     if (format === "pdf") {
-      const html = renderPoHtml(payload);
-      return new NextResponse(html, {
+      const buffer = await renderPoPdf(payload);
+      // Meaningful filename using the real PO reference already issued
+      // for this order (po.poNumber, e.g. "PO-2026-00001") — matches the
+      // existing naming convention used elsewhere in the PO flow, rather
+      // than inventing a new one.
+      return new NextResponse(buffer as unknown as BodyInit, {
         headers: {
-          "Content-Type": "text/html; charset=utf-8",
-          "Content-Disposition": `inline; filename="${payload.poNumber}.html"`,
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${payload.poNumber}.pdf"`,
         },
       });
     }
@@ -53,74 +67,58 @@ export async function GET(request: Request, { params }: { params: { id: string }
   }
 }
 
-function renderPoHtml(po: any): string {
-  const rows = po.lineItems
-    .map(
-      (li: any) => `
-      <tr>
-        <td>${escapeHtml(li.productName)}</td>
-        <td style="text-align:right">${li.quantity} ${escapeHtml(li.unit ?? "")}</td>
-        <td style="text-align:right">₹${Number(li.unitPrice).toLocaleString("en-IN")}</td>
-        <td style="text-align:right">₹${Number(li.tax).toLocaleString("en-IN")}</td>
-        <td>${li.deliveryDate ? new Date(li.deliveryDate).toLocaleDateString("en-IN") : "TBD"}</td>
-        <td style="text-align:right">₹${Number(li.lineTotal).toLocaleString("en-IN")}</td>
-      </tr>`
-    )
-    .join("");
+// C39 fix: generates an actual PDF buffer (replacing the previous HTML
+// string that could never be a real downloadable .pdf) using pdfkit — the
+// same library/pattern as app/api/builder/orders/[id]/invoice/pdf/route.ts,
+// so no second PDF framework is introduced. Renders the identical content
+// the old HTML template showed (status, version, buyer/supplier, line
+// items, total, notes) from the same serialized PO payload.
+function renderPoPdf(po: any): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: "A4", margin: 40 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk) => chunks.push(chunk as Buffer));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
 
-  return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>${escapeHtml(po.poNumber)}</title>
-<style>
-  body { font-family: -apple-system, Arial, sans-serif; color: #1e293b; padding: 32px; }
-  h1 { font-size: 20px; margin-bottom: 4px; }
-  .meta { color: #64748b; font-size: 13px; margin-bottom: 24px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-  th, td { border: 1px solid #e2e8f0; padding: 8px 10px; font-size: 13px; }
-  th { background: #f8fafc; text-align: left; }
-  .total { text-align: right; font-weight: 700; margin-top: 12px; }
-  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #dbeafe; color: #1d4ed8; font-size: 12px; font-weight: 600; }
-</style>
-</head>
-<body>
-  <h1>Purchase Order ${escapeHtml(po.poNumber)}</h1>
-  <p class="meta">
-    Status: <span class="badge">${escapeHtml(po.status)}</span> · Version ${po.version} ·
-    Generated ${new Date(po.generatedAt).toLocaleString("en-IN")}
-  </p>
-  <p class="meta">
-    Buyer: ${escapeHtml(po.builder?.name ?? po.builder?.email ?? "Builder")}<br/>
-    Supplier: ${escapeHtml(po.supplier?.companyName ?? "Supplier")}<br/>
-    Enquiry/Order ref: ${escapeHtml(po.orderId)}<br/>
-    ${po.approvedAt ? `Approved: ${new Date(po.approvedAt).toLocaleString("en-IN")} by ${escapeHtml(po.approvedBy ?? "")}` : "Awaiting approval"}
-  </p>
-  <table>
-    <thead>
-      <tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Tax</th><th>Delivery</th><th>Line Total</th></tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <p class="total">Total: ₹${Number(po.total).toLocaleString("en-IN")}</p>
-  ${po.notes ? `<p class="meta">Notes: ${escapeHtml(po.notes)}</p>` : ""}
-</body>
-</html>`;
-}
+    doc.fontSize(18).text(`Purchase Order ${po.poNumber}`);
+    doc
+      .fontSize(10)
+      .fillColor("#64748b")
+      .text(`Status: ${po.status} · Version ${po.version}`)
+      .text(`Generated: ${new Date(po.generatedAt).toLocaleString("en-IN")}`)
+      .text(`Buyer: ${po.builder?.name ?? po.builder?.email ?? "Builder"}`)
+      .text(`Supplier: ${po.supplier?.companyName ?? "Supplier"}`)
+      .text(`Enquiry/Order ref: ${po.enquiryId ?? po.orderId}`)
+      .text(
+        po.approvedAt
+          ? `Approved: ${new Date(po.approvedAt).toLocaleString("en-IN")} by ${po.approvedBy ?? ""}`
+          : "Awaiting approval"
+      )
+      .fillColor("#0f172a");
 
-function escapeHtml(value: string): string {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => {
-    switch (char) {
-      case "&":
-        return "&amp;";
-      case "<":
-        return "&lt;";
-      case ">":
-        return "&gt;";
-      case '"':
-        return "&quot;";
-      default:
-        return "&#39;";
+    doc.moveDown();
+    doc.fontSize(12).text("Line Items", { underline: true });
+    doc.moveDown(0.3);
+    for (const li of po.lineItems) {
+      const deliveryLabel = li.deliveryDate ? new Date(li.deliveryDate).toLocaleDateString("en-IN") : "TBD";
+      doc
+        .fontSize(9)
+        .text(
+          `${li.productName} — ${li.quantity} ${li.unit ?? ""} x ₹${Number(li.unitPrice).toLocaleString("en-IN")} ` +
+            `+ ₹${Number(li.tax).toLocaleString("en-IN")} tax = ₹${Number(li.lineTotal).toLocaleString("en-IN")} ` +
+            `(delivery: ${deliveryLabel})`
+        );
     }
+
+    doc.moveDown();
+    doc.fontSize(12).text(`Total: ₹${Number(po.total).toLocaleString("en-IN")}`, { align: "right" });
+
+    if (po.notes) {
+      doc.moveDown();
+      doc.fontSize(10).fillColor("#64748b").text(`Notes: ${po.notes}`).fillColor("#0f172a");
+    }
+
+    doc.end();
   });
 }

@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged, notifyPaymentRequired, waitUntilMock } = vi.hoisted(() => {
-  const orderRows = new Map<string, { id: string; status: string; items: any[] }>();
+  const orderRows = new Map<string, { id: string; status: string; items: any[]; paymentStatus: string }>();
   const findUniqueCalls: any[] = [];
   const updateCalls: any[] = [];
   const notifyCustomerOrderStatusChanged = vi.fn(() => Promise.resolve());
@@ -89,8 +89,12 @@ beforeEach(() => {
   waitUntilMock.mockClear();
 });
 
-function seedOrder(id: string, status: string) {
-  orderRows.set(id, { id, status, items: [] });
+// paymentStatus defaults to "PAID" so every existing transition-guard test
+// below (none of which is exercising the C34 payment-before-delivery rule)
+// keeps passing unchanged — pass an explicit paymentStatus to test that
+// rule specifically (see the dedicated describe block further down).
+function seedOrder(id: string, status: string, paymentStatus: string = "PAID") {
+  orderRows.set(id, { id, status, items: [], paymentStatus });
 }
 
 describe("updateSupplierOrderStatus — backend transition guard", () => {
@@ -314,5 +318,62 @@ describe("updateSupplierOrderStatus — Vercel-safe notification scheduling (wai
       expect.anything(),
       expect.objectContaining({ orderId: "order-23", previousStatus: "PLACED", newStatus: "PROCESSING" })
     );
+  });
+});
+
+// C34 — an order must never be marked DELIVERED while payment is not
+// settled. This is the supplier portal's own copy of the rule (mirrors the
+// equivalent guard/tests in apps/api's OrdersService) — the "Mark
+// Delivered" button here (components/supplier/OrderStatusActions.tsx) calls
+// PATCH /api/supplier/orders/:id, which calls this function directly, so
+// this is the single place that must reject the transition even if the
+// request bypasses the UI entirely.
+describe("updateSupplierOrderStatus — C34 payment-before-delivery guard", () => {
+  it("rejects Mark Delivered when payment is still PENDING", async () => {
+    seedOrder("order-30", "DISPATCHED", "PENDING");
+    await expect(updateSupplierOrderStatus("order-30", "DELIVERED" as any)).rejects.toThrow(
+      /cannot be marked as delivered until payment has been confirmed/
+    );
+  });
+
+  it("rejects Mark Delivered when payment proof is still PENDING_VERIFICATION", async () => {
+    seedOrder("order-31", "DISPATCHED", "PENDING_VERIFICATION");
+    await expect(updateSupplierOrderStatus("order-31", "DELIVERED" as any)).rejects.toThrow(
+      /cannot be marked as delivered until payment has been confirmed/
+    );
+  });
+
+  it("rejects Mark Delivered for a REFUNDED order", async () => {
+    seedOrder("order-32", "DISPATCHED", "REFUNDED");
+    await expect(updateSupplierOrderStatus("order-32", "DELIVERED" as any)).rejects.toThrow(
+      /cannot be marked as delivered until payment has been confirmed/
+    );
+  });
+
+  it("allows Mark Delivered once payment is PAID", async () => {
+    seedOrder("order-33", "DISPATCHED", "PAID");
+    const result = await updateSupplierOrderStatus("order-33", "DELIVERED" as any);
+    expect(result.status).toBe("DELIVERED");
+  });
+
+  it("allows Mark Delivered from OUT_FOR_DELIVERY once payment is PAID", async () => {
+    seedOrder("order-34", "OUT_FOR_DELIVERY", "PAID");
+    const result = await updateSupplierOrderStatus("order-34", "DELIVERED" as any);
+    expect(result.status).toBe("DELIVERED");
+  });
+
+  it("never blocks non-delivery transitions regardless of payment status", async () => {
+    seedOrder("order-35", "PROCESSING", "PENDING");
+    const result = await updateSupplierOrderStatus("order-35", "DISPATCHED" as any);
+    expect(result.status).toBe("DISPATCHED");
+  });
+
+  it("does not schedule any notification when Mark Delivered is rejected for unpaid orders", async () => {
+    seedOrder("order-36", "DISPATCHED", "PENDING");
+    await expect(updateSupplierOrderStatus("order-36", "DELIVERED" as any)).rejects.toThrow(
+      /cannot be marked as delivered until payment has been confirmed/
+    );
+    expect(waitUntilMock).not.toHaveBeenCalled();
+    expect(notifyCustomerOrderStatusChanged).not.toHaveBeenCalled();
   });
 });

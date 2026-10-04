@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from "@nestjs/common";
 import { waitUntil } from "@vercel/functions";
-import { OrderStatus, generateOrderNumber } from "@matsrc/db";
+import { OrderStatus, PaymentStatus, generateOrderNumber } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
 import { formatDate, humanizeToken } from "src/supplier/utils";
@@ -91,6 +91,10 @@ export class OrdersService {
       quantity: `${item.quantity} ${item.product.unit}`,
       material: item.product.name,
       status: item.order.status,
+      // C34: surfaced so updateStatus() below can enforce "paid before
+      // delivery" using the order's *current* payment state at the moment
+      // of the transition attempt, without a second round-trip.
+      paymentStatus: item.order.paymentStatus,
       tracking: item.order.tracking.map((entry) => ({
         id: entry.id,
         label: entry.note ?? humanizeToken(entry.status),
@@ -111,6 +115,30 @@ export class OrdersService {
     if (!VALID_SUPPLIER_TRANSITIONS[current.status]?.includes(status)) {
       throw new BadRequestException(
         `Invalid order status transition: cannot move from ${current.status} to ${status}`
+      );
+    }
+
+    // C34 — server-side enforcement: an order must never be marked DELIVERED
+    // while its payment is not yet settled. This is the single authoritative
+    // place Order.status transitions to DELIVERED go through for every
+    // caller — the supplier portal's "Mark Delivered" action (PATCH
+    // /api/supplier/orders/:id via this same OrdersService in the NestJS
+    // deployment) and the WhatsApp "DELIVERED <order-id>" bot flow
+    // (OrderStatusFlow, src/whatsapp/flows/order-status.flow.ts) both call
+    // this method, so gating here blocks every path, including a direct API
+    // call that bypasses the UI entirely. Uses the existing PaymentStatus
+    // enum (packages/db/prisma/schema.prisma) — PAID is the only status that
+    // means payment has actually been settled, via any of the existing
+    // payment methods (UPI/CARD/NET_BANKING/COD/CREDIT/BANK_TRANSFER): the
+    // payment gateway/admin bank-transfer verification/admin invoice flow
+    // all funnel into setting paymentStatus = PAID (see
+    // apps/api/src/admin/payments/payments.service.ts and the ICICI
+    // gateway integration) rather than this service ever guessing or
+    // auto-marking payment itself. REFUNDED is deliberately NOT treated as
+    // paid — a refunded order must not be delivered either.
+    if (status === OrderStatus.DELIVERED && current.paymentStatus !== PaymentStatus.PAID) {
+      throw new BadRequestException(
+        "This order cannot be marked as delivered until payment has been confirmed."
       );
     }
 

@@ -4,16 +4,33 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import GoogleIcon from "@/components/shared/GoogleIcon";
 
 // UF-01 Steps 1–5
+//
+// C22 fix: removed the "Select Role" step entirely. This is the customer
+// (Builder) portal's registration page — apps/web has no supplier-facing
+// registration flow (supplier sign-up/onboarding is a completely separate
+// app, apps/supplier, with its own auth.ts/onboarding page), so asking the
+// customer to choose between "Builder"/"Supplier" here was unnecessary and
+// confusing. The role is now a fixed constant (never a user-selectable or
+// otherwise client-controlled value) matching the SAME default this portal
+// already assigns a brand-new user elsewhere when no explicit choice is
+// made — see /api/auth/verify-otp/route.ts's `create: { ..., role:
+// "BUILDER" }` and lib/builder-db.ts's getOrCreateBuilder (`role:
+// "BUILDER"`). The backend (/api/auth/set-role) still independently
+// validates the role value server-side (rejects anything other than
+// "BUILDER"/"SUPPLIER") — this change does not weaken that validation, it
+// just stops presenting a choice that doesn't apply to this portal.
+const CUSTOMER_PORTAL_ROLE = "BUILDER" as const;
+
 export default function RegisterPage() {
   const router = useRouter();
-  const [step, setStep] = useState<"channel" | "otp" | "role" | "contact">("channel");
+  const [step, setStep] = useState<"channel" | "otp" | "contact">("channel");
   const [channel, setChannel] = useState<"phone" | "email">("phone");
   const [identifier, setIdentifier] = useState("");
   const [name, setName] = useState("");
   const [otp, setOtp] = useState("");
-  const [role, setRole] = useState<"BUILDER" | "SUPPLIER" | "">("");
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [whatsappConsent, setWhatsappConsent] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -52,8 +69,8 @@ export default function RegisterPage() {
       if (!res.ok) throw new Error(data.message);
 
       // /api/auth/verify-otp only upserts the User row — it doesn't create a
-      // session by itself. Sign in now (before the Select Role / Contact
-      // steps) via the existing Credentials provider (apps/web/auth.ts) so
+      // session by itself. Sign in now (before the Contact step) via the
+      // existing Credentials provider (apps/web/auth.ts) so
       // /api/auth/set-role below can identify the signed-in user.
       const signInResult = await signIn("credentials", {
         email: data.email,
@@ -64,18 +81,13 @@ export default function RegisterPage() {
         throw new Error("Signed in but could not start your session. Please try again.");
       }
 
-      setStep("role");
+      // C22 fix: go straight to the Contact step — Select Role removed.
+      setStep("contact");
     } catch (err: any) {
       setError(err.message ?? "Invalid OTP");
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleRoleSelect(e: React.FormEvent) {
-    e.preventDefault();
-    if (!role) return;
-    setStep("contact");
   }
 
   async function handleContactSubmit(e: React.FormEvent) {
@@ -85,8 +97,11 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/set-role", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          role,
+        body: JSON.stringify({
+          // C22 fix: always the fixed customer-portal role — never a
+          // user-selected value. /api/auth/set-role still independently
+          // validates this server-side.
+          role: CUSTOMER_PORTAL_ROLE,
           whatsappNumber: whatsappNumber.trim() || null,
           whatsappConsent,
         }),
@@ -151,7 +166,13 @@ export default function RegisterPage() {
             className="w-full flex items-center justify-center gap-3 rounded-lg border py-2.5 text-sm font-medium transition-colors hover:opacity-80"
             style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)" }}
           >
-            Continue with Google
+            {/* C23 fix: button previously had no logo at all — just text.
+                Shared GoogleIcon component (components/shared/GoogleIcon.tsx,
+                extracted from the Sign In page's existing working Google
+                button) so both pages render identical, correctly sized/
+                aligned Google branding. */}
+            <GoogleIcon />
+            <span>Continue with Google</span>
           </button>
           <div className="relative">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t" style={{ borderColor: "var(--posh-border)" }} /></div>
@@ -212,38 +233,10 @@ export default function RegisterPage() {
         </form>
       )}
 
-      {step === "role" && (
-        <form onSubmit={handleRoleSelect} className="space-y-4">
-          <p className="text-sm mb-4" style={{ color: "var(--posh-fg-muted)" }}>How will you use Buildohub.in?</p>
-          <div className="grid grid-cols-2 gap-2 sm:gap-3">
-            {(["BUILDER", "SUPPLIER"] as const).map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setRole(r)}
-                // Compact, content-sized card — no min-height; padding/gaps
-                // tightened so the button is only as tall as its two lines of
-                // text need. Icon + heading stay inline on one row at every
-                // breakpoint (mobile included), never stacked.
-                className="rounded-xl border-2 p-2.5 text-left transition-all sm:p-3"
-                style={role === r
-                  ? { borderColor: "var(--posh-primary)", background: "rgba(196,145,90,0.10)" }
-                  : { borderColor: "var(--posh-border)" }}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span className="text-lg leading-none sm:text-xl">{r === "BUILDER" ? "🏗️" : "🏭"}</span>
-                  <span className="font-semibold text-sm" style={{ color: "var(--posh-fg)" }}>{r === "BUILDER" ? "Builder" : "Supplier"}</span>
-                </div>
-                <div className="mt-0.5 text-xs" style={{ color: "var(--posh-fg-muted)" }}>{r === "BUILDER" ? "Buy construction materials" : "Sell construction materials"}</div>
-              </button>
-            ))}
-          </div>
-          {error && <p className="text-red-400 text-xs">{error}</p>}
-          <button type="submit" disabled={loading || !role} className="posh-btn-solid w-full rounded-lg py-2.5 text-sm font-medium disabled:opacity-50">
-            {loading ? "Saving..." : "Continue →"}
-          </button>
-        </form>
-      )}
+      {/* C22 fix: "Select Role" step removed entirely — this customer
+          portal only ever registers a Builder account (see
+          CUSTOMER_PORTAL_ROLE above); the OTP step now transitions directly
+          into "contact". */}
 
       {step === "contact" && (
         <form onSubmit={handleContactSubmit} className="space-y-4">

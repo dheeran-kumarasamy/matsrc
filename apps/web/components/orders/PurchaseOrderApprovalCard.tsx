@@ -71,6 +71,14 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
   const [approverName, setApproverName] = useState("");
   const [approverDesignation, setApproverDesignation] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // C37 fix: an explicit Send OTP step — the previous implementation let the
+  // user type any 6-digit number straight into the approval form with no
+  // OTP ever actually sent. `sendingOtp`/`otpSent`/`otpDeliveryMessage`
+  // drive that new step; `otpSent` gates whether the OTP input is shown at
+  // all (no OTP field is rendered until a real send has been attempted).
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpDeliveryMessage, setOtpDeliveryMessage] = useState<string | null>(null);
 
   // "Need to change the quantity?" flow (§ create new enquiry / cancel order)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -144,6 +152,26 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
     }
   }
 
+  // C37 fix: sends a real, PO-scoped OTP via the new /send-otp endpoint
+  // before any OTP input is shown. Never claims success without an honest
+  // delivery outcome — the server's message (e.g. "OTP sent to your
+  // registered email (jo***@example.com)." when MSG91 SMS is stubbed) is
+  // surfaced verbatim rather than a generic "OTP sent".
+  async function sendOtp() {
+    setSendingOtp(true);
+    setError(null);
+    setOtpDeliveryMessage(null);
+    try {
+      const result = await builderApiPost<{ message?: string }>(`/purchase-orders/${po.id}/send-otp`, {});
+      setOtpDeliveryMessage(result.message ?? "OTP sent.");
+      setOtpSent(true);
+    } catch (err: any) {
+      setError(err.message ?? "Could not send the OTP. Please try again.");
+    } finally {
+      setSendingOtp(false);
+    }
+  }
+
   async function approve() {
     setApproving(true);
     setError(null);
@@ -156,9 +184,11 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
       setPo(updated);
       setShowOtp(false);
       setOtp("");
+      setOtpSent(false);
+      setOtpDeliveryMessage(null);
       router.refresh();
     } catch (err: any) {
-      setError("Approval failed. Check the OTP and try again.");
+      setError(err.message ?? "Approval failed. Check the OTP and try again.");
     } finally {
       setApproving(false);
     }
@@ -397,46 +427,88 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
         {isDraft ? (
           showOtp ? (
             <div className="w-full max-w-sm space-y-2 rounded-lg border border-slate-200 p-3">
-              <p className="text-xs text-slate-500">
-                Enter the 6-digit OTP sent to your registered mobile/email to digitally approve and issue this PO.
-              </p>
-              <input
-                type="text"
-                maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                placeholder="6-digit OTP"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm tracking-widest"
-              />
-              <input
-                type="text"
-                value={approverName}
-                onChange={(e) => setApproverName(e.target.value)}
-                placeholder="Approver name (optional)"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              <input
-                type="text"
-                value={approverDesignation}
-                onChange={(e) => setApproverDesignation(e.target.value)}
-                placeholder="Designation (optional)"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={approve}
-                  disabled={approving || otp.length !== 6}
-                  className="flex-1 rounded-md bg-[color:var(--posh-primary)] px-3 py-2 text-sm font-semibold text-[color:var(--posh-primary-fg)] disabled:opacity-60"
-                >
-                  {approving ? "Approving..." : "Confirm & Issue PO"}
-                </button>
-                <button
-                  onClick={() => setShowOtp(false)}
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
-                >
-                  Cancel
-                </button>
-              </div>
+              {!otpSent ? (
+                // C37 fix: no OTP input is shown until a real OTP has
+                // actually been requested/sent — the previous implementation
+                // let the user type any 6-digit number here with nothing
+                // ever sent.
+                <>
+                  <p className="text-xs text-slate-500">
+                    Approving this PO requires a one-time OTP for digital approval. Click below to send it to your
+                    registered mobile/email.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={sendOtp}
+                      disabled={sendingOtp}
+                      className="flex-1 rounded-md bg-[color:var(--posh-primary)] px-3 py-2 text-sm font-semibold text-[color:var(--posh-primary-fg)] disabled:opacity-60"
+                    >
+                      {sendingOtp ? "Sending OTP..." : "Send OTP"}
+                    </button>
+                    <button
+                      onClick={() => setShowOtp(false)}
+                      className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-500">
+                    {otpDeliveryMessage || "Enter the 6-digit OTP sent to approve and issue this PO."}
+                  </p>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                    placeholder="6-digit OTP"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm tracking-widest"
+                  />
+                  <input
+                    type="text"
+                    value={approverName}
+                    onChange={(e) => setApproverName(e.target.value)}
+                    placeholder="Approver name (optional)"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={approverDesignation}
+                    onChange={(e) => setApproverDesignation(e.target.value)}
+                    placeholder="Designation (optional)"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={approve}
+                      disabled={approving || otp.length !== 6}
+                      className="flex-1 rounded-md bg-[color:var(--posh-primary)] px-3 py-2 text-sm font-semibold text-[color:var(--posh-primary-fg)] disabled:opacity-60"
+                    >
+                      {approving ? "Approving..." : "Confirm & Issue PO"}
+                    </button>
+                    <button
+                      onClick={sendOtp}
+                      disabled={sendingOtp}
+                      className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
+                    >
+                      {sendingOtp ? "Resending..." : "Resend OTP"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowOtp(false);
+                        setOtpSent(false);
+                        setOtp("");
+                        setOtpDeliveryMessage(null);
+                      }}
+                      className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <button

@@ -76,6 +76,7 @@ model User {
   sites                  Site[]                  @relation("BuilderSites")
   tallyLedgerMapping     TallyLedgerMapping?
   sourcingSessions       SourcingSession[]       @relation("UserSourcingSessions")
+  otpChallenges          OtpChallenge[]
 
   // Legacy contractor-prefix code used only by pre-existing enquiry IDs in
   // the previous "<CONTRACTOR_CODE>-<SITE_CODE>-<SEQUENCE>" format (e.g.
@@ -156,6 +157,98 @@ model PendingContactVerification {
   @@unique([userId, channel])
   @@index([userId])
   @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────────
+// C20 + C37 — Shared, purpose-bound OTP challenge store.
+//
+// Generalizes the hashed-OTP + expiry + attempts + resend-cooldown pattern
+// already proven in PendingContactVerification (above) into a reusable
+// model that is NOT tied to a single (userId, channel) pair — C20 (login,
+// which may not yet have a resolved userId at send-time) and C37 (PO
+// approval, which must be scoped to a specific PurchaseOrder as well as a
+// user) both need extra/different scoping dimensions than the contact-
+// verification flow does, which is why a new model is introduced instead of
+// overloading PendingContactVerification's existing @@unique([userId,
+// channel]) constraint and its "exactly one pending value per channel"
+// semantics.
+//
+// SECURITY INVARIANTS (mirrors PendingContactVerification):
+//  - Only a salted hash of the OTP is ever persisted (see lib/otp-service).
+//  - A row is purpose-bound: a LOGIN_OTP challenge can never satisfy a
+//    PO_APPROVAL_OTP verification and vice versa (enforced by always
+//    filtering lookups on `purpose` in addition to the other scope columns).
+//  - A row is single-use: verified rows are marked `usedAt` (or deleted) so
+//    they can never be replayed.
+//  - Issuing a new OTP for the same (purpose, identifier[, purchaseOrderId])
+//    scope invalidates/overwrites the previous one.
+enum OtpPurpose {
+  LOGIN_OTP
+  PO_APPROVAL_OTP
+}
+
+enum OtpChannel {
+  SMS
+  EMAIL
+}
+
+enum OtpDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  NOT_CONFIGURED
+}
+
+model OtpChallenge {
+  id      String     @id @default(cuid())
+  purpose OtpPurpose
+
+  // Nullable: C20's identifier-first send step may not have a resolved User
+  // row yet (a brand-new phone/email); C37 always has an authenticated user.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // The normalized phone/email the OTP was (or will be) sent to — always
+  // present, since every purpose currently supported requires a delivery
+  // target. Never the raw/unnormalized user input.
+  identifier String
+
+  // PO_APPROVAL_OTP only — binds the challenge to one specific Purchase
+  // Order so an OTP issued for PO A can never approve PO B. Always null for
+  // LOGIN_OTP.
+  purchaseOrderId String?
+
+  // OTP is never stored in plain text — only a salted hash (scrypt, same
+  // primitive as PendingContactVerification/lib/otp-service).
+  otpHash String
+  otpSalt String
+
+  expiresAt   DateTime
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  usedAt      DateTime?
+
+  createdAt  DateTime @default(now())
+  lastSentAt DateTime @default(now())
+  sendCount  Int      @default(1)
+
+  // Delivery observability (§14 of the investigation) — never stores
+  // secrets, provider credentials, or the plaintext OTP.
+  channel           OtpChannel
+  provider          String
+  providerMessageId String?
+  deliveryStatus    OtpDeliveryStatus @default(PENDING)
+  lastError         String?
+
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([purpose])
+  @@index([identifier])
+  @@index([purchaseOrderId])
+  @@index([expiresAt])
+  @@index([purpose, identifier])
+  @@index([purpose, purchaseOrderId])
 }
 
 model KycDocument {

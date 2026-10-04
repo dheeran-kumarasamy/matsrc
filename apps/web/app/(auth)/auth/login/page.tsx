@@ -29,6 +29,11 @@ function LoginPageInner() {
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"identifier" | "otp">("identifier");
   const [loading, setLoading] = useState(false);
+  // Honest delivery status from /api/auth/send-otp (e.g. "OTP sent to your
+  // registered email (jo***@example.com)." when MSG91 SMS is stubbed and
+  // the email fallback was used) — never claims an SMS was sent when it
+  // wasn't (C20 fix).
+  const [deliveryMessage, setDeliveryMessage] = useState("");
   // P0 fix: surface Auth.js's `?error=...` redirect (e.g. after a failed
   // Google sign-in) as a real message instead of silently dropping it —
   // previously the page never read this param at all, so a failed Google
@@ -38,6 +43,7 @@ function LoginPageInner() {
   async function handleSendOtp(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setDeliveryMessage("");
     setLoading(true);
     try {
       const res = await fetch("/api/auth/send-otp", {
@@ -45,7 +51,12 @@ function LoginPageInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ channel, identifier }),
       });
-      if (!res.ok) throw new Error((await res.json()).message);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message);
+      // Surface the ACTUAL delivery channel/target (e.g. "OTP sent to your
+      // registered email (jo***@example.com)." if SMS was stubbed and the
+      // email fallback delivered it) — never a generic "OTP sent".
+      setDeliveryMessage(typeof data.message === "string" ? data.message : "");
       setStep("otp");
     } catch (err: any) {
       setError(err.message ?? "Failed to send OTP");
@@ -179,8 +190,12 @@ function LoginPageInner() {
       ) : (
         <form onSubmit={handleVerifyOtp} className="space-y-4">
           <p className="text-sm" style={{ color: "var(--posh-fg-muted)" }}>
-            Enter the 6-digit OTP sent to{" "}
-            <strong style={{ color: "var(--posh-fg)" }}>{identifier}</strong>
+            {deliveryMessage || (
+              <>
+                Enter the 6-digit OTP sent to{" "}
+                <strong style={{ color: "var(--posh-fg)" }}>{identifier}</strong>
+              </>
+            )}
           </p>
           <input
             type="text"

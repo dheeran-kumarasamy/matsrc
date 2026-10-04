@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { PurchaseOrderStatus, notifySupplierPoReceived } from "@matsrc/db";
+import { PurchaseOrderStatus, notifySupplierPoReceived, OtpPurpose } from "@matsrc/db";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
 import { serializePurchaseOrder, purchaseOrderInclude } from "@/lib/purchase-order-utils";
+import { verifyOtpChallenge, checkOtpVerifyRateLimit } from "@/lib/otp-service";
 
 export const dynamic = "force-dynamic";
 
@@ -9,15 +10,19 @@ export const dynamic = "force-dynamic";
 // OTP/in-app authenticated approval action = e-signature equivalent. Locks the PO,
 // transitions Draft → Issued, writes a non-repudiable AuditLog entry (actor, timestamp,
 // IP/device), and notifies the supplier in-app (best-effort, non-blocking).
+//
+// C37 fix: previously this only checked the OTP's syntactic shape
+// (`/^\d{6}$/`), so ANY 6-digit number approved the PO regardless of whether
+// an OTP was ever sent. Now verifies the actual, PO-scoped OtpChallenge
+// issued by the new /send-otp endpoint — purpose=PO_APPROVAL_OTP, scoped to
+// this specific purchaseOrderId, so an OTP issued for a different PO, a
+// different user, or a LOGIN_OTP challenge can never approve this PO.
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
     const ctx = getUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
     const body = await request.json().catch(() => ({}));
 
-    // Digital approval gate: require a verified OTP flag from the client (see
-    // MfaVerification component pattern already used at checkout). This keeps the
-    // approval action auditable and non-repudiable without any physical signature.
     const otp = typeof body.otp === "string" ? body.otp : "";
     if (!/^\d{6}$/.test(otp)) {
       return NextResponse.json({ error: "A valid 6-digit OTP is required to approve this purchase order" }, { status: 400 });
@@ -27,6 +32,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       where: { id: params.id, builderId: user.id },
       include: {
         supplier: { include: { user: true } },
+        builder: true,
         lineItems: { include: { product: true } },
         order: { select: { enquiryId: true } },
       },
@@ -38,6 +44,34 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     if (po.status !== PurchaseOrderStatus.DRAFT) {
       return NextResponse.json({ error: "Only draft purchase orders can be approved" }, { status: 400 });
+    }
+
+    if (!po.builder.email) {
+      return NextResponse.json({ error: "No registered email on file for this account" }, { status: 400 });
+    }
+
+    const verifyRateLimit = checkOtpVerifyRateLimit(`${user.id}:${po.id}`, OtpPurpose.PO_APPROVAL_OTP);
+    if (!verifyRateLimit.allowed) {
+      return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
+    }
+
+    // Digital approval gate: real OTP verification, not a shape check.
+    // Scoped to purpose + identifier (the builder's own registered email —
+    // the same identifier /send-otp issued the challenge against) + this
+    // exact purchaseOrderId.
+    const verified = await verifyOtpChallenge(
+      {
+        purpose: OtpPurpose.PO_APPROVAL_OTP,
+        identifier: po.builder.email,
+        userId: user.id,
+        purchaseOrderId: po.id,
+      },
+      otp
+    );
+
+    if (!verified.ok) {
+      const status = verified.code === "NOT_FOUND" || verified.code === "EXPIRED" ? 400 : 401;
+      return NextResponse.json({ error: verified.message }, { status });
     }
 
     const approverName = typeof body.approverName === "string" ? body.approverName.trim() : "";

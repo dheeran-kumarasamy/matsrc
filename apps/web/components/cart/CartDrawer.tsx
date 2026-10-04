@@ -284,14 +284,27 @@ export default function CartDrawer() {
               ) : (
                 items.map((item) => (
                   <div key={item.id} className="flex gap-3 rounded-2xl border p-3" style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.03)" }}>
-                    {/* C12 fix: this was always an empty, un-styled div — no
-                        <img> was ever rendered, so no cart item could ever
-                        show a product image regardless of what the cart API
-                        returned. Renders item.image (Product.images[0], see
-                        /api/builder/cart's GET handler) when present, falling
-                        back to the same neutral placeholder tile (not a
-                        broken <img>) when the product has no image. */}
-                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl" style={{ background: "rgba(var(--posh-wash-rgb),0.08)" }}>
+                    {/* C18 fix: product image/name were plain, unlinked
+                        markup — there was no way to reach the canonical
+                        Product Detail page from the Cart. Wrapped both in a
+                        Link to the existing canonical route
+                        (/products/[id] — the same route ProductCard and
+                        ProductQuickView already link to via the product's
+                        real id, see apps/supplier/lib/supplier-data.ts's
+                        `id: product.id`), using item.productId already
+                        present on every cart item (lib/store/cart-store.ts).
+                        No new route/duplicate PDP introduced. Closes the
+                        cart drawer on click (same convention as the empty
+                        "Browse materials" link above) so the PDP underneath
+                        is visible immediately instead of staying hidden
+                        behind the open Sheet. */}
+                    <Link
+                      href={`/products/${item.productId}`}
+                      onClick={() => closeCart()}
+                      aria-label={`View ${item.name} product details`}
+                      className="h-14 w-14 shrink-0 overflow-hidden rounded-xl transition-opacity hover:opacity-80"
+                      style={{ background: "rgba(var(--posh-wash-rgb),0.08)" }}
+                    >
                       {item.image ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -300,9 +313,16 @@ export default function CartDrawer() {
                           className="h-full w-full object-cover"
                         />
                       ) : null}
-                    </div>
+                    </Link>
                     <div className="flex-1">
-                      <p className="text-sm font-medium" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
+                      <Link
+                        href={`/products/${item.productId}`}
+                        onClick={() => closeCart()}
+                        className="text-sm font-medium transition-opacity hover:opacity-70 hover:underline underline-offset-2"
+                        style={{ color: "var(--posh-fg)" }}
+                      >
+                        {item.name}
+                      </Link>
                       <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
                         {getSupplierDisplayName(item.supplierName, item.supplierId)}
                       </p>

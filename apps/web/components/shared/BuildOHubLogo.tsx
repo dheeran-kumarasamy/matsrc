@@ -57,16 +57,20 @@ export default function BuildOHubLogo({ href = "/", size = "default", className 
     letterSpacing: "-0.01em",
   };
 
+  // C16: `.brand-wordmark` (app/globals.css) layers the Poppins brand
+  // typeface on top of `.posh-heading`'s existing weight/letter-spacing —
+  // scoped to this single shared logo component so no other heading
+  // anywhere else in the app changes font.
   if (href === null) {
     return (
-      <span className={`posh-heading ${className}`} style={style}>
+      <span className={`posh-heading brand-wordmark ${className}`} style={style}>
         {content}
       </span>
     );
   }
 
   return (
-    <Link href={href} className={`posh-heading shrink-0 ${className}`} style={style}>
+    <Link href={href} className={`posh-heading brand-wordmark shrink-0 ${className}`} style={style}>
       {content}
     </Link>
   );

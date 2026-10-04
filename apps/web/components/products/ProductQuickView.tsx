@@ -12,6 +12,7 @@ import EnquiryPanel from "@/components/products/EnquiryPanel";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import WatchlistButton from "@/components/products/WatchlistButton";
 import { getCategoryEmoji } from "@/lib/category-images";
+import { DELIVERY_TIMING_BROWSING_NOTE } from "@/lib/delivery-estimate";
 
 import { parseNumericLabel, type SupplierListing } from "@/lib/listings";
 
@@ -90,6 +91,11 @@ export default function ProductQuickView({ product }: Props) {
                   <p className="mt-1 font-semibold text-slate-900">{product.maxServiceableQty}</p>
                 </div>
               </div>
+
+              {/* C13 — same truthful delivery-timing framing as ProductCard
+                  (see lib/delivery-estimate.ts). Kept visually secondary,
+                  below the price/stock grid and above pricing tiers. */}
+              <p className="text-xs text-slate-400">{DELIVERY_TIMING_BROWSING_NOTE}</p>
 
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-slate-800">Pricing tiers</h3>

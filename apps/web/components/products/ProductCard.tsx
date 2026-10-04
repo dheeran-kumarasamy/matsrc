@@ -3,6 +3,7 @@ import { getCategoryEmoji } from "@/lib/category-images";
 import WatchlistToggleIcon from "@/components/products/WatchlistToggleIcon";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { resolveStartingDisplayPrice, formatStartingPriceLabel } from "@/lib/product-price-display";
+import { DELIVERY_TIMING_BROWSING_NOTE } from "@/lib/delivery-estimate";
 
 interface Props {
   skeleton?: boolean;
@@ -127,6 +128,17 @@ export default function ProductCard({ skeleton, product }: Props) {
             : "1 supplier quoting"}
         </span>
       </div>
+
+      {/* C13 — delivery timing visibility while browsing. No reliable
+          per-listing delivery-days estimate exists in the schema at PLP
+          time (see lib/delivery-estimate.ts doc comment for the full
+          investigation), so this surfaces the same truthful framing the
+          app already uses elsewhere for this gap, kept visually secondary
+          (smaller, muted) below price/supplier-count and above the primary
+          CTA so it doesn't clutter the card. */}
+      <p className="mt-1 text-[11px]" style={{ color: "var(--posh-fg-muted)" }}>
+        {DELIVERY_TIMING_BROWSING_NOTE}
+      </p>
 
       {/* Quick "Request Quote" action — subtle, reveals on hover on
           pointer devices; stays visible on touch (no hover state) so it's

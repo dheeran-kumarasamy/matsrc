@@ -48,6 +48,13 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
       <OrderStatusActions
         orderId={order.id}
         status={order.status}
+        // C34 (UI-level prevention): lets the "Mark Delivered" button be
+        // disabled before the supplier ever attempts the action, when the
+        // order's payment isn't settled yet. Purely a UX convenience — the
+        // server-side guard in updateSupplierOrderStatus (lib/supplier-data.ts)
+        // is what actually enforces the rule even if this prop is stale or
+        // this check is bypassed entirely.
+        paymentStatus={order.paymentStatus}
         // `label` already mirrors OrderTracking.note verbatim whenever a note
         // was recorded (see getSupplierOrderDetail's `label: entry.note ??
         // humanizeToken(entry.status)`), so it doubles as the `note` input

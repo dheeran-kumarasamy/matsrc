@@ -127,14 +127,32 @@ export default function RegisterPage() {
 
       {step === "channel" && (
         <form onSubmit={handleSendOtp} className="space-y-4">
-          {/* Social login */}
-          <a
-            href="/api/auth/signin/google?callbackUrl=%2Fdashboard"
+          {/* Social login — C02 fix: this previously used a bare <a href>
+              pointing straight at Auth.js's GET /api/auth/signin/google
+              endpoint. Auth.js (NextAuth v5) requires a valid CSRF token on
+              sign-in requests, normally attached automatically by the
+              signIn() client helper used below; a plain anchor navigation
+              never attaches it, so Auth.js rejected the request and bounced
+              the user to the configured error/sign-in page
+              (authConfig.pages.signIn = "/auth/login" in apps/web/auth.ts)
+              instead of ever reaching Google. Using the same signIn("google")
+              client call already used successfully on the Sign In page
+              (auth/login/page.tsx) and the supplier portal's Google button
+              fixes this without introducing a second auth mechanism — a new
+              Google user is still lazily created as a BUILDER the first time
+              an authenticated API route resolves their session
+              (lib/builder-db.ts's getOrCreateBuilder/resolveUserCtx), exactly
+              like the existing phone/email OTP flow; an existing
+              Google-linked account (allowDangerousEmailAccountLinking: true
+              in auth.ts) is simply signed back into its same User row. */}
+          <button
+            type="button"
+            onClick={() => signIn("google", { callbackUrl: "/newdashboard" })}
             className="w-full flex items-center justify-center gap-3 rounded-lg border py-2.5 text-sm font-medium transition-colors hover:opacity-80"
             style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)" }}
           >
             Continue with Google
-          </a>
+          </button>
           <div className="relative">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t" style={{ borderColor: "var(--posh-border)" }} /></div>
             <div className="relative flex justify-center text-xs px-2" style={{ color: "var(--posh-fg-muted)", background: "var(--posh-bg-card)" }}>or</div>

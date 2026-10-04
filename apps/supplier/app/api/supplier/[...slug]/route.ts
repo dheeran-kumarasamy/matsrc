@@ -198,6 +198,17 @@ export async function PATCH(req: NextRequest) {
         if (typeof transitionError?.message === "string" && transitionError.message.startsWith("Invalid order status transition")) {
           return NextResponse.json({ message: transitionError.message }, { status: 400 });
         }
+        // C34: payment-before-delivery business-rule rejection (see
+        // updateSupplierOrderStatus's guard in lib/supplier-data.ts) is also
+        // a client error (attempting a disallowed transition), not a server
+        // fault — return 400 with the same safe, non-internal message
+        // rather than falling through to the generic 500 handler below.
+        if (
+          typeof transitionError?.message === "string" &&
+          transitionError.message === "This order cannot be marked as delivered until payment has been confirmed."
+        ) {
+          return NextResponse.json({ message: transitionError.message }, { status: 400 });
+        }
         if (transitionError?.message === "Order not found") {
           return NextResponse.json({ message: "Order not found" }, { status: 404 });
         }

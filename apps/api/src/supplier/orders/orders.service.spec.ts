@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { BadRequestException } from "@nestjs/common";
-import { OrderStatus } from "@matsrc/db";
+import { OrderStatus, PaymentStatus } from "@matsrc/db";
 import { OrdersService } from "./orders.service";
 
 // Mock of Vercel's waitUntil() — records every promise handed to it so
@@ -20,7 +20,7 @@ vi.mock("@vercel/functions", () => ({
 // exists (e.g. a direct PATCH to /supplier/orders/:id/status, or a WhatsApp
 // flow calling this service directly). Mirrors the equivalent guard/tests
 // for apps/supplier/lib/supplier-data.ts's updateSupplierOrderStatus.
-function buildService(orderRow: { status: OrderStatus; items?: any[] }) {
+function buildService(orderRow: { status: OrderStatus; items?: any[]; paymentStatus?: PaymentStatus }) {
   const prisma: any = {
     order: {
       update: vi.fn(async ({ data }: any) => ({
@@ -66,10 +66,16 @@ function buildService(orderRow: { status: OrderStatus; items?: any[] }) {
     paymentRequiredNotificationService as any
   );
 
-  // findOne() drives the "current status" check inside updateStatus — stub
-  // it directly so this test focuses purely on the transition guard rather
-  // than the full order-item-lookup query shape.
-  vi.spyOn(service, "findOne").mockResolvedValue({ status: orderRow.status } as any);
+  // findOne() drives the "current status" (and, for C34, "current
+  // paymentStatus") check inside updateStatus — stub it directly so this
+  // test focuses purely on the transition/payment guards rather than the
+  // full order-item-lookup query shape. Defaults to PAID so every
+  // pre-existing transition-guard test above (none of which cares about
+  // payment) keeps passing unchanged.
+  vi.spyOn(service, "findOne").mockResolvedValue({
+    status: orderRow.status,
+    paymentStatus: orderRow.paymentStatus ?? PaymentStatus.PAID,
+  } as any);
 
   return { service, prisma, customerOrderStatusNotificationService, paymentRequiredNotificationService };
 }
@@ -136,6 +142,78 @@ describe("OrdersService.updateStatus — backend transition guard", () => {
   });
 });
 
+// C34 — an order must never be marked DELIVERED while payment is not
+// settled, enforced server-side regardless of caller (supplier portal
+// "Mark Delivered" action, WhatsApp delivery-confirmation flow, or a direct
+// API call bypassing any UI entirely — all funnel through this one
+// updateStatus() method).
+describe("OrdersService.updateStatus — C34 payment-before-delivery guard", () => {
+  it("rejects Mark Delivered when payment is still PENDING", async () => {
+    const { service } = buildService({ status: OrderStatus.DISPATCHED, paymentStatus: PaymentStatus.PENDING });
+
+    await expect(
+      service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" })
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects Mark Delivered when payment proof is still PENDING_VERIFICATION", async () => {
+    const { service } = buildService({
+      status: OrderStatus.DISPATCHED,
+      paymentStatus: PaymentStatus.PENDING_VERIFICATION,
+    });
+
+    await expect(
+      service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" })
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects Mark Delivered for a REFUNDED order", async () => {
+    const { service } = buildService({ status: OrderStatus.DISPATCHED, paymentStatus: PaymentStatus.REFUNDED });
+
+    await expect(
+      service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" })
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("allows Mark Delivered once payment is PAID", async () => {
+    const { service } = buildService({ status: OrderStatus.DISPATCHED, paymentStatus: PaymentStatus.PAID });
+
+    const result = await service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" });
+
+    expect(result.status).toBe(OrderStatus.DELIVERED);
+  });
+
+  it("allows Mark Delivered from OUT_FOR_DELIVERY once payment is PAID", async () => {
+    const { service } = buildService({ status: OrderStatus.OUT_FOR_DELIVERY, paymentStatus: PaymentStatus.PAID });
+
+    const result = await service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" });
+
+    expect(result.status).toBe(OrderStatus.DELIVERED);
+  });
+
+  it("never blocks non-delivery transitions regardless of payment status", async () => {
+    const { service } = buildService({ status: OrderStatus.PROCESSING, paymentStatus: PaymentStatus.PENDING });
+
+    const result = await service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" });
+
+    expect(result.status).toBe(OrderStatus.DISPATCHED);
+  });
+
+  it("does not schedule any notification when Mark Delivered is rejected for unpaid orders", async () => {
+    const { service, customerOrderStatusNotificationService } = buildService({
+      status: OrderStatus.DISPATCHED,
+      paymentStatus: PaymentStatus.PENDING,
+    });
+
+    await expect(
+      service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" })
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(waitUntilMock).not.toHaveBeenCalled();
+    expect(customerOrderStatusNotificationService.notifyIfTransitioned).not.toHaveBeenCalled();
+  });
+});
+
 // Task Test 1/2/3 — customer_order_status routing via the Notification
 // Engine, with the previous Twilio/WhatsAppLifecycle duplicate sends
 // removed from this call site entirely (no mocks for them exist above —
@@ -172,9 +250,11 @@ describe("OrdersService.updateStatus — customer_order_status notification rout
     // findOne() is stubbed to a fixed value above, so re-stub between calls
     // to reflect the just-applied status for the next transition in this
     // sequence (mirrors the real findOne() re-reading the committed row).
-    vi.spyOn(service, "findOne").mockResolvedValueOnce({ status: OrderStatus.PROCESSING } as any);
+    // paymentStatus: PAID so the C34 payment-before-delivery guard (which
+    // this test isn't exercising) doesn't block the final DELIVERED step.
+    vi.spyOn(service, "findOne").mockResolvedValueOnce({ status: OrderStatus.PROCESSING, paymentStatus: PaymentStatus.PAID } as any);
     await service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" });
-    vi.spyOn(service, "findOne").mockResolvedValueOnce({ status: OrderStatus.DISPATCHED } as any);
+    vi.spyOn(service, "findOne").mockResolvedValueOnce({ status: OrderStatus.DISPATCHED, paymentStatus: PaymentStatus.PAID } as any);
     await service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" });
 
     expect(customerOrderStatusNotificationService.notifyIfTransitioned).toHaveBeenCalledTimes(3);

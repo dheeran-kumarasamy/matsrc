@@ -284,7 +284,23 @@ export default function CartDrawer() {
               ) : (
                 items.map((item) => (
                   <div key={item.id} className="flex gap-3 rounded-2xl border p-3" style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.03)" }}>
-                    <div className="h-14 w-14 shrink-0 rounded-xl" style={{ background: "rgba(var(--posh-wash-rgb),0.08)" }} />
+                    {/* C12 fix: this was always an empty, un-styled div — no
+                        <img> was ever rendered, so no cart item could ever
+                        show a product image regardless of what the cart API
+                        returned. Renders item.image (Product.images[0], see
+                        /api/builder/cart's GET handler) when present, falling
+                        back to the same neutral placeholder tile (not a
+                        broken <img>) when the product has no image. */}
+                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl" style={{ background: "rgba(var(--posh-wash-rgb),0.08)" }}>
+                      {item.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : null}
+                    </div>
                     <div className="flex-1">
                       <p className="text-sm font-medium" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
                       <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>

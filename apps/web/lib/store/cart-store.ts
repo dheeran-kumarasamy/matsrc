@@ -19,6 +19,9 @@ export type CartItem = {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  // C12 fix: the product's primary image URL (Product.images[0] — see
+  // /api/builder/cart's GET handler), or null when the product has none.
+  image?: string | null;
   aggregationEnabled?: boolean;
   aggregationPriceTiers?: PriceTier[] | null;
   aggregationWindowDays?: number | null;

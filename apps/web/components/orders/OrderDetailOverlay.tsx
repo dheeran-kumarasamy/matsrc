@@ -131,7 +131,22 @@ export default function OrderDetailOverlay({ order }: Props) {
   return (
     <Dialog defaultOpen onOpenChange={handleOpenChange}>
       <DialogContent className="p-0 sm:max-w-4xl">
-        <DialogHeader>
+        {/* C19 fix: DialogContent's Close button (components/ui/dialog.tsx)
+            is `absolute right-4 top-4`, floating on top of whatever this
+            header renders — it was never given its own reserved layout
+            area. On an order with a status badge, a "Group Order" pill,
+            and/or an "Open payment link" button (i.e. most real orders),
+            that right-aligned button row filled the same top-right corner
+            the X sits in, so the X visually overlapped the order status /
+            payment-link text and, on narrow viewports, could sit on top of
+            it entirely. Reserving `pr-12` (wider than the close button's
+            own ~32px box + its `right-4`/`top-4` offset) on this header
+            keeps every header element — title, dates, status badge,
+            payment-link button — inside a lane that structurally never
+            reaches the close button's corner, at every breakpoint; it does
+            not touch the scrollable content area below, which was already
+            a separate, independently-scrolling block. */}
+        <DialogHeader className="pr-12">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-400">My Orders</p>
@@ -144,7 +159,7 @@ export default function OrderDetailOverlay({ order }: Props) {
               </div>
 
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <OrderStatusBadge status={order.status} />
 
               {order.isAggregated ? (

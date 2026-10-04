@@ -1239,6 +1239,12 @@ export type SupplierOrderDetail = {
   quantity: string;
   material: string;
   status: OrderStatus;
+  // C34: surfaced so the order detail page can disable/hide "Mark
+  // Delivered" client-side when payment isn't settled yet — a UI-level
+  // convenience only; the authoritative enforcement is the server-side
+  // guard in updateSupplierOrderStatus below, which rejects the transition
+  // regardless of what the UI shows.
+  paymentStatus: "PENDING" | "PENDING_VERIFICATION" | "PAID" | "FAILED" | "REFUNDED";
   tracking: SupplierTrackingStep[];
   purchaseOrder: SupplierOrderPurchaseOrderSummary | null;
   // REQ-06: the minimum price of the builder-facing price range at enquiry
@@ -1311,6 +1317,7 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     quantity: `${item.quantity} ${item.product.unit}`,
     material: item.product.name,
     status: item.order.status,
+    paymentStatus: item.order.paymentStatus,
     askPrice: `${formatCurrency((item as any).askPrice ?? item.unitPrice)} / ${item.product.unit}`,
     siteName: item.order.site?.name ?? null,
     tracking: item.order.tracking.map((entry: any) => ({
@@ -1519,7 +1526,7 @@ export async function updateSupplierOrderStatus(
   // supplier-triggered transitions between the existing OrderStatus values.
   const current = await prisma.order.findUnique({
     where: { id: orderId },
-    select: { status: true },
+    select: { status: true, paymentStatus: true },
   });
   if (!current) {
     throw new Error("Order not found");
@@ -1528,6 +1535,27 @@ export async function updateSupplierOrderStatus(
     throw new Error(
       `Invalid order status transition: cannot move from ${current.status} to ${status}`
     );
+  }
+
+  // C34 — server-side enforcement: an order must never be marked DELIVERED
+  // while its payment is not yet settled. This function is the single
+  // authoritative place the supplier portal transitions Order.status to
+  // DELIVERED through (the "Mark Delivered" button -> PATCH
+  // /api/supplier/orders/:id -> this function), so gating here blocks the
+  // transition even if a request bypasses the UI and calls the API route
+  // directly. Mirrors the equivalent guard in apps/api's OrdersService
+  // (src/supplier/orders/orders.service.ts), which apps/api's own
+  // "Mark Delivered" path and the WhatsApp delivery-confirmation flow both
+  // go through — both apps enforce the identical rule using the existing
+  // PaymentStatus enum (packages/db/prisma/schema.prisma). PAID is the only
+  // status that means payment has actually been settled, regardless of
+  // which configured payment method (UPI/CARD/NET_BANKING/COD/CREDIT/
+  // BANK_TRANSFER) was used — every one of those funnels into
+  // paymentStatus = PAID via the payment gateway, admin bank-transfer
+  // verification, or admin invoice flow, never guessed or auto-set here.
+  // REFUNDED is deliberately not treated as paid.
+  if (status === "DELIVERED" && current.paymentStatus !== "PAID") {
+    throw new Error("This order cannot be marked as delivered until payment has been confirmed.");
   }
 
   // Decline path: run the multi-supplier fan-out promote-or-cascade logic

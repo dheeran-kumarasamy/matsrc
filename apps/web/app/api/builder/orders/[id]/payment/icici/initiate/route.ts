@@ -130,7 +130,42 @@ export async function POST(request: Request, { params }: { params: { id: string 
       );
     }
 
-    const redirectUrl = result.data?.redirectUrl || result.data?.redirectURL || null;
+    // DIAGNOSTIC LOGGING (task: investigate redirectUrl: null): always log
+    // ICICI's raw Initiate Sale response before attempting to extract a
+    // redirect, so an unexpected/misnamed field or a gateway-side rejection
+    // is visible in server logs instead of silently collapsing to null.
+    console.log("[ICICI initiateSale] raw gateway response", {
+      merchantTxnNo,
+      httpStatus: result.httpStatus,
+      responseCode: result.data?.responseCode ?? result.data?.respCode ?? null,
+      responseMessage:
+        result.data?.responseDescription ?? result.data?.respDesc ?? result.data?.message ?? null,
+      body: result.data,
+    });
+
+    // ICICI's PG v2 Initiate Sale API documents a `redirectURI` (NOT
+    // `redirectUrl`/`redirectURL`, which this code previously checked for
+    // and never matched) that must be combined with a `tranCtx` token to
+    // form the actual page the builder is sent to. The two legacy camelCase
+    // keys are kept as a defensive fallback only, in case a future
+    // ICICI response shape differs from what's documented.
+    const redirectUri = result.data?.redirectURI || result.data?.redirectUrl || result.data?.redirectURL || null;
+    const tranCtx = result.data?.tranCtx ?? null;
+
+    const redirectUrl = redirectUri
+      ? tranCtx
+        ? `${redirectUri}${redirectUri.includes("?") ? "&" : "?"}tranCtx=${encodeURIComponent(tranCtx)}`
+        : redirectUri
+      : null;
+
+    if (!redirectUrl) {
+      console.error("[ICICI initiateSale] no redirect extracted from response", {
+        merchantTxnNo,
+        responseCode: result.data?.responseCode,
+        responseDescription: result.data?.responseDescription,
+        keys: result.data ? Object.keys(result.data) : [],
+      });
+    }
 
     await prisma.paymentTransaction.update({
       where: { id: transaction.id },
@@ -150,6 +185,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
       amount: Number(payableAmount),
       redirectUrl,
       status: redirectUrl ? "REDIRECTED" : "PENDING",
+      // Surfaced ONLY when redirectUrl is null so the builder/dev can see
+      // ICICI's own rejection reason directly in the browser Network tab,
+      // without needing access to Vercel server logs. Never includes
+      // ICICI_PG_SECRET_KEY or any other credential — result.data is
+      // ICICI's own response body, which never contains the merchant secret.
+      ...(redirectUrl
+        ? {}
+        : {
+            gatewayResponseCode: result.data?.responseCode ?? null,
+            gatewayResponseDescription: result.data?.responseDescription ?? null,
+            rawGatewayResponse: result.data ?? null,
+          }),
     });
   } catch (error) {
     console.error("ICICI initiate POST error:", error);

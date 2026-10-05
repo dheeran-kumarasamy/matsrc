@@ -16,6 +16,12 @@ type InitiateResponse = {
   redirectUrl?: string | null;
   status: string;
   reused?: boolean;
+  // Only present when redirectUrl is null — ICICI's own rejection reason,
+  // surfaced directly from the gateway response so it's visible in the
+  // browser without digging through server logs (see initiate/route.ts).
+  gatewayResponseCode?: string | null;
+  gatewayResponseDescription?: string | null;
+  rawGatewayResponse?: unknown;
 };
 
 type Props = {
@@ -39,11 +45,18 @@ export default function ICICIPaymentPanel({ orderId, amount }: Props) {
       }
       // No redirect URL yet (e.g. gateway accepted but returned no
       // redirect, or a reused in-flight attempt) — surface a clear status
-      // instead of silently doing nothing.
+      // instead of silently doing nothing. When ICICI itself rejected the
+      // request, prefer showing its own responseDescription so the real
+      // reason is visible immediately rather than a generic message.
+      const gatewayMessage = result.gatewayResponseDescription
+        ? `ICICI UAT: ${result.gatewayResponseDescription}${
+            result.gatewayResponseCode ? ` (${result.gatewayResponseCode})` : ""
+          }`
+        : null;
       setError(
         result.reused
           ? "A payment is already in progress for this order. Please wait or check your payment status."
-          : "Payment was initiated but no redirect was received. Please try again shortly."
+          : gatewayMessage || "Payment was initiated but no redirect was received. Please try again shortly."
       );
     } catch (err: any) {
       setError(err?.message || "Unable to start ICICI payment. Please try again.");

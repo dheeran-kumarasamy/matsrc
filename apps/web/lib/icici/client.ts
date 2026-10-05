@@ -20,7 +20,36 @@
 import "server-only";
 import { getIciciConfig, type IciciUatConfig } from "./config";
 import { generateICICIHash, verifyICICIHash, type IciciHashablePayload } from "./hash";
-import { formatIciciTxnDate } from "./txn-date";
+import { formatIciciTxnDate, formatIciciTxnDateCompact } from "./txn-date";
+
+// --- UNCONFIRMED PROTOCOL DETAILS (see docs/payments/icici-uat.md §9 and
+// hash.ts's spec-assumption caveat) ---------------------------------------
+// This repo was never supplied ICICI's actual signed PG v2 API spec
+// document. Two fields below were implemented from a single empirical UAT
+// rejection rather than the real spec, and ICICI PG v2 (PayPhi-based)
+// integrations commonly use DIFFERENT conventions for both:
+//   - currencyCode: ISO 4217 **numeric** code "356" (not the alphabetic
+//     "INR") is the common PayPhi/PG v2 convention.
+//   - txnDate: a 14-digit "yyyyMMddHHmmss" compact string (not the spaced
+//     "yyyy-MM-dd HH:mm:ss" format this repo's txn-date.ts currently
+//     produces) is the common PG v2 convention.
+// Both are made configurable here (default preserves this repo's existing,
+// previously-tested behaviour) so either convention can be tried against
+// the live UAT sandbox without further code changes, while the real spec
+// remains unconfirmed. Once ICICI's spec is confirmed, remove this
+// toggle and hard-code the correct value.
+function resolveCurrencyCode(): string {
+  // Set ICICI_PG_CURRENCY_CODE="356" to try the ISO-numeric convention.
+  return process.env.ICICI_PG_CURRENCY_CODE || "INR";
+}
+
+function resolveTxnDate(date: Date): string {
+  // Set ICICI_PG_TXN_DATE_FORMAT="compact" to try the 14-digit
+  // "yyyyMMddHHmmss" convention instead of the spaced default.
+  return (process.env.ICICI_PG_TXN_DATE_FORMAT || "").toLowerCase() === "compact"
+    ? formatIciciTxnDateCompact(date)
+    : formatIciciTxnDate(date);
+}
 
 export type IciciInitiateSaleParams = {
   merchantTxnNo: string;
@@ -68,15 +97,19 @@ export async function initiateSale(
 ): Promise<IciciGatewayCallResult<any>> {
   // See ./txn-date.ts for why this specific format/timezone is required —
   // confirmed against a real rejection from the live ICICI UAT sandbox
-  // (responseCode P1006 "Invalid Transaction Date").
-  const txnDate = formatIciciTxnDate(new Date());
+  // (responseCode P1006 "Invalid Transaction Date"). See the module-level
+  // comment above resolveCurrencyCode()/resolveTxnDate() — both the
+  // currency code and txnDate format remain unconfirmed against ICICI's
+  // real spec and are configurable via env vars for testing.
+  const txnDate = resolveTxnDate(new Date());
+  const currencyCode = resolveCurrencyCode();
 
   const payload: IciciHashablePayload = {
     merchantId: config.merchantId,
     merchantTxnNo: params.merchantTxnNo,
     amount: params.amount,
     aggregatorID: config.aggregatorId,
-    currencyCode: "INR",
+    currencyCode,
     payType: "0", // ICICI UAT sample value for a standard sale transaction
     customerEmailID: params.customerEmailId,
     transactionType: "SALE",
@@ -87,6 +120,18 @@ export async function initiateSale(
 
   const secureHash = generateICICIHash(payload, config.secretKey);
   const requestBody = { ...payload, secureHash };
+
+  // DIAGNOSTIC LOGGING (task: verify currencyCode/txnDate convention): log
+  // which variant of each unconfirmed field was actually sent, so a UAT
+  // rejection's responseCode/responseDescription (logged by the caller,
+  // apps/web/app/api/builder/orders/[id]/payment/icici/initiate/route.ts)
+  // can be correlated back to exactly what was sent.
+  console.log("[ICICI initiateSale] request variant", {
+    merchantTxnNo: params.merchantTxnNo,
+    currencyCode,
+    txnDate,
+    txnDateFormat: (process.env.ICICI_PG_TXN_DATE_FORMAT || "spaced (default)").toLowerCase(),
+  });
 
   try {
     const { status, json } = await postJson(`${config.baseUrl}/tsp/pg/api/v2/initiateSale`, requestBody);

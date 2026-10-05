@@ -30,3 +30,15 @@ export function formatIciciTxnDate(date: Date): string {
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
   return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`;
 }
+
+// ICICI PG v2 (PayPhi-based) integrations commonly document txnDate as a
+// 14-digit "yyyyMMddHHmmss" compact string (no separators, no space), which
+// differs from the spaced "yyyy-MM-dd HH:mm:ss" format above that this repo
+// previously confirmed only empirically (see the module doc comment and
+// formatIciciTxnDate's own comment) against a single UAT rejection. Kept as
+// an alternate formatter — toggled via ICICI_PG_TXN_DATE_FORMAT — so both
+// conventions can be tried without another code change while the real
+// ICICI spec document is still unconfirmed (see hash.ts's same caveat).
+export function formatIciciTxnDateCompact(date: Date): string {
+  return formatIciciTxnDate(date).replace(/[-: ]/g, "");
+}

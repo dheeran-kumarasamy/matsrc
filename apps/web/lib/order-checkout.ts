@@ -343,7 +343,20 @@ export async function createOrdersFromCart(
 
   const createdOrders: CreatedOrderSummary[] = [];
 
-  const deliveryDate = options.deliveryDate ? new Date(options.deliveryDate) : null;
+  // BUGFIX: `new Date(options.deliveryDate)` silently produces an Invalid
+  // Date object for any unparseable string — Prisma doesn't reject that
+  // until deep inside the per-supplier-group $transaction below, surfacing
+  // as an uncaught 500 ("Failed to create order") instead of a clean,
+  // actionable validation error. Validate up front and refuse the request
+  // the same way an empty cart or missing site already does.
+  let deliveryDate: Date | null = null;
+  if (options.deliveryDate) {
+    const parsed = new Date(options.deliveryDate);
+    if (Number.isNaN(parsed.getTime())) {
+      return { ok: false, error: "That delivery date isn't valid. Please choose another date.", status: 400 };
+    }
+    deliveryDate = parsed;
+  }
   // REQ-07: map-based geolocation capture, replacing the checkout pincode
   // field. All optional/nullable — existing flows that don't send these
   // are unaffected.

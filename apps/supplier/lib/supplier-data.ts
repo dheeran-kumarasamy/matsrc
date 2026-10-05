@@ -436,7 +436,7 @@ export async function getSupplierDashboardData(email: string) {
           },
         },
       },
-      include: { product: true, order: true },
+      include: { product: { include: { brandRef: true } }, order: true },
       orderBy: { order: { createdAt: "desc" } },
       take: 5,
     }),
@@ -447,7 +447,7 @@ export async function getSupplierDashboardData(email: string) {
           status: "PLACED",
         },
       },
-      include: { product: true, order: true },
+      include: { product: { include: { brandRef: true } }, order: true },
       orderBy: { order: { createdAt: "desc" } },
       take: 5,
     }),
@@ -478,6 +478,9 @@ export async function getSupplierDashboardData(email: string) {
     orders: confirmedIncomingOrders.map((item: any) => ({
       id: item.orderId,
       material: item.product.name,
+      // S06: see getSupplierOrders's brand resolution comment — FK-first,
+      // free-text-fallback, null when the product genuinely has no brand.
+      brand: item.product.brandRef?.name ?? item.product.brand ?? null,
       quantity: `${item.quantity} ${item.product.unit}`,
       eta: formatDate(item.deliveryDate ?? item.order.deliveryDate),
       status: mapOrderStatus(item.order.status),
@@ -485,6 +488,7 @@ export async function getSupplierDashboardData(email: string) {
     pendingEnquiries: pendingEnquiries.map((item: any) => ({
       id: item.orderId,
       material: item.product.name,
+      brand: item.product.brandRef?.name ?? item.product.brand ?? null,
       quantity: `${item.quantity} ${item.product.unit}`,
       eta: formatDate(item.deliveryDate ?? item.order.deliveryDate),
     })),
@@ -1238,7 +1242,7 @@ export async function getSupplierOrders(email: string): Promise<SupplierOrderRow
         },
       },
     },
-    include: { order: { include: { user: true } }, product: true },
+    include: { order: { include: { user: true } }, product: { include: { brandRef: true } } },
     orderBy: { order: { createdAt: "desc" } },
   });
 
@@ -1246,6 +1250,12 @@ export async function getSupplierOrders(email: string): Promise<SupplierOrderRow
     id: item.orderId,
     buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
     material: item.product.name,
+    // S06: Brand resolution prefers the FK-linked Brand master-data record
+    // (product.brandRef), falling back to the deprecated free-text
+    // `product.brand` column for legacy rows created before brandRef
+    // existed. `null` (never `undefined`/empty string) when the product
+    // genuinely has no brand, so the UI can omit the row entirely.
+    brand: item.product.brandRef?.name ?? item.product.brand ?? null,
     qty: `${item.quantity} ${item.product.unit}`,
     status: item.order.status,
     isAggregated: Boolean(item.order.isAggregated),
@@ -1257,6 +1267,8 @@ export type SupplierOrderRow = {
   id: string;
   buyer: string;
   material: string;
+  // S06: null when the product has no brand on record — never "undefined"/"".
+  brand: string | null;
   qty: string;
   status: OrderStatus;
   isAggregated?: boolean;
@@ -1268,6 +1280,12 @@ export type SupplierTrackingStep = {
   id: string;
   label: string;
   status: OrderStatus;
+  // S11: the authoritative event timestamp for this tracking entry — reuses
+  // the existing OrderTracking.recordedAt column (the row's own event time,
+  // never Order.updatedAt) rather than inventing a new timestamp source.
+  // ISO 8601 UTC string; the UI converts to the project's existing en-IN
+  // display convention at render time.
+  recordedAt: string;
 };
 
 export type SupplierOrderPurchaseOrderSummary = {
@@ -1302,6 +1320,8 @@ export type SupplierOrderDetail = {
   // existing Site model (Order.siteId) — null for legacy/untagged orders,
   // which must render as "Unassigned" rather than break.
   siteName: string | null;
+  // S06: null when the product has no brand on record — never "undefined"/"".
+  brand: string | null;
 };
 
 
@@ -1344,7 +1364,7 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
           site: { select: { name: true } },
         },
       },
-      product: true,
+      product: { include: { brandRef: true } },
     },
   });
 
@@ -1367,10 +1387,17 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     paymentStatus: item.order.paymentStatus,
     askPrice: `${formatCurrency((item as any).askPrice ?? item.unitPrice)} / ${item.product.unit}`,
     siteName: item.order.site?.name ?? null,
+    // S06: see getSupplierOrders's brand resolution comment above — same
+    // FK-first, free-text-fallback, null-when-absent rule.
+    brand: (item.product as any).brandRef?.name ?? item.product.brand ?? null,
     tracking: item.order.tracking.map((entry: any) => ({
       id: entry.id,
       label: entry.note ?? humanizeToken(entry.status),
       status: entry.status,
+      // S11: OrderTracking.recordedAt is the authoritative timestamp for
+      // this event (set at row-creation time, defaulting to now() —
+      // packages/db/prisma/schema.prisma) — never Order.updatedAt.
+      recordedAt: entry.recordedAt.toISOString(),
     })),
     purchaseOrder: purchaseOrder
 

@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 
 
@@ -18,12 +19,47 @@ const statusTone: Record<SupplierHeaderProps["kycStatus"], string> = {
 
 export function SupplierHeader({ kycStatus }: SupplierHeaderProps) {
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   const statusLabel = useMemo(() => {
     if (kycStatus === "APPROVED") return "Approved";
     if (kycStatus === "REJECTED") return "Rejected";
     return "Pending";
   }, [kycStatus]);
+
+  // S16: auto-hide the profile dropdown — closes on outside click, Escape,
+  // and route change, so it never remains visually open after navigation or
+  // an action. Mirrors the same pattern already used by the shared
+  // apps/web ProfileMenu/NotificationBell components (mousedown outside
+  // listener + Escape keydown), scoped to this component only.
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  // S16: close on route change (e.g. clicking "Onboarding" navigates away —
+  // the menu must not remain open on the new page).
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
 
   return (
     <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -37,7 +73,7 @@ export function SupplierHeader({ kycStatus }: SupplierHeaderProps) {
 
 
 
-        <div className="relative">
+        <div className="relative" ref={menuRef}>
           <button
             type="button"
             onClick={() => setOpen((value) => !value)}
@@ -57,16 +93,35 @@ export function SupplierHeader({ kycStatus }: SupplierHeaderProps) {
           </button>
 
           {open ? (
-            <div className="absolute right-0 top-[62px] z-20 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+            // S17 root cause: neither the header nor
+            // components/supplier/MarketScroller.tsx ("live rate band")
+            // establish their own stacking context (no position/z-index on
+            // their outer elements), so their absolutely-positioned
+            // children (this dropdown at the old z-20, and the ticker's
+            // "LIVE" label also at z-20) competed in the *same* root
+            // stacking context. With equal z-index, later DOM order wins —
+            // the ticker renders after the header, so its label painted
+            // over the dropdown. Raising the dropdown to z-50 (still a
+            // deliberate, documented value rather than an arbitrary
+            // 999999) unambiguously places it above the ticker's z-10/z-20
+            // layers and any other in-page content.
+            <div className="absolute right-0 top-[62px] z-50 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
               <div className="border-b border-slate-200 bg-teal-50/80 px-4 py-3 text-lg leading-none text-slate-900">
                 KYC Status <span className={statusTone[kycStatus]}>({statusLabel})</span>
               </div>
-              <Link href="/onboarding" className="block px-4 py-3 text-lg text-slate-800 hover:bg-slate-50">
+              <Link
+                href="/onboarding"
+                onClick={() => setOpen(false)}
+                className="block px-4 py-3 text-lg text-slate-800 hover:bg-slate-50"
+              >
                 Onboarding
               </Link>
               <button
                 type="button"
-                onClick={() => signOut({ callbackUrl: "/sign-in" })}
+                onClick={() => {
+                  setOpen(false);
+                  signOut({ callbackUrl: "/sign-in" });
+                }}
                 className="block w-full border-t border-slate-200 px-4 py-3 text-left text-lg text-red-600 hover:bg-slate-50"
               >
                 Logout

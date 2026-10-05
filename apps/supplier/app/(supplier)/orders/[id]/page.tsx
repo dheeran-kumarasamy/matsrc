@@ -12,7 +12,23 @@ type Props = {
 type TrackingStep = {
   id: string;
   label: string;
+  recordedAt: string;
 };
+
+// S11: matches the existing en-IN date/time display convention used
+// elsewhere in the app (e.g. apps/admin's formatDateTime helpers) — no new
+// timezone system introduced. Dates are stored in UTC (OrderTracking.
+// recordedAt) and converted for display using the host runtime's locale
+// formatting, consistent with every other formatDateTime in this codebase.
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
 
 export default async function SupplierOrderDetailPage({ params }: Props) {
   const session = await auth();
@@ -28,17 +44,26 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
       <section className="panel p-5">
         <h3 className="text-xl font-extrabold text-slate-900">Order #{order.id}</h3>
         <p className="mt-1 text-sm text-slate-600">
-          Buyer: {order.buyer} | Material: {order.material} | Delivery: {order.deliveryDate}
+          Buyer: {order.buyer} | Material: {order.brand ? `${order.brand} ` : ""}
+          {order.material} | Delivery: {order.deliveryDate}
         </p>
         <p className="mt-1 text-sm text-slate-600">Site: {order.siteName ?? "Unassigned"}</p>
         <p className="mt-1 text-sm font-semibold text-slate-800">Ask Price: {order.askPrice}</p>
 
 
         <div className="mt-4 space-y-3">
-          {order.tracking.map((step: TrackingStep, i: number) => (
-            <div key={step.id} className="flex items-center gap-3">
-              <div className={`h-3 w-3 rounded-full ${i === order.tracking.length - 1 ? "bg-blue-600" : "bg-slate-300"}`} />
-              <p className="text-sm font-semibold text-slate-700">{step.label}</p>
+          {/* S11: newest activity first — tracking is fetched ascending by
+              recordedAt (see getSupplierOrderDetail), so it's reversed here
+              for display, per "newest -> oldest" expected ordering. */}
+          {[...order.tracking].reverse().map((step: TrackingStep, i: number) => (
+            <div key={step.id} className="flex items-start gap-3">
+              <div className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${i === 0 ? "bg-blue-600" : "bg-slate-300"}`} />
+              <div>
+                <p className="text-sm font-semibold text-slate-700">{step.label}</p>
+                <p className="text-xs text-slate-400" title={step.recordedAt}>
+                  {formatDateTime(step.recordedAt)}
+                </p>
+              </div>
             </div>
           ))}
           {order.tracking.length === 0 ? <p className="text-sm text-slate-500">No tracking events recorded yet.</p> : null}

@@ -19,10 +19,25 @@ type OrderDetail = {
   deliveryDate: string;
   quantity: string;
   material: string;
+  // S06: null when the product has no brand on record.
+  brand?: string | null;
   status: string;
-  tracking: Array<{ id: string; label: string; status: string }>;
+  tracking: Array<{ id: string; label: string; status: string; recordedAt: string }>;
   purchaseOrder: PurchaseOrderSummary | null;
 };
+
+// S11: matches the existing en-IN date/time display convention used
+// elsewhere in the app (e.g. apps/admin's formatDateTime helpers / the
+// supplier order detail page) — no new timezone system introduced.
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: "bg-slate-100 text-slate-600 border-slate-200",
@@ -86,6 +101,7 @@ export function OrderDetailButton({
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase text-slate-400">Material</p>
+                {detail.brand ? <p className="text-xs font-semibold text-slate-500">{detail.brand}</p> : null}
                 <p className="text-slate-800">{detail.material}</p>
               </div>
               <div>
@@ -139,14 +155,22 @@ export function OrderDetailButton({
             <div>
               <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Tracking</p>
               <div className="space-y-2">
-                {detail.tracking.map((step, i) => (
-                  <div key={step.id} className="flex items-center gap-3">
+                {/* S11: newest first — detail.tracking arrives ascending by
+                    recordedAt (see getSupplierOrderDetail), reversed here for
+                    display. */}
+                {[...detail.tracking].reverse().map((step, i) => (
+                  <div key={step.id} className="flex items-start gap-3">
                     <div
-                      className={`h-2.5 w-2.5 rounded-full ${
-                        i === detail.tracking.length - 1 ? "bg-blue-600" : "bg-slate-300"
+                      className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
+                        i === 0 ? "bg-blue-600" : "bg-slate-300"
                       }`}
                     />
-                    <p className="text-sm text-slate-700">{step.label}</p>
+                    <div>
+                      <p className="text-sm text-slate-700">{step.label}</p>
+                      <p className="text-xs text-slate-400" title={step.recordedAt}>
+                        {formatDateTime(step.recordedAt)}
+                      </p>
+                    </div>
                   </div>
                 ))}
                 {detail.tracking.length === 0 ? (

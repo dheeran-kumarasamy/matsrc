@@ -19,6 +19,8 @@ type DashboardKpi = {
 type DashboardOrder = {
   id: string;
   material: string;
+  // S06: null when the product has no brand on record.
+  brand?: string | null;
   quantity: string;
   eta: string;
   status: "NEW" | "PACKING" | "IN_TRANSIT";
@@ -29,6 +31,8 @@ type QueueKey = "listings" | "orders" | "rfqs";
 type PendingEnquiry = {
   id: string;
   material: string;
+  // S06: null when the product has no brand on record.
+  brand?: string | null;
   quantity: string;
   eta: string;
 };
@@ -131,7 +135,10 @@ function PendingEnquiryQueueTable({ enquiries }: { enquiries: PendingEnquiry[] }
                       className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
                     />
                   </td>
-                  <td className="px-7 py-5 text-slate-800">{enquiry.material}</td>
+                  <td className="px-7 py-5 text-slate-800">
+                    {enquiry.brand ? <p className="text-sm font-semibold text-slate-500">{enquiry.brand}</p> : null}
+                    <p>{enquiry.material}</p>
+                  </td>
                   <td className="px-7 py-5 text-slate-800">{enquiry.quantity}</td>
                   <td className="px-7 py-5 text-slate-800">{enquiry.eta}</td>
                   <td className="px-7 py-5">

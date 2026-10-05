@@ -3,6 +3,9 @@ import { OrderDetailButton } from "@/components/supplier/OrderDetailButton";
 type SupplierOrder = {
   id: string;
   material: string;
+  // S06: null when the product has no brand on record — the row simply
+  // omits the brand line rather than rendering "undefined"/"null".
+  brand?: string | null;
   quantity: string;
   eta: string;
   status: "NEW" | "PACKING" | "IN_TRANSIT";
@@ -53,7 +56,10 @@ export function OrderQueueTable({ orders }: { orders: SupplierOrder[] }) {
                     className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
                   />
                 </td>
-                <td className="px-7 py-5 text-slate-800">{order.material}</td>
+                <td className="px-7 py-5 text-slate-800">
+                  {order.brand ? <p className="text-sm font-semibold text-slate-500">{order.brand}</p> : null}
+                  <p>{order.material}</p>
+                </td>
                 <td className="px-7 py-5 text-slate-800">{order.quantity}</td>
                 <td className="px-7 py-5 text-slate-800">{order.eta}</td>
                 <td className="px-7 py-5">

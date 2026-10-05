@@ -138,11 +138,37 @@ export class PricingIngestionService {
 
       const existing = await this.prisma.pricingRawObservation.findUnique({
         where: { dedupeHash },
-        select: { id: true },
+        select: { id: true, observation: { select: { id: true } } },
       });
 
       if (existing) {
         duplicate += 1;
+
+        // BUGFIX (alerts stopped generating after the source's price last
+        // changed): an unchanged dedupeHash means the source page itself is
+        // unchanged — i.e. this scrape just RE-CONFIRMED the existing price
+        // is still accurate today. Without this, PricingDailyRollupService's
+        // rollupForDate() (which only looks at PricingObservation rows whose
+        // fetchedAt falls within the given calendar day — see that file) and
+        // therefore PricingAlertEvaluationService.evaluateForDate() would
+        // only ever see data from the one day the price first landed, and
+        // would silently skip creating ANY row (and so ANY alert) on every
+        // subsequent day a source's price genuinely doesn't change — exactly
+        // what happened to JINDAL_PANTHER's unchanged TMT price table.
+        //
+        // Only fetchedAt is touched — pricePerBaseUnit/priceValue is NEVER
+        // mutated here (see PricingObservation's "Never mutate priceValue"
+        // schema comment); this is a freshness re-stamp, not a price change.
+        // A row with no normalized PricingObservation (e.g. still PENDING,
+        // or QUARANTINED/UNMAPPED/REJECTED) has nothing to re-stamp and is
+        // left untouched — normalization will handle it on its own schedule.
+        if (existing.observation) {
+          await this.prisma.pricingObservation.update({
+            where: { id: existing.observation.id },
+            data: { fetchedAt: new Date() },
+          });
+        }
+
         continue;
       }
 

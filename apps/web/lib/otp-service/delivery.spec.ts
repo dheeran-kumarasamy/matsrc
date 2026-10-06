@@ -1,6 +1,6 @@
-// Unit tests for the OTP delivery orchestration (MSG91 SMS stub -> SES email
-// fallback), with the email sender and recordDeliveryAttempt mocked — no
-// real network/database calls.
+// Unit tests for the OTP delivery orchestration (email-only — SMS/MSG91 is
+// currently disabled, see delivery.ts), with the email sender and
+// recordDeliveryAttempt mocked — no real network/database calls.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OtpChannel, OtpDeliveryStatus } from "@matsrc/db";
@@ -24,26 +24,7 @@ beforeEach(() => {
 });
 
 describe("deliverOtp", () => {
-  it("MSG91 stub reports unavailable — never claims SMS was sent", async () => {
-    delete process.env.MSG91_OTP_ENABLED;
-    process.env.SMTP_HOST = "smtp.example.com";
-    process.env.SMTP_USERNAME = "user";
-    process.env.SMTP_PASSWORD = "pass";
-
-    const { deliverOtp } = await import("./delivery");
-    const result = await deliverOtp("challenge-1", { phone: "+919000000000", email: "builder@example.com" }, "123456");
-
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.channel).toBe("EMAIL");
-
-    // The SMS attempt is recorded as NOT_CONFIGURED, never SENT.
-    expect(recordDeliveryAttempt).toHaveBeenCalledWith(
-      "challenge-1",
-      expect.objectContaining({ channel: OtpChannel.SMS, status: OtpDeliveryStatus.NOT_CONFIGURED })
-    );
-  });
-
-  it("falls back to email when SMS is unavailable and email is configured", async () => {
+  it("sends via email even when a phone number is present — SMS/MSG91 is disabled", async () => {
     process.env.SMTP_HOST = "smtp.example.com";
     process.env.SMTP_USERNAME = "user";
     process.env.SMTP_PASSWORD = "pass";
@@ -54,9 +35,15 @@ describe("deliverOtp", () => {
     expect(sendOtpEmail).toHaveBeenCalledWith("builder@example.com", "123456");
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.channel).toBe("EMAIL");
+
+    // No SMS delivery attempt is ever recorded.
+    expect(recordDeliveryAttempt).not.toHaveBeenCalledWith(
+      "challenge-1",
+      expect.objectContaining({ channel: OtpChannel.SMS })
+    );
   });
 
-  it("fails honestly when SMS is unavailable and there is no email to fall back to", async () => {
+  it("fails honestly when there is no email on file (phone alone is never sufficient)", async () => {
     const { deliverOtp } = await import("./delivery");
     const result = await deliverOtp("challenge-1", { phone: "+919000000000", email: null }, "123456");
 

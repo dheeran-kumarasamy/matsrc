@@ -18,10 +18,10 @@ export const dynamic = "force-dynamic";
 //      success, exactly as the previous implementation did).
 //   3. Generate + persist a real OTP challenge (crypto.randomInt-based,
 //      hashed, 5-minute expiry, resend cooldown, rate-limited).
-//   4. Attempt delivery: for email-channel login, SES email directly; for
-//      phone-channel login, MSG91 SMS first (currently always stubbed/
-//      NOT_CONFIGURED) then SES email fallback IF the account has a usable
-//      verified email on file.
+//   4. Attempt delivery: SMS (MSG91) is currently disabled — every OTP is
+//      sent via SES email, regardless of channel, IF the account has a
+//      usable email on file (phone-channel login still requires a verified
+//      email on the account for delivery to succeed; see deliverOtp()).
 //   5. Return an HONEST delivery result — never "SMS sent" when MSG91 is
 //      stubbed, never a generic success if nothing was actually delivered.
 export async function POST(req: NextRequest) {

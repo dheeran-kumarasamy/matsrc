@@ -1,34 +1,42 @@
 import { OtpChannel, OtpDeliveryStatus } from "@matsrc/db";
 import { sendOtpEmail } from "@/lib/contact-verification/email-sender";
-import { Msg91SmsProvider } from "./providers/msg91-sms.provider";
-import type { SmsOtpProvider } from "./providers/sms-provider.interface";
 import { recordDeliveryAttempt } from "./challenge";
 
-// Delivery orchestration for OTP challenges — owns provider selection
-// (MSG91 SMS stub -> SES email fallback) but NEVER owns OTP
-// generation/storage/verification (see ./challenge.ts), per the task spec's
-// "the delivery provider must NOT own OTP verification" requirement.
+// Delivery orchestration for OTP challenges — owns provider selection but
+// NEVER owns OTP generation/storage/verification (see ./challenge.ts), per
+// the task spec's "the delivery provider must NOT own OTP verification"
+// requirement.
+//
+// SMS delivery (MSG91) is TEMPORARILY DISABLED — every OTP is now sent via
+// email only, regardless of whether a phone number is on file. MSG91 was
+// already a permanently-stubbed, never-really-sends provider (see
+// ./providers/msg91-sms.provider.ts), so this removes the dead
+// attempt/fallback indirection rather than changing any real behavior: no
+// OTP was ever actually delivered via SMS before this change either.
+// Re-enabling SMS later only requires restoring the `target.phone` branch
+// below (the Msg91SmsProvider class and SmsOtpProvider interface are left
+// untouched for that purpose).
 //
 // Reuses the EXISTING, already-wired sendOtpEmail() (nodemailer over SES
 // SMTP) from apps/web/lib/contact-verification/email-sender.ts as-is —
 // this is the one genuinely working delivery mechanism per the task spec,
 // so it is called directly rather than re-implemented.
 
-const smsProvider: SmsOtpProvider = new Msg91SmsProvider();
-
 export type DeliveryTarget = {
-  // The phone number to attempt SMS delivery to, if any (normalized E.164).
+  // Kept for call-site compatibility (both C20 and C37 still pass a phone
+  // when one is on file) but currently IGNORED — SMS delivery is disabled,
+  // see the module comment above.
   phone?: string | null;
-  // The email address to use for email delivery/fallback, if any (normalized).
+  // The email address OTPs are always delivered to.
   email?: string | null;
 };
 
 export type DeliveryOutcome =
-  | { ok: true; channel: "SMS" | "EMAIL"; maskedTarget: string }
+  | { ok: true; channel: "EMAIL"; maskedTarget: string }
   | {
       ok: false;
-      // SMS was stubbed/unavailable AND there was no usable email to fall
-      // back to — an honest, actionable failure (never a fake success).
+      // No usable email on file, or the email send itself failed — an
+      // honest, actionable failure (never a fake success).
       code: "NO_EMAIL_FALLBACK" | "EMAIL_SEND_FAILED";
       message: string;
     };
@@ -43,51 +51,25 @@ function maskEmail(email: string): string {
 }
 
 /**
- * Attempts delivery of `otp` using the configured channel strategy:
- *   1. If a phone number is available, try MSG91 SMS first (currently always
- *      reports NOT_CONFIGURED — see Msg91SmsProvider).
- *   2. On SMS unavailability/failure, fall back to SES email IF an eligible
- *      email address is available.
- *   3. If neither channel can deliver, return an honest failure — never a
+ * Delivers `otp` via email only — SMS (MSG91) is currently disabled (see
+ * module comment above), so `target.phone` is ignored entirely and every
+ * OTP is sent to `target.email`:
+ *   1. If no email address is on file, return an honest failure — never a
  *      fabricated "sent" result.
- *
- * Every attempt (including the stubbed SMS "attempt") is recorded against
- * `challengeId` via recordDeliveryAttempt() for observability — without
- * ever persisting the plaintext OTP or any provider secret.
+ *   2. Otherwise send via SES/SMTP, recorded against `challengeId` via
+ *      recordDeliveryAttempt() for observability — without ever persisting
+ *      the plaintext OTP or any provider secret.
  */
 export async function deliverOtp(
   challengeId: string,
   target: DeliveryTarget,
   otp: string
 ): Promise<DeliveryOutcome> {
-  if (target.phone) {
-    const smsResult = await smsProvider.sendOtp(target.phone, otp);
-
-    if (smsResult.status === "SENT") {
-      await recordDeliveryAttempt(challengeId, {
-        channel: OtpChannel.SMS,
-        provider: smsProvider.providerName,
-        status: OtpDeliveryStatus.SENT,
-        providerMessageId: smsResult.providerMessageId,
-      });
-      return { ok: true, channel: "SMS", maskedTarget: maskPhoneForDisplay(target.phone) };
-    }
-
-    // NOT_CONFIGURED (stub) or FAILED — record honestly, never as SENT.
-    await recordDeliveryAttempt(challengeId, {
-      channel: OtpChannel.SMS,
-      provider: smsProvider.providerName,
-      status: smsResult.status === "NOT_CONFIGURED" ? OtpDeliveryStatus.NOT_CONFIGURED : OtpDeliveryStatus.FAILED,
-      error: smsResult.status === "NOT_CONFIGURED" ? smsResult.reason : smsResult.error,
-    });
-  }
-
   if (!target.email) {
     return {
       ok: false,
       code: "NO_EMAIL_FALLBACK",
-      message:
-        "SMS delivery is currently unavailable and no registered email address is available to send the OTP to.",
+      message: "No registered email address is available to send the OTP to.",
     };
   }
 
@@ -145,10 +127,4 @@ export async function deliverOtp(
  */
 function isSesEmailConfigured(): boolean {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USERNAME && process.env.SMTP_PASSWORD);
-}
-
-function maskPhoneForDisplay(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length < 4) return "***";
-  return `+${"*".repeat(Math.max(digits.length - 4, 3))}${digits.slice(-4)}`;
 }

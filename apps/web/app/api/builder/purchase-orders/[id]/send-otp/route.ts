@@ -64,10 +64,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: issued.message }, { status: 429 });
     }
 
-    // Phone-first with the SAME MSG91-stub -> SES-email-fallback strategy as
-    // C20. Builder's own phone number (if any) is attempted first; email is
-    // always the guaranteed fallback for PO approval since it is required
-    // above.
+    // SMS (MSG91) is currently disabled (same as C20) — the OTP is always
+    // sent via email, which is why a registered email is required above.
     const delivery = await deliverOtp(
       issued.challengeId,
       { phone: po.builder.phone ?? null, email: po.builder.email },

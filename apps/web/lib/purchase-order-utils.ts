@@ -1,7 +1,45 @@
-import { PurchaseOrderStatus } from "@matsrc/db";
+import { PurchaseOrderStatus, calculateLineGst } from "@matsrc/db";
 
 export function toNumber(value: unknown): number {
   return value === null || value === undefined ? 0 : Number(value);
+}
+
+// Verify and Fix PO Generation to Use Accepted Supplier RFQ Price.
+//
+// Builds a single PurchaseOrderLineItem.create payload from a confirmed
+// OrderItem. `item.unitPrice` is read as-is — it is ALREADY the accepted
+// supplier RFQ quotation price (overwritten from the winning
+// SupplierQuote.unitPrice by BestPriceSelectionService.
+// selectAndFinalizeIfEligible at quote-acceptance time — see
+// apps/api/src/supplier/rfqs/best-price-selection.service.ts). This
+// function never reads Product.basePrice/PricingTier, so a later catalogue
+// price change can never leak into a PO.
+//
+// `tax` is computed via the same shared calculateLineGst used by the RFQ
+// quotation flow, from this same accepted unitPrice and the OrderItem's own
+// taxRatePercent (falls back to DEFAULT_TAX_RATE_PERCENT when absent —
+// never hard-coded to a single rate for every product).
+export function buildPurchaseOrderLineItemData(item: {
+  productId: string;
+  quantity: number;
+  unitPrice: unknown;
+  taxRatePercent?: unknown;
+  deliveryDate?: Date | null;
+}, fallbackDeliveryDate: Date | null) {
+  const gst = calculateLineGst({
+    quantity: item.quantity,
+    unitPrice: toNumber(item.unitPrice),
+    gstRatePercent:
+      item.taxRatePercent !== null && item.taxRatePercent !== undefined ? toNumber(item.taxRatePercent) : null,
+  });
+
+  return {
+    productId: item.productId,
+    quantity: item.quantity,
+    unitPrice: gst.unitPrice,
+    tax: gst.gstAmount,
+    deliveryDate: item.deliveryDate ?? fallbackDeliveryDate ?? null,
+  };
 }
 
 export async function generatePoNumber(prisma: any): Promise<string> {

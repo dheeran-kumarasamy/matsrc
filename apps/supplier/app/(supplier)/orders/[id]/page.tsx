@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OrderStatusActions } from "@/components/supplier/OrderStatusActions";
+import { RfqQuotationForm } from "@/components/supplier/RfqQuotationForm";
 import { getSupplierOrderDetail } from "@/lib/supplier-data";
 
 type Props = {
@@ -50,6 +51,20 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
         <p className="mt-1 text-sm text-slate-600">Site: {order.siteName ?? "Unassigned"}</p>
         <p className="mt-1 text-sm font-semibold text-slate-800">Ask Price: {order.askPrice}</p>
 
+        {/* Supplier RFQ Price Revision & GST-Inclusive Order Value: while
+            this enquiry is still awaiting the supplier's decision (PLACED),
+            let the supplier revise the quoted unit price per line item and
+            review the GST-inclusive total before confirming. Once the order
+            has moved past PLACED, the submitted quotation is final (spec
+            §14) — the form is no longer shown. */}
+        {order.status === "PLACED" ? (
+          <div className="mt-4">
+            <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Quotation</h4>
+            <div className="mt-2">
+              <RfqQuotationForm enquiryId={order.id} />
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-4 space-y-3">
           {/* S11: newest activity first — tracking is fetched ascending by

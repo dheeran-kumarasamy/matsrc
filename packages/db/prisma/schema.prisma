@@ -602,6 +602,27 @@ model SupplierQuote {
   leadTimeDays Int?
   createdAt    DateTime        @default(now())
 
+  // Supplier RFQ Price Revision & GST-Inclusive Order Value — the
+  // RFQ-specific supplier-quoted price (unitPrice above) plus its
+  // server-calculated GST/line-total breakdown, frozen at submission time so
+  // the exact quotation presented to/submitted by the supplier can always be
+  // reproduced later, even if the product's catalogue price or GST rate
+  // changes afterwards (see RfqsService.createQuote / the equivalent
+  // apps/supplier/lib/supplier-data.ts call site, which are the only two
+  // writers of these columns). Nullable/additive — existing pre-migration
+  // rows simply have no GST breakdown and continue to be read exactly as
+  // before (see findEnquiryQuotes, which tolerates nulls).
+  //
+  // `quantity` is the RFQ/OrderItem quantity AT THE TIME this quote was
+  // submitted — captured here (rather than only read live off OrderItem) so
+  // a later, unrelated quantity change can never silently alter a quotation
+  // that has already been submitted and/or converted into an order.
+  quantity       Int?
+  gstRatePercent Decimal? @db.Decimal(5, 2)
+  lineSubtotal   Decimal? @db.Decimal(14, 2)
+  gstAmount      Decimal? @db.Decimal(14, 2)
+  lineTotal      Decimal? @db.Decimal(14, 2)
+
   @@index([enquiryId])
   @@index([supplierId])
   @@index([lineItemId])

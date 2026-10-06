@@ -1,10 +1,11 @@
-import { prisma, notifyCustomerOrderStatusChanged, notifyPaymentRequired } from "@matsrc/db";
+import { prisma, notifyCustomerOrderStatusChanged, notifyPaymentRequired, calculateLineGst, parseQuotedPrice } from "@matsrc/db";
 import { waitUntil } from "@vercel/functions";
 import { parsePhoneNumber } from "libphonenumber-js";
 import { getProductImage } from "./category-images";
 import {
   groupByCanonicalProduct,
   resolveHeadlinePrice,
+  resolveLowestPriceForQuantity,
   resolvePriceRange,
   resolveMinimumDisplayPrice,
   type ResolutionCandidate,
@@ -1324,6 +1325,43 @@ export type SupplierOrderDetail = {
   brand: string | null;
 };
 
+// Supplier RFQ Price Revision & GST-Inclusive Order Value — a single
+// quotable RFQ line item (one per OrderItem this supplier is currently
+// assigned to for the enquiry), with the GST breakdown computed from
+// whichever unit price is currently in effect (the supplier's own prior
+// submitted SupplierQuote, if any, otherwise the existing tier-resolved
+// catalogue price per spec §3).
+export type RfqQuotationLine = {
+  lineItemId: string;
+  productName: string;
+  brand: string | null;
+  quantity: number;
+  unit: string;
+  gstRatePercent: number;
+  // Pre-populated per spec §3: the supplier's own prior SupplierQuote price
+  // for this RFQ if one exists, otherwise the existing tier-resolved
+  // catalogue price. The supplier may edit this before submitting.
+  initialUnitPrice: number;
+  lineSubtotal: number;
+  gstAmount: number;
+  lineTotal: number;
+};
+
+export type RfqQuotationContext = {
+  enquiryId: string;
+  // Display-only Meaningful Enquiry ID — falls back to the raw order id for
+  // pre-migration orders (see Order.enquiryId's doc comment in schema.prisma).
+  displayEnquiryId: string;
+  // False once the enquiry's quote selection has already been finalized, or
+  // the enquiry has moved to CANCELLED — the UI must not allow submission
+  // and should show "This RFQ is no longer available for quotation."
+  quotable: boolean;
+  lines: RfqQuotationLine[];
+  subtotal: number;
+  gstAmount: number;
+  grandTotal: number;
+};
+
 
 
 export type SupplierRfqCard = {
@@ -1413,6 +1451,105 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
   };
 }
 
+// Supplier RFQ Price Revision & GST-Inclusive Order Value (spec §1-§9).
+//
+// Returns every RFQ/enquiry line item this supplier is currently assigned
+// to (OrderItem.supplierId === this supplier — the active PENDING candidate
+// in the multi-supplier fan-out), pre-populated with:
+//   - the supplier's own most recent prior SupplierQuote.unitPrice for this
+//     RFQ, if one exists (so reopening the RFQ shows what was last entered —
+//     spec §17's "at minimum... reopening the RFQ should show the
+//     previously entered prices", the only draft-like persistence this
+//     app already has), otherwise
+//   - the existing tier-resolved catalogue price for this quantity (spec
+//     §3 — "use that as the initial value"), via the SAME
+//     resolveLowestPriceForQuantity used everywhere else prices are
+//     resolved for a given quantity.
+// GST is resolved per line item from OrderItem.taxRatePercent (falling back
+// to DEFAULT_TAX_RATE_PERCENT via calculateLineGst — never hard-coded).
+export async function getEnquiryQuotationContext(enquiryId: string, email: string): Promise<RfqQuotationContext | null> {
+  const { supplierProfile } = await ensureSupplierContext(email);
+
+  const order = await prisma.order.findUnique({
+    where: { id: enquiryId },
+    include: {
+      items: {
+        where: { supplierId: supplierProfile.id },
+        include: {
+          product: {
+            include: {
+              brandRef: true,
+              pricingTiers: { select: { minQty: true, maxQty: true, tierPrice: true } },
+            },
+          },
+          supplierQuotes: {
+            where: { supplierId: supplierProfile.id },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  if (!order || order.items.length === 0) return null;
+
+  const quotable = !order.quoteSelectionCompletedAt && order.status !== "CANCELLED";
+
+  const lines: RfqQuotationLine[] = order.items.map((item: any) => {
+    const priorQuote = item.supplierQuotes[0];
+
+    let initialUnitPrice: number;
+    if (priorQuote) {
+      initialUnitPrice = Number(priorQuote.unitPrice);
+    } else {
+      const candidate: ResolutionCandidate = {
+        listingId: item.productId,
+        supplierId: supplierProfile.id,
+        basePrice: Number(item.product.basePrice),
+        stock: item.product.stock,
+        maxServiceableQty: item.product.maxServiceableQty ?? item.product.stock,
+        pricingTiers: item.product.pricingTiers.map((tier: any) => ({
+          minQty: tier.minQty,
+          maxQty: tier.maxQty,
+          tierPrice: Number(tier.tierPrice),
+        })),
+        isActive: item.product.isActive,
+      };
+      const resolution = resolveLowestPriceForQuantity([candidate], item.quantity);
+      initialUnitPrice = resolution?.unitPrice ?? Number(item.unitPrice);
+    }
+
+    const gstRatePercent = item.taxRatePercent !== null && item.taxRatePercent !== undefined ? Number(item.taxRatePercent) : null;
+    const gst = calculateLineGst({ quantity: item.quantity, unitPrice: initialUnitPrice, gstRatePercent });
+
+    return {
+      lineItemId: item.id,
+      productName: item.product.name,
+      brand: item.product.brandRef?.name ?? item.product.brand ?? null,
+      quantity: item.quantity,
+      unit: item.product.unit,
+      gstRatePercent: gst.gstRatePercent,
+      initialUnitPrice: gst.unitPrice,
+      lineSubtotal: gst.lineSubtotal,
+      gstAmount: gst.gstAmount,
+      lineTotal: gst.lineTotal,
+    };
+  });
+
+  const subtotal = lines.reduce((sum, line) => sum + line.lineSubtotal, 0);
+  const gstAmountTotal = lines.reduce((sum, line) => sum + line.gstAmount, 0);
+
+  return {
+    enquiryId,
+    displayEnquiryId: order.enquiryId ?? enquiryId,
+    quotable,
+    lines,
+    subtotal: Math.round(subtotal * 100) / 100,
+    gstAmount: Math.round(gstAmountTotal * 100) / 100,
+    grandTotal: Math.round((subtotal + gstAmountTotal) * 100) / 100,
+  };
+}
 
 // Multi-supplier fan-out: when the ACTING supplier declines (status ===
 // "CANCELLED"), we must not immediately cancel the whole enquiry if other
@@ -1819,12 +1956,21 @@ export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]>
   return [...rfqCards, ...enquiryCards];
 }
 
+export type RfqQuoteLineInput = { lineItemId: string; unitPrice: string };
+
 export async function createSupplierQuote(
   rfqId: string,
-  input: { price: string; validUntil?: string; notes?: string },
+  input: { price: string; validUntil?: string; notes?: string; lineQuotes?: RfqQuoteLineInput[] },
   email: string
 ) {
   const { supplierProfile } = await ensureSupplierContext(email);
+
+  // Supplier RFQ Price Revision & GST-Inclusive Order Value: when the
+  // caller submits `lineQuotes`, this is a real enquiry (OrderItem-backed)
+  // RFQ quotation, not the legacy QuickRequest `Quote` flow below.
+  if (Array.isArray(input.lineQuotes) && input.lineQuotes.length > 0) {
+    return createEnquiryLineQuotesForSupplier(rfqId, input.lineQuotes, supplierProfile.id);
+  }
 
   const rfq = await prisma.quickRequest.findUnique({ where: { id: rfqId } });
   if (!rfq) return null;
@@ -1838,6 +1984,99 @@ export async function createSupplierQuote(
       notes: input.notes?.trim() || null,
     },
   });
+}
+
+// Supplier RFQ Price Revision & GST-Inclusive Order Value (spec §11): the
+// server-side authority for the supplier portal's own RFQ quotation
+// submission. Mirrors apps/api's RfqsService.createEnquiryLineQuotes
+// (same validation/GST-calculation rules, same SupplierQuote persistence
+// shape) since apps/supplier's Next.js API routes have direct Prisma
+// access and don't proxy through apps/api for this flow.
+async function createEnquiryLineQuotesForSupplier(
+  enquiryId: string,
+  lineQuotes: RfqQuoteLineInput[],
+  supplierId: string
+) {
+  const enquiry = await prisma.order.findUnique({
+    where: { id: enquiryId },
+    include: { items: true },
+  });
+
+  if (!enquiry) {
+    throw new Error("Enquiry not found");
+  }
+
+  // Spec §11/§20: reject submissions against an RFQ that is no longer
+  // open/quotable.
+  if (enquiry.quoteSelectionCompletedAt || enquiry.status === "CANCELLED") {
+    throw new Error("This RFQ is no longer available for quotation.");
+  }
+
+  const itemsById = new Map(enquiry.items.map((item: any) => [item.id, item]));
+
+  const resolvedLines = lineQuotes.map((lineQuote) => {
+    const item = itemsById.get(lineQuote.lineItemId);
+    if (!item) {
+      throw new Error(`Line item ${lineQuote.lineItemId} not found for enquiry`);
+    }
+
+    // Authorization: only the supplier currently assigned to this line
+    // item may submit a quotation for it.
+    if ((item as any).supplierId !== supplierId) {
+      throw new Error(`You are not authorized to quote line item ${lineQuote.lineItemId}.`);
+    }
+
+    const unitPrice = parseQuotedPrice(lineQuote.unitPrice);
+    if (unitPrice === null) {
+      throw new Error(`Invalid quoted price for line item ${lineQuote.lineItemId} — price must be a non-negative number.`);
+    }
+
+    // Quantity is always the RFQ's own OrderItem quantity — never
+    // client-supplied.
+    const quantity = (item as any).quantity;
+    const taxRatePercent = (item as any).taxRatePercent;
+    const gstRatePercent = taxRatePercent !== null && taxRatePercent !== undefined ? Number(taxRatePercent) : null;
+
+    const gst = calculateLineGst({ quantity, unitPrice, gstRatePercent });
+
+    return { lineItemId: lineQuote.lineItemId, gst };
+  });
+
+  const created = await prisma.$transaction(async (tx) => {
+    const rows: Array<{ id: string; unitPrice: any }> = [];
+    for (const { lineItemId, gst } of resolvedLines) {
+      const row = await tx.supplierQuote.create({
+        data: {
+          enquiryId,
+          supplierId,
+          lineItemId,
+          unitPrice: gst.unitPrice,
+          currency: "INR",
+          quantity: gst.quantity,
+          gstRatePercent: gst.gstRatePercent,
+          lineSubtotal: gst.lineSubtotal,
+          gstAmount: gst.gstAmount,
+          lineTotal: gst.lineTotal,
+        },
+      });
+      rows.push({ id: row.id, unitPrice: row.unitPrice });
+
+      // Supplier RFQ Price Revision (spec §15/§22): the single-supplier
+      // confirm flow (this app's "Confirm Enquiry" action) has no separate
+      // cross-supplier best-price-selection step — the order must use the
+      // submitted quotation price directly, so OrderItem.unitPrice is
+      // updated here, inside the same transaction as the SupplierQuote
+      // write, immediately to the just-submitted price.
+      await tx.orderItem.update({
+        where: { id: lineItemId },
+        data: { unitPrice: gst.unitPrice },
+      });
+    }
+    return rows;
+  });
+
+  const latest = created[created.length - 1];
+  return { id: latest?.id ?? enquiryId, rfqId: enquiryId, price: latest?.unitPrice?.toString() ?? "0" };
 }
 
 export async function getSupplierProfileData(email: string) {

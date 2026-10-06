@@ -63,6 +63,14 @@ export * from "./lib/supplier-po-received-notification";
 // packages/db/lib/payment-required-notification.ts for full documentation.
 export * from "./lib/payment-required-notification";
 
+// Supplier RFQ Price Revision & GST-Inclusive Order Value — shared,
+// framework-agnostic GST/line-total calculation used by both the
+// NestJS RfqsService (apps/api) and the Next.js supplier portal
+// (apps/supplier/lib/supplier-data.ts) so there is exactly one place this
+// math is implemented. See packages/db/lib/gst-calculation.ts for full
+// documentation.
+export * from "./lib/gst-calculation";
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

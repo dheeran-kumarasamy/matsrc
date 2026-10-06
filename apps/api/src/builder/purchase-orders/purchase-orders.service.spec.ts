@@ -98,6 +98,137 @@ describe("PurchaseOrdersService.create", () => {
     );
     expect(result.lineItems[0].quantity).toBe(42);
   });
+
+  // Verify and Fix PO Generation to Use Accepted Supplier RFQ Price.
+  //
+  // Catalogue price = ₹400, Supplier RFQ quote = ₹425 (already reflected on
+  // OrderItem.unitPrice by BestPriceSelectionService — see that service's
+  // own regression test). PO must use ₹425, never ₹400.
+  it("uses the accepted supplier RFQ quotation price (OrderItem.unitPrice), not the catalogue price, and computes GST from it", async () => {
+    const { service, prisma } = buildService({
+      order: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "order-1",
+          quoteSelectionCompletedAt: new Date(),
+          selectedSupplierId: "sup-1",
+          paymentMethod: "UPI",
+          bestPriceTotal: null,
+          tentativeDeliveryDate: null,
+          items: [
+            // unitPrice (425) is the ACCEPTED supplier quote — distinct
+            // from any hypothetical catalogue price (400), which this
+            // service must never read.
+            { productId: "p1", quantity: 100, unitPrice: 425, taxRatePercent: 18, deliveryDate: null },
+          ],
+        }),
+      },
+    });
+
+    prisma.purchaseOrder.findFirst.mockResolvedValueOnce(null);
+    prisma.purchaseOrder.create.mockImplementation(async ({ data }: any) => ({
+      id: "po-1",
+      lineItems: data.lineItems.create.map((li: any, i: number) => ({
+        id: `li-${i + 1}`,
+        ...li,
+        product: { name: "Cement", unit: "bag" },
+      })),
+      supplier: { id: "sup-1", companyName: "Supplier One" },
+      builder: { id: "builder-1", name: "Builder One", email: "builder@example.com" },
+    }));
+
+    const result = await service.create(userCtx, { orderId: "order-1" } as any);
+
+    expect(prisma.purchaseOrder.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          lineItems: expect.objectContaining({
+            create: [expect.objectContaining({ productId: "p1", quantity: 100, unitPrice: 425, tax: 7650 })],
+          }),
+        }),
+      })
+    );
+
+    expect(result.lineItems[0].unitPrice).toBe(425);
+    expect(result.lineItems[0].tax).toBe(7650);
+    // lineTotal = unitPrice * quantity + tax = 42500 + 7650 = 50150
+    expect(result.lineItems[0].lineTotal).toBe(50150);
+  });
+
+  // Multi-line verification: each PO line must use ITS OWN accepted
+  // supplier quotation price, never one price applied to every line.
+  it("uses each line item's own accepted supplier quote price independently", async () => {
+    const { service, prisma } = buildService({
+      order: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "order-2",
+          quoteSelectionCompletedAt: new Date(),
+          selectedSupplierId: "sup-1",
+          paymentMethod: "UPI",
+          bestPriceTotal: null,
+          tentativeDeliveryDate: null,
+          items: [
+            { productId: "p-a", quantity: 100, unitPrice: 425, taxRatePercent: 18, deliveryDate: null },
+            { productId: "p-b", quantity: 50, unitPrice: 1250, taxRatePercent: 5, deliveryDate: null },
+          ],
+        }),
+      },
+    });
+
+    prisma.purchaseOrder.findFirst.mockResolvedValueOnce(null);
+    prisma.purchaseOrder.create.mockImplementation(async ({ data }: any) => ({
+      id: "po-2",
+      lineItems: data.lineItems.create.map((li: any, i: number) => ({
+        id: `li-${i + 1}`,
+        ...li,
+        product: { name: `Product ${i}`, unit: "unit" },
+      })),
+      supplier: { id: "sup-1", companyName: "Supplier One" },
+      builder: { id: "builder-1", name: "Builder One", email: "builder@example.com" },
+    }));
+
+    const result = await service.create(userCtx, { orderId: "order-2" } as any);
+
+    // 100 * 425 * 18% = 7650
+    expect(result.lineItems[0]).toMatchObject({ productId: "p-a", unitPrice: 425, tax: 7650 });
+    // 50 * 1250 * 5% = 3125
+    expect(result.lineItems[1]).toMatchObject({ productId: "p-b", unitPrice: 1250, tax: 3125 });
+  });
+
+  // Immutability: supplier submits ₹425, catalogue price later changes to
+  // ₹450 — PO generation reads only OrderItem.unitPrice (already frozen at
+  // ₹425 by quote acceptance) and must never consult/re-resolve the
+  // catalogue price.
+  it("never falls back to a changed catalogue price — only reads OrderItem.unitPrice", async () => {
+    const { service, prisma } = buildService({
+      order: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "order-3",
+          quoteSelectionCompletedAt: new Date(),
+          selectedSupplierId: "sup-1",
+          paymentMethod: "UPI",
+          bestPriceTotal: null,
+          tentativeDeliveryDate: null,
+          items: [
+            // Simulates: catalogue price is now 450, but the accepted
+            // OrderItem.unitPrice remains 425 — this service has no
+            // product/catalogue lookup at all, so it cannot regress.
+            { productId: "p1", quantity: 10, unitPrice: 425, taxRatePercent: 18, deliveryDate: null },
+          ],
+        }),
+      },
+    });
+
+    prisma.purchaseOrder.findFirst.mockResolvedValueOnce(null);
+    prisma.purchaseOrder.create.mockImplementation(async ({ data }: any) => ({
+      id: "po-3",
+      lineItems: data.lineItems.create.map((li: any) => ({ id: "li-1", ...li, product: { name: "Cement", unit: "bag" } })),
+      supplier: { id: "sup-1", companyName: "Supplier One" },
+      builder: { id: "builder-1", name: "Builder One", email: "builder@example.com" },
+    }));
+
+    const result = await service.create(userCtx, { orderId: "order-3" } as any);
+    expect(result.lineItems[0].unitPrice).toBe(425);
+  });
 });
 
 describe("PurchaseOrdersService.update", () => {

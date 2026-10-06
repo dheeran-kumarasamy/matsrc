@@ -9,6 +9,7 @@ import {
   getSupplierOrderDetail,
   getSupplierOrders,
   getSupplierRfqs,
+  getEnquiryQuotationContext,
   updateSupplierListing,
   updateSupplierOrderStatus,
   updateSupplierProfile,
@@ -84,6 +85,19 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(detail);
       }
 
+      // Supplier RFQ Price Revision & GST-Inclusive Order Value: used by the
+      // supplier's RFQ quotation form to fetch quotable line items
+      // pre-populated with the applicable price + server-calculated GST
+      // breakdown before the supplier edits/submits.
+      const quotationMatch = path.match(/^\/rfqs\/([^/]+)\/quotation$/);
+      if (quotationMatch) {
+        const context = await getEnquiryQuotationContext(quotationMatch[1], email);
+        if (!context) {
+          return NextResponse.json({ message: "RFQ not found" }, { status: 404 });
+        }
+        return NextResponse.json(context);
+      }
+
       // Used by the dashboard "View" overlay to fetch product/listing details on demand.
       const listingMatch = path.match(/^\/listings\/([^/]+)$/);
       if (listingMatch) {
@@ -121,11 +135,22 @@ export async function POST(req: NextRequest) {
     const quoteMatch = path.match(/^\/rfqs\/([^/]+)\/quote$/);
     if (quoteMatch) {
       const rfqId = quoteMatch[1];
-      const created = await createSupplierQuote(rfqId, body, email);
-      if (!created) {
-        return NextResponse.json({ message: "RFQ not found" }, { status: 404 });
+      try {
+        const created = await createSupplierQuote(rfqId, body, email);
+        if (!created) {
+          return NextResponse.json({ message: "RFQ not found" }, { status: 404 });
+        }
+        return NextResponse.json(created, { status: 201 });
+      } catch (quoteError: any) {
+        // Supplier RFQ Price Revision & GST-Inclusive Order Value: every
+        // validation failure thrown by createEnquiryLineQuotesForSupplier
+        // (invalid/negative price, unauthorized line item, RFQ no longer
+        // quotable, missing line item) is a client error — return 400 with
+        // the specific message rather than falling through to the generic
+        // 500 handler below.
+        const message = typeof quoteError?.message === "string" ? quoteError.message : "Invalid quotation submission";
+        return NextResponse.json({ message }, { status: 400 });
       }
-      return NextResponse.json(created, { status: 201 });
     }
 
     // Supplier-side: POST /supplier/purchase-orders/:id/acknowledge — confirm receipt in-app.

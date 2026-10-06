@@ -1,5 +1,6 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { waitUntil } from "@vercel/functions";
+import { calculateLineGst, parseQuotedPrice } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
 import { formatDate } from "src/supplier/utils";
@@ -106,6 +107,14 @@ export class RfqsService {
       currency: quote.currency,
       leadTimeDays: quote.leadTimeDays,
       createdAt: quote.createdAt,
+      // Supplier RFQ Price Revision & GST-Inclusive Order Value — null for
+      // pre-migration quotes that predate these columns (see SupplierQuote's
+      // doc comment in schema.prisma); the UI must tolerate nulls here.
+      quantity: quote.quantity,
+      gstRatePercent: quote.gstRatePercent?.toString() ?? null,
+      lineSubtotal: quote.lineSubtotal?.toString() ?? null,
+      gstAmount: quote.gstAmount?.toString() ?? null,
+      lineTotal: quote.lineTotal?.toString() ?? null,
     }));
   }
 
@@ -154,26 +163,87 @@ export class RfqsService {
       throw new NotFoundException("Enquiry not found");
     }
 
+    // Supplier RFQ Price Revision & GST-Inclusive Order Value (spec §11/§20):
+    // reject quotation submissions against an enquiry that is no longer
+    // open/quotable — either because best-price selection has already
+    // finalized it (quoteSelectionCompletedAt set — the concurrency/
+    // uniqueness backstop against duplicate/late quotations), or because the
+    // enquiry has moved to a terminal state (CANCELLED). This is a client
+    // error (stale UI / a direct API call against an expired RFQ), not a
+    // server fault.
+    if (enquiry.quoteSelectionCompletedAt || enquiry.status === "CANCELLED") {
+      throw new BadRequestException("This RFQ is no longer available for quotation.");
+    }
+
     const itemsById = new Map(enquiry.items.map((item) => [item.id, item]));
     const lineQuotes = dto.lineQuotes ?? [];
+
+    if (lineQuotes.length === 0) {
+      throw new BadRequestException("At least one line item quote is required.");
+    }
+
+    // Validate every line item BEFORE writing anything — a single invalid
+    // price must reject the whole submission rather than partially persist
+    // some lines (spec §11: "Every required line item has a valid price").
+    const resolvedLines = lineQuotes.map((lineQuote) => {
+      const item = itemsById.get(lineQuote.lineItemId);
+      if (!item) {
+        throw new NotFoundException(`Line item ${lineQuote.lineItemId} not found for enquiry`);
+      }
+
+      // Authorization (spec §11/§23): only the supplier currently assigned
+      // to this line item (OrderItem.supplierId — the active PENDING
+      // candidate in the multi-supplier fan-out, see
+      // packages/db/prisma/schema.prisma's OrderItemSupplierCandidate doc
+      // comment) may submit a quotation for it.
+      if (item.supplierId !== supplierProfile.id) {
+        throw new BadRequestException(`You are not authorized to quote line item ${lineQuote.lineItemId}.`);
+      }
+
+      // Price validation (spec §12): reject negative/NaN/Infinity/empty/
+      // invalid-decimal prices with a clear message, never silently
+      // coerce to 0 or drop the line.
+      const unitPrice = parseQuotedPrice(lineQuote.unitPrice);
+      if (unitPrice === null) {
+        throw new BadRequestException(
+          `Invalid quoted price for line item ${lineQuote.lineItemId} — price must be a non-negative number.`
+        );
+      }
+
+      // Quantity (spec §11/§23/Test 8): ALWAYS the RFQ's own OrderItem
+      // quantity — the client never supplies (and cannot override) it.
+      const quantity = item.quantity;
+
+      // GST (spec §6): resolved per-line-item from the existing
+      // OrderItem.taxRatePercent configuration (falls back to
+      // DEFAULT_TAX_RATE_PERCENT when absent) — never hard-coded to a
+      // single rate for every product.
+      const gst = calculateLineGst({
+        quantity,
+        unitPrice,
+        gstRatePercent: item.taxRatePercent !== null && item.taxRatePercent !== undefined ? Number(item.taxRatePercent) : null,
+      });
+
+      return { lineQuote, item, gst };
+    });
 
     const created = await this.prisma.$transaction(async (tx) => {
       const rows = [] as Array<{ id: string; unitPrice: string }>;
 
-      for (const lineQuote of lineQuotes) {
-        const item = itemsById.get(lineQuote.lineItemId);
-        if (!item) {
-          throw new NotFoundException(`Line item ${lineQuote.lineItemId} not found for enquiry`);
-        }
-
+      for (const { lineQuote, gst } of resolvedLines) {
         const quote = await tx.supplierQuote.create({
           data: {
             enquiryId,
             supplierId: supplierProfile.id,
             lineItemId: lineQuote.lineItemId,
-            unitPrice: Number(lineQuote.unitPrice),
+            unitPrice: gst.unitPrice,
             currency: (lineQuote.currency || "INR").toUpperCase(),
             leadTimeDays: lineQuote.leadTimeDays,
+            quantity: gst.quantity,
+            gstRatePercent: gst.gstRatePercent,
+            lineSubtotal: gst.lineSubtotal,
+            gstAmount: gst.gstAmount,
+            lineTotal: gst.lineTotal,
           },
         });
 

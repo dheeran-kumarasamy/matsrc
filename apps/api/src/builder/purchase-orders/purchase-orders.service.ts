@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { waitUntil } from "@vercel/functions";
-import { PurchaseOrderStatus } from "@matsrc/db";
+import { PurchaseOrderStatus, calculateLineGst } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { BuilderContextService } from "src/builder/builder-context.service";
 import { NotificationService } from "src/notifications/notification.service";
@@ -196,13 +196,38 @@ export class PurchaseOrdersService {
           tentativeDeliveryDate: order.tentativeDeliveryDate,
         },
         lineItems: {
-          create: order.items.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            tax: 0,
-            deliveryDate: item.deliveryDate ?? order.tentativeDeliveryDate ?? null,
-          })),
+          // Verify and Fix PO Generation to Use Accepted Supplier RFQ Price:
+          // `item.unitPrice` here is OrderItem.unitPrice, which
+          // BestPriceSelectionService.selectAndFinalizeIfEligible already
+          // overwrote with the accepted SupplierQuote.unitPrice at quote-
+          // acceptance time (see apps/api/src/supplier/rfqs/
+          // best-price-selection.service.ts) — NOT the product's current
+          // catalogue/tier price. The PO must never re-derive this from
+          // Product.basePrice/PricingTier, so this reads directly off the
+          // already-accepted OrderItem row and nothing else.
+          //
+          // `tax` was previously hard-coded to 0 (GST was never actually
+          // computed into the PO at all, regardless of price source) — now
+          // computed via the same shared calculateLineGst used by the RFQ
+          // quotation flow, from this same accepted unitPrice and the
+          // product's existing OrderItem.taxRatePercent (falls back to
+          // DEFAULT_TAX_RATE_PERCENT when absent — never hard-coded to a
+          // single rate).
+          create: order.items.map((item) => {
+            const gst = calculateLineGst({
+              quantity: item.quantity,
+              unitPrice: Number(item.unitPrice),
+              gstRatePercent: item.taxRatePercent !== null && item.taxRatePercent !== undefined ? Number(item.taxRatePercent) : null,
+            });
+
+            return {
+              productId: item.productId,
+              quantity: item.quantity,
+              unitPrice: gst.unitPrice,
+              tax: gst.gstAmount,
+              deliveryDate: item.deliveryDate ?? order.tentativeDeliveryDate ?? null,
+            };
+          }),
         },
       },
       include: {

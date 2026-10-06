@@ -5,6 +5,7 @@ import {
   serializePurchaseOrder,
   purchaseOrderInclude,
   generatePoNumber,
+  buildPurchaseOrderLineItemData,
 } from "@/lib/purchase-order-utils";
 import { notifySupplierPurchaseOrderGenerated } from "@/lib/notify";
 
@@ -101,13 +102,13 @@ export async function POST(request: Request) {
           tentativeDeliveryDate: order.tentativeDeliveryDate,
         },
         lineItems: {
-          create: order.items.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            tax: 0,
-            deliveryDate: item.deliveryDate ?? order.tentativeDeliveryDate ?? null,
-          })),
+          // Verify and Fix PO Generation to Use Accepted Supplier RFQ Price:
+          // see buildPurchaseOrderLineItemData's doc comment — unitPrice is
+          // read as-is from the already-accepted OrderItem.unitPrice, never
+          // re-derived from catalogue/tier pricing.
+          create: order.items.map((item) =>
+            buildPurchaseOrderLineItemData(item as any, order.tentativeDeliveryDate)
+          ),
         },
       },
       include: purchaseOrderInclude,

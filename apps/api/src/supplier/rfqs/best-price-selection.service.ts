@@ -159,15 +159,37 @@ export class BestPriceSelectionService {
     const previousStatus = order.status;
     const newStatus = previousStatus === OrderStatus.PLACED ? OrderStatus.PROCESSING : previousStatus;
 
-    await this.prisma.order.update({
-      where: { id: enquiryId },
-      data: {
-        status: newStatus,
-        selectedSupplierId,
-        bestPriceTotal,
-        tentativeDeliveryDate,
-        quoteSelectionCompletedAt: new Date(),
-      },
+    // Supplier RFQ Price Revision & GST-Inclusive Order Value (spec §15):
+    // the order must use the supplier's SUBMITTED RFQ quotation price, never
+    // the current catalogue/listing price — `winningLines` above already
+    // holds each line item's winning SupplierQuote.unitPrice (and winning
+    // supplierId, for the multi-supplier-fan-out case where different line
+    // items are won by different suppliers). OrderItem.unitPrice/supplierId
+    // must be updated to match here, inside the same transaction as the
+    // Order finalization, so the order that results from this RFQ actually
+    // reflects what was quoted — not whatever unitPrice/supplierId the
+    // OrderItem happened to be created with.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: enquiryId },
+        data: {
+          status: newStatus,
+          selectedSupplierId,
+          bestPriceTotal,
+          tentativeDeliveryDate,
+          quoteSelectionCompletedAt: new Date(),
+        },
+      });
+
+      for (const line of winningLines) {
+        await tx.orderItem.update({
+          where: { id: line.lineItemId },
+          data: {
+            unitPrice: line.unitPrice,
+            supplierId: line.supplierId,
+          },
+        });
+      }
     });
 
     // Notification Engine — customer_order_status WhatsApp template. Only a

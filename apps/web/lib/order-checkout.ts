@@ -194,6 +194,12 @@ export async function createOrdersFromCart(
   userId: string,
   options: CreateOrdersOptions = {}
 ): Promise<CreateOrdersResult> {
+  // DIAGNOSTIC LOGGING (task: investigate /orders/checkout 500): checkpoint
+  // logs through the pipeline so a 500 can be localized to a specific
+  // phase (cart fetch / site validation / listings fetch / resolution /
+  // per-supplier-group transaction) rather than only a generic stack trace.
+  console.log("[createOrdersFromCart] start", { userId, options });
+
   const cartItems = await prisma.cartItem.findMany({
     where: { userId },
     include: {
@@ -211,6 +217,8 @@ export async function createOrdersFromCart(
       },
     },
   });
+
+  console.log("[createOrdersFromCart] cart fetched", { userId, cartItemCount: cartItems.length });
 
   if (!cartItems.length) {
     return { ok: false, error: "Cart is empty", status: 400 };
@@ -237,6 +245,7 @@ export async function createOrdersFromCart(
       select: { id: true },
     });
     if (!site) {
+      console.log("[createOrdersFromCart] site validation failed", { userId, requestedSiteId });
       return {
         ok: false,
         error: "Selected site was not found or is no longer active. Please choose another site.",
@@ -245,12 +254,46 @@ export async function createOrdersFromCart(
     }
   }
 
+  console.log("[createOrdersFromCart] site validated", { userId, requestedSiteId });
+
   // Re-resolve each cart item's canonical group fresh against the latest
   // supplier listings (spec: "re-resolve at checkout" — prices/stock may
   // have changed since add-to-cart). Falls back to the item's own
   // supplier/product pricing if no live resolution is available (e.g.
   // legacy local-only product with no matching public listing).
   const allListings = await fetchAllSupplierListings();
+  console.log("[createOrdersFromCart] listings fetched", { userId, listingCount: allListings.length });
+
+  // DATA-INTEGRITY GUARD (root cause of a live P2003 FK violation on
+  // checkout — Order/OrderItem/OrderItemSupplierCandidate.supplierId all
+  // reference SupplierProfile.id): the public listings API above is served
+  // by a SEPARATE app/deployment (supplier.buildohub.in) whose database can
+  // drift out of sync with this app's own database — a listing's
+  // `headlineSupplierId` is NOT guaranteed to exist as a real
+  // SupplierProfile row here. Validate every resolved supplierId against
+  // this app's own DB before trusting it; fall back to the cart item's own
+  // product.supplierId (always a valid FK target, since it's read straight
+  // off the already-fetched Product.supplier relation) whenever the
+  // listings-API-resolved id doesn't actually exist locally.
+  const resolvedSupplierIds = new Set(
+    [...new Set(allListings.map((listing) => listing.headlineSupplierId).filter((id): id is string => Boolean(id)))]
+  );
+  const validSupplierIds =
+    resolvedSupplierIds.size > 0
+      ? new Set(
+          (
+            await prisma.supplierProfile.findMany({
+              where: { id: { in: Array.from(resolvedSupplierIds) } },
+              select: { id: true },
+            })
+          ).map((row) => row.id)
+        )
+      : new Set<string>();
+  console.log("[createOrdersFromCart] supplier id validation", {
+    userId,
+    resolvedFromListings: resolvedSupplierIds.size,
+    validInThisDb: validSupplierIds.size,
+  });
 
   type ResolvedLine = {
     productId: string;
@@ -277,7 +320,26 @@ export async function createOrdersFromCart(
       item.quantity
     );
 
-    if (resolution && resolution.supplierId) {
+    // DATA-INTEGRITY GUARD (see validSupplierIds above): a resolution whose
+    // supplierId doesn't exist as a real SupplierProfile in THIS app's own
+    // database must never be used — it would otherwise reach
+    // tx.order.create() and fail with Prisma P2003 (foreign key violation),
+    // surfacing as an opaque 500 on checkout. Treated identically to "no
+    // live resolution available", which already has a safe fallback path
+    // below. The candidate pool is filtered the same way, since
+    // OrderItemSupplierCandidate.supplierId carries the identical FK.
+    const resolutionSupplierValid = Boolean(resolution?.supplierId && validSupplierIds.has(resolution.supplierId));
+    const validRanked = ranked.filter((candidate) => validSupplierIds.has(candidate.supplierId));
+
+    if (resolution && !resolutionSupplierValid) {
+      console.error("[createOrdersFromCart] discarding resolution with unknown supplierId", {
+        userId,
+        productId: item.productId,
+        unknownSupplierId: resolution.supplierId,
+      });
+    }
+
+    if (resolution && resolutionSupplierValid) {
       return {
         productId: item.productId,
         quantity: item.quantity,
@@ -293,7 +355,7 @@ export async function createOrdersFromCart(
         resolvedListingId: resolution.listingId,
         tierMinQty: resolution.tierMinQty,
         tierMaxQty: resolution.tierMaxQty,
-        candidates: ranked,
+        candidates: validRanked,
       };
     }
 
@@ -381,6 +443,12 @@ export async function createOrdersFromCart(
     select: { name: true, email: true },
   });
 
+  console.log("[createOrdersFromCart] groups resolved", {
+    userId,
+    groupCount: groups.size,
+    supplierIds: Array.from(groups.keys()),
+  });
+
   for (const group of groups.values()) {
     const totalAmount = group.items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
     const resolvedAt = new Date();
@@ -399,7 +467,14 @@ export async function createOrdersFromCart(
     // real-world latency occasionally exceeding the 5s default and
     // aborting mid-flight with Prisma error P2028 ("Transaction already
     // closed") — surfaced to the client as a 500 on checkout.
-    const order = await prisma.$transaction(async (tx) => {
+    //
+    // DIAGNOSTIC LOGGING (task: investigate /orders/checkout 500): wrapped
+    // in try/catch purely to log Prisma's code/meta before re-throwing —
+    // behaviour/control-flow is otherwise unchanged (still propagates to
+    // the route's catch block exactly as before).
+    let order;
+    try {
+      order = await prisma.$transaction(async (tx) => {
       const enquiryId = await generateEnquiryId(tx, {
         builderId: userId,
         builderName: builderForEnquiryId?.name,
@@ -478,7 +553,25 @@ export async function createOrdersFromCart(
         },
       },
       });
-    }, { maxWait: 10000, timeout: 15000 });
+      }, { maxWait: 10000, timeout: 15000 });
+    } catch (error) {
+      console.error("[createOrdersFromCart] per-supplier-group transaction failed", {
+        userId,
+        supplierId: group.supplierId,
+        itemCount: group.items.length,
+        message: error instanceof Error ? error.message : String(error),
+        code: (error as any)?.code,
+        meta: (error as any)?.meta,
+      });
+      throw error;
+    }
+
+    console.log("[createOrdersFromCart] order created", {
+      userId,
+      supplierId: group.supplierId,
+      orderId: order.id,
+      enquiryId: order.enquiryId,
+    });
 
     createdOrders.push({
       id: order.id,

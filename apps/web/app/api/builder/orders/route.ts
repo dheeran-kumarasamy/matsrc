@@ -152,7 +152,18 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ orders: result.orders }, { status: 201 });
   } catch (error) {
-    console.error("Orders POST error:", error);
+    // DIAGNOSTIC LOGGING (task: investigate /orders/checkout 500): log the
+    // full error shape — Prisma errors carry a `code`/`meta` that the bare
+    // Error object's message/stack alone doesn't surface, and which the
+    // createOrdersFromCart doc comment specifically calls out (e.g. P2028
+    // "Transaction already closed" under real Neon latency) as a known
+    // cause of exactly this 500.
+    console.error("Orders POST error:", {
+      message: error instanceof Error ? error.message : String(error),
+      code: (error as any)?.code,
+      meta: (error as any)?.meta,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json({ error: "Failed to create order" }, { status: 500 });
   }
 }

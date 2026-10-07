@@ -219,8 +219,15 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           <div className="posh-card p-6">
             <h2 className="posh-card-title">Status timeline</h2>
             <div className="mt-4">
-              <OrderTimeline status={order.status} isAggregated={order.isAggregated} poolLocked={order.poolLocked} />
-
+              {/* S12 Phase 1: renders this Order's own real OrderTracking
+                  events (never sibling Orders' — order.tracking is scoped
+                  server-side to this order's id only). */}
+              <OrderTimeline
+                status={order.status}
+                tracking={order.tracking}
+                isAggregated={order.isAggregated}
+                poolLocked={order.poolLocked}
+              />
             </div>
           </div>
 

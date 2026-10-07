@@ -34,6 +34,7 @@ import { builderApiPost } from "@/lib/api";
 import SiteSelector from "@/components/orders/SiteSelector";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import OrderConfirmationBanner from "@/components/orders/OrderConfirmationBanner";
+import { buildConfirmedOrderSummaries } from "@/lib/order-confirmation";
 
 
 
@@ -142,7 +143,9 @@ export default function CartDrawer() {
   const isCartOpen = useOverlayStore((state) => state.isCartOpen);
 
   const checkoutStep = useOverlayStore((state) => state.checkoutStep);
-  const lastOrderReference = useOverlayStore((state) => state.lastOrderReference);
+  // S12 Phase 1: every enquiry/order created by the checkout that just
+  // completed (one per supplier) — never just the first one.
+  const lastCompletedOrders = useOverlayStore((state) => state.lastCompletedOrders);
   const closeCart = useOverlayStore((state) => state.closeCart);
   const setCheckoutStep = useOverlayStore((state) => state.setCheckoutStep);
   const goToNextStep = useOverlayStore((state) => state.goToNextStep);
@@ -218,17 +221,18 @@ export default function CartDrawer() {
     setSubmitError(null);
     try {
 
-      const response = await builderApiPost<{ orders: Array<{ id: string; enquiryId?: string }> }>(
-        "/orders/checkout",
-        { siteId }
-      );
+      const response = await builderApiPost<{
+        orders: Array<{ id: string; enquiryId?: string; supplierName?: string }>;
+      }>("/orders/checkout", { siteId });
 
-      // Prefer the human-readable enquiry ID (e.g. "ABC-SITE01-000123") so
-      // the confirmation banner shows a meaningful reference — see
-      // packages/db/lib/enquiry-id.ts and components/orders/
-      // OrderConfirmationBanner.tsx.
-      const reference = response.orders?.[0]?.enquiryId ?? response.orders?.[0]?.id ?? "submitted";
-      completeCheckout(reference);
+      // S12 Phase 1: preserve EVERY created enquiry/order reference (one
+      // per supplier — see apps/web/lib/order-checkout.ts), never just the
+      // first, using the same human-readable enquiry ID fallback rule as
+      // every other confirmation surface — see
+      // lib/order-confirmation.ts's buildConfirmedOrderSummaries() and
+      // components/orders/OrderConfirmationBanner.tsx.
+      const summaries = buildConfirmedOrderSummaries(response);
+      completeCheckout(summaries.length > 0 ? summaries : [{ reference: "submitted" }]);
       void fetchCart();
     } catch {
       setSubmitError("Unable to submit enquiry right now. Please try again.");
@@ -421,7 +425,7 @@ export default function CartDrawer() {
 
           {checkoutStep === "success" ? (
             <div className="py-6">
-              <OrderConfirmationBanner enquiryId={lastOrderReference} />
+              <OrderConfirmationBanner orders={lastCompletedOrders} />
             </div>
           ) : null}
         </div>

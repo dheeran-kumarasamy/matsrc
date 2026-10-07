@@ -1468,7 +1468,14 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
           status: purchaseOrder.status,
           version: purchaseOrder.version,
           approvedAt: purchaseOrder.approvedAt ? purchaseOrder.approvedAt.toISOString() : null,
-          exportUrl: `/api/builder/purchase-orders/${purchaseOrder.id}/export`,
+          // Same-origin supplier-portal route (NOT apps/web's builder
+          // route) — a supplier session can never satisfy the builder
+          // app's builderId ownership check, and the two apps are separate
+          // domains, so pointing here at a relative /api/builder/... path
+          // 404'd. See
+          // app/api/supplier/purchase-orders/[id]/export/route.ts's doc
+          // comment.
+          exportUrl: `/api/supplier/purchase-orders/${purchaseOrder.id}/export`,
         }
       : null,
   };

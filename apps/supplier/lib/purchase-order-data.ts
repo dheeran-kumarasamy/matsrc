@@ -116,7 +116,12 @@ export async function getSupplierPurchaseOrderDetail(
     notes: po.notes,
     createdAt: po.createdAt.toISOString(),
     lineItems,
-    exportUrl: `/api/builder/purchase-orders/${po.id}/export`,
+    // Same-origin supplier-portal route (NOT apps/web's builder route) — a
+    // supplier session can never satisfy the builder app's builderId
+    // ownership check, and the two apps are separate domains, so pointing
+    // here at a relative /api/builder/... path 404'd. See
+    // app/api/supplier/purchase-orders/[id]/export/route.ts's doc comment.
+    exportUrl: `/api/supplier/purchase-orders/${po.id}/export`,
   };
 }
 

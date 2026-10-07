@@ -20,6 +20,7 @@
     "libphonenumber-js": "^1.12.42",
     "next": "^14.2.3",
     "next-auth": "^5.0.0-beta.19",
+    "pdfkit": "^0.20.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "twilio": "^6.0.2"
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@matsrc/config": "workspace:*",
     "@types/node": "^20.14.2",
+    "@types/pdfkit": "^0.17.6",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.19",

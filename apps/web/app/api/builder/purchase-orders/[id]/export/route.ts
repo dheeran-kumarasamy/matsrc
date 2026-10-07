@@ -61,7 +61,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
         "Content-Disposition": `attachment; filename="${payload.poNumber}.json"`,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    // This endpoint is hit via a plain <a href> download link (not a
+    // fetch()-based builderApi* call), so resolveUserCtx() falls back to
+    // the NextAuth session cookie (see lib/builder-db.ts) and throws
+    // "UNAUTHENTICATED" if that session check fails (expired/missing
+    // cookie). Every other route using resolveUserCtx()/getUserCtx() maps
+    // this to a clean 401 — this route was missing that check entirely and
+    // fell through to a generic 500, which is what surfaced in production
+    // as "GET .../export?format=pdf 500 (Internal Server Error)".
+    if (error?.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
     console.error("Purchase order export error:", error);
     return NextResponse.json({ error: "Failed to export purchase order" }, { status: 500 });
   }

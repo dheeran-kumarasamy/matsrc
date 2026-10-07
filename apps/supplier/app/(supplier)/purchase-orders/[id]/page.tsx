@@ -28,7 +28,13 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
             {po.version > 1 ? <span className="ml-2 text-sm text-slate-400">v{po.version}</span> : null}
           </h3>
           <p className="text-sm text-slate-600">Buyer: {po.buyerName}</p>
-          <p className="text-xs text-slate-400">Linked order: {po.orderId}</p>
+          {/* S15: the associated Order reference must be the same
+              supplier-facing business identifier shown on the order
+              pages (orderNumber ?? enquiryId), never the raw internal
+              cuid `po.orderId` — see apps/supplier/lib/order-display.ts.
+              The PO's own `poNumber` above is a separate identifier
+              series and is unaffected. */}
+          <p className="text-xs text-slate-400">Linked order: {po.orderReference}</p>
         </div>
         <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${STATUS_STYLES[po.status] ?? ""}`}>
           {po.status}

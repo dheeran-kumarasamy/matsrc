@@ -43,7 +43,7 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
   return (
     <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
       <section className="panel p-5">
-        <h3 className="text-xl font-extrabold text-slate-900">Order #{order.id}</h3>
+        <h3 className="text-xl font-extrabold text-slate-900">Order {order.displayOrderNumber}</h3>
         <p className="mt-1 text-sm text-slate-600">
           Buyer: {order.buyer} | Material: {order.brand ? `${order.brand} ` : ""}
           {order.material} | Delivery: {order.deliveryDate}

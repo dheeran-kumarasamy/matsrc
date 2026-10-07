@@ -12,6 +12,7 @@ import {
 } from "./resolution";
 import { sendWhatsAppMessage } from "./twilio-whatsapp";
 import { isValidOrderStatusTransition } from "./order-status-transitions";
+import { resolveSupplierOrderReference } from "./order-display";
 
 
 
@@ -478,6 +479,9 @@ export async function getSupplierDashboardData(email: string) {
     ],
     orders: confirmedIncomingOrders.map((item: any) => ({
       id: item.orderId,
+      // S15: canonical supplier-facing Order reference — see
+      // apps/supplier/lib/order-display.ts. Never the raw `id` above.
+      displayOrderNumber: resolveSupplierOrderReference(item.order),
       material: item.product.name,
       // S06: see getSupplierOrders's brand resolution comment — FK-first,
       // free-text-fallback, null when the product genuinely has no brand.
@@ -488,6 +492,7 @@ export async function getSupplierDashboardData(email: string) {
     })),
     pendingEnquiries: pendingEnquiries.map((item: any) => ({
       id: item.orderId,
+      displayOrderNumber: resolveSupplierOrderReference(item.order),
       material: item.product.name,
       brand: item.product.brandRef?.name ?? item.product.brand ?? null,
       quantity: `${item.quantity} ${item.product.unit}`,
@@ -1249,6 +1254,10 @@ export async function getSupplierOrders(email: string): Promise<SupplierOrderRow
 
   return items.map((item: any) => ({
     id: item.orderId,
+    // S15: canonical supplier-facing Order reference (orderNumber ??
+    // enquiryId, never the raw `id` above) — see
+    // apps/supplier/lib/order-display.ts.
+    displayOrderNumber: resolveSupplierOrderReference(item.order),
     buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
     material: item.product.name,
     // S06: Brand resolution prefers the FK-linked Brand master-data record
@@ -1266,6 +1275,11 @@ export async function getSupplierOrders(email: string): Promise<SupplierOrderRow
 
 export type SupplierOrderRow = {
   id: string;
+  // S15: canonical supplier-facing Order reference — see
+  // apps/supplier/lib/order-display.ts. Resolved server-side so every
+  // consumer renders the exact same label without re-implementing the
+  // orderNumber ?? enquiryId fallback.
+  displayOrderNumber: string;
   buyer: string;
   material: string;
   // S06: null when the product has no brand on record — never "undefined"/"".
@@ -1300,6 +1314,11 @@ export type SupplierOrderPurchaseOrderSummary = {
 
 export type SupplierOrderDetail = {
   id: string;
+  // S15: canonical supplier-facing Order reference — see
+  // apps/supplier/lib/order-display.ts. Resolved server-side so the
+  // detail page/modal render the exact same label as the order list and
+  // dashboard queue for the same Order.
+  displayOrderNumber: string;
   buyer: string;
   deliveryDate: string;
   quantity: string;
@@ -1417,6 +1436,10 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
 
   return {
     id: item.orderId,
+    // S15: canonical supplier-facing Order reference (orderNumber ??
+    // enquiryId, never the raw `id` above) — see
+    // apps/supplier/lib/order-display.ts.
+    displayOrderNumber: resolveSupplierOrderReference(item.order),
     buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
     deliveryDate: formatDate(item.deliveryDate ?? item.order.deliveryDate),
     quantity: `${item.quantity} ${item.product.unit}`,

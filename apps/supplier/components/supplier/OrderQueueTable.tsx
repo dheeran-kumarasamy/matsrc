@@ -2,6 +2,10 @@ import { OrderDetailButton } from "@/components/supplier/OrderDetailButton";
 
 type SupplierOrder = {
   id: string;
+  // S15: canonical supplier-facing Order reference (orderNumber ??
+  // enquiryId), resolved server-side — see
+  // apps/supplier/lib/order-display.ts. Never the raw cuid `id` above.
+  displayOrderNumber: string;
   material: string;
   // S06: null when the product has no brand on record — the row simply
   // omits the brand line rather than rendering "undefined"/"null".
@@ -22,11 +26,6 @@ const badgeLabel: Record<SupplierOrder["status"], string> = {
   PACKING: "Processing",
   IN_TRANSIT: "Shipped",
 };
-
-function formatOrderId(id: string) {
-  const token = id.replace(/[^a-zA-Z0-9]/g, "").slice(-3).toUpperCase() || "000";
-  return `ORD-${token}`;
-}
 
 export function OrderQueueTable({ orders }: { orders: SupplierOrder[] }) {
   return (
@@ -52,7 +51,7 @@ export function OrderQueueTable({ orders }: { orders: SupplierOrder[] }) {
                   {/* Clicking the order number opens the details overlay (UF-04). */}
                   <OrderDetailButton
                     orderId={order.id}
-                    label={formatOrderId(order.id)}
+                    label={order.displayOrderNumber}
                     className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
                   />
                 </td>

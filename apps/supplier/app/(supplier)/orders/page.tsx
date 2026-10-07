@@ -35,7 +35,7 @@ export default async function SupplierOrdersPage() {
                 <td className="px-4 py-3 font-semibold text-slate-800">
                   <OrderDetailButton
                     orderId={order.id}
-                    label={`#${order.id}`}
+                    label={order.displayOrderNumber}
                     className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
                   />
                   {order.isAggregated ? (

@@ -1,5 +1,6 @@
 import { prisma } from "@matsrc/db";
-import { ensureSupplierContext } from "@/lib/supplier-data";
+import { ensureSupplierContext } from "./supplier-data";
+import { resolveSupplierOrderReference } from "./order-display";
 
 export type SupplierPurchaseOrderRow = {
   id: string;
@@ -8,6 +9,12 @@ export type SupplierPurchaseOrderRow = {
   version: number;
   buyerName: string;
   orderId: string;
+  // S15: canonical supplier-facing Order reference for the Order this PO
+  // was issued against (orderNumber ?? enquiryId, never the raw `orderId`
+  // above) — see apps/supplier/lib/order-display.ts. The PO's own
+  // `poNumber` is a completely separate identifier series and is
+  // unaffected.
+  orderReference: string;
   total: number;
   itemCount: number;
   approvedAt: string | null;
@@ -45,6 +52,7 @@ export async function getSupplierPurchaseOrders(email: string): Promise<Supplier
     include: {
       builder: true,
       lineItems: true,
+      order: { select: { enquiryId: true, orderNumber: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -56,6 +64,7 @@ export async function getSupplierPurchaseOrders(email: string): Promise<Supplier
     version: po.version,
     buyerName: po.builder.name ?? po.builder.email ?? "Builder",
     orderId: po.orderId,
+    orderReference: resolveSupplierOrderReference(po.order),
     total: po.lineItems.reduce((acc, li) => acc + toNumber(li.unitPrice) * li.quantity + toNumber(li.tax), 0),
     itemCount: po.lineItems.length,
     approvedAt: po.approvedAt ? po.approvedAt.toISOString() : null,
@@ -74,6 +83,7 @@ export async function getSupplierPurchaseOrderDetail(
     include: {
       builder: true,
       lineItems: { include: { product: true } },
+      order: { select: { enquiryId: true, orderNumber: true } },
     },
   });
 
@@ -98,6 +108,7 @@ export async function getSupplierPurchaseOrderDetail(
     version: po.version,
     buyerName: po.builder.name ?? po.builder.email ?? "Builder",
     orderId: po.orderId,
+    orderReference: resolveSupplierOrderReference(po.order),
     total: lineItems.reduce((acc, li) => acc + li.lineTotal, 0),
     itemCount: lineItems.length,
     approvedAt: po.approvedAt ? po.approvedAt.toISOString() : null,

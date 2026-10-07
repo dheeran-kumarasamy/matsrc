@@ -74,6 +74,10 @@ function buildHarness(options: { globalEnabled?: boolean; mode?: "live" | "dry-r
       create: vi.fn().mockImplementation(async ({ data }: any) => ({ id: `log-${eventCounter}`, ...data, metaMessageId: null, errorDetails: null })),
       update: vi.fn().mockImplementation(async ({ data }: any) => data),
     },
+    notification: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockImplementation(async ({ data }: any) => ({ id: "in-app-notification-1", ...data })),
+    },
   };
 
   const config = new WhatsAppEngineConfigService();
@@ -106,6 +110,52 @@ describe("CustomerOrderStatusNotificationService.notifyIfTransitioned", () => {
     expect(prisma.whatsAppMessageLog.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ templateName: "customer_order_status", parameters: ["BH-2026-00452", "Processing"] }) })
     );
+  });
+
+  // In-app Alerts bell — this is the regression test for the bug where
+  // builders stopped seeing new order-status alerts in the bell dropdown
+  // (apps/web/components/builder/NotificationBell.tsx) after the Meta
+  // WhatsApp Cloud API migration dropped the `Notification` table write.
+  it("also writes an in-app Notification row (Alerts bell) for a real transition, idempotent per (order, status)", async () => {
+    const { service, prisma } = buildHarness();
+
+    await service.notifyIfTransitioned({ orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+
+    expect(prisma.notification.create).toHaveBeenCalledTimes(1);
+    expect(prisma.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: "user-1",
+          audience: "builder",
+          title: "Enquiry confirmed",
+          idempotencyKey: "builder-order-status:order-1:PROCESSING",
+        }),
+      })
+    );
+
+    // Retrying the exact same transition must not create a second row.
+    prisma.notification.findFirst.mockResolvedValueOnce({ id: "in-app-notification-1" });
+    await service.notifyIfTransitioned({ orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+    expect(prisma.notification.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("never writes an in-app Notification row for the initial PLACED creation (no builder-facing copy)", async () => {
+    const { service, prisma } = buildHarness();
+
+    await service.notifyIfTransitioned({ orderId: "order-1", previousStatus: null, newStatus: OrderStatus.PLACED });
+
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+  });
+
+  it("never lets a failed in-app Notification write block the WhatsApp send", async () => {
+    const { service, prisma } = buildHarness();
+    prisma.notification.create.mockRejectedValueOnce(new Error("DB down"));
+
+    await expect(
+      service.notifyIfTransitioned({ orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING })
+    ).resolves.toBeUndefined();
+
+    expect(prisma.notificationEvent.create).toHaveBeenCalledTimes(1);
   });
 
   // Test 2 — PROCESSING -> DISPATCHED

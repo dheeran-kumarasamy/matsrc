@@ -79,7 +79,29 @@ POLICIES.push(
   // apps/api/src/notification-engine/whatsapp/customer-order-status-notification.service.ts.
   { eventType: "ORDER_STATUS_CHANGED", channel: "WHATSAPP", templateName: "customer_order_status", metaTemplateId: "1788249542353441", displayName: "Order Status Update", description: "Notifies a customer whenever their order's status changes.", priority: "P1", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   { eventType: "DELIVERY_EXCEPTION", channel: "WHATSAPP", templateName: "delivery_exception", displayName: "Delivery Exception", description: "Alerts a customer of a delivery exception (delay, damage, failed attempt) on their order.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
-  { eventType: "ACTION_REQUIRED", channel: "WHATSAPP", templateName: "action_reminder_alert", displayName: "Action Required", description: "Generic action-required nudge for a customer (e.g. confirm delivery slot, upload document).", priority: "P1", cooldownMinutes: 240, maxPerDay: 1, businessHoursOnly: true }
+  { eventType: "ACTION_REQUIRED", channel: "WHATSAPP", templateName: "action_reminder_alert", displayName: "Action Required", description: "Generic action-required nudge for a customer (e.g. confirm delivery slot, upload document).", priority: "P1", cooldownMinutes: 240, maxPerDay: 1, businessHoursOnly: true },
+  // buildohub_login_otp — Buyer/Supplier portal primary login OTP delivery
+  // channel (WhatsApp). AUTHENTICATION-category Meta template, APPROVED
+  // (verified live via Graph API GET /{WABA_ID}/message_templates?name=buildohub_login_otp
+  // on 2026-10-08): metaTemplateId "1454146059894282", language "en", body
+  // has exactly 1 variable ({{1}}=OTP), button is a URL-type "Copy code"
+  // button (Meta's COPY_CODE-via-URL-button mechanism) with 1 dynamic
+  // parameter ({{1}}=OTP) — matches the existing payload shape in
+  // packages/db/lib/login-otp-whatsapp-notification.ts exactly (body text
+  // param + button sub_type "url" index 0 text param), no correction
+  // needed. Footer text says "Expires in 10 minutes" (code_expiration_minutes:
+  // 10) — NOTE this is template copy only; actual OTP expiry enforcement is
+  // the backend OtpChallenge's 5-minute OTP_TTL_MS (apps/web/lib/otp-service/constants.ts
+  // / packages/db/lib/otp-challenge.ts), which is stricter than the
+  // template's stated 10 minutes. This is a display-copy mismatch, not a
+  // security issue (backend expiring OTPs sooner than the message implies
+  // is safe) — flagged for the project owner to resolve by either getting
+  // Meta to approve updated footer copy or extending OTP_TTL_MS, NOT
+  // silently changed here since OTP_TTL_MS is shared with PO_APPROVAL_OTP.
+  // No cooldown/daily-limit/business-hours restriction — OTP delivery must
+  // never be throttled the way business notifications are (see
+  // notification-event-types.ts MANDATORY_EVENT_TYPES).
+  { eventType: "LOGIN_OTP", channel: "WHATSAPP", templateName: "buildohub_login_otp", metaTemplateId: "1454146059894282", displayName: "Login OTP (WhatsApp)", description: "Delivers the Buyer/Supplier portal login OTP via WhatsApp — primary login delivery channel.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false }
 );
 
 async function main() {

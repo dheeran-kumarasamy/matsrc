@@ -8,12 +8,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const userFindUnique = vi.fn();
+const userFindFirst = vi.fn();
 const userUpsert = vi.fn();
 
 vi.mock("@/lib/builder-db", () => ({
   prisma: {
     user: {
       findUnique: (...args: unknown[]) => userFindUnique(...args),
+      // Pre-live-review correction: `phone` is no longer a unique field
+      // (see schema.prisma) — the real route now looks up phone-based
+      // identifiers via findFirst(), not findUnique(). Both are mocked so
+      // this spec continues to reflect the actual call site exactly.
+      findFirst: (...args: unknown[]) => userFindFirst(...args),
       upsert: (...args: unknown[]) => userUpsert(...args),
     },
   },
@@ -22,6 +28,7 @@ vi.mock("@/lib/builder-db", () => ({
 const issueOtpChallenge = vi.fn();
 const verifyOtpChallenge = vi.fn();
 const deliverOtp = vi.fn();
+const deliverOtpViaWhatsApp = vi.fn();
 const checkOtpSendRateLimit = vi.fn((..._args: unknown[]) => ({ allowed: true, remaining: 10, retryAfterMs: 0 }));
 const checkOtpVerifyRateLimit = vi.fn((..._args: unknown[]) => ({ allowed: true, remaining: 10, retryAfterMs: 0 }));
 
@@ -29,6 +36,7 @@ vi.mock("@/lib/otp-service", () => ({
   issueOtpChallenge: (...args: unknown[]) => issueOtpChallenge(...args),
   verifyOtpChallenge: (...args: unknown[]) => verifyOtpChallenge(...args),
   deliverOtp: (...args: unknown[]) => deliverOtp(...args),
+  deliverOtpViaWhatsApp: (...args: unknown[]) => deliverOtpViaWhatsApp(...args),
   checkOtpSendRateLimit: (...args: unknown[]) => checkOtpSendRateLimit(...args),
   checkOtpVerifyRateLimit: (...args: unknown[]) => checkOtpVerifyRateLimit(...args),
 }));
@@ -47,27 +55,67 @@ beforeEach(() => {
 });
 
 describe("POST /api/auth/send-otp (C20)", () => {
-  it("MSG91 stub reports unavailable and the honest email-fallback message is returned", async () => {
-    userFindUnique.mockResolvedValue({ id: "user-1", email: "builder@example.com" });
+  it("delivers via WhatsApp as the primary channel for a 'whatsapp' request", async () => {
+    userFindFirst.mockResolvedValue({ id: "user-1", email: "builder@example.com", whatsappNumber: "+919000000000", phone: "+919000000000" });
     issueOtpChallenge.mockResolvedValue({ ok: true, challengeId: "c1", otp: "123456", expiresAt: new Date() });
-    deliverOtp.mockResolvedValue({ ok: true, channel: "EMAIL", maskedTarget: "bu***@example.com" });
+    deliverOtpViaWhatsApp.mockResolvedValue({ ok: true, channel: "WHATSAPP", maskedTarget: "+91 ******0000" });
+
+    const { POST } = await import("@/app/api/auth/send-otp/route");
+    const res = await POST(makeRequest({ channel: "whatsapp", identifier: "9000000000" }));
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.channel).toBe("WHATSAPP");
+    expect(data.message).toContain("WhatsApp");
+    expect(deliverOtp).not.toHaveBeenCalled();
+  });
+
+  it("legacy 'phone' channel value is treated as a WhatsApp request", async () => {
+    userFindFirst.mockResolvedValue({ id: "user-1", email: "builder@example.com", whatsappNumber: null, phone: "+919000000000" });
+    issueOtpChallenge.mockResolvedValue({ ok: true, challengeId: "c1", otp: "123456", expiresAt: new Date() });
+    deliverOtpViaWhatsApp.mockResolvedValue({ ok: true, channel: "WHATSAPP", maskedTarget: "+91 ******0000" });
 
     const { POST } = await import("@/app/api/auth/send-otp/route");
     const res = await POST(makeRequest({ channel: "phone", identifier: "9000000000" }));
+
+    expect(res.status).toBe(200);
+    expect(deliverOtpViaWhatsApp).toHaveBeenCalled();
+  });
+
+  it("fails honestly (never claims success) when WhatsApp delivery fails, and does NOT auto-fallback to email", async () => {
+    userFindFirst.mockResolvedValue({ id: "user-1", email: "builder@example.com", whatsappNumber: "+919000000000", phone: "+919000000000" });
+    issueOtpChallenge.mockResolvedValue({ ok: true, challengeId: "c1", otp: "123456", expiresAt: new Date() });
+    deliverOtpViaWhatsApp.mockResolvedValue({ ok: false, code: "WHATSAPP_SEND_FAILED", message: "We couldn't send the OTP to WhatsApp." });
+
+    const { POST } = await import("@/app/api/auth/send-otp/route");
+    const res = await POST(makeRequest({ channel: "whatsapp", identifier: "9000000000" }));
+
+    expect(res.status).toBe(503);
+    expect(deliverOtp).not.toHaveBeenCalled();
+  });
+
+  it("explicit email fallback delivers via the existing email OTP service", async () => {
+    userFindUnique.mockResolvedValue({ id: "user-1", email: "builder@example.com" });
+    issueOtpChallenge.mockResolvedValue({ ok: true, challengeId: "c2", otp: "123456", expiresAt: new Date() });
+    deliverOtp.mockResolvedValue({ ok: true, channel: "EMAIL", maskedTarget: "bu***@example.com" });
+
+    const { POST } = await import("@/app/api/auth/send-otp/route");
+    const res = await POST(makeRequest({ channel: "email", identifier: "builder@example.com" }));
     const data = await res.json();
 
     expect(res.status).toBe(200);
     expect(data.channel).toBe("EMAIL");
     expect(data.message).toContain("registered email");
+    expect(deliverOtpViaWhatsApp).not.toHaveBeenCalled();
   });
 
-  it("fails honestly when neither SMS nor email can deliver", async () => {
+  it("fails honestly when email delivery itself fails", async () => {
     userFindUnique.mockResolvedValue(null);
     issueOtpChallenge.mockResolvedValue({ ok: true, challengeId: "c1", otp: "123456", expiresAt: new Date() });
     deliverOtp.mockResolvedValue({ ok: false, code: "NO_EMAIL_FALLBACK", message: "no fallback" });
 
     const { POST } = await import("@/app/api/auth/send-otp/route");
-    const res = await POST(makeRequest({ channel: "phone", identifier: "9000000000" }));
+    const res = await POST(makeRequest({ channel: "email", identifier: "builder@example.com" }));
 
     expect(res.status).toBe(503);
   });

@@ -31,7 +31,21 @@ enum KycStatus {
 model User {
   id             String    @id @default(cuid())
   email          String?   @unique
-  phone          String?   @unique
+  // Pre-live-review correction: `phone` is intentionally NO LONGER globally
+  // unique. A real-world phone number can belong to a Buyer AND a Supplier
+  // account simultaneously (each portal's login OTP now provisions the User
+  // row under its own portal-specific placeholder email — see
+  // apps/web/app/api/auth/verify-otp/route.ts's `{phone}@phone.buildohub.in`
+  // vs apps/supplier/app/api/auth/verify-otp/route.ts's
+  // `{phone}@supplier.phone.buildohub.in` — `email` is the true identity
+  // key both portals rely on). This was a real, live-tested blocker: the
+  // pre-existing @unique on `phone` alone rejected Supplier's User.upsert()
+  // with a unique-constraint violation the moment the SAME phone number had
+  // already logged into Buyer once, making it impossible for one person to
+  // hold both a Buyer and a Supplier account via phone-based OTP login.
+  // Still indexed (see @@index([phone]) below) for lookup performance —
+  // only the uniqueness guarantee is removed.
+  phone          String?
   name           String?
   role           Role
   kycStatus      KycStatus @default(PENDING)
@@ -190,6 +204,11 @@ enum OtpPurpose {
 enum OtpChannel {
   SMS
   EMAIL
+  // Additive value for WhatsApp OTP delivery (Buyer/Supplier portal login).
+  // Existing SMS/EMAIL values and historical OtpChallenge rows are
+  // untouched — this is a pure enum extension (see migration
+  // 20261008045916_add_otp_channel_whatsapp).
+  WHATSAPP
 }
 
 enum OtpDeliveryStatus {

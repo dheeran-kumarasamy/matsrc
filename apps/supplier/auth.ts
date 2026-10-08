@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import type { NextAuthConfig, Session } from "next-auth";
 import type { JWT } from "next-auth/jwt";
 import Google from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@matsrc/db";
 
 const authConfig: NextAuthConfig = {
@@ -56,10 +57,38 @@ const authConfig: NextAuthConfig = {
     },
   },
   providers: [
+    // UNCHANGED: Google provider, config, and the signIn()/jwt()/session()
+    // callbacks above are exactly as they were before this change — the new
+    // OTP login path (Credentials provider below) is additive only.
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
       allowDangerousEmailAccountLinking: true,
+    }),
+    // New: Supplier OTP login (WhatsApp primary / email fallback). This
+    // provider does NOT perform OTP verification itself — by the time this
+    // `authorize()` runs, the Supplier's new /api/auth/send-otp +
+    // /api/auth/verify-otp routes (apps/supplier/lib/otp-service/) have
+    // already verified the OTP against the shared OtpChallenge lifecycle
+    // (packages/db/lib/otp-challenge.ts) and resolved/created the
+    // SupplierProfile-bearing User row. This Credentials provider's sole
+    // job is to mint the same NextAuth session shape Google login produces,
+    // using the already-verified email — mirroring apps/web/auth.ts's
+    // identical "accept pre-verified identity" Credentials provider.
+    Credentials({
+      credentials: {
+        email: { label: "Email", type: "email" },
+        name: { label: "Name", type: "text" },
+      },
+      async authorize(credentials: any) {
+        if (!credentials?.email) return null;
+        return {
+          id: credentials.email as string,
+          email: credentials.email as string,
+          name: (credentials.name as string) || "",
+          image: null,
+        } as any;
+      },
     }),
   ],
 };

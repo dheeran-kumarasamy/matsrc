@@ -1,5 +1,6 @@
-import { OtpChannel, OtpDeliveryStatus } from "@matsrc/db";
+import { OtpChannel, OtpDeliveryStatus, notifyLoginOtpWhatsApp } from "@matsrc/db";
 import { sendOtpEmail } from "@/lib/contact-verification/email-sender";
+import { prisma } from "@/lib/builder-db";
 import { recordDeliveryAttempt } from "./challenge";
 
 // Delivery orchestration for OTP challenges — owns provider selection but
@@ -7,10 +8,17 @@ import { recordDeliveryAttempt } from "./challenge";
 // the task spec's "the delivery provider must NOT own OTP verification"
 // requirement.
 //
-// SMS delivery (MSG91) is TEMPORARILY DISABLED — every OTP is now sent via
-// email only, regardless of whether a phone number is on file. MSG91 was
-// already a permanently-stubbed, never-really-sends provider (see
-// ./providers/msg91-sms.provider.ts), so this removes the dead
+// WhatsApp is now the PRIMARY login OTP delivery channel (see
+// deliverOtpViaWhatsApp below) — the login UI calls it explicitly when the
+// user presses "Send OTP on WhatsApp". It is a SEPARATE, explicit function
+// from deliverOtp() (email) — WhatsApp failure NEVER automatically falls
+// back to email; the UI must show the failure and let the user explicitly
+// choose "Use email OTP instead", which calls deliverOtp() below.
+//
+// SMS delivery (MSG91) remains DISABLED for login OTP — email is now the
+// explicit, user-selected FALLBACK (not an automatic one) rather than the
+// default. MSG91 was already a permanently-stubbed, never-really-sends
+// provider (see ./providers/msg91-sms.provider.ts) — this removes the dead
 // attempt/fallback indirection rather than changing any real behavior: no
 // OTP was ever actually delivered via SMS before this change either.
 // Re-enabling SMS later only requires restoring the `target.phone` branch
@@ -19,8 +27,8 @@ import { recordDeliveryAttempt } from "./challenge";
 //
 // Reuses the EXISTING, already-wired sendOtpEmail() (nodemailer over SES
 // SMTP) from apps/web/lib/contact-verification/email-sender.ts as-is —
-// this is the one genuinely working delivery mechanism per the task spec,
-// so it is called directly rather than re-implemented.
+// this is the one genuinely working email delivery mechanism, so it is
+// called directly rather than re-implemented.
 
 export type DeliveryTarget = {
   // Kept for call-site compatibility (both C20 and C37 still pass a phone
@@ -127,4 +135,78 @@ export async function deliverOtp(
  */
 function isSesEmailConfigured(): boolean {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USERNAME && process.env.SMTP_PASSWORD);
+}
+
+/**
+ * Masks a phone number for safe display — shows the leading "+<country code>"
+ * prefix and the last 4 digits, masks everything in between (e.g.
+ * "+91 ******9167" per the required login UI copy). Never exposes the full
+ * number unnecessarily.
+ */
+function maskPhone(phone: string): string {
+  if (phone.length <= 6) return "***";
+  const prefixLen = phone.startsWith("+") ? 3 : 2; // "+91" or similar
+  const prefix = phone.slice(0, prefixLen);
+  const last4 = phone.slice(-4);
+  const maskedLen = Math.max(phone.length - prefixLen - 4, 4);
+  return `${prefix} ${"*".repeat(maskedLen)}${last4}`;
+}
+
+export type WhatsAppDeliveryOutcome =
+  | { ok: true; channel: "WHATSAPP"; maskedTarget: string }
+  | {
+      ok: false;
+      // Honest, actionable failure codes — the caller must present
+      // "Use email OTP instead" rather than silently retrying another
+      // channel. Never a fabricated "sent" result.
+      code: "NO_WHATSAPP_NUMBER" | "WHATSAPP_SEND_FAILED";
+      message: string;
+    };
+
+/**
+ * Delivers `otp` via WhatsApp (buildohub_login_otp AUTHENTICATION template),
+ * the PRIMARY login OTP channel. Calls the shared, framework-agnostic
+ * notifyLoginOtpWhatsApp() (packages/db/lib/login-otp-whatsapp-notification.ts)
+ * — this function owns ONLY: resolving the target number, calling that
+ * shared sender, and recording the outcome against the OtpChallenge via
+ * recordDeliveryAttempt(). It NEVER falls back to email automatically — see
+ * this file's top doc comment.
+ */
+export async function deliverOtpViaWhatsApp(
+  challengeId: string,
+  whatsappNumber: string,
+  otp: string
+): Promise<WhatsAppDeliveryOutcome> {
+  if (!whatsappNumber) {
+    return {
+      ok: false,
+      code: "NO_WHATSAPP_NUMBER",
+      message: "No WhatsApp-enabled number is available to send the OTP to.",
+    };
+  }
+
+  const result = await notifyLoginOtpWhatsApp(prisma as any, { challengeId, phone: whatsappNumber, otp });
+
+  if (!result.success) {
+    await recordDeliveryAttempt(challengeId, {
+      channel: OtpChannel.WHATSAPP,
+      provider: "meta-whatsapp-cloud-api",
+      status: OtpDeliveryStatus.FAILED,
+      error: result.reason,
+    });
+    return {
+      ok: false,
+      code: "WHATSAPP_SEND_FAILED",
+      message: "We couldn't send the OTP to WhatsApp.",
+    };
+  }
+
+  await recordDeliveryAttempt(challengeId, {
+    channel: OtpChannel.WHATSAPP,
+    provider: "meta-whatsapp-cloud-api",
+    status: OtpDeliveryStatus.SENT,
+    providerMessageId: result.externalId || null,
+  });
+
+  return { ok: true, channel: "WHATSAPP", maskedTarget: maskPhone(whatsappNumber) };
 }

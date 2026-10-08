@@ -63,6 +63,21 @@ export * from "./lib/supplier-po-received-notification";
 // packages/db/lib/payment-required-notification.ts for full documentation.
 export * from "./lib/payment-required-notification";
 
+// Shared OTP challenge lifecycle (generation/hashing/persistence/expiry/
+// resend-cooldown/attempt-limiting/single-use) against the OtpChallenge
+// Prisma model — used directly by apps/supplier's new LOGIN_OTP routes so
+// there is exactly one OTP table/lifecycle definition shared with apps/web.
+// See packages/db/lib/otp-challenge.ts for full documentation.
+export * from "./lib/otp-challenge";
+
+// buildohub_login_otp WhatsApp notification (LOGIN_OTP event, Meta WhatsApp
+// Cloud API via the Notification Engine tables) — the single shared,
+// framework-agnostic WhatsApp delivery used by the Buyer (apps/web) and
+// Supplier (apps/supplier) portal "Send OTP on WhatsApp" login flow. NEVER
+// generates/verifies OTPs — see packages/db/lib/login-otp-whatsapp-notification.ts
+// for the full architectural boundary documentation.
+export * from "./lib/login-otp-whatsapp-notification";
+
 // Supplier RFQ Price Revision & GST-Inclusive Order Value — shared,
 // framework-agnostic GST/line-total calculation used by both the
 // NestJS RfqsService (apps/api) and the Next.js supplier portal

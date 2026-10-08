@@ -21,13 +21,19 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
-    const channel = body?.channel;
+    const rawChannel = body?.channel;
+    // "whatsapp" and the legacy "phone" value are treated identically here —
+    // both are a phone-number identifier, normalized the same way, mapped
+    // to the same placeholder-email identity scheme below. See
+    // /api/auth/send-otp/route.ts for the same alias.
+    const channel: "phone" | "email" | null =
+      rawChannel === "email" ? "email" : rawChannel === "phone" || rawChannel === "whatsapp" ? "phone" : null;
     const rawIdentifier = typeof body?.identifier === "string" ? body.identifier.trim() : "";
     const otp = typeof body?.otp === "string" ? body.otp : "";
     const name = typeof body?.name === "string" ? body.name.trim() : "";
 
     if (channel !== "phone" && channel !== "email") {
-      return NextResponse.json({ message: "Choose phone or email." }, { status: 400 });
+      return NextResponse.json({ message: "Choose WhatsApp or email." }, { status: 400 });
     }
     if (!rawIdentifier) {
       return NextResponse.json({ message: "Missing phone/email." }, { status: 400 });

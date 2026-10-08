@@ -5,7 +5,7 @@
 
 export { issueOtpChallenge, verifyOtpChallenge, recordDeliveryAttempt } from "./challenge";
 export type { ChallengeScope, IssueResult, VerifyResult } from "./challenge";
-export { deliverOtp } from "./delivery";
-export type { DeliveryTarget, DeliveryOutcome } from "./delivery";
+export { deliverOtp, deliverOtpViaWhatsApp } from "./delivery";
+export type { DeliveryTarget, DeliveryOutcome, WhatsAppDeliveryOutcome } from "./delivery";
 export { checkOtpSendRateLimit, checkOtpVerifyRateLimit } from "./rate-limit";
 export * from "./constants";

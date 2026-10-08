@@ -9,6 +9,7 @@ import { builderApiDelete, builderApiGet, builderApiPost } from "@/lib/api";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import SiteSelector from "@/components/orders/SiteSelector";
 import { buildConfirmedOrdersUrl } from "@/lib/order-confirmation";
+import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel } from "@/lib/gst-display";
 
 // BUG-06 fix: this input keeps its own local editable string state, synced
 // from the `quantity` prop via useEffect (so +/- button clicks and cart
@@ -117,8 +118,11 @@ export default function CartPage() {
     };
   }, []);
 
-  const gst = useMemo(() => Math.round(data.summary.subtotal * 0.18), [data.summary.subtotal]);
-  const total = useMemo(() => data.summary.subtotal + gst, [data.summary.subtotal, gst]);
+  // C29: reuses the single shared gst-display estimator (same 18% default
+  // Checkout/CartDrawer already apply) instead of a separately hard-coded
+  // `* 0.18` literal — no behaviour change, same figures as before.
+  const gst = useMemo(() => estimateGstAmount(data.summary.subtotal), [data.summary.subtotal]);
+  const total = useMemo(() => estimateGstInclusiveTotal(data.summary.subtotal), [data.summary.subtotal]);
 
   async function handleRemove(productId: string, id: string) {
     setLoadingId(id);
@@ -292,7 +296,7 @@ export default function CartPage() {
                 <span>Subtotal</span><span>₹{data.summary.subtotal.toLocaleString("en-IN")}</span>
               </div>
               <div className="flex justify-between font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
-                <span>GST (18%)</span><span>₹{gst.toLocaleString("en-IN")}</span>
+                <span>{formatGstLineLabel()}</span><span>₹{gst.toLocaleString("en-IN")}</span>
               </div>
               <div className="flex justify-between font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
                 <span>Freight</span><span>—</span>

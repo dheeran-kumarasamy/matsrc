@@ -13,6 +13,7 @@ import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import WatchlistButton from "@/components/products/WatchlistButton";
 import { getCategoryEmoji } from "@/lib/category-images";
 import { DELIVERY_TIMING_BROWSING_NOTE } from "@/lib/delivery-estimate";
+import { formatGstExclusiveNote } from "@/lib/gst-display";
 
 import { parseNumericLabel, type SupplierListing } from "@/lib/listings";
 
@@ -99,6 +100,13 @@ export default function ProductQuickView({ product }: Props) {
 
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-slate-800">Pricing tiers</h3>
+                {/* C29 — disclose GST treatment here, before the
+                    "Add to Enquiry Basket" action in the aside. Prices
+                    below are exclusive of GST, same rate uniformly applied
+                    across every tier/supplier today (lib/gst-display.ts). */}
+                <p className="text-xs text-slate-400">
+                  Prices below exclude GST — {formatGstExclusiveNote().replace("+ ", "")} applies in addition.
+                </p>
                 <div className="grid gap-2">
                   {product.pricingTiers.slice(0, 3).map((tier) => (
                     <div

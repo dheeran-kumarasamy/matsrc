@@ -14,6 +14,7 @@ import { getSiteUrl } from "@/lib/site-url";
 import { getCategoryEmoji } from "@/lib/category-images";
 
 import { getSupplierListings, getSupplierProduct, parseNumericLabel, type SupplierListing } from "@/lib/listings";
+import { formatGstExclusiveNote } from "@/lib/gst-display";
 
 export const dynamic = "force-dynamic";
 
@@ -158,8 +159,19 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
             <div className="grid gap-4 border-t border-[color:var(--posh-border)] p-6 sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <p className="posh-label">Base price</p>
-                <p className="posh-card-title mt-1">{product.price}</p>
-                <p className="posh-muted mt-1 text-xs">Per {product.unit}, before quantity-tier discounts.</p>
+                <p className="posh-card-title mt-1">
+                  {product.price}
+                  {/* C29 — disclose GST treatment before add-to-enquiry.
+                      No rupee amount is shown against this base price
+                      specifically, since the actual enquiry value depends
+                      on the quantity-tier selected below (see Pricing
+                      tiers section) — only the rate, which is uniform
+                      across tiers/suppliers today (lib/gst-display.ts). */}
+                  <span className="ml-1.5 align-middle text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--posh-fg-muted)" }}>
+                    {formatGstExclusiveNote()}
+                  </span>
+                </p>
+                <p className="posh-muted mt-1 text-xs">Per {product.unit}, before quantity-tier discounts. GST is charged in addition to the price shown.</p>
               </div>
               <div>
                 <p className="posh-label">Stock</p>
@@ -176,7 +188,11 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
 
           <div className="posh-card p-6">
             <h2 className="posh-card-title">Pricing tiers</h2>
-            <p className="posh-subtitle mt-1">The enquiry value updates automatically as quantity changes.</p>
+            <p className="posh-subtitle mt-1">
+              The enquiry value updates automatically as quantity changes. Prices below are exclusive of GST
+              ({formatGstExclusiveNote().replace("+ ", "")}), applied against whichever tier applies to your selected
+              quantity — never only the lowest tier.
+            </p>
             <div className="mt-4 grid gap-3">
               {product.pricingTiers.map((tier) => (
                 <div key={`${tier.minQty}-${tier.maxQty}`} className="flex items-center justify-between rounded-xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.03)] px-4 py-3 text-sm">

@@ -7,6 +7,7 @@ import { ShoppingCart } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart-store";
 import { useOverlayStore } from "@/lib/store/overlay-store";
 import { recordInterestEvent } from "@/lib/interest-events";
+import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel } from "@/lib/gst-display";
 
 
 type PricingTier = {
@@ -57,6 +58,13 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
   const selectedTier = useMemo(() => findTier(pricingTiers, quantity), [pricingTiers, quantity]);
   const unitPrice = useMemo(() => parseTierPrice(selectedTier?.price ?? "0"), [selectedTier]);
   const lineTotal = unitPrice * quantity;
+  // C29 — this is the one pre-cart place a real GST rupee amount is safe to
+  // show: unitPrice/quantity here are the ACTUAL selected tier and quantity
+  // (not a cross-supplier/cross-tier minimum like the PLP card), so this
+  // mirrors the exact same `estimateGstAmount`/`estimateGstInclusiveTotal`
+  // Cart/Checkout use on the identical subtotal — no second calculation.
+  const gstAmount = useMemo(() => estimateGstAmount(lineTotal), [lineTotal]);
+  const gstInclusiveTotal = useMemo(() => estimateGstInclusiveTotal(lineTotal), [lineTotal]);
 
   function commitQuantity(rawValue: string) {
     const parsed = Number(rawValue);
@@ -161,10 +169,18 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
       </div>
       {quantityError ? <p className="text-xs font-bold text-[color:var(--posh-fg)]">{quantityError}</p> : null}
 
-      <div className="rounded-xl border border-dashed border-slate-200 p-3">
+      <div className="rounded-xl border border-dashed border-slate-200 p-3 space-y-1">
         <div className="flex items-center justify-between text-sm text-slate-500">
-          <span>Estimated enquiry value</span>
+          <span>Subtotal ({quantity} {unit})</span>
           <span className="font-semibold text-slate-900">₹{lineTotal.toLocaleString("en-IN")}</span>
+        </div>
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <span>{formatGstLineLabel()}</span>
+          <span>₹{gstAmount.toLocaleString("en-IN")}</span>
+        </div>
+        <div className="flex items-center justify-between border-t border-slate-100 pt-1 text-sm">
+          <span className="font-semibold text-slate-700">Estimated enquiry value</span>
+          <span className="font-bold text-slate-900">₹{gstInclusiveTotal.toLocaleString("en-IN")}</span>
         </div>
       </div>
 

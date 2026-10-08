@@ -35,6 +35,7 @@ import SiteSelector from "@/components/orders/SiteSelector";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import OrderConfirmationBanner from "@/components/orders/OrderConfirmationBanner";
 import { buildConfirmedOrderSummaries } from "@/lib/order-confirmation";
+import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel } from "@/lib/gst-display";
 
 
 
@@ -177,8 +178,11 @@ export default function CartDrawer() {
     }
   }, [isCartOpen, hasLoaded, fetchCart]);
 
-  const gst = useMemo(() => Math.round(summary.subtotal * 0.18), [summary.subtotal]);
-  const total = useMemo(() => summary.subtotal + gst, [summary.subtotal, gst]);
+  // C29: reuses the single shared gst-display estimator (same 18% default
+  // Cart/Checkout already apply) instead of a separately hard-coded
+  // `* 0.18` literal — no behaviour change, same figures as before.
+  const gst = useMemo(() => estimateGstAmount(summary.subtotal), [summary.subtotal]);
+  const total = useMemo(() => estimateGstInclusiveTotal(summary.subtotal), [summary.subtotal]);
 
   const supplierGroups = useMemo(() => {
     const groups = new Map<string, { supplierName: string; count: number }>();
@@ -373,6 +377,25 @@ export default function CartDrawer() {
                   Items span {supplierGroups.length} suppliers — these will be submitted as separate enquiries.
                 </p>
               ) : null}
+
+              {/* C29 — GST visibility at the review step, not just at the
+                  final "confirm" step below. Reuses the same gst/total
+                  figures computed above (useMemo from summary.subtotal via
+                  the shared gst-display estimator) so this can never
+                  disagree with the confirm-step/checkout totals. */}
+              {items.length > 0 ? (
+                <div className="rounded-xl border p-3 text-xs" style={{ borderColor: "var(--posh-border)" }}>
+                  <div className="flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
+                    <span>Subtotal</span><span>₹{summary.subtotal.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
+                    <span>{formatGstLineLabel()}</span><span>₹{gst.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between font-bold" style={{ color: "var(--posh-fg)" }}>
+                    <span>Estimated total</span><span>₹{total.toLocaleString("en-IN")}</span>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -401,7 +424,7 @@ export default function CartDrawer() {
                     <span>Subtotal</span><span>₹{summary.subtotal.toLocaleString("en-IN")}</span>
                   </div>
                   <div className="flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
-                    <span>GST (18%)</span><span>₹{gst.toLocaleString("en-IN")}</span>
+                    <span>{formatGstLineLabel()}</span><span>₹{gst.toLocaleString("en-IN")}</span>
                   </div>
                   <div className="flex justify-between border-t pt-2" style={{ borderColor: "var(--posh-border)" }}>
                     <span className="font-bold" style={{ color: "var(--posh-fg)" }}>Estimated total</span>

@@ -4,6 +4,7 @@ import WatchlistToggleIcon from "@/components/products/WatchlistToggleIcon";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { resolveStartingDisplayPrice, formatStartingPriceLabel } from "@/lib/product-price-display";
 import { DELIVERY_TIMING_BROWSING_NOTE } from "@/lib/delivery-estimate";
+import { formatGstExclusiveNote } from "@/lib/gst-display";
 
 interface Props {
   skeleton?: boolean;
@@ -118,6 +119,18 @@ export default function ProductCard({ skeleton, product }: Props) {
                 </span>
                 {formatStartingPriceLabel(displayPrice)}
                 {unitSuffix}
+                {/* C29 — compact pre-checkout GST disclosure. No rupee
+                    amount is shown here (the displayed price is a
+                    cross-supplier/cross-tier minimum — see
+                    product-price-display.ts — so a single fabricated GST
+                    rupee figure would misleadingly imply it applies to
+                    just this minimum tier/supplier). The rate itself is
+                    the same platform-wide one every order already resolves
+                    to (see lib/gst-display.ts), so disclosing it here is
+                    truthful. */}
+                <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--posh-fg-muted)" }}>
+                  {formatGstExclusiveNote()}
+                </span>
               </div>
             );
           })()}

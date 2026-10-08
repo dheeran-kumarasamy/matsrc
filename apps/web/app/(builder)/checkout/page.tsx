@@ -8,6 +8,7 @@ import { recordInterestEvent } from "@/lib/interest-events";
 import SiteSelector from "@/components/orders/SiteSelector";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { buildConfirmedOrdersUrl } from "@/lib/order-confirmation";
+import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel } from "@/lib/gst-display";
 
 
 async function builderAggregationPost<T>(path: string, body: unknown): Promise<T> {
@@ -125,8 +126,11 @@ export default function CheckoutPage() {
     return Array.from(groups.values());
   }, [cart.items, poolingItemIds]);
 
-  const gst = useMemo(() => Math.round(cart.summary.subtotal * 0.18), [cart.summary.subtotal]);
-  const total = useMemo(() => cart.summary.subtotal + gst, [cart.summary.subtotal, gst]);
+  // C29: reuses the single shared gst-display estimator (same 18% default
+  // Cart/CartDrawer already apply) instead of a separately hard-coded
+  // `* 0.18` literal — no behaviour change, same figures as before.
+  const gst = useMemo(() => estimateGstAmount(cart.summary.subtotal), [cart.summary.subtotal]);
+  const total = useMemo(() => estimateGstInclusiveTotal(cart.summary.subtotal), [cart.summary.subtotal]);
 
   async function handleOptIn(item: CartResponse["items"][number]) {
     if (!pincode || pincode.length !== 6) {
@@ -358,7 +362,7 @@ export default function CheckoutPage() {
           <span>₹{cart.summary.subtotal.toLocaleString("en-IN")}</span>
         </div>
         <div className="flex justify-between text-sm text-slate-500">
-          <span>GST estimate</span>
+          <span>{formatGstLineLabel()}</span>
           <span>₹{gst.toLocaleString("en-IN")}</span>
         </div>
         <div className="flex justify-between border-t border-slate-100 pt-3 font-bold text-slate-800">

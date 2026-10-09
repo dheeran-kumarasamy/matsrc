@@ -78,6 +78,14 @@ export * from "./lib/otp-challenge";
 // for the full architectural boundary documentation.
 export * from "./lib/login-otp-whatsapp-notification";
 
+// Buildohub Advance Balance (Buyer Advance Payment & Advance Balance) —
+// shared, framework-agnostic advance ledger helpers (row-lock, append
+// ledger entry + cached balance update, lazy account creation,
+// reconciliation). Used by both apps/web (buyer-facing advance/order-
+// payment routes) and apps/api (admin advance-payment approval/rejection).
+// See packages/db/lib/advance-ledger.ts for full documentation.
+export * from "./lib/advance-ledger";
+
 // Supplier RFQ Price Revision & GST-Inclusive Order Value — shared,
 // framework-agnostic GST/line-total calculation used by both the
 // NestJS RfqsService (apps/api) and the Next.js supplier portal

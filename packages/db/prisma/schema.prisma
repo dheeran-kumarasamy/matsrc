@@ -92,6 +92,12 @@ model User {
   sourcingSessions       SourcingSession[]       @relation("UserSourcingSessions")
   otpChallenges          OtpChallenge[]
 
+  // Buildohub Advance Balance (Buyer Advance Payment & Advance Balance
+  // feature) — at most one active CustomerAdvanceAccount per buyer. See
+  // CustomerAdvanceAccount model below for full documentation.
+  advanceAccount  CustomerAdvanceAccount?
+  advancePayments AdvancePayment[]
+
   // Legacy contractor-prefix code used only by pre-existing enquiry IDs in
   // the previous "<CONTRACTOR_CODE>-<SITE_CODE>-<SEQUENCE>" format (e.g.
   // "ABC" in "ABC-SITE01-000123"). No longer read/written by Consolidated
@@ -808,6 +814,12 @@ model Order {
   // no invoice until an Admin explicitly generates one (see Invoice model).
   invoice Invoice?
 
+  // Buildohub Advance Balance: zero or more ORDER_PAYMENT/REFUND/REVERSAL
+  // ledger entries recording advance-balance usage against this order.
+  // Optional/additive — an order that never used the advance balance has
+  // none of these rows. See CustomerAdvanceTransaction below.
+  advanceTransactions CustomerAdvanceTransaction[]
+
   @@index([userId])
   @@index([status])
   @@index([selectedSupplierId])
@@ -851,6 +863,197 @@ model PaymentVerification {
   @@index([orderId])
   @@index([userId])
   @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// Buildohub Advance Balance (Buyer Advance Payment & Advance Balance)
+//
+// A buyer may deposit money into their Buildohub account in advance and
+// optionally use that balance toward future order payments. The advance
+// ledger (CustomerAdvanceTransaction) is the single source of truth for the
+// balance; CustomerAdvanceAccount.availableBalance is a cached, denormalized
+// value that is ALWAYS written inside the same transaction that creates the
+// corresponding ledger row, never on its own.
+//
+// Business rule (see project spec): the advance balance is an OPTIONAL
+// payment source. It is never automatically consumed at order payment time
+// — the buyer must explicitly opt in per order/payment (default: do not
+// use). No "always use advance" global preference exists.
+// ─────────────────────────────────────────────
+
+enum AdvanceAccountStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum AdvancePaymentMethod {
+  MANUAL
+  // Reserved for a future payment-gateway integration (see
+  // AdvancePayment.gateway* fields below) — not implemented in this phase.
+  PAYMENT_GATEWAY
+}
+
+enum AdvancePaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AdvanceTransactionType {
+  CREDIT
+  ORDER_PAYMENT
+  REFUND
+  REVERSAL
+  ADJUSTMENT
+}
+
+// At most one (buyerId unique) advance account per buyer — created lazily
+// on first use (first "Add Advance" submission) rather than backfilled for
+// every existing buyer, so this migration never needs to touch historical
+// User rows.
+model CustomerAdvanceAccount {
+  id      String @id @default(cuid())
+  buyerId String @unique
+  buyer   User   @relation(fields: [buyerId], references: [id])
+
+  currency String @default("INR")
+
+  // Cached, denormalized balance — always kept consistent with the ledger
+  // (CustomerAdvanceTransaction.balanceAfter of the most recent entry for
+  // this account). Never mutated directly without a corresponding ledger
+  // row.
+  availableBalance Decimal              @default(0) @db.Decimal(12, 2)
+  status           AdvanceAccountStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments     AdvancePayment[]
+  transactions CustomerAdvanceTransaction[]
+
+  @@index([buyerId])
+  @@index([status])
+}
+
+// Manual (or future gateway) advance-payment submission — distinct from
+// Order Payment / PaymentVerification. Reuses the exact same
+// screenshot/payment-proof storage shape as PaymentVerification (private
+// Bytes column, never a public URL) so the existing upload/validation code
+// (apps/web/lib/payment-proof-validation.ts) can be reused as-is.
+//
+// Submitting an AdvancePayment NEVER by itself increases
+// CustomerAdvanceAccount.availableBalance — only an Admin APPROVED
+// transition does that, atomically alongside a CREDIT ledger entry (see
+// CustomerAdvanceTransaction below).
+model AdvancePayment {
+  id               String                 @id @default(cuid())
+  advanceAccountId String
+  advanceAccount   CustomerAdvanceAccount @relation(fields: [advanceAccountId], references: [id])
+  buyerId          String
+  buyer            User                   @relation(fields: [buyerId], references: [id])
+
+  // Buildohub reference — format "AP/<FY><MM>/<SSSSS>" (e.g.
+  // "AP/2601/00001"), generated via generateAdvancePaymentNumber() /
+  // packages/db/lib/business-number.ts. Its own independent serial
+  // sequence — never shares the EQ/OD/IN BusinessSequence rows.
+  referenceNumber String @unique
+
+  amount        Decimal              @db.Decimal(12, 2)
+  paymentMethod AdvancePaymentMethod @default(MANUAL)
+  status        AdvancePaymentStatus @default(PENDING)
+
+  // Manual payment-proof fields — mirrors PaymentVerification exactly.
+  // Nullable so a future PAYMENT_GATEWAY submission (no screenshot) remains
+  // valid.
+  paymentReference   String?
+  screenshotData     Bytes?
+  screenshotMimeType String?
+  screenshotFileName String?
+  screenshotSize     Int?
+
+  // Reserved for a future payment-gateway integration. Never populated by
+  // the MANUAL flow implemented in this phase. A gateway webhook/server-side
+  // confirmation (never a browser-reported "success") would be the only
+  // authoritative writer of these fields and of status=APPROVED for a
+  // PAYMENT_GATEWAY payment.
+  gateway              String?
+  gatewayTransactionId String?
+  gatewayOrderId       String?
+  gatewayPaymentId     String?
+  gatewayStatus        String?
+
+  submittedAt     DateTime  @default(now())
+  approvedAt      DateTime?
+  approvedBy      String?
+  rejectedAt      DateTime?
+  rejectedBy      String?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creditTransaction CustomerAdvanceTransaction?
+
+  @@index([advanceAccountId])
+  @@index([buyerId])
+  @@index([status])
+  @@index([referenceNumber])
+  @@index([submittedAt])
+}
+
+// The advance ledger — the single source of truth for every balance
+// movement. Immutable once created: corrections are represented by new
+// REVERSAL/REFUND/ADJUSTMENT rows, never by editing/deleting an existing
+// row (see reversalOfTransactionId self-relation below).
+model CustomerAdvanceTransaction {
+  id        String                 @id @default(cuid())
+  accountId String
+  account   CustomerAdvanceAccount @relation(fields: [accountId], references: [id])
+
+  type   AdvanceTransactionType
+  amount Decimal                @db.Decimal(12, 2)
+
+  // Account balance immediately after this transaction was applied —
+  // recomputed and recorded atomically with the mutation.
+  balanceAfter Decimal @db.Decimal(12, 2)
+
+  // Free-text/human-readable reference for this ledger line (e.g. the
+  // AdvancePayment's referenceNumber for a CREDIT, or the Order's
+  // enquiryId/orderNumber for an ORDER_PAYMENT).
+  reference String?
+
+  // CREDIT rows are only ever created at admin-approval time (see
+  // AdvancePaymentsService.approve) and are therefore always APPROVED by
+  // construction — PENDING never applies to a ledger row itself (only to
+  // the AdvancePayment awaiting approval).
+  status AdvancePaymentStatus @default(APPROVED)
+
+  paymentMethod AdvancePaymentMethod?
+
+  advancePaymentId String?         @unique
+  advancePayment   AdvancePayment? @relation(fields: [advancePaymentId], references: [id])
+
+  // Present only for ORDER_PAYMENT/REFUND/REVERSAL rows tied to a specific
+  // order's payment.
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  createdBy  String
+  approvedBy String?
+  approvedAt DateTime?
+
+  // Self-relation: a REVERSAL/REFUND row may point back at the original
+  // transaction it corrects. The original row is NEVER edited/deleted.
+  reversalOfTransactionId String?
+  reversalOf              CustomerAdvanceTransaction?  @relation("AdvanceTransactionReversal", fields: [reversalOfTransactionId], references: [id])
+  reversals               CustomerAdvanceTransaction[] @relation("AdvanceTransactionReversal")
+
+  createdAt DateTime @default(now())
+
+  @@index([accountId])
+  @@index([type])
+  @@index([orderId])
+  @@index([createdAt])
 }
 
 // ─────────────────────────────────────────────

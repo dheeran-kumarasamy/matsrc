@@ -31,6 +31,7 @@ const links: { href: string; label: string }[] = [
   { href: "/sites", label: "Sites" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/orders", label: "My Orders" },
+  { href: "/advance", label: "Advance Balance" },
   { href: "/purchase-orders", label: "Purchase Orders" },
   { href: "/disputes", label: "Disputes" },
 ];

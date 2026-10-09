@@ -25,6 +25,7 @@ import { WhatsAppEscalationsModule } from "./admin/whatsapp-escalations/whatsapp
 import { SupplierRejectionsModule } from "./admin/supplier-rejections/supplier-rejections.module";
 import { CatalogModule } from "./admin/catalog/catalog.module";
 import { PaymentsModule } from "./admin/payments/payments.module";
+import { AdvancePaymentsModule } from "./admin/advance-payments/advance-payments.module";
 import { InvoicesModule } from "./admin/invoices/invoices.module";
 
 import { NotificationsModule } from "./notifications/notifications.module";
@@ -77,6 +78,7 @@ import { AdminNotificationEngineModule } from "./notification-engine/admin/admin
     SupplierReportsModule,
     CatalogModule,
     PaymentsModule,
+    AdvancePaymentsModule,
     InvoicesModule,
 
     WhatsAppModule,

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { builderApiGet } from "@/lib/api";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import PaymentMethodSelector from "@/components/orders/PaymentMethodSelector";
-import BankTransferPaymentPanel from "@/components/orders/BankTransferPaymentPanel";
+import OrderPaymentPanels from "@/components/orders/OrderPaymentPanels";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { getBankAccountDetails } from "@/lib/bank-account-config";
 
@@ -89,7 +89,7 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
         order.paymentStatus !== "PAID" &&
         order.status !== "CANCELLED" &&
         (order.paymentLinkAvailable || order.paymentStatus === "PENDING_VERIFICATION") ? (
-          <BankTransferPaymentPanel orderId={order.id} amount={order.total} bank={getBankAccountDetails()} />
+          <OrderPaymentPanels orderId={order.id} initialTotal={order.total} bank={getBankAccountDetails()} />
         ) : null}
 
         <div className="flex flex-wrap gap-3">

@@ -5,6 +5,7 @@ import {
   generateEnquiryNumber,
   generateOrderNumber,
   generateInvoiceNumber,
+  generateAdvancePaymentNumber,
   validateBusinessNumber,
 } from "./business-number";
 
@@ -44,11 +45,43 @@ describe("Financial Year Calculation", () => {
 });
 
 describe("Business Number Validation", () => {
-  it("validates EQ, OD, and IN business number formats", () => {
+  it("validates EQ, OD, IN and AP business number formats", () => {
     expect(validateBusinessNumber("EQ", "EQ/2601/00001")).toBe(true);
     expect(validateBusinessNumber("OD", "OD/2601/00001")).toBe(true);
     expect(validateBusinessNumber("IN", "IN/2601/00001")).toBe(true);
+    expect(validateBusinessNumber("AP", "AP/2601/00001")).toBe(true);
     expect(validateBusinessNumber("EQ", "INVALID")).toBe(false);
+    expect(validateBusinessNumber("AP", "EQ/2601/00001")).toBe(false);
+  });
+});
+
+describe("AP Business Number Generation", () => {
+  it("generates AP/YYMM/SSSSS formatted numbers using its own independent sequence", async () => {
+    const { tx } = createFakeTx();
+    const date = new Date(2026, 3, 1);
+
+    const first = await generateAdvancePaymentNumber(tx as any, date);
+    const second = await generateAdvancePaymentNumber(tx as any, date);
+
+    expect(first).toBe("AP/2601/00001");
+    expect(second).toBe("AP/2601/00002");
+  });
+
+  it("maintains an AP counter independent of EQ/OD/IN", async () => {
+    const { tx } = createFakeTx();
+    const date = new Date(2026, 3, 1);
+
+    const eq1 = await generateEnquiryNumber(tx as any, date);
+    const od1 = await generateOrderNumber(tx as any, date);
+    const in1 = await generateInvoiceNumber(tx as any, date);
+    const ap1 = await generateAdvancePaymentNumber(tx as any, date);
+    const ap2 = await generateAdvancePaymentNumber(tx as any, date);
+
+    expect(eq1).toBe("EQ/2601/00001");
+    expect(od1).toBe("OD/2601/00001");
+    expect(in1).toBe("IN/2601/00001");
+    expect(ap1).toBe("AP/2601/00001");
+    expect(ap2).toBe("AP/2601/00002");
   });
 });
 

@@ -3,6 +3,7 @@ import { PaymentMethod, PaymentStatus } from "@matsrc/db";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
 import { notifyPaymentProofSubmitted } from "@/lib/notify";
 import { validatePaymentProofFile, buildSafePaymentProofFileName } from "@/lib/payment-proof-validation";
+import { computeOrderOutstandingAmount } from "@/lib/order-outstanding";
 
 export const dynamic = "force-dynamic";
 
@@ -136,12 +137,20 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // Never trust the uploaded filename for storage — only used for display.
     const safeFileName = buildSafePaymentProofFileName(order.id, file.name);
 
+    // Mixed payment support (Buildohub Advance Balance + bank transfer, see
+    // spec §30): the bank-transfer screenshot's declared amount is the
+    // order's current OUTSTANDING amount (totalAmount minus any advance
+    // already applied via /api/builder/orders/[id]/advance-payment), not
+    // the full order total — never double-charges a buyer who already used
+    // part of their advance balance toward this order.
+    const { outstanding } = await computeOrderOutstandingAmount(order.id);
+
     if (existing) {
       await prisma.paymentVerification.update({
         where: { id: existing.id },
         data: {
           paymentMethod: PaymentMethod.BANK_TRANSFER,
-          amount: order.totalAmount,
+          amount: outstanding,
           screenshotData: buffer,
           screenshotMimeType: file.type,
           screenshotFileName: safeFileName,
@@ -159,7 +168,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
           orderId: order.id,
           userId: user.id,
           paymentMethod: PaymentMethod.BANK_TRANSFER,
-          amount: order.totalAmount,
+          amount: outstanding,
           screenshotData: buffer,
           screenshotMimeType: file.type,
           screenshotFileName: safeFileName,

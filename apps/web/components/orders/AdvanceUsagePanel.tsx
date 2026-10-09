@@ -48,8 +48,15 @@ export default function AdvanceUsagePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 
-  if (!summary || summary.availableBalance <= 0) {
-    return null; // Nothing to offer — no advance balance available.
+  const maxUsable = summary ? Math.max(0, Math.min(summary.availableBalance, summary.outstanding)) : 0;
+
+  // Nothing worth showing: the summary couldn't be loaded, OR the buyer has
+  // never had any advance balance AND none was ever applied to this order.
+  // Once the buyer either has balance to offer OR has already applied some
+  // to this order, the panel stays mounted (even after dropping to ₹0) so a
+  // confirmation/explanatory message never silently vanishes mid-interaction.
+  if (!summary || (summary.availableBalance <= 0 && summary.advanceApplied <= 0)) {
+    return null;
   }
 
   async function applyAdvance() {
@@ -58,6 +65,17 @@ export default function AdvanceUsagePanel({
     const amount = Number(amountToUse);
     if (!Number.isFinite(amount) || amount <= 0) {
       setError("Enter a valid amount to use from your advance balance");
+      return;
+    }
+    // Client-side clamp BEFORE the network call — the server re-validates
+    // this authoritatively regardless, but this avoids a confusing 400 for
+    // an amount the UI itself advertised as the maximum.
+    if (amount > maxUsable) {
+      setError(
+        maxUsable <= 0
+          ? "You have no advance balance available to use for this order. Please refresh the page."
+          : `You can use up to ₹${maxUsable.toLocaleString("en-IN")} from your advance balance`
+      );
       return;
     }
     setApplying(true);
@@ -81,6 +99,8 @@ export default function AdvanceUsagePanel({
     }
   }
 
+  const nothingLeftToOffer = maxUsable <= 0;
+
   return (
     <div className="rounded-xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.03)] p-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -88,46 +108,58 @@ export default function AdvanceUsagePanel({
         <p className="text-sm font-bold text-[color:var(--posh-fg)]">Available ₹{summary.availableBalance.toLocaleString("en-IN")}</p>
       </div>
 
-      <div>
-        <p className="posh-label mb-2">Use Advance Balance?</p>
-        <div className="flex gap-4 text-sm">
-          <label className="flex items-center gap-2">
-            <input type="radio" checked={!useAdvance} onChange={() => setUseAdvance(false)} />
-            No
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="radio" checked={useAdvance} onChange={() => setUseAdvance(true)} />
-            Yes
-          </label>
-        </div>
-      </div>
-
-      {useAdvance ? (
-        <div className="space-y-2">
-          <p className="posh-label">Amount to Use</p>
-          <input
-            type="number"
-            min={0}
-            max={Math.min(summary.availableBalance, summary.outstanding)}
-            step="0.01"
-            value={amountToUse}
-            onChange={(e) => setAmountToUse(e.target.value)}
-            placeholder={`Up to ₹${Math.min(summary.availableBalance, summary.outstanding).toLocaleString("en-IN")}`}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-          />
-          <button
-            type="button"
-            onClick={applyAdvance}
-            disabled={applying}
-            className="posh-btn-solid rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
-          >
-            {applying ? "Applying…" : "Apply Advance"}
-          </button>
-        </div>
-      ) : (
+      {nothingLeftToOffer ? (
         <p className="text-xs text-[color:var(--posh-fg-muted)]">
-          Your advance balance will not be used. The full amount remains payable via your selected payment method.
+          {summary.outstanding <= 0
+            ? "This order has already been fully covered by your Buildohub Advance Balance."
+            : summary.advanceApplied > 0
+            ? `₹${summary.advanceApplied.toLocaleString("en-IN")} from your advance balance has already been applied to this order. Your advance balance is now ₹0.`
+            : "You have no Buildohub Advance Balance available right now."}
         </p>
+      ) : (
+        <>
+          <div>
+            <p className="posh-label mb-2">Use Advance Balance?</p>
+            <div className="flex gap-4 text-sm">
+              <label className="flex items-center gap-2">
+                <input type="radio" checked={!useAdvance} onChange={() => setUseAdvance(false)} />
+                No
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="radio" checked={useAdvance} onChange={() => setUseAdvance(true)} />
+                Yes
+              </label>
+            </div>
+          </div>
+
+          {useAdvance ? (
+            <div className="space-y-2">
+              <p className="posh-label">Amount to Use</p>
+              <input
+                type="number"
+                min={0}
+                max={maxUsable}
+                step="0.01"
+                value={amountToUse}
+                onChange={(e) => setAmountToUse(e.target.value)}
+                placeholder={`Up to ₹${maxUsable.toLocaleString("en-IN")}`}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={applyAdvance}
+                disabled={applying}
+                className="posh-btn-solid rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+              >
+                {applying ? "Applying…" : "Apply Advance"}
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-[color:var(--posh-fg-muted)]">
+              Your advance balance will not be used. The full amount remains payable via your selected payment method.
+            </p>
+          )}
+        </>
       )}
 
       {error ? <p className="text-xs text-rose-600">{error}</p> : null}

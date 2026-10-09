@@ -18,6 +18,7 @@
     "db:check-unsafe-patterns": "node scripts/check-unsafe-patterns.js",
     "db:seed-notification-templates": "node scripts/seed-notification-templates.js",
     "db:backfill-auth-identities": "node scripts/backfill-auth-identities.js",
+    "db:reset-test-data": "node scripts/reset-test-data.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

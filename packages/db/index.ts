@@ -70,6 +70,14 @@ export * from "./lib/payment-required-notification";
 // See packages/db/lib/otp-challenge.ts for full documentation.
 export * from "./lib/otp-challenge";
 
+// Unified Account Identity — shared identity-resolution layer (AuthIdentity)
+// used by every login method (WhatsApp OTP, Email OTP, Google) in both the
+// Buyer (apps/web) and Supplier (apps/supplier) portals so a login method
+// can never create a second account for an already-known person within the
+// same portal. See packages/db/lib/identity-resolution.ts for full
+// documentation and the identity audit this implements.
+export * from "./lib/identity-resolution";
+
 // buildohub_login_otp WhatsApp notification (LOGIN_OTP event, Meta WhatsApp
 // Cloud API via the Notification Engine tables) — the single shared,
 // framework-agnostic WhatsApp delivery used by the Buyer (apps/web) and

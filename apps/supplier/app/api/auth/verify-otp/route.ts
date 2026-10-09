@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@matsrc/db";
+import { prisma, resolveOrLinkIdentity, detectCrossIdentityConflict, resolveCrossRoleSafeEmail } from "@matsrc/db";
 import { verifySupplierOtpChallenge, normalizeSupplierPhone } from "@/lib/otp-service";
 
 export const dynamic = "force-dynamic";
@@ -44,37 +44,68 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: verified.message }, { status });
     }
 
-    // Pre-live-review correction: apps/web (Buyer) and apps/supplier share
-    // the SAME production User table (unique on `email`). Buyer's
-    // verify-otp route independently derives a placeholder email for a
-    // phone-only login as `{phone}@phone.buildohub.in`. Using that EXACT
-    // same scheme here caused a real, live-tested cross-portal identity
-    // collision: a phone number that logged into Buyer first silently
-    // merged into that existing BUILDER-role row on Supplier login
-    // (prisma.user.upsert() hit `update: {}` instead of `create`), so
-    // Supplier's SupplierProfile was never provisioned and role stayed
-    // BUILDER. Using a SUPPLIER-portal-specific namespace
-    // (`@supplier.phone.buildohub.in`) guarantees Supplier's phone-only
-    // identity is always disjoint from Buyer's for the same phone number,
-    // matching the task's requirement to "preserve existing account lookup"
-    // and "separate login from registration behavior" without merging two
-    // different portals' identities for the same real-world phone number.
-    const email = channel === "email" ? identifier : `${identifier.replace(/\D/g, "")}@supplier.phone.buildohub.in`;
+    // Unified Account Identity: resolution now goes through AuthIdentity
+    // (provider+identifier+role=SUPPLIER) FIRST, fixing the same
+    // WhatsApp-placeholder-email vs real-email/Google duplicate-account
+    // bug found by the identity audit — Supplier's Google signIn callback
+    // (apps/supplier/auth.ts) resolves through the exact same layer, so a
+    // Supplier who logs in via WhatsApp and later via Google/Email
+    // converges on the SAME SupplierProfile-bearing User instead of a
+    // second one.
+    //
+    // The legacy, Supplier-portal-scoped placeholder email
+    // (`{phone}@supplier.phone.buildohub.in`) is preserved ONLY as a
+    // fallback `User` lookup/creation key for phone-only logins that have
+    // no real email yet — see the pre-existing doc comment above this
+    // scheme's introduction for why it must stay disjoint from Buyer's own
+    // placeholder namespace. It is never again the primary
+    // identity-resolution mechanism.
+    const legacyPlaceholderEmail = `${identifier.replace(/\D/g, "")}@supplier.phone.buildohub.in`;
 
-    const user = await prisma.user.upsert({
-      where: { email },
-      update: {},
-      create: {
-        email,
-        name: null,
-        role: "SUPPLIER",
-        phone: channel === "whatsapp" ? identifier : null,
-        supplierProfile: {
-          create: { companyName: "New Supplier" },
-        },
+    // CRITICAL: `User.email` is globally unique across BOTH portals/roles,
+    // so an email match might actually belong to a BUILDER, not a
+    // SUPPLIER — the role check below is what prevents a Supplier login
+    // from ever resolving to a Buyer's User (portal/role isolation).
+    const legacyMatch =
+      channel === "whatsapp"
+        ? await prisma.user.findUnique({ where: { email: legacyPlaceholderEmail } })
+        : await prisma.user.findUnique({ where: { email: identifier } });
+    const legacyCandidate = legacyMatch?.role === "SUPPLIER" ? legacyMatch : null;
+
+    const scope = {
+      provider: (channel === "email" ? "EMAIL" : "WHATSAPP") as "EMAIL" | "WHATSAPP",
+      providerIdentifier: identifier,
+      role: "SUPPLIER" as const,
+    };
+
+    // Safety check (Situation 2 from the audit): never silently merge two
+    // already-distinct Users — surface a safe conflict instead.
+    const conflict = await detectCrossIdentityConflict(prisma as any, scope, legacyCandidate?.id ?? null);
+    if (conflict) {
+      return NextResponse.json({ message: conflict.message, code: conflict.code }, { status: 409 });
+    }
+
+    const resolved = await resolveOrLinkIdentity(prisma as any, scope, {
+      candidateUserId: legacyCandidate?.id ?? null,
+      createUser: async () => {
+        const desiredEmail = channel === "email" ? identifier : legacyPlaceholderEmail;
+        const safeEmail = await resolveCrossRoleSafeEmail(prisma as any, desiredEmail, "SUPPLIER");
+        const created = await prisma.user.create({
+          data: {
+            email: safeEmail,
+            name: null,
+            role: "SUPPLIER",
+            phone: channel === "whatsapp" ? identifier : null,
+            supplierProfile: {
+              create: { companyName: "New Supplier" },
+            },
+          },
+        });
+        return { id: created.id };
       },
-      include: { supplierProfile: true },
     });
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: resolved.userId } });
 
     return NextResponse.json({ ok: true, email: user.email, name: user.name ?? "" });
   } catch (error: any) {

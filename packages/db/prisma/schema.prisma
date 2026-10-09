@@ -28,6 +28,63 @@ enum KycStatus {
   REJECTED
 }
 
+// Unified Account Identity (AuthIdentity) — the persistent identity-linking
+// layer introduced to stop WhatsApp OTP / Email OTP / Google from each
+// independently resolving/creating their own `User` row for the same real
+// person within a single portal (see the identity audit this implements).
+// Option A from that audit: a small, additive table — NOT the full Auth.js
+// `Account`/`Session`/`VerificationToken` adapter set, and session strategy
+// stays JWT-based, unchanged.
+//
+// Canonical identities per provider (never the placeholder email, never the
+// Google email alone):
+//   WHATSAPP -> E.164-normalized phone number
+//   EMAIL    -> trimmed + lowercased email address
+//   GOOGLE   -> the stable Google OAuth `account.providerAccountId` (the
+//               OAuth "sub"), NEVER the Google email — an email can change
+//               or be reused by a different Google account over time, the
+//               sub cannot.
+enum AuthIdentityProvider {
+  WHATSAPP
+  EMAIL
+  GOOGLE
+}
+
+// Portal/role-aware uniqueness is the key correction over the audit's naive
+// `@@unique([provider, providerIdentifier])` recommendation: Buildohub
+// intentionally allows the SAME phone/email/Google identity to belong to one
+// Buyer (role=BUILDER) User AND one Supplier (role=SUPPLIER) User
+// simultaneously — see schema's existing `User.phone` non-uniqueness
+// rationale above. Scoping the unique constraint to `(provider,
+// providerIdentifier, role)` preserves that cross-portal behavior while
+// still guaranteeing one identity can never resolve to two DIFFERENT Users
+// within the SAME portal/role — which is the actual duplicate-account bug
+// this model exists to close.
+model AuthIdentity {
+  id     String               @id @default(cuid())
+  userId String
+  user   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider AuthIdentityProvider
+
+  // Canonical, normalized identifier — see provider-specific normalization
+  // rules in the enum doc comment above. Never a placeholder/synthetic
+  // value (e.g. never `{phone}@phone.buildohub.in`).
+  providerIdentifier String
+
+  // The portal/role this identity is linked to — always BUILDER or
+  // SUPPLIER in practice (ADMIN/SUPER_ADMIN do not use this login surface),
+  // but left as the full `Role` enum rather than a narrower one to avoid
+  // introducing a second, parallel role-like enum.
+  role Role
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, providerIdentifier, role])
+  @@index([userId])
+}
+
 model User {
   id             String    @id @default(cuid())
   email          String?   @unique
@@ -91,6 +148,7 @@ model User {
   tallyLedgerMapping     TallyLedgerMapping?
   sourcingSessions       SourcingSession[]       @relation("UserSourcingSessions")
   otpChallenges          OtpChallenge[]
+  authIdentities         AuthIdentity[]
 
   // Buildohub Advance Balance (Buyer Advance Payment & Advance Balance
   // feature) — at most one active CustomerAdvanceAccount per buyer. See

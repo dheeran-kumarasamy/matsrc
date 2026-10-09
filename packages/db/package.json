@@ -17,6 +17,7 @@
     "db:safe:db-execute": "node scripts/prisma-safe.js db-execute",
     "db:check-unsafe-patterns": "node scripts/check-unsafe-patterns.js",
     "db:seed-notification-templates": "node scripts/seed-notification-templates.js",
+    "db:backfill-auth-identities": "node scripts/backfill-auth-identities.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

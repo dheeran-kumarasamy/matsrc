@@ -1,6 +1,7 @@
 import NextAuth, { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
+import { resolveBuilderGoogleSignIn } from "@/lib/google-identity";
 
 export const authConfig: NextAuthConfig = {
 
@@ -10,6 +11,24 @@ export const authConfig: NextAuthConfig = {
     error: "/auth/login",
   },
   callbacks: {
+    // Unified Account Identity: the audit found Buyer's Google login had NO
+    // durable User provisioning/linking callback at all — Google sign-ins
+    // never resolved to a database `User` row, unlike Supplier's (unsafe,
+    // email-only) upsert. This adds the missing callback using the SAME
+    // safe, AuthIdentity-based resolution Supplier now uses: the Google
+    // identity key is the stable OAuth subject (account.providerAccountId),
+    // never the Google email, and a real email that happens to match an
+    // existing User is used ONLY as a link candidate — never to silently
+    // merge with a different, already-linked User.
+    async signIn({ user, account }) {
+      if (account?.provider === "google") {
+        const result = await resolveBuilderGoogleSignIn(user, account);
+        if (!result.allow) {
+          return result.redirectTo ?? false;
+        }
+      }
+      return true;
+    },
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;

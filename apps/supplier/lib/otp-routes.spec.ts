@@ -8,7 +8,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const userFindUnique = vi.fn();
 const userFindFirst = vi.fn();
-const userUpsert = vi.fn();
+const userCreate = vi.fn();
+const userFindUniqueOrThrow = vi.fn();
+
+// Unified Account Identity: the real routes now resolve/link through
+// @matsrc/db's identity-resolution layer (unit-tested separately in
+// packages/db/lib/identity-resolution.spec.ts). These mocks reproduce its
+// observable behavior closely enough for route-level assertions: no
+// AuthIdentity exists yet by default, so resolveOrLinkIdentity falls
+// through to candidateUserId (legacy lookup) or createUser().
+const findIdentity = vi.fn(async (..._args: any[]) => null as any);
+const detectCrossIdentityConflict = vi.fn(async (..._args: any[]) => null as any);
+const resolveOrLinkIdentity = vi.fn(async (_prisma: any, _scope: any, options: any) => {
+  if (options.candidateUserId) return { status: "LINKED_EXISTING", userId: options.candidateUserId };
+  const user = await options.createUser();
+  return { status: "CREATED_NEW", userId: user.id };
+});
+const resolveCrossRoleSafeEmail = vi.fn(async (_prisma: any, email: string, ..._rest: any[]) => email);
 
 vi.mock("@matsrc/db", () => ({
   prisma: {
@@ -18,12 +34,17 @@ vi.mock("@matsrc/db", () => ({
       // (see packages/db/prisma/schema.prisma) — the real route now looks
       // up phone-based identifiers via findFirst(), not findUnique().
       findFirst: (...args: unknown[]) => userFindFirst(...args),
-      upsert: (...args: unknown[]) => userUpsert(...args),
+      create: (...args: unknown[]) => userCreate(...args),
+      findUniqueOrThrow: (...args: unknown[]) => userFindUniqueOrThrow(...args),
     },
   },
   // Real Prisma enum value — the route scopes its findFirst() by
   // role: Role.SUPPLIER, so the mock must provide a real Role export.
   Role: { BUILDER: "BUILDER", SUPPLIER: "SUPPLIER", ADMIN: "ADMIN", SUPER_ADMIN: "SUPER_ADMIN" },
+  findIdentity: (...args: unknown[]) => findIdentity(...(args as [any, any])),
+  detectCrossIdentityConflict: (...args: unknown[]) => detectCrossIdentityConflict(...(args as [any, any, any])),
+  resolveOrLinkIdentity: (...args: unknown[]) => resolveOrLinkIdentity(...(args as [any, any, any])),
+  resolveCrossRoleSafeEmail: (...args: unknown[]) => resolveCrossRoleSafeEmail(...(args as [any, any, any])),
 }));
 
 const issueSupplierOtpChallenge = vi.fn();
@@ -125,15 +146,17 @@ describe("POST /api/auth/send-otp (Supplier)", () => {
 describe("POST /api/auth/verify-otp (Supplier)", () => {
   it("accepts the correct OTP and creates a User + SupplierProfile", async () => {
     verifySupplierOtpChallenge.mockResolvedValue({ ok: true, userId: null, identifier: "+919000000000" });
-    userUpsert.mockResolvedValue({ email: "9000000000@phone.buildohub.in", name: null });
+    userFindUnique.mockResolvedValue(null);
+    userCreate.mockResolvedValue({ id: "user-1", email: "9000000000@supplier.phone.buildohub.in", name: null });
+    userFindUniqueOrThrow.mockResolvedValue({ id: "user-1", email: "9000000000@supplier.phone.buildohub.in", name: null });
 
     const { POST } = await import("@/app/api/auth/verify-otp/route");
     const res = await POST(makeRequest({ channel: "whatsapp", identifier: "9000000000", otp: "123456" }));
 
     expect(res.status).toBe(200);
-    expect(userUpsert).toHaveBeenCalledWith(
+    expect(userCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({ role: "SUPPLIER", supplierProfile: expect.objectContaining({ create: expect.anything() }) }),
+        data: expect.objectContaining({ role: "SUPPLIER", supplierProfile: expect.objectContaining({ create: expect.anything() }) }),
       })
     );
   });
@@ -145,7 +168,7 @@ describe("POST /api/auth/verify-otp (Supplier)", () => {
     const res = await POST(makeRequest({ channel: "whatsapp", identifier: "9000000000", otp: "999999" }));
 
     expect(res.status).toBe(401);
-    expect(userUpsert).not.toHaveBeenCalled();
+    expect(userCreate).not.toHaveBeenCalled();
   });
 
   it("rejects an expired OTP", async () => {
@@ -163,5 +186,56 @@ describe("POST /api/auth/verify-otp (Supplier)", () => {
 
     expect(res.status).toBe(400);
     expect(verifySupplierOtpChallenge).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/auth/verify-otp (Supplier) — Unified Account Identity", () => {
+  it("WhatsApp login for an already-known phone links to the pre-existing placeholder-email User instead of creating a second one", async () => {
+    verifySupplierOtpChallenge.mockResolvedValue({ ok: true, userId: null, identifier: "+919000000000" });
+    userFindUnique.mockResolvedValue({ id: "sup-user-1", role: "SUPPLIER", email: "9000000000@supplier.phone.buildohub.in" });
+    userFindUniqueOrThrow.mockResolvedValue({ id: "sup-user-1", email: "9000000000@supplier.phone.buildohub.in", name: null });
+
+    const { POST } = await import("@/app/api/auth/verify-otp/route");
+    const res = await POST(makeRequest({ channel: "whatsapp", identifier: "9000000000", otp: "123456" }));
+
+    expect(res.status).toBe(200);
+    expect(userCreate).not.toHaveBeenCalled();
+    expect(resolveOrLinkIdentity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ provider: "WHATSAPP", role: "SUPPLIER" }),
+      expect.objectContaining({ candidateUserId: "sup-user-1" })
+    );
+  });
+
+  it("ignores a legacy email match that belongs to a BUILDER (Buyer) User — never resolves Supplier login to a Buyer account", async () => {
+    verifySupplierOtpChallenge.mockResolvedValue({ ok: true, userId: null, identifier: "shared@example.com" });
+    userFindUnique.mockResolvedValue({ id: "buyer-user-1", role: "BUILDER", email: "shared@example.com" });
+    userCreate.mockResolvedValue({ id: "new-sup-user", email: "shared@example.com", name: null });
+    userFindUniqueOrThrow.mockResolvedValue({ id: "new-sup-user", email: "shared@example.com", name: null });
+
+    const { POST } = await import("@/app/api/auth/verify-otp/route");
+    const res = await POST(makeRequest({ channel: "email", identifier: "shared@example.com", otp: "123456" }));
+
+    expect(res.status).toBe(200);
+    expect(resolveOrLinkIdentity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ candidateUserId: null })
+    );
+  });
+
+  it("returns a safe 409 conflict instead of silently merging when the identity is already linked to a DIFFERENT User", async () => {
+    verifySupplierOtpChallenge.mockResolvedValue({ ok: true, userId: null, identifier: "supplier@example.com" });
+    userFindUnique.mockResolvedValue({ id: "sup-user-A", role: "SUPPLIER", email: "supplier@example.com" });
+    detectCrossIdentityConflict.mockResolvedValue({ code: "IDENTITY_CONFLICT", message: "conflict" });
+
+    const { POST } = await import("@/app/api/auth/verify-otp/route");
+    const res = await POST(makeRequest({ channel: "email", identifier: "supplier@example.com", otp: "123456" }));
+    const data = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(data.code).toBe("IDENTITY_CONFLICT");
+    expect(resolveOrLinkIdentity).not.toHaveBeenCalled();
+    expect(userCreate).not.toHaveBeenCalled();
   });
 });

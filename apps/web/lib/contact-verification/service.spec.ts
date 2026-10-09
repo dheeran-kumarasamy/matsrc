@@ -39,6 +39,22 @@ const sendOtpSms = vi.fn(async (_to: string, _otp: string) => ({ ok: true as con
 vi.mock("./email-sender", () => ({ sendOtpEmail: (to: string, otp: string) => sendOtpEmail(to, otp) }));
 vi.mock("./sms-sender", () => ({ sendOtpSms: (to: string, otp: string) => sendOtpSms(to, otp) }));
 
+// Unified Account Identity: verifyContactChange() now also guards against
+// an identity conflict and links the newly-verified value into
+// AuthIdentity — mocked here the same way as the OTP-route specs
+// (packages/db/lib/identity-resolution.ts is unit-tested separately).
+const detectCrossIdentityConflict = vi.fn(async (..._args: any[]) => null as any);
+const linkIdentity = vi.fn(async (_prisma: any, _scope: any, userId: string) => ({ id: "ai-1", userId }));
+
+vi.mock("@matsrc/db", async () => {
+  const actual = await vi.importActual<any>("@matsrc/db");
+  return {
+    ...actual,
+    detectCrossIdentityConflict: (...args: unknown[]) => detectCrossIdentityConflict(...(args as [any, any, any])),
+    linkIdentity: (...args: unknown[]) => linkIdentity(...(args as [any, any, any])),
+  };
+});
+
 const USER_ID = "user-1";
 
 function fakeUser(overrides: Partial<{ email: string | null; phone: string | null }> = {}) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma, Role } from "@matsrc/db";
+import { prisma, Role, findIdentity } from "@matsrc/db";
 import {
   issueSupplierOtpChallenge,
   deliverSupplierOtpViaWhatsApp,
@@ -53,14 +53,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Unified Account Identity: prefer the AuthIdentity lookup (provider +
+    // identifier + role=SUPPLIER) so a previously-linked WhatsApp/email/
+    // Google identity resolves to its User even if that User's legacy
+    // `phone` field was never populated/backfilled. Falls back to the
+    // pre-existing lookups for Users not yet linked into AuthIdentity —
+    // this is read-only here (send-otp never creates or links identities
+    // itself; only verify-otp does).
+    //
     // NOTE: `phone` is intentionally NOT a unique field (see schema.prisma
     // comment — the same phone number can now legitimately belong to both
     // a Buyer and a Supplier account, keyed by their distinct portal-scoped
     // emails) — findFirst(), not findUnique(), is required here. Scoped to
     // role: SUPPLIER so this never matches a Buyer account with the same
     // phone number.
-    const existingUser =
-      channel === "email"
+    const linkedIdentity = await findIdentity(prisma as any, {
+      provider: channel === "email" ? "EMAIL" : "WHATSAPP",
+      providerIdentifier: identifier,
+      role: "SUPPLIER",
+    });
+    const existingUser = linkedIdentity
+      ? await prisma.user.findUnique({ where: { id: linkedIdentity.userId } })
+      : channel === "email"
         ? await prisma.user.findUnique({ where: { email: identifier } })
         : await prisma.user.findFirst({ where: { phone: identifier, role: Role.SUPPLIER } });
 

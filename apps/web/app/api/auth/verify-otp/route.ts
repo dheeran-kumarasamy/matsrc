@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/builder-db";
 import { normalizeEmail, isValidEmailFormat, normalizePhone } from "@/lib/contact-verification/validation";
 import { verifyOtpChallenge, checkOtpVerifyRateLimit } from "@/lib/otp-service";
-import { OtpPurpose } from "@matsrc/db";
+import { OtpPurpose, resolveOrLinkIdentity, detectCrossIdentityConflict, resolveCrossRoleSafeEmail } from "@matsrc/db";
 
 export const dynamic = "force-dynamic";
 
@@ -64,26 +64,73 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: verified.message }, { status });
     }
 
-    // The rest of this app resolves the signed-in user by email (see
-    // lib/builder-db.ts's getUserCtx/resolveUserCtx and auth.ts's
-    // Credentials provider), so a phone-only identifier is mapped to a
-    // stable, deterministic placeholder email rather than introducing a
-    // second identity key throughout the codebase — unchanged behaviour
-    // from the previous implementation.
-    const email = channel === "email" ? identifier : `${identifier.replace(/\D/g, "")}@phone.buildohub.in`;
+    // Unified Account Identity: resolution now goes through AuthIdentity
+    // (provider+identifier+role) FIRST — this is the fix for the
+    // WhatsApp-placeholder-email vs real-email duplicate-account bug found
+    // by the identity audit. The legacy placeholder email
+    // (`{phone}@phone.buildohub.in`) is preserved ONLY as a fallback `User`
+    // lookup/creation key for phone-only logins that have no real email yet
+    // — it is never again the primary identity-resolution mechanism.
+    const legacyPlaceholderEmail = `${identifier.replace(/\D/g, "")}@phone.buildohub.in`;
 
-    const user = await prisma.user.upsert({
-      where: { email },
-      update: name ? { name } : {},
-      create: {
-        email,
-        name: name || null,
-        phone: channel === "phone" ? identifier : null,
-        role: "BUILDER",
-      },
-    });
+    // For a phone login, look up any pre-existing User via the legacy
+    // placeholder scheme (Situation 1 in the audit: this User already
+    // exists from before AuthIdentity existed, or from a previous WhatsApp
+    // login that hasn't been backfilled yet) — this is used ONLY as a
+    // candidate to link the new AuthIdentity to, never to silently merge
+    // with a different real-email User. CRITICAL: `User.email` is
+    // globally unique across BOTH portals/roles, so an email match might
+    // actually belong to a SUPPLIER, not a BUILDER — the role check below
+    // is what prevents a Buyer login from ever resolving to a Supplier's
+    // User (portal/role isolation).
+    const legacyMatch =
+      channel === "phone"
+        ? await prisma.user.findUnique({ where: { email: legacyPlaceholderEmail } })
+        : await prisma.user.findUnique({ where: { email: identifier } });
+    const legacyCandidate = legacyMatch?.role === "BUILDER" ? legacyMatch : null;
 
-    return NextResponse.json({ ok: true, email: user.email, name: user.name ?? "" });
+    const scope = {
+      provider: (channel === "email" ? "EMAIL" : "WHATSAPP") as "EMAIL" | "WHATSAPP",
+      providerIdentifier: identifier,
+      role: "BUILDER" as const,
+    };
+
+    // Safety check (Situation 2 from the audit): if this exact identifier
+    // is ALREADY linked to a different User than the legacy candidate we
+    // just found, never silently merge — surface a safe conflict instead.
+    const conflict = await detectCrossIdentityConflict(prisma as any, scope, legacyCandidate?.id ?? null);
+    if (conflict) {
+      return NextResponse.json({ message: conflict.message, code: conflict.code }, { status: 409 });
+    }
+
+    const resolved = await resolveOrLinkIdentity(
+      prisma as any,
+      scope,
+      {
+        candidateUserId: legacyCandidate?.id ?? null,
+        createUser: async () => {
+          const desiredEmail = channel === "email" ? identifier : legacyPlaceholderEmail;
+          const safeEmail = await resolveCrossRoleSafeEmail(prisma as any, desiredEmail, "BUILDER");
+          const created = await prisma.user.create({
+            data: {
+              email: safeEmail,
+              name: name || null,
+              phone: channel === "phone" ? identifier : null,
+              role: "BUILDER",
+            },
+          });
+          return { id: created.id };
+        },
+      }
+    );
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: resolved.userId } });
+
+    if (name && user.name !== name) {
+      await prisma.user.update({ where: { id: user.id }, data: { name } });
+    }
+
+    return NextResponse.json({ ok: true, email: user.email, name: name || user.name || "" });
   } catch (error: any) {
     console.error("verify-otp error:", error);
     const message = error?.message || "Failed to verify OTP";

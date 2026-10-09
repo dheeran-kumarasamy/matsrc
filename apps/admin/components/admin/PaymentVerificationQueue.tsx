@@ -20,6 +20,10 @@ type PendingPayment = {
   screenshotFileName: string;
   submittedAt: string;
   screenshotUrl: string;
+  // Admin visibility into Buildohub Advance Balance usage (spec §33) — 0/null
+  // when this order never used the advance balance.
+  advanceReserved?: number;
+  advanceReservationStatus?: "ACTIVE" | "CONSUMED" | "RELEASED" | null;
 };
 
 export function PaymentVerificationQueue({ items }: { items: PendingPayment[] }) {
@@ -92,6 +96,13 @@ export function PaymentVerificationQueue({ items }: { items: PendingPayment[] })
               <p className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-500">
                 Submitted {new Date(item.submittedAt).toLocaleString("en-IN")}
               </p>
+
+              {item.advanceReservationStatus === "ACTIVE" && item.advanceReserved ? (
+                <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
+                  Advance Reserved: ₹{item.advanceReserved.toLocaleString("en-IN")} (ACTIVE — will be consumed on approval,
+                  released on rejection)
+                </p>
+              ) : null}
 
               <div className="mt-3">
                 <a

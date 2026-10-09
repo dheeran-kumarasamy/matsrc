@@ -36,7 +36,7 @@ function buildService(overrides: Partial<any> = {}) {
     auditLog: {
       create: vi.fn().mockResolvedValue({}),
     },
-    $queryRaw: vi.fn().mockResolvedValue([{ id: "acct-1", buyerId: "buyer-1", availableBalance: 0, status: "ACTIVE" }]),
+    $queryRaw: vi.fn().mockResolvedValue([{ id: "acct-1", buyerId: "buyer-1", availableBalance: 0, reservedBalance: 0, status: "ACTIVE" }]),
   };
   prisma.$transaction = vi.fn().mockImplementation((arg: any) => (Array.isArray(arg) ? Promise.all(arg) : arg(prisma)));
 
@@ -64,7 +64,7 @@ describe("AdvancePaymentsService.approve", () => {
     );
     expect(prisma.customerAdvanceAccount.update).toHaveBeenCalledWith({
       where: { id: "acct-1" },
-      data: { availableBalance: 50000 },
+      data: { availableBalance: 50000, reservedBalance: 0 },
     });
     expect(prisma.auditLog.create).toHaveBeenCalled();
     expect(result.status).toBe("APPROVED");

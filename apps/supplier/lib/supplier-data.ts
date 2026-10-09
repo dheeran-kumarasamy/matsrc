@@ -1,4 +1,12 @@
-import { prisma, notifyCustomerOrderStatusChanged, notifyPaymentRequired, calculateLineGst, parseQuotedPrice } from "@matsrc/db";
+import {
+  prisma,
+  notifyCustomerOrderStatusChanged,
+  notifyPaymentRequired,
+  calculateLineGst,
+  parseQuotedPrice,
+  lockAdvanceAccountRow,
+  releaseAdvanceReservation,
+} from "@matsrc/db";
 import { waitUntil } from "@vercel/functions";
 import { parsePhoneNumber } from "libphonenumber-js";
 import { getProductImage } from "./category-images";
@@ -1658,17 +1666,41 @@ async function declineOrderForSupplier(orderId: string, supplierId: string, reas
   const fullyDeclined = refreshed.items.every((item) => item.allCandidatesDeclined);
 
   if (fullyDeclined) {
-    const cancelled = await prisma.order.update({
-      where: { id: orderId },
-      data: { status: "CANCELLED" },
-    });
+    // Advance Balance reservation release: defensive/future-proofing — in
+    // today's application flow a PLACED order (the only status this decline
+    // path runs from) cannot yet have an advance reservation, but if that
+    // ever changes, cancellation must never leave advance money permanently
+    // RESERVED. Atomic with the cancellation itself — mirrors the identical
+    // logic in apps/api's OrdersService.declineForSupplier.
+    const cancelled = await prisma.$transaction(async (tx) => {
+      const updatedOrder = await tx.order.update({
+        where: { id: orderId },
+        data: { status: "CANCELLED" },
+      });
 
-    await prisma.orderTracking.create({
-      data: {
-        orderId,
-        status: "CANCELLED",
-        note: "All eligible suppliers declined this enquiry",
-      },
+      await tx.orderTracking.create({
+        data: {
+          orderId,
+          status: "CANCELLED",
+          note: "All eligible suppliers declined this enquiry",
+        },
+      });
+
+      const advanceAccount = await tx.customerAdvanceAccount.findFirst({
+        where: { buyerId: order.userId },
+        select: { id: true },
+      });
+      if (advanceAccount) {
+        const locked = await lockAdvanceAccountRow(tx as any, advanceAccount.id);
+        await releaseAdvanceReservation(tx as any, {
+          orderId,
+          createdBy: "system",
+          currentAvailable: Number(locked.availableBalance),
+          currentReserved: Number(locked.reservedBalance),
+        });
+      }
+
+      return updatedOrder;
     });
 
     // Notification Engine — customer_order_status Meta WhatsApp template.

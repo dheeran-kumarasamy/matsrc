@@ -93,13 +93,15 @@ export class AdvancePaymentsService {
       }
 
       const locked = await lockAdvanceAccountRow(tx as any, payment.advanceAccountId);
-      const currentBalance = Number(locked.availableBalance);
+      const currentAvailable = Number(locked.availableBalance);
+      const currentReserved = Number(locked.reservedBalance);
 
-      const { transaction, balanceAfter } = await appendLedgerEntry(tx as any, {
+      const { transaction, availableAfter: balanceAfter } = await appendLedgerEntry(tx as any, {
         accountId: payment.advanceAccountId,
         type: "CREDIT",
         amount: Number(payment.amount),
-        currentBalance,
+        currentAvailable,
+        currentReserved,
         reference: payment.referenceNumber,
         paymentMethod: payment.paymentMethod,
         advancePaymentId: payment.id,

@@ -1,6 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from "@nestjs/common";
 import { waitUntil } from "@vercel/functions";
-import { OrderStatus, PaymentStatus, generateOrderNumber } from "@matsrc/db";
+import {
+  OrderStatus,
+  PaymentStatus,
+  generateOrderNumber,
+  lockAdvanceAccountRow,
+  releaseAdvanceReservation,
+} from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
 import { formatDate, humanizeToken } from "src/supplier/utils";
@@ -329,17 +335,41 @@ export class OrdersService {
     const fullyDeclined = refreshed.items.every((item) => item.allCandidatesDeclined);
 
     if (fullyDeclined) {
-      const cancelled = await this.prisma.order.update({
-        where: { id: orderId },
-        data: { status: OrderStatus.CANCELLED },
-      });
+      // Advance Balance reservation release: defensive/future-proofing — in
+      // today's application flow a PLACED order (the only status this
+      // decline path runs from) cannot yet have an advance reservation (see
+      // the identical note in apps/web's buyer-cancel route), but if that
+      // ever changes, cancellation must never leave advance money
+      // permanently RESERVED. Atomic with the cancellation itself.
+      const cancelled = await this.prisma.$transaction(async (tx) => {
+        const updatedOrder = await tx.order.update({
+          where: { id: orderId },
+          data: { status: OrderStatus.CANCELLED },
+        });
 
-      await this.prisma.orderTracking.create({
-        data: {
-          orderId,
-          status: OrderStatus.CANCELLED,
-          note: "All eligible suppliers declined this enquiry",
-        },
+        await tx.orderTracking.create({
+          data: {
+            orderId,
+            status: OrderStatus.CANCELLED,
+            note: "All eligible suppliers declined this enquiry",
+          },
+        });
+
+        const advanceAccount = await tx.customerAdvanceAccount.findFirst({
+          where: { buyerId: order.userId },
+          select: { id: true },
+        });
+        if (advanceAccount) {
+          const locked = await lockAdvanceAccountRow(tx as any, advanceAccount.id);
+          await releaseAdvanceReservation(tx as any, {
+            orderId,
+            createdBy: "system",
+            currentAvailable: Number(locked.availableBalance),
+            currentReserved: Number(locked.reservedBalance),
+          });
+        }
+
+        return updatedOrder;
       });
 
       void this.notificationService.notifyBuilderOrderDecision(orderId, OrderStatus.CANCELLED).catch((error) => {

@@ -7,6 +7,10 @@ type AdvanceSummary = {
   totalAmount: number;
   advanceApplied: number;
   outstanding: number;
+  // Still-pending commitment — RESERVED, not yet settled (see Advance
+  // Balance Payment Lifecycle fix). Distinct from advanceApplied, which
+  // also includes any already-CONSUMED (genuinely spent/settled) amount.
+  advanceReserved: number;
   availableBalance: number;
   accountStatus: string;
 };
@@ -80,14 +84,30 @@ export default function AdvanceUsagePanel({
     }
     setApplying(true);
     try {
-      const result = await builderApiPost<{ advanceApplied: number; remainingOutstanding: number; availableBalance: number }>(
-        `/orders/${orderId}/advance-payment`,
-        { amount }
+      const result = await builderApiPost<{
+        advanceApplied: number;
+        remainingOutstanding: number;
+        availableBalance: number;
+        settled: boolean;
+      }>(`/orders/${orderId}/advance-payment`, { amount });
+      // §31: distinguish "Reserved" (still awaiting the remaining payment)
+      // from "Used" (settled — only when this reservation alone fully
+      // covered the order and there is no external payment left to wait
+      // for, consumption happens immediately in the same request).
+      setSuccess(
+        result.settled
+          ? `₹${result.advanceApplied.toLocaleString("en-IN")} used from your advance balance — order fully paid`
+          : `₹${result.advanceApplied.toLocaleString("en-IN")} reserved from your advance balance, pending payment confirmation`
       );
-      setSuccess(`₹${result.advanceApplied.toLocaleString("en-IN")} applied from your advance balance`);
       setSummary((prev) =>
         prev
-          ? { ...prev, outstanding: result.remainingOutstanding, availableBalance: result.availableBalance, advanceApplied: prev.advanceApplied + result.advanceApplied }
+          ? {
+              ...prev,
+              outstanding: result.remainingOutstanding,
+              availableBalance: result.availableBalance,
+              advanceApplied: result.settled ? prev.advanceApplied + result.advanceApplied : prev.advanceApplied,
+              advanceReserved: result.settled ? 0 : result.advanceApplied,
+            }
           : prev
       );
       onOutstandingChange(result.remainingOutstanding);
@@ -108,12 +128,18 @@ export default function AdvanceUsagePanel({
         <p className="text-sm font-bold text-[color:var(--posh-fg)]">Available ₹{summary.availableBalance.toLocaleString("en-IN")}</p>
       </div>
 
+      {summary.advanceReserved > 0 ? (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+          Advance Reserved: ₹{summary.advanceReserved.toLocaleString("en-IN")} — pending payment confirmation
+        </p>
+      ) : null}
+
       {nothingLeftToOffer ? (
         <p className="text-xs text-[color:var(--posh-fg-muted)]">
           {summary.outstanding <= 0
             ? "This order has already been fully covered by your Buildohub Advance Balance."
             : summary.advanceApplied > 0
-            ? `₹${summary.advanceApplied.toLocaleString("en-IN")} from your advance balance has already been applied to this order. Your advance balance is now ₹0.`
+            ? `₹${summary.advanceApplied.toLocaleString("en-IN")} from your advance balance has already been used for this order. Your advance balance is now ₹0.`
             : "You have no Buildohub Advance Balance available right now."}
         </p>
       ) : (

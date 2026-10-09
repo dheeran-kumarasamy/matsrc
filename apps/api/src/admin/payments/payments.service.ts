@@ -1,6 +1,14 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { waitUntil } from "@vercel/functions";
-import { OrderStatus, PaymentStatus, PaymentVerificationStatus, generateOrderNumber } from "@matsrc/db";
+import {
+  OrderStatus,
+  PaymentStatus,
+  PaymentVerificationStatus,
+  generateOrderNumber,
+  lockAdvanceAccountRow,
+  consumeAdvanceReservation,
+  releaseAdvanceReservation,
+} from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationService } from "src/notifications/notification.service";
 import { CustomerOrderStatusNotificationService } from "src/notification-engine/whatsapp/customer-order-status-notification.service";
@@ -21,13 +29,25 @@ export class PaymentsService {
     const verifications = await this.prisma.paymentVerification.findMany({
       where: { status: PaymentVerificationStatus.PENDING },
       include: {
-        order: { select: { id: true, enquiryId: true, status: true, totalAmount: true, paymentMethod: true } },
+        order: {
+          select: {
+            id: true,
+            enquiryId: true,
+            status: true,
+            totalAmount: true,
+            paymentMethod: true,
+            // Admin visibility (spec §33): lets the review screen answer
+            // "Advance Reserved: X / Advance Status: ACTIVE" alongside the
+            // external payment it's reviewing.
+            advanceReservation: { select: { amount: true, status: true } },
+          },
+        },
         user: { select: { id: true, name: true, email: true, phone: true } },
       },
       orderBy: { submittedAt: "asc" },
     });
 
-    return verifications.map((v) => this.serializeSummary(v));
+    return verifications.map((v) => this.serializeSummary(v as any));
   }
 
   // List every order whose bank-transfer payment proof has been APPROVED —
@@ -158,6 +178,33 @@ export class PaymentsService {
         },
       });
 
+      // Advance Balance reservation consumption (fixes the original bug:
+      // advance was being permanently debited the moment the buyer applied
+      // it, even while this external payment was still unconfirmed). This
+      // approval IS the authoritative order-payment-confirmation event, so
+      // if the buyer reserved any advance against this order, it is
+      // consumed (RESERVED -> CONSUMED) atomically in the SAME transaction
+      // as the order being marked PAID — never two separate commits that
+      // could leave "order PAID, advance still RESERVED" or vice versa.
+      // consumeAdvanceReservation is a no-op (returns null) if this order
+      // never used advance, or if it was already consumed.
+      const advanceAccount = await tx.customerAdvanceAccount.findFirst({
+        where: { buyerId: verification.userId },
+        select: { id: true },
+      });
+      if (advanceAccount) {
+        const locked = await lockAdvanceAccountRow(tx as any, advanceAccount.id);
+        await consumeAdvanceReservation(tx as any, {
+          orderId,
+          createdBy: actorId,
+          reference: verification.order.enquiryId ?? orderId,
+          currentAvailable: Number(locked.availableBalance),
+          currentReserved: Number(locked.reservedBalance),
+          approvedBy: actorId,
+          approvedAt: now,
+        });
+      }
+
       await tx.auditLog.create({
         data: {
           actorId,
@@ -236,8 +283,14 @@ export class PaymentsService {
     const now = new Date();
     const wasAlreadyRejected = verification.status === PaymentVerificationStatus.REJECTED;
 
-    const [updatedVerification] = await this.prisma.$transaction([
-      this.prisma.paymentVerification.update({
+    // Converted from the previous array-style $transaction([...]) to a
+    // callback-style transaction so the Advance Balance reservation release
+    // below (which needs to look up the buyer's account row and lock it)
+    // can run atomically alongside the rejection + order reset — never two
+    // separate commits that could leave "payment rejected, advance still
+    // RESERVED".
+    const updatedVerification = await this.prisma.$transaction(async (tx) => {
+      const ver = await tx.paymentVerification.update({
         where: { id: verification.id },
         data: {
           status: PaymentVerificationStatus.REJECTED,
@@ -245,12 +298,37 @@ export class PaymentsService {
           reviewedBy: actorId,
           rejectionReason: reason,
         },
-      }),
-      this.prisma.order.update({
+      });
+
+      await tx.order.update({
         where: { id: orderId },
         data: { paymentStatus: PaymentStatus.PENDING },
-      }),
-      this.prisma.auditLog.create({
+      });
+
+      // Release any advance balance the buyer had RESERVED against this
+      // order (fixes the original bug: advance was being permanently
+      // debited even when this external payment ultimately failed). A
+      // rejection is a definitive "this payment did not succeed" event, so
+      // any ACTIVE reservation for the order is released back to the
+      // buyer's available balance — never silently left RESERVED forever.
+      // No-op (returns null) if this order never used advance, or if it
+      // was already released/consumed.
+      const advanceAccount = await tx.customerAdvanceAccount.findFirst({
+        where: { buyerId: verification.userId },
+        select: { id: true },
+      });
+      if (advanceAccount) {
+        const locked = await lockAdvanceAccountRow(tx as any, advanceAccount.id);
+        await releaseAdvanceReservation(tx as any, {
+          orderId,
+          createdBy: actorId,
+          reference: verification.order.enquiryId ?? orderId,
+          currentAvailable: Number(locked.availableBalance),
+          currentReserved: Number(locked.reservedBalance),
+        });
+      }
+
+      await tx.auditLog.create({
         data: {
           actorId,
           action: "PAYMENT_VERIFICATION_REJECTED",
@@ -258,8 +336,10 @@ export class PaymentsService {
           entityId: verification.id,
           metadata: { orderId, reason },
         },
-      }),
-    ]);
+      });
+
+      return ver;
+    });
 
     const customer = await this.getUser(verification.userId);
 
@@ -307,7 +387,15 @@ export class PaymentsService {
     reviewedAt: Date | null;
     reviewedBy: string | null;
     rejectionReason: string | null;
-    order: { id: string; enquiryId?: string | null; status: OrderStatus; totalAmount: any; paymentMethod: string; paymentStatus?: PaymentStatus };
+    order: {
+      id: string;
+      enquiryId?: string | null;
+      status: OrderStatus;
+      totalAmount: any;
+      paymentMethod: string;
+      paymentStatus?: PaymentStatus;
+      advanceReservation?: { amount: any; status: string } | null;
+    };
     user: { id: string; name: string | null; email: string | null; phone: string | null };
   }) {
     return {
@@ -328,6 +416,11 @@ export class PaymentsService {
       reviewedAt: v.reviewedAt,
       reviewedBy: v.reviewedBy,
       rejectionReason: v.rejectionReason,
+      // Admin visibility (spec §33) — lets the admin answer "Advance
+      // Reserved: X / Advance Status: ACTIVE" without a separate lookup.
+      // null when this order never used the Buildohub Advance Balance.
+      advanceReserved: v.order.advanceReservation ? Number(v.order.advanceReservation.amount) : 0,
+      advanceReservationStatus: v.order.advanceReservation?.status ?? null,
       // Consumed by the admin app's own /api/admin/payments/[orderId]/screenshot
       // proxy route (apps/admin), which re-authenticates the caller via the
       // NextAuth session and forwards to this NestJS admin/payments/:orderId/

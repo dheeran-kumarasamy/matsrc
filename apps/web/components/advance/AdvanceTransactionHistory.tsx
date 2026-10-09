@@ -5,7 +5,7 @@ import { builderApiGet } from "@/lib/api";
 
 type Transaction = {
   id: string;
-  type: "CREDIT" | "ORDER_PAYMENT" | "REFUND" | "REVERSAL" | "ADJUSTMENT";
+  type: "CREDIT" | "ORDER_PAYMENT" | "REFUND" | "REVERSAL" | "ADJUSTMENT" | "ADVANCE_RESERVATION" | "ADVANCE_RELEASE";
   amount: number;
   balanceAfter: number;
   reference: string | null;
@@ -14,12 +14,19 @@ type Transaction = {
   createdAt: string;
 };
 
+// §25/§32: the ledger now distinguishes RESERVING money (still pending
+// settlement) from genuinely CONSUMING it (ORDER_PAYMENT, only written once
+// the order's payment is confirmed) and RELEASING a reservation back
+// (rejected/cancelled order) — never a misleading permanent debit shown the
+// moment the buyer merely applies advance to an order.
 const LABELS: Record<Transaction["type"], string> = {
   CREDIT: "Advance Payment",
   ORDER_PAYMENT: "Order Payment",
   REFUND: "Refund",
   REVERSAL: "Reversal",
   ADJUSTMENT: "Adjustment",
+  ADVANCE_RESERVATION: "Advance Reserved",
+  ADVANCE_RELEASE: "Advance Released",
 };
 
 const IS_CREDIT: Record<Transaction["type"], boolean> = {
@@ -28,6 +35,12 @@ const IS_CREDIT: Record<Transaction["type"], boolean> = {
   REFUND: true,
   REVERSAL: false,
   ADJUSTMENT: true,
+  // A reservation moves money OUT of the available balance (shown as a
+  // debit here, even though it isn't yet a genuine spend) and a release
+  // moves it back IN — mirrors the balance-column sign convention in
+  // packages/db/lib/advance-ledger.ts's balanceEffect().
+  ADVANCE_RESERVATION: false,
+  ADVANCE_RELEASE: true,
 };
 
 // Buyer-facing Advance Balance History (spec §18) — reuses the existing

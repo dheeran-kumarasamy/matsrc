@@ -45,12 +45,28 @@ function buildService(overrides: Partial<any> = {}) {
       upsert: vi.fn().mockResolvedValue({}),
       update: vi.fn().mockResolvedValue({ value: 1 }),
     },
-    $queryRaw: vi.fn().mockResolvedValue([]),
+    // Advance Balance reservation consumption/release (see
+    // packages/db/lib/advance-ledger.ts) — approve()/reject() both look up
+    // the buyer's advance account and (no-op) consume/release any ACTIVE
+    // reservation for the order. No advance account by default (most
+    // payment tests don't involve advance balance at all).
+    customerAdvanceAccount: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({}),
+    },
+    advanceReservation: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+    customerAdvanceTransaction: {
+      create: vi.fn().mockResolvedValue({}),
+    },
+    $queryRaw: vi.fn().mockResolvedValue([{ id: "acct-1", availableBalance: 0, reservedBalance: 0 }]),
   };
-  // approve() uses the callback-style $transaction((tx) => ...) shape (needs
-  // the same `tx` client for generateOrderNumber()); reject() still uses the
-  // older array-of-operations shape ($transaction([op1, op2, ...])) — this
-  // mock supports both so both methods' tests pass against the same fake.
+  // Both approve() and reject() use the callback-style $transaction((tx) =>
+  // ...) shape — the same `tx` client is reused for generateOrderNumber()
+  // and the advance-reservation consume/release helpers.
   prisma.$transaction = vi.fn().mockImplementation((arg: any) => (Array.isArray(arg) ? Promise.all(arg) : arg(prisma)));
 
   const notificationService = { sendWhatsApp: vi.fn().mockResolvedValue(undefined) };
@@ -98,6 +114,37 @@ describe("PaymentsService.approve", () => {
 
     await expect(service.approve("order-1", "admin-1")).rejects.toThrow(BadRequestException);
   });
+
+  it("consumes an ACTIVE advance reservation atomically when approving (fixes the original bug)", async () => {
+    const { service, prisma } = buildService();
+    prisma.customerAdvanceAccount.findFirst.mockResolvedValue({ id: "acct-1" });
+    prisma.$queryRaw.mockResolvedValue([{ id: "acct-1", availableBalance: 50000, reservedBalance: 20000 }]);
+    prisma.advanceReservation.findUnique.mockResolvedValue({
+      id: "res-1",
+      orderId: "order-1",
+      advanceAccountId: "acct-1",
+      amount: 20000,
+      status: "ACTIVE",
+    });
+
+    await service.approve("order-1", "admin-1");
+
+    expect(prisma.customerAdvanceTransaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ type: "ORDER_PAYMENT", orderId: "order-1" }) })
+    );
+    expect(prisma.advanceReservation.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { orderId: "order-1" }, data: expect.objectContaining({ status: "CONSUMED" }) })
+    );
+  });
+
+  it("does not touch the advance ledger when the buyer has no advance account", async () => {
+    const { service, prisma } = buildService();
+
+    await service.approve("order-1", "admin-1");
+
+    expect(prisma.customerAdvanceAccount.findFirst).toHaveBeenCalled();
+    expect(prisma.customerAdvanceTransaction.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("PaymentsService.reject", () => {
@@ -133,5 +180,35 @@ describe("PaymentsService.reject", () => {
     await service.reject("order-1", "admin-1", "new reason");
 
     expect(notificationService.sendWhatsApp).not.toHaveBeenCalled();
+  });
+
+  it("releases an ACTIVE advance reservation atomically when rejecting (fixes the original bug)", async () => {
+    const { service, prisma } = buildService();
+    prisma.customerAdvanceAccount.findFirst.mockResolvedValue({ id: "acct-1" });
+    prisma.$queryRaw.mockResolvedValue([{ id: "acct-1", availableBalance: 30000, reservedBalance: 20000 }]);
+    prisma.advanceReservation.findUnique.mockResolvedValue({
+      id: "res-1",
+      orderId: "order-1",
+      advanceAccountId: "acct-1",
+      amount: 20000,
+      status: "ACTIVE",
+    });
+
+    await service.reject("order-1", "admin-1", "Screenshot amount mismatch");
+
+    expect(prisma.customerAdvanceTransaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ type: "ADVANCE_RELEASE", orderId: "order-1" }) })
+    );
+    expect(prisma.advanceReservation.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { orderId: "order-1" }, data: expect.objectContaining({ status: "RELEASED" }) })
+    );
+  });
+
+  it("does not touch the advance ledger when rejecting an order with no advance reservation", async () => {
+    const { service, prisma } = buildService();
+
+    await service.reject("order-1", "admin-1", "reason");
+
+    expect(prisma.customerAdvanceTransaction.create).not.toHaveBeenCalled();
   });
 });

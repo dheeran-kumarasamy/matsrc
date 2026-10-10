@@ -73,6 +73,16 @@ export const authConfig: NextAuthConfig = {
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
       allowDangerousEmailAccountLinking: true,
+      // Without this, Google silently reuses the browser's existing Google
+      // session and signs the user straight into whichever account was last
+      // active, never showing the account chooser — surprising when a
+      // supplier has multiple Google accounts (e.g. personal + business).
+      // `select_account` forces Google's account-chooser screen on every
+      // sign-in attempt, even if the browser already has an active Google
+      // session. Mirrors the identical fix in apps/web/auth.ts.
+      authorization: {
+        params: { prompt: "select_account" },
+      },
     }),
     // New: Supplier OTP login (WhatsApp primary / email fallback). This
     // provider does NOT perform OTP verification itself — by the time this

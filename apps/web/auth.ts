@@ -75,6 +75,15 @@ export const authConfig: NextAuthConfig = {
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
       allowDangerousEmailAccountLinking: true,
+      // Without this, Google silently reuses the browser's existing Google
+      // session and signs the user straight into whichever account was last
+      // active, never showing the account chooser — surprising when a buyer
+      // has multiple Google accounts (e.g. personal + work). `select_account`
+      // forces Google's account-chooser screen on every sign-in attempt, even
+      // if the browser already has an active Google session.
+      authorization: {
+        params: { prompt: "select_account" },
+      },
     }),
   ],
 };

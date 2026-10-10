@@ -4,7 +4,9 @@ import {
   linkIdentity,
   resolveOrLinkIdentity,
   detectCrossIdentityConflict,
+  resolveCrossRoleSafeEmail,
   type IdentityResolutionPrismaClient,
+  type UserEmailLookupPrismaClient,
 } from "./identity-resolution";
 
 // Tests for the shared identity-resolution layer (AuthIdentity) backing
@@ -161,5 +163,62 @@ describe("detectCrossIdentityConflict", () => {
 
     const result = await detectCrossIdentityConflict(prisma, SCOPE, "user-A");
     expect(result).toBeNull();
+  });
+});
+
+describe("resolveCrossRoleSafeEmail", () => {
+  function buildUserLookup(byEmail: Record<string, { role: "BUILDER" | "SUPPLIER" } | undefined>) {
+    const findUnique = vi.fn(async ({ where: { email } }: any) => byEmail[email] ?? null);
+    return { user: { findUnique } } as UserEmailLookupPrismaClient & { _findUnique: typeof findUnique };
+  }
+
+  it("returns the desired email unchanged when no User exists at that address", async () => {
+    const prisma = buildUserLookup({});
+    const result = await resolveCrossRoleSafeEmail(prisma, "a@b.com", "BUILDER");
+    expect(result).toBe("a@b.com");
+  });
+
+  it("returns the desired email unchanged when the existing User already has the SAME role", async () => {
+    const prisma = buildUserLookup({ "a@b.com": { role: "BUILDER" } });
+    const result = await resolveCrossRoleSafeEmail(prisma, "a@b.com", "BUILDER");
+    expect(result).toBe("a@b.com");
+  });
+
+  it("derives local+<role>@domain when the existing User has a DIFFERENT role", async () => {
+    const prisma = buildUserLookup({ "a@b.com": { role: "SUPPLIER" } });
+    const result = await resolveCrossRoleSafeEmail(prisma, "a@b.com", "BUILDER");
+    expect(result).toBe("a+builder@b.com");
+  });
+
+  // Regression test for the production bug (2026-10-10): the derived
+  // `local+<role>@domain` address was returned WITHOUT checking it was
+  // itself free, so a second collision (e.g. a prior Google sign-in
+  // already created a User at that exact derived address) caused
+  // prisma.user.create() to throw a P2002 further down the call stack —
+  // surfaced to end users as a generic "verify-otp" 400 error.
+  it("falls back to local+<role>2@domain when the first derived address is ALSO already taken", async () => {
+    const prisma = buildUserLookup({
+      "a@b.com": { role: "SUPPLIER" },
+      "a+builder@b.com": { role: "BUILDER" }, // the collision that broke the old implementation
+    });
+    const result = await resolveCrossRoleSafeEmail(prisma, "a@b.com", "BUILDER");
+    expect(result).toBe("a+builder2@b.com");
+  });
+
+  it("keeps incrementing the numeric suffix until a free address is found", async () => {
+    const prisma = buildUserLookup({
+      "a@b.com": { role: "SUPPLIER" },
+      "a+builder@b.com": { role: "BUILDER" },
+      "a+builder2@b.com": { role: "BUILDER" },
+      "a+builder3@b.com": { role: "BUILDER" },
+    });
+    const result = await resolveCrossRoleSafeEmail(prisma, "a@b.com", "BUILDER");
+    expect(result).toBe("a+builder4@b.com");
+  });
+
+  it("uses the 'supplier' suffix tag for role=SUPPLIER", async () => {
+    const prisma = buildUserLookup({ "a@b.com": { role: "BUILDER" } });
+    const result = await resolveCrossRoleSafeEmail(prisma, "a@b.com", "SUPPLIER");
+    expect(result).toBe("a+supplier@b.com");
   });
 });

@@ -174,6 +174,25 @@ export type UserEmailLookupPrismaClient = {
  * EMAIL/GOOGLE AuthIdentity's `providerIdentifier` and is still what's
  * used for actual OTP delivery (see each portal's otp-service, which
  * always delivers to the normalized `identifier`, never to `User.email`).
+ *
+ * BUG FIX: the original implementation derived `local+<role>@domain` and
+ * returned it WITHOUT verifying that derived address was itself actually
+ * free. Caught in production: a Buyer (BUILDER) account was created via
+ * Google sign-in at `dheeran.kumarasamy+builder@gmail.com` (the derived
+ * email, because the real email already belonged to a SUPPLIER User).
+ * Minutes later, an Email-OTP login attempt for the SAME real
+ * (SUPPLIER-owned) email, also resolving role=BUILDER, re-derived that
+ * EXACT SAME `+builder` address — which now already belonged to the
+ * just-created BUILDER user — and `prisma.user.create()` threw a P2002
+ * unique-constraint violation, surfaced to the end user as a generic
+ * "verify-otp" 400. Fixed by looping with an incrementing numeric suffix
+ * (`+builder`, `+builder2`, `+builder3`, ...) until a genuinely free email
+ * is found, and by checking uniqueness even when no role-collision was
+ * detected on the ORIGINAL desiredEmail (belt-and-suspenders: the original
+ * early-return assumed "no existing user at this address" or "same role"
+ * meant always safe, which holds for desiredEmail itself but not
+ * necessarily indicative of race conditions — kept as the fast path, the
+ * loop below is what actually guarantees the returned email is free).
  */
 export async function resolveCrossRoleSafeEmail(
   prisma: UserEmailLookupPrismaClient,
@@ -184,12 +203,30 @@ export async function resolveCrossRoleSafeEmail(
   if (!existing || existing.role === role) {
     return desiredEmail;
   }
+
   const at = desiredEmail.indexOf("@");
   if (at <= 0) return desiredEmail;
   const local = desiredEmail.slice(0, at);
   const domain = desiredEmail.slice(at + 1);
   const suffixTag = role === "SUPPLIER" ? "supplier" : "builder";
-  return `${local}+${suffixTag}@${domain}`;
+
+  // Try `local+<role>@domain` first (the original, human-recognizable
+  // scheme), then fall back to `local+<role>2@domain`, `+<role>3@domain`,
+  // etc. until an address with no existing User row is found. A generous
+  // but finite cap avoids ever looping forever if something is
+  // pathologically wrong.
+  for (let attempt = 1; attempt <= 50; attempt++) {
+    const candidate = attempt === 1 ? `${local}+${suffixTag}@${domain}` : `${local}+${suffixTag}${attempt}@${domain}`;
+    const candidateExisting = await prisma.user.findUnique({ where: { email: candidate } });
+    if (!candidateExisting) {
+      return candidate;
+    }
+  }
+
+  // Exhausted every attempt (should never happen in practice) — fail
+  // loudly rather than silently returning a colliding email that would
+  // just throw a confusing P2002 further down the call stack anyway.
+  throw new Error("Could not derive a unique cross-role-safe email after 50 attempts.");
 }
 
 export type IdentityConflictError = {

@@ -143,13 +143,28 @@ async function main() {
   console.log("");
 
   if (databaseIsProduction || environment === "production") {
-    console.error(
-      "BLOCKED: this script refuses to run against a database detected as production " +
-        "(by Neon endpoint ID and/or environment label). This operation is destructive " +
-        "and irreversible — it must never target production.\n"
+    const overrideFlag = process.env.ALLOW_PRODUCTION_DB_OPERATION === "true";
+    const productionConfirmPhrase = process.env.CONFIRM_PRODUCTION_RESET === "yes-i-am-sure";
+
+    if (!overrideFlag || !productionConfirmPhrase) {
+      console.error(
+        "BLOCKED: this script refuses to run against a database detected as production " +
+          "(by Neon endpoint ID and/or environment label). This operation is destructive " +
+          "and irreversible — it must never target production without an explicit, " +
+          "double-gated override.\n\n" +
+          "To proceed against production anyway (e.g. a deliberate, backed-up pre-launch " +
+          "reset), set BOTH of:\n" +
+          "  ALLOW_PRODUCTION_DB_OPERATION=true\n" +
+          "  CONFIRM_PRODUCTION_RESET=yes-i-am-sure\n"
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    console.log(
+      "⚠  PRODUCTION OVERRIDE ACTIVE — both ALLOW_PRODUCTION_DB_OPERATION=true and " +
+        "CONFIRM_PRODUCTION_RESET=yes-i-am-sure are set. Proceeding against PRODUCTION.\n"
     );
-    process.exitCode = 1;
-    return;
   }
 
   if (!confirmed) {

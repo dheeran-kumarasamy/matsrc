@@ -30,6 +30,16 @@ function LoginPageInner() {
   // kind (a phone number) server-side — see /api/auth/send-otp's alias.
   const [channel, setChannel] = useState<"whatsapp" | "email">("whatsapp");
   const [identifier, setIdentifier] = useState("");
+  // Optional "your name" — only matters the FIRST time someone signs in via
+  // OTP with no prior account (verify-otp creates a brand-new User row in
+  // that case). Without this, a first-time OTP sign-in's User.name is left
+  // null, and the dashboard greeting then falls back to showing the raw
+  // email local-part (e.g. "Welcome back, dheeran.kumarasamy+builder2")
+  // instead of a real name — see apps/web/lib/user-display.ts getFirstName.
+  // Returning users who already have a name on file can simply leave this
+  // blank; verify-otp only applies a NEW name when one is actually typed
+  // (see /api/auth/verify-otp/route.ts's `if (name && user.name !== name)`).
+  const [name, setName] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"identifier" | "otp">("identifier");
   const [loading, setLoading] = useState(false);
@@ -56,7 +66,7 @@ function LoginPageInner() {
       const res = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel: requestChannel, identifier }),
+        body: JSON.stringify({ channel: requestChannel, identifier, name }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -105,7 +115,7 @@ function LoginPageInner() {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel, identifier, otp }),
+        body: JSON.stringify({ channel, identifier, otp, name }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message);
@@ -144,6 +154,26 @@ function LoginPageInner() {
 
       {step === "identifier" && channel === "whatsapp" ? (
         <form onSubmit={handleSendOtp} className="space-y-2">
+          {/* Optional — only needed for a brand-new account (see `name`
+              state doc comment above). Returning users can leave this
+              blank; it never overwrites an existing name with an empty
+              value (verify-otp only applies a name when one is typed). */}
+          <label className="block text-sm font-medium mb-1" style={{ color: "var(--posh-fg)" }}>
+            Your name <span style={{ color: "var(--posh-fg-muted)", fontWeight: 400 }}>(optional, only needed for new accounts)</span>
+          </label>
+          <input
+            type="text"
+            placeholder="e.g. Dheeran Kumarasamy"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-xl border px-4 py-3 text-base focus:outline-none focus:ring-2 mb-2"
+            style={{
+              borderColor: "var(--posh-border)",
+              background: "transparent",
+              color: "var(--posh-fg)",
+              focusRingColor: "var(--posh-primary)",
+            } as React.CSSProperties}
+          />
           <label className="block text-sm font-medium mb-1" style={{ color: "var(--posh-fg)" }}>
             WhatsApp mobile number
           </label>
@@ -190,6 +220,24 @@ function LoginPageInner() {
         </form>
       ) : step === "identifier" && channel === "email" ? (
         <form onSubmit={handleSendOtp} className="space-y-2">
+          {/* Optional — only needed for a brand-new account, same as the
+              WhatsApp step above. */}
+          <label className="block text-sm font-medium mb-1" style={{ color: "var(--posh-fg)" }}>
+            Your name <span style={{ color: "var(--posh-fg-muted)", fontWeight: 400 }}>(optional, only needed for new accounts)</span>
+          </label>
+          <input
+            type="text"
+            placeholder="e.g. Dheeran Kumarasamy"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-xl border px-4 py-3 text-base focus:outline-none focus:ring-2 mb-2"
+            style={{
+              borderColor: "var(--posh-border)",
+              background: "transparent",
+              color: "var(--posh-fg)",
+              focusRingColor: "var(--posh-primary)",
+            } as React.CSSProperties}
+          />
           <label className="block text-sm font-medium mb-1" style={{ color: "var(--posh-fg)" }}>
             Email address
           </label>

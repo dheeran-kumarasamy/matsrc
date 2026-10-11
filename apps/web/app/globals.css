@@ -503,6 +503,36 @@
     border-color: var(--posh-primary);
   }
 
+  /* ── Shared header search control ──────────────────────────────────────
+     Same `.posh-input` sizing/radius, but with a clearly visible orange
+     border at rest (not just on focus) plus a dedicated orange "Search"
+     submit button sized to match the input's height exactly, so the pair
+     reads as one cohesive pill-shaped control (HeaderSearchForm.tsx, used
+     app-wide — builder portal header + /newdashboard). */
+  .posh-search-input {
+    @apply w-full rounded-xl border-2 px-3 py-2.5 text-sm font-medium outline-none focus:ring-1;
+    border-color: var(--posh-primary);
+    background: var(--posh-bg-card);
+    color: var(--posh-fg);
+  }
+  .posh-search-input::placeholder {
+    color: var(--posh-fg-muted);
+  }
+  .posh-search-input:focus {
+    border-color: var(--posh-primary-hover);
+  }
+  .posh-search-btn {
+    @apply shrink-0 rounded-xl border-2 px-4 py-2.5 text-sm font-bold transition-colors;
+    border-color: var(--posh-primary);
+    background: var(--posh-primary);
+    color: var(--posh-primary-fg);
+  }
+  .posh-search-btn:hover,
+  .posh-search-btn:focus-visible {
+    background: var(--posh-primary-hover);
+    border-color: var(--posh-primary-hover);
+  }
+
   /* Table header cell. */
   .posh-th {
     @apply border-b pb-3 text-[10px] font-bold uppercase tracking-[0.18em];

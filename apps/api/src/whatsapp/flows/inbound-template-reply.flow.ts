@@ -5,20 +5,41 @@ import { PrismaService } from "src/prisma/prisma.service";
 import { BotMessage } from "../whatsapp.types";
 
 /**
- * Normalizes a Meta webhook inbound phone (`message.from`/`wa_id`) to the
- * E.164 format `AuthIdentity.providerIdentifier` stores for WhatsApp
- * identities (see packages/db/lib/identity-resolution.ts and
- * apps/web/app/api/auth/verify-otp/route.ts's `normalizePhone`). Meta's
- * inbound phone is ALREADY a full international number with no leading `+`
- * (e.g. "919876543210", confirmed against Meta's own webhook reference) —
- * unlike `apps/api/src/common/validators/phone.validator.ts`'s
- * `normalizePhoneNumber`, which assumes a LOCAL number and prepends a
- * country code, this must only ever prepend the literal `+` and parse,
- * never re-prepend "91". Deliberately a separate, narrowly-scoped function
- * rather than reusing/altering that shared validator, which other call
- * sites correctly rely on for local-number input.
+ * Normalizes ANY WhatsApp-style phone string — a Meta webhook inbound phone
+ * (`message.from`/`wa_id`) OR a stored `User.whatsappNumber`/`User.phone`/
+ * `WhatsAppMessageLog.phoneNumber` value — to the canonical E.164 format
+ * `AuthIdentity.providerIdentifier` stores for WhatsApp identities (see
+ * packages/db/lib/identity-resolution.ts and
+ * apps/web/app/api/auth/verify-otp/route.ts's `normalizePhone`).
+ *
+ * C41 follow-up fix: this environment stores `User.whatsappNumber`/`phone`
+ * (and therefore `WhatsAppMessageLog.phoneNumber`, which every outbound
+ * sender copies straight from those fields) WITH a leading `+`
+ * (e.g. "+918870519167"), while Meta's inbound webhook phone is ALWAYS a
+ * bare international number with NO leading `+` (e.g. "918870519167",
+ * confirmed against Meta's own webhook reference AND against this
+ * environment's own WHATSAPP_DELIVERY_STATUS AuditLog rows for the same
+ * recipient). Every direct `===`/`!==` string comparison between an inbound
+ * phone and a stored phone in this file was therefore comparing two
+ * differently-formatted representations of the identical number and always
+ * failing — this is the confirmed root cause of both `payment_required`
+ * ("Make Payment") and `supplier_po_alert` ("View Purchase Order") silently
+ * producing no reply.
+ *
+ * This function already handles BOTH directions correctly as-is: it only
+ * ever prepends the literal `+` (never re-prepends a country code like
+ * "91", unlike `apps/api/src/common/validators/phone.validator.ts`'s
+ * `normalizePhoneNumber`, which assumes a LOCAL number — a different,
+ * unrelated convention this file deliberately does not reuse/alter), so
+ * calling it on an already-`+`-prefixed stored value is a no-op parse, and
+ * calling it on a bare inbound value adds the `+` before parsing — both
+ * converge on the exact same canonical E.164 string. Every phone comparison
+ * in this file MUST go through this function (or `phoneNumbersMatch` below,
+ * which wraps it) — never a raw string `===`/`!==`/Prisma-exact-match
+ * against an un-normalized value.
  */
-function normalizeInboundWhatsAppPhone(phone: string): string | null {
+function normalizeWhatsAppPhone(phone: string | null | undefined): string | null {
+  if (!phone) return null;
   const trimmed = phone.trim();
   if (!trimmed) return null;
   try {
@@ -28,6 +49,20 @@ function normalizeInboundWhatsAppPhone(phone: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Format-agnostic phone equality — normalizes both sides via
+ * `normalizeWhatsAppPhone` before comparing, so a stored `+`-prefixed value
+ * and a bare inbound Meta value (or vice versa) are correctly recognized as
+ * the same number. Returns `false` (never throws, never matches) if either
+ * side fails to normalize/parse — an unparseable phone is never treated as
+ * a match by default.
+ */
+function phoneNumbersMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  const normalizedA = normalizeWhatsAppPhone(a);
+  const normalizedB = normalizeWhatsAppPhone(b);
+  return normalizedA !== null && normalizedA === normalizedB;
 }
 
 /**
@@ -185,8 +220,11 @@ export class InboundTemplateReplyFlow {
       }
 
       // The inbound phone must match the phone this specific template send
-      // actually targeted — never trust button payload/text alone.
-      if (log.phoneNumber !== phone) {
+      // actually targeted — never trust button payload/text alone. Compared
+      // via phoneNumbersMatch() (not a raw string ===) since the stored
+      // WhatsAppMessageLog.phoneNumber may be "+"-prefixed while Meta's
+      // inbound phone never is — see normalizeWhatsAppPhone's doc comment.
+      if (!phoneNumbersMatch(log.phoneNumber, phone)) {
         this.logger.warn(
           `InboundTemplateReplyFlow: inbound phone does not match WhatsAppMessageLog.phoneNumber for templateName=${log.templateName} — ignoring reply`
         );
@@ -230,7 +268,10 @@ export class InboundTemplateReplyFlow {
         select: { whatsappNumber: true, phone: true },
       });
       const recipientPhone = recipient?.whatsappNumber?.trim() || recipient?.phone?.trim();
-      if (recipientPhone === phone) {
+      // Format-agnostic comparison — see normalizeWhatsAppPhone's doc
+      // comment: the recipient's stored phone may be "+"-prefixed while
+      // the inbound Meta `phone` never is.
+      if (phoneNumbersMatch(recipientPhone, phone)) {
         return candidate;
       }
     }
@@ -249,12 +290,21 @@ export class InboundTemplateReplyFlow {
     event: { recipientId: string; entityId: string | null; payload: any },
     phone: string
   ): Promise<BotMessage | null> {
+    // Scoped strictly to the single, already-trusted recipientId from the
+    // matched NotificationEvent (never a broader lookup) + role=SUPPLIER.
+    // The phone-match assertion itself can no longer be pushed into the
+    // Prisma `where` clause (the stored whatsappNumber/phone may be
+    // "+"-prefixed while the inbound Meta `phone` never is — a plain
+    // Prisma string-equality filter can't express that), so it is verified
+    // in JS via phoneNumbersMatch() immediately below instead.
     const supplierUser = await this.prisma.user.findFirst({
-      where: { id: event.recipientId, role: "SUPPLIER", OR: [{ whatsappNumber: phone }, { phone }] },
+      where: { id: event.recipientId, role: "SUPPLIER" },
       include: { supplierProfile: true },
     });
 
-    if (!supplierUser?.supplierProfile) {
+    const supplierPhone = supplierUser?.whatsappNumber?.trim() || supplierUser?.phone?.trim();
+
+    if (!supplierUser?.supplierProfile || !phoneNumbersMatch(supplierPhone, phone)) {
       this.logger.warn(`InboundTemplateReplyFlow: could not re-authenticate supplier for eventType=${eventType}`);
       return null;
     }
@@ -309,7 +359,7 @@ export class InboundTemplateReplyFlow {
     event: { recipientId: string; entityId: string | null },
     phone: string
   ): Promise<BotMessage | null> {
-    const normalized = normalizeInboundWhatsAppPhone(phone);
+    const normalized = normalizeWhatsAppPhone(phone);
     if (!normalized) {
       return null;
     }

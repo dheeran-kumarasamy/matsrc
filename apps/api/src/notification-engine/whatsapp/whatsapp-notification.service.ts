@@ -42,21 +42,24 @@ type MetaGraphErrorBody = {
  *    the log row is created with status "failed" and errorDetails
  *    "DISABLED_BY_CHANNEL".
  *
- * Buttons: this service deliberately sends ONLY a `body` component (the
- * text parameters) and never constructs a `button`/header component. A
- * Meta Utility template's Quick-Reply/Call-to-Action button (e.g.
- * "supplier_rfq_reminder"'s static "Submit Quote" button, or
- * "supplier_quote_alert"'s "Review RFQ" button) is rendered automatically
- * by WhatsApp from the approved template definition itself — it requires
- * no extra `components` entry unless the button is configured in Meta as a
- * *dynamic* URL button (which would need a `type: "button"` component with
- * the per-recipient URL suffix). None of the currently-mapped templates
- * (including "supplier_rfq_reminder") are configured with a dynamic URL
- * button in Meta today, so this stays body-parameters-only. This is also
- * exactly why "customer_order_status" (Order Status template type, no
- * button at all) sends correctly with zero special-casing: the absence of
- * a button component here works identically whether or not the approved
- * template itself has a button.
+ * Buttons: this service sends a `body` component (the text parameters)
+ * and, when the caller supplies one, an additional `button` component for
+ * a *dynamic* Meta URL button. A Meta Utility template's static
+ * Quick-Reply/Call-to-Action button (e.g. "supplier_rfq_reminder"'s static
+ * "Submit Quote" button, or "supplier_quote_alert"'s "Review RFQ" button)
+ * is rendered automatically by WhatsApp from the approved template
+ * definition itself — it requires no extra `components` entry. A
+ * *dynamic* URL button (e.g. "payment_required_v2"'s approved "Complete
+ * Payment" button, fixed prefix `https://buildohub.in/orders/payment/{{1}}`)
+ * DOES require an explicit `type: "button", sub_type: "url", index: 0`
+ * component carrying only the per-recipient dynamic suffix — never the
+ * full URL — exactly mirroring the existing, already-approved
+ * `buildohub_login_otp` COPY_CODE-via-URL-button pattern in
+ * `packages/db/lib/login-otp-whatsapp-notification.ts`. Callers that do
+ * not pass `buttonUrlSuffix` get the exact same body-only payload as
+ * before (e.g. "customer_order_status", which has no button at all, and
+ * every other static-QUICK_REPLY-button template) — this parameter is
+ * purely additive and backward compatible.
  */
 @Injectable()
 export class WhatsappNotificationService {
@@ -67,7 +70,22 @@ export class WhatsappNotificationService {
     private readonly config: WhatsAppEngineConfigService
   ) {}
 
-  async sendTemplateAlert(phone: string, templateName: string, parameters: string[]): Promise<SendTemplateAlertResult> {
+  /**
+   * @param buttonUrlSuffix  Optional dynamic suffix for an approved Meta URL
+   *   button (e.g. "payment_required_v2"'s "Complete Payment" button, fixed
+   *   prefix `https://buildohub.in/orders/payment/{{1}}` — the suffix here
+   *   is just the bare `orderId`, never the full URL and never a
+   *   `payment/{orderId}`-style value, since `/payment/` is already part of
+   *   the approved fixed prefix). Omit entirely for every template with a
+   *   static QUICK_REPLY button or no button at all — this is purely
+   *   additive and never changes behaviour for existing callers.
+   */
+  async sendTemplateAlert(
+    phone: string,
+    templateName: string,
+    parameters: string[],
+    buttonUrlSuffix?: string
+  ): Promise<SendTemplateAlertResult> {
     const mode = this.config.getMode();
 
     const log = await this.prisma.whatsAppMessageLog.create({
@@ -89,7 +107,7 @@ export class WhatsappNotificationService {
       return this.finalizeDryRun(log.id, templateName, phone, mode);
     }
 
-    return this.sendLive(log.id, phone, templateName, parameters, mode);
+    return this.sendLive(log.id, phone, templateName, parameters, mode, buttonUrlSuffix);
   }
 
   private async finalizeOff(logId: string, mode: string): Promise<SendTemplateAlertResult> {
@@ -117,7 +135,8 @@ export class WhatsappNotificationService {
     phone: string,
     templateName: string,
     parameters: string[],
-    mode: string
+    mode: string,
+    buttonUrlSuffix?: string
   ): Promise<SendTemplateAlertResult> {
     try {
       const phoneNumberId = this.config.getPhoneNumberId();
@@ -128,6 +147,22 @@ export class WhatsappNotificationService {
         return { status: "failed", logId, errorDetails, mode };
       }
 
+      // Dynamic URL button component — only added when the caller supplies a
+      // suffix (e.g. "payment_required_v2"'s approved "Complete Payment"
+      // button). Mirrors buildohub_login_otp's existing button component
+      // shape exactly (sub_type "url", index 0, single text parameter) —
+      // never a second/competing component shape. Every other template
+      // (static QUICK_REPLY button or no button at all) is completely
+      // unaffected since `buttonUrlSuffix` is omitted for those callers.
+      const components = [
+        ...(parameters.length > 0
+          ? [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text })) }]
+          : []),
+        ...(buttonUrlSuffix
+          ? [{ type: "button", sub_type: "url", index: 0, parameters: [{ type: "text", text: buttonUrlSuffix }] }]
+          : []),
+      ];
+
       const payload = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
@@ -136,9 +171,7 @@ export class WhatsappNotificationService {
         template: {
           name: templateName,
           language: { code: this.config.getTemplateLanguage() },
-          ...(parameters.length > 0
-            ? { components: [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text })) }] }
-            : {}),
+          ...(components.length > 0 ? { components } : {}),
         },
       };
 

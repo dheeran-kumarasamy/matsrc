@@ -23,18 +23,46 @@ function formatDeadline(from: Date = new Date()): string {
 }
 
 /**
+ * Dynamic suffix for the approved `payment_required_v2` Meta URL button
+ * ("Complete Payment"). Meta's approved fixed URL prefix is
+ * `https://buildohub.in/orders/payment/` — i.e. the `/payment/` segment is
+ * ALREADY part of the approved template's fixed prefix, NOT the dynamic
+ * `{{1}}` parameter — so only the BARE `orderId` is ever sent as the
+ * button's dynamic parameter, resolving to
+ * `https://buildohub.in/orders/payment/{orderId}`. Sending `payment/{orderId}`
+ * (the previous `payment_required` template's convention, when the approved
+ * fixed prefix was only `https://buildohub.in/orders/`) would now produce a
+ * broken double `/payment/payment/` URL — this is the confirmed, correct
+ * suffix for `payment_required_v2` specifically, never a value derived from
+ * anything other than the trusted, server-side `orderId` already used to
+ * build the body parameters above. Destination:
+ * `apps/web/app/(builder)/orders/payment/[id]/page.tsx` (route unchanged by
+ * this task — see `getPaymentLink()` in
+ * `apps/api/src/builder/orders/orders.service.ts` for the same URL
+ * convention). The destination page itself (`/orders/[id]` builder API
+ * route) re-authenticates the session and re-scopes the Prisma lookup to
+ * `userId: user.id` — this button never grants access to an order merely
+ * because its id appears in the URL.
+ */
+function buildPaymentButtonUrlSuffix(orderId: string): string {
+  return orderId;
+}
+
+/**
  * PaymentRequiredNotificationService — the single call site every
  * PLACED -> PROCESSING order-confirmation code path in apps/api
  * (BestPriceSelectionService.selectAndFinalizeIfEligible,
  * supplier/orders/orders.service.ts OrdersService.updateStatus) calls to
- * fire the customer-facing `payment_required` WhatsApp Utility template
+ * fire the customer-facing `payment_required_v2` WhatsApp Utility template
  * through the existing Notification Engine (`NotificationEngineService.dispatch`
  * -> `NotificationPolicyService` -> `NotificationEventPolicy` template
  * registry -> `WhatsAppEngineChannel` -> `WhatsappNotificationService` ->
  * Meta Cloud API), per the `PAYMENT_REQUIRED` event type already defined in
  * `notification-event-types.ts` and seeded in
  * `packages/db/scripts/seed-notification-templates.js` (templateName
- * "payment_required", metaTemplateId "1457666726425273", language "en").
+ * "payment_required_v2", metaTemplateId "1645900400305073", language "en" —
+ * upgraded from the original "payment_required"/"1457666726425273" once
+ * Meta approved the dynamic "Complete Payment" URL button).
  *
  * Deliberately NOT a new/parallel notification system — mirrors
  * `CustomerOrderStatusNotificationService` exactly. apps/supplier (a
@@ -115,6 +143,7 @@ export class PaymentRequiredNotificationService {
           parameters: [enquiryDisplayId, amountPayable, paymentDeadline],
           title: "Payment Required",
           body: `Payment is required for your Buildohub requirement ${enquiryDisplayId}. Amount payable: ${amountPayable}. Payment deadline: ${paymentDeadline}. Please complete the payment to proceed with your order.`,
+          buttonUrlSuffix: buildPaymentButtonUrlSuffix(orderId),
           dedupeKey,
           payload: {
             orderId,

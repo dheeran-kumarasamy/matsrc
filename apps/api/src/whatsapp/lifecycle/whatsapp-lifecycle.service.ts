@@ -147,7 +147,9 @@ export class WhatsAppLifecycleService {
 
       const isCredit = order.paymentMethod === PaymentMethod.CREDIT;
       const templateKey: LifecycleTemplateKey = isCredit ? "builder_payment_link_bnpl_credit" : "builder_payment_link_cash";
-      const paymentLink = this.toAbsoluteBuilderUrl(`/orders/${order.id}/payment`);
+      // Order reference number is always the LAST path segment on the buyer
+      // website — route moved from /orders/[id]/payment -> /orders/payment/[id].
+      const paymentLink = this.toAbsoluteBuilderUrl(`/orders/payment/${order.id}`);
 
       const bodyValues = isCredit
         ? [

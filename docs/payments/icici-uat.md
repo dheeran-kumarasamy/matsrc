@@ -40,9 +40,10 @@ environment variables (the same pattern already used for the WhatsApp Meta
 credentials in this repo).
 
 The ICICI payment UI panel on the builder payment page is also gated
-server-side by this exact same check (`app/(builder)/orders/[id]/payment/page.tsx`)
-— it is never rendered into the HTML at all on a non-UAT deployment, not
-merely hidden by client-side CSS/JS.
+server-side by this exact same check (`app/(builder)/orders/payment/[id]/page.tsx`
+— route moved from `/orders/[id]/payment` so the order reference number is
+always the last path segment) — it is never rendered into the HTML at all on
+a non-UAT deployment, not merely hidden by client-side CSS/JS.
 
 ## 2. Required environment variables
 

@@ -16,8 +16,10 @@ function resolveUnitPrice(product: any, quantity: number) {
   return Number(matchedTier?.tierPrice ?? product.basePrice);
 }
 
+// Order reference number is always the LAST path segment on the buyer
+// website — route moved from /orders/[id]/payment -> /orders/payment/[id].
 function getPaymentLink(orderId: string) {
-  return `/orders/${orderId}/payment`;
+  return `/orders/payment/${orderId}`;
 }
 
 @Injectable()

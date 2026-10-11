@@ -103,7 +103,9 @@ export async function GET(
         order.status === OrderStatus.PROCESSING &&
         (order.paymentStatus === PaymentStatus.PENDING ||
           order.paymentStatus === PaymentStatus.PENDING_VERIFICATION),
-      paymentLink: `/orders/${order.id}/payment`,
+      // Order reference number is always the LAST path segment — route moved
+      // from /orders/[id]/payment -> /orders/payment/[id].
+      paymentLink: `/orders/payment/${order.id}`,
       bankGuaranteeAvailable,
 
       supplierId: order.items[0]?.product.supplier.id ?? null,

@@ -18,6 +18,14 @@ export type DispatchNotificationParams = {
   body?: string;
   dedupeKey?: string;
   payload?: Record<string, unknown>;
+  /**
+   * Optional dynamic suffix for an approved Meta WhatsApp URL button — see
+   * `NotificationPayload.buttonUrlSuffix`'s doc comment. Forwarded verbatim
+   * to the WhatsApp channel only; never persisted on the NotificationEvent
+   * row itself (the orderId/entityId it was derived from already is, via
+   * `payload`/`entityId`).
+   */
+  buttonUrlSuffix?: string;
 };
 
 export type DispatchNotificationResult = {
@@ -124,6 +132,7 @@ export class NotificationEngineService {
         deepLink: params.deepLink,
         title: params.title,
         body: params.body,
+        buttonUrlSuffix: params.buttonUrlSuffix,
       });
 
       await this.prisma.notificationEvent.update({

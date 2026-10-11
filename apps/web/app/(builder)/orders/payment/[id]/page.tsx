@@ -26,6 +26,14 @@ type OrderPayment = {
 };
 
 
+// Route moved from /orders/[id]/payment -> /orders/payment/[id] so the order
+// reference number is always the LAST path segment across the buyer
+// website's URL scheme (consistent with /orders/[id] and /purchase-orders/[id]).
+// Every internal link, the shared `paymentLink`/`getPaymentLink()` builders
+// (apps/api's orders.service.ts + whatsapp-lifecycle.service.ts, apps/web's
+// /api/builder/orders and /api/builder/orders/[id] routes), and the
+// `payment_required` WhatsApp template's dynamic button suffix have all been
+// updated to this new path in the same change.
 export default async function OrderPaymentPage({ params }: { params: { id: string } }) {
   let order: OrderPayment | null = null;
 

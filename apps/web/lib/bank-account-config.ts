@@ -1,5 +1,7 @@
 // Bank-transfer ("Standard" payment method) beneficiary details shown to the
-// customer on the /orders/[id]/payment page. There is no existing bank/
+// customer on the /orders/payment/[id] page (route moved from
+// /orders/[id]/payment so the order reference number is always the last
+// path segment). There is no existing bank/
 // payment configuration table or admin UI for this in the current schema,
 // so — per the task's guidance to introduce a clean, environment-driven
 // configuration mechanism consistent with existing conventions (this repo

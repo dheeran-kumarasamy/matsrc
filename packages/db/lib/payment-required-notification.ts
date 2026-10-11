@@ -1,7 +1,7 @@
 // packages/db/lib/payment-required-notification.ts
 //
-// Shared, framework-agnostic implementation of the `payment_required` Meta
-// WhatsApp template (Notification Engine pipeline) — fired the ONE time an
+// Shared, framework-agnostic implementation of the `payment_required_v2`
+// Meta WhatsApp template (Notification Engine pipeline) — fired the ONE time an
 // Order becomes payable, i.e. the moment it transitions PLACED -> PROCESSING
 // while its PaymentStatus is still PENDING (no payment made yet).
 //
@@ -63,8 +63,8 @@
 // Approved Meta template contract (fetched directly from the Graph API
 // message_templates endpoint using this repo's own configured
 // WHATSAPP_BUSINESS_ACCOUNT_ID / WHATSAPP_ACCESS_TOKEN — not invented):
-//   Template name:   payment_required
-//   Meta Template ID: 1457666726425273
+//   Template name:   payment_required_v2
+//   Meta Template ID: 1645900400305073
 //   Language:        en
 //   Category:        UTILITY
 //   Body: "Payment is required for your Buildohub requirement {{1}}.
@@ -73,17 +73,28 @@
 //          Payment deadline: {{3}}
 //
 //          Please complete the payment to proceed with your order."
-//   Buttons: one static QUICK_REPLY button ("Make Payment") — NOT a dynamic
-//          URL button, so (exactly like `supplier_po_alert`'s "View Purchase
-//          Order" button) WhatsApp renders it automatically from the
-//          template definition; no extra `components` entry/URL parameter is
-//          sent for it.
+//          (identical body/parameter-count/order to the superseded
+//          "payment_required" template — only the button changed.)
+//   Buttons: one dynamic URL button ("Complete Payment"), approved FIXED
+//          prefix `https://buildohub.in/orders/payment/` (note: `/payment/`
+//          is part of the fixed prefix itself, NOT the dynamic `{{1}}`
+//          parameter — this differs from the superseded "payment_required"
+//          template, whose fixed prefix was only `https://buildohub.in/orders/`).
+//          Only the BARE `orderId` (built by `buildPaymentButtonUrlSuffix`
+//          below) is ever sent as the button's `{{1}}` parameter — never the
+//          full URL, and never the old `payment/{orderId}` suffix, which
+//          would now resolve to a broken double `/payment/payment/` URL.
+//          Resolved destination: `https://buildohub.in/orders/payment/{orderId}`,
+//          matching the existing `/orders/payment/[id]` route (unchanged by
+//          this task). Previously a static QUICK_REPLY button ("Make
+//          Payment", identical to `supplier_po_alert`'s "View Purchase
+//          Order" handling) before Meta approved this URL-button upgrade.
 //   {{1}} = enquiry/order display ID  = Order.enquiryId ?? Order.id (the
 //          exact same canonical display-ID fallback used by
 //          `customer_order_status` / `supplier_po_alert`).
 //   {{2}} = amount payable            = Order.totalAmount (the canonical,
 //          single order total already shown to the customer on the
-//          payment page — apps/web/app/(builder)/orders/[id]/payment/page.tsx
+//          payment page — apps/web/app/(builder)/orders/payment/[id]/page.tsx
 //          — and the exact same amount PaymentVerification.amount is set to
 //          when a proof is later submitted, see payment-proof/route.ts:
 //          `amount: order.totalAmount`). Never independently
@@ -225,6 +236,25 @@ export function buildPaymentRequiredDedupeKey(orderId: string): string {
   return `${EVENT_TYPE}:${orderId}`;
 }
 
+/**
+ * Dynamic suffix for the approved `payment_required_v2` Meta URL button
+ * ("Complete Payment"). Meta's approved FIXED prefix is
+ * `https://buildohub.in/orders/payment/` — the `/payment/` segment is
+ * already part of the fixed prefix, NOT the dynamic `{{1}}` parameter — so
+ * only the BARE `orderId` is ever sent to Meta, resolving to
+ * `https://buildohub.in/orders/payment/{orderId}`, which matches the
+ * existing, already-authenticated buyer payment page at
+ * `apps/web/app/(builder)/orders/payment/[id]/page.tsx` (route unchanged by
+ * this task). Sending the previous `payment_required` template's
+ * `payment/{orderId}` suffix here would now produce a broken double
+ * `/payment/payment/` URL. Mirrors apps/api's
+ * `PaymentRequiredNotificationService`'s identical helper byte-for-byte so
+ * both send paths produce the exact same button payload.
+ */
+export function buildPaymentButtonUrlSuffix(orderId: string): string {
+  return orderId;
+}
+
 type MetaGraphErrorBody = {
   error?: { message?: string; code?: number; error_subcode?: number };
 };
@@ -242,22 +272,27 @@ function formatMetaError(status: number, body: MetaGraphErrorBody): string {
 
 /**
  * Low-level Meta Cloud API template send — exactly 3 body parameters, no
- * header. The approved template's static "Make Payment" QUICK_REPLY button
- * is rendered automatically by WhatsApp from the template definition itself
- * (not a dynamic URL button, so no extra `components` entry is needed — see
- * WhatsappNotificationService's doc comment / supplier_po_alert's identical
- * static-button handling). Mirrors apps/api's
- * WhatsappNotificationService.sendTemplateAlert / this package's other
- * *-notification.ts `sendTemplateViaMeta` byte-for-byte (same payload shape,
- * same WhatsAppMessageLog bookkeeping, same live/dry-run/off branching) so
- * every app produces identical audit-trail rows and identical Meta payloads.
+ * header, plus an optional dynamic URL `button` component when
+ * `buttonUrlSuffix` is supplied. The approved template's button was
+ * originally a static "Make Payment" QUICK_REPLY (rendered automatically by
+ * WhatsApp from the template definition, no extra component needed), then
+ * re-approved as a dynamic "Complete Payment" URL button under the
+ * `payment_required` template (fixed prefix `https://buildohub.in/orders/{{1}}`),
+ * and now sent via the newly approved `payment_required_v2` template (fixed
+ * prefix `https://buildohub.in/orders/payment/{{1}}` — note `/payment/` is
+ * now part of the fixed prefix) — see `buildPaymentButtonUrlSuffix`'s doc
+ * comment above. Mirrors apps/api's WhatsappNotificationService.sendLive's
+ * identical button-component shape byte-for-byte (same payload shape, same
+ * WhatsAppMessageLog bookkeeping, same live/dry-run/off branching) so every
+ * app produces identical audit-trail rows and identical Meta payloads.
  */
 async function sendTemplateViaMeta(
   prisma: PaymentRequiredPrismaClient,
   phone: string,
   templateName: string,
   parameters: string[],
-  log: (message: string) => void
+  log: (message: string) => void,
+  buttonUrlSuffix?: string
 ): Promise<{ success: boolean; externalId?: string; error?: string }> {
   const mode = getPaymentRequiredWhatsAppMode();
 
@@ -293,6 +328,20 @@ async function sendTemplateViaMeta(
       return { success: false, error: errorDetails };
     }
 
+    // Dynamic URL button component — only added when a suffix is supplied
+    // (the approved "Complete Payment" button). Mirrors apps/api's
+    // WhatsappNotificationService.sendLive's identical component shape
+    // (sub_type "url", index 0, single text parameter) so both send paths
+    // produce byte-for-byte the same Meta payload shape.
+    const components = [
+      ...(parameters.length > 0
+        ? [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text })) }]
+        : []),
+      ...(buttonUrlSuffix
+        ? [{ type: "button", sub_type: "url", index: 0, parameters: [{ type: "text", text: buttonUrlSuffix }] }]
+        : []),
+    ];
+
     const payload = {
       messaging_product: "whatsapp",
       recipient_type: "individual",
@@ -301,9 +350,7 @@ async function sendTemplateViaMeta(
       template: {
         name: templateName,
         language: { code: getTemplateLanguage() },
-        ...(parameters.length > 0
-          ? { components: [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text })) }] }
-          : {}),
+        ...(components.length > 0 ? { components } : {}),
       },
     };
 
@@ -477,7 +524,8 @@ export async function notifyPaymentRequired(
       phone,
       decision.templateName,
       [enquiryDisplayId, amountPayable, paymentDeadline],
-      onLog
+      onLog,
+      buildPaymentButtonUrlSuffix(orderId)
     );
 
     await prisma.notificationEvent.update({ where: { id: event.id }, data: { status: sendResult.success ? "sent" : "failed" } });

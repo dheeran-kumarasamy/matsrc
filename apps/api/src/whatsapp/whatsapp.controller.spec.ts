@@ -46,6 +46,36 @@ function makeInboundMessagePayload(messageId: string, phone: string, text: strin
   };
 }
 
+function makeTemplateButtonPayload(messageId: string, phone: string, buttonText: string, contextMessageId: string) {
+  return {
+    object: "whatsapp_business_account",
+    entry: [
+      {
+        id: "WABA_ID",
+        changes: [
+          {
+            field: "messages",
+            value: {
+              messaging_product: "whatsapp",
+              metadata: { display_phone_number: "15550001111", phone_number_id: "123456789012345" },
+              messages: [
+                {
+                  id: messageId,
+                  from: phone,
+                  timestamp: "1700000002",
+                  type: "button",
+                  context: { id: contextMessageId },
+                  button: { text: buttonText, payload: buttonText },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function makeStatusPayload(messageId: string, status: "sent" | "delivered" | "read" | "failed", recipient: string) {
   return {
     object: "whatsapp_business_account",
@@ -158,7 +188,11 @@ describe("WhatsAppController", () => {
 
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
       expect(res.send).toHaveBeenCalledWith("EVENT_RECEIVED");
-      expect(router.handleInboundMessage).toHaveBeenCalledWith("919876543210", "MENU");
+      expect(router.handleInboundMessage).toHaveBeenCalledWith(
+        "919876543210",
+        "MENU",
+        expect.objectContaining({ templateButtonPayload: undefined, templateMessageId: undefined })
+      );
     });
 
     it("rejects a webhook POST with an invalid signature with 401", async () => {
@@ -248,6 +282,52 @@ describe("WhatsAppController", () => {
       expect(sessionService.withIdempotency).toHaveBeenCalledTimes(2);
       expect(res1.status).toHaveBeenCalledWith(HttpStatus.OK);
       expect(res2.status).toHaveBeenCalledWith(HttpStatus.OK);
+    });
+  });
+
+  describe("POST receive — quick-reply TEMPLATE button taps (C41)", () => {
+    it("parses a type:\"button\" message and forwards its payload text + originating context.id to the router", async () => {
+      const payload = makeTemplateButtonPayload("wamid.BTN1", "919876543210", "Review RFQ", "wamid.ORIGINAL_TEMPLATE");
+      const req = makeReq(payload);
+      const signature = signBody(req.rawBody!, APP_SECRET);
+      const res = makeMockResponse();
+
+      await controller.receive(req, signature, res);
+
+      expect(router.handleInboundMessage).toHaveBeenCalledWith(
+        "919876543210",
+        "Review RFQ",
+        expect.objectContaining({ templateButtonPayload: "Review RFQ", templateMessageId: "wamid.ORIGINAL_TEMPLATE" })
+      );
+      expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
+      expect(res.send).toHaveBeenCalledWith("EVENT_RECEIVED");
+    });
+
+    it("never sets templateButtonPayload/templateMessageId for a menu-flow Interactive List/Button tap (interactive.*_reply)", async () => {
+      // A List Message row tap (interactive.list_reply.id) is NOT a quick-reply
+      // template button tap — it must never be mistaken for one.
+      const payload = makeInboundMessagePayload("wamid.MENU1", "919876543210", "PRICE_UPDATE");
+      const req = makeReq(payload);
+      const signature = signBody(req.rawBody!, APP_SECRET);
+      const res = makeMockResponse();
+
+      await controller.receive(req, signature, res);
+
+      expect(router.handleInboundMessage).toHaveBeenCalledWith(
+        "919876543210",
+        "PRICE_UPDATE",
+        expect.objectContaining({ templateButtonPayload: undefined, templateMessageId: undefined })
+      );
+    });
+
+    it("a URL button tap generates no inbound webhook message at all — nothing to assert here, this documents the contract", () => {
+      // URL buttons (e.g. buildohub_login_otp's "Copy code" button) are pure
+      // client-side navigation/copy actions — Meta never sends a `messages[]`
+      // webhook event for them. There is no payload shape to construct or
+      // parse for this case; this test exists only to document that
+      // explicitly, per the task's "preserve URL-button navigation, do not
+      // invent a webhook response for it" requirement.
+      expect(true).toBe(true);
     });
   });
 });

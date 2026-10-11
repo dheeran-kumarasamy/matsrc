@@ -46,6 +46,7 @@ describe("WhatsAppRouterService", () => {
   let orderStatusFlow: { start: ReturnType<typeof vi.fn>; handle: ReturnType<typeof vi.fn> };
   let dailyReportFlow: { start: ReturnType<typeof vi.fn>; handle: ReturnType<typeof vi.fn> };
   let dailyPriceReplyFlow: { tryHandle: ReturnType<typeof vi.fn> };
+  let inboundTemplateReplyFlow: { tryHandle: ReturnType<typeof vi.fn> };
   let router: WhatsAppRouterService;
   let session: WhatsAppSession;
 
@@ -82,6 +83,7 @@ describe("WhatsAppRouterService", () => {
     orderStatusFlow = { start: vi.fn().mockResolvedValue({ kind: "text", text: "order-status-start" }), handle: vi.fn() };
     dailyReportFlow = { start: vi.fn().mockResolvedValue({ kind: "text", text: "daily-report-start" }), handle: vi.fn() };
     dailyPriceReplyFlow = { tryHandle: vi.fn().mockResolvedValue(null) };
+    inboundTemplateReplyFlow = { tryHandle: vi.fn().mockResolvedValue(null) };
 
     router = new WhatsAppRouterService(
       authService as any,
@@ -91,7 +93,8 @@ describe("WhatsAppRouterService", () => {
       enquiryDecisionFlow as any,
       orderStatusFlow as any,
       dailyReportFlow as any,
-      dailyPriceReplyFlow as any
+      dailyPriceReplyFlow as any,
+      inboundTemplateReplyFlow as any
     );
   });
 
@@ -149,5 +152,43 @@ describe("WhatsAppRouterService", () => {
     expect(enquiryDecisionFlow.start).not.toHaveBeenCalled();
     expect(orderStatusFlow.start).not.toHaveBeenCalled();
     expect(dailyReportFlow.start).not.toHaveBeenCalled();
+  });
+
+  describe("quick-reply TEMPLATE button tap interception (C41)", () => {
+    it("returns InboundTemplateReplyFlow's reply directly when it resolves one, without touching the menu/session machinery at all", async () => {
+      inboundTemplateReplyFlow.tryHandle.mockResolvedValue({ kind: "text", text: "RFQ detail reply" });
+
+      const reply = await router.handleInboundMessage("919876543210", "Review RFQ", {
+        templateButtonPayload: "Review RFQ",
+        templateMessageId: "wamid.ORIGINAL",
+      });
+
+      expect(reply).toEqual({ kind: "text", text: "RFQ detail reply" });
+      expect(inboundTemplateReplyFlow.tryHandle).toHaveBeenCalledWith("919876543210", {
+        templateButtonPayload: "Review RFQ",
+        templateMessageId: "wamid.ORIGINAL",
+      });
+      // Falls through to nothing else — the menu/auth machinery is never touched.
+      expect(authService.resolveByVerifiedNumber).not.toHaveBeenCalled();
+    });
+
+    it("falls through to the existing menu/auth handling when InboundTemplateReplyFlow returns null (safe no-op)", async () => {
+      inboundTemplateReplyFlow.tryHandle.mockResolvedValue(null);
+      sessionService.get.mockReturnValueOnce(undefined);
+
+      const reply = await router.handleInboundMessage("919876543210", "MENU", {
+        templateButtonPayload: "Review RFQ",
+        templateMessageId: "wamid.UNKNOWN",
+      });
+
+      expect(inboundTemplateReplyFlow.tryHandle).toHaveBeenCalledTimes(1);
+      expect(reply.kind).toBe("list"); // normal main-menu rendering, unaffected
+    });
+
+    it("never calls InboundTemplateReplyFlow at all when no templateMessageId is present (ordinary text/menu messages)", async () => {
+      await router.handleInboundMessage("919876543210", "not-a-valid-option");
+
+      expect(inboundTemplateReplyFlow.tryHandle).not.toHaveBeenCalled();
+    });
   });
 });

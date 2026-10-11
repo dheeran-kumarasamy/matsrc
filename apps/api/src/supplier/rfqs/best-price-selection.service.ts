@@ -176,6 +176,27 @@ export class BestPriceSelectionService {
           status: newStatus,
           selectedSupplierId,
           bestPriceTotal,
+          // RFQ Accepted-Total Synchronization: Order.totalAmount is set at
+          // enquiry-creation time from the catalogue/listing price (see
+          // apps/web/lib/order-checkout.ts createOrdersFromCart /
+          // apps/api/src/builder/orders/orders.service.ts create) and was
+          // never previously updated once supplier quotes were accepted —
+          // leaving it stale relative to the actual accepted commercial
+          // value whenever a winning SupplierQuote.unitPrice differs from
+          // the original catalogue price. `bestPriceTotal` above is already
+          // computed as Σ(winningLine.unitPrice × quantity) over the exact
+          // same `winningLines` whose unitPrice is written onto each
+          // OrderItem immediately below, so it IS the accepted,
+          // GST-exclusive order total by construction — reusing it here
+          // (rather than deriving a second figure) keeps `totalAmount` and
+          // `bestPriceTotal` equal and consistent with the accepted
+          // OrderItem rows, inside this same transaction. Existing
+          // AdvanceReservation/PaymentVerification/CustomerAdvanceTransaction
+          // rows are immutable, stored Decimal snapshots and are
+          // deliberately NOT touched here — only the next
+          // computeOrderOutstandingAmount() call (apps/web/lib/
+          // order-outstanding.ts) will read the corrected totalAmount.
+          totalAmount: bestPriceTotal,
           tentativeDeliveryDate,
           quoteSelectionCompletedAt: new Date(),
         },

@@ -1704,6 +1704,20 @@ model SupplierRating {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
+  // Optional receipt-copy upload (additive, nullable — existing rating rows
+  // remain fully valid without ever setting these). Mirrors the exact same
+  // private-bytes-in-Postgres storage pattern as PaymentVerification's
+  // screenshot* fields above: bytes + MIME type + server-generated filename
+  // + size, never a public/static URL. Kept on SupplierRating itself (not a
+  // separate model) because the relationship is strictly 1:1 with the order
+  // (SupplierRating.orderId is already @unique, so there is no need for a
+  // separate join table for a single optional receipt per rating).
+  receiptData       Bytes?
+  receiptMimeType   String?
+  receiptFileName   String?
+  receiptSize       Int?
+  receiptUploadedAt DateTime?
+
   @@index([supplierId])
   @@index([builderId])
 }

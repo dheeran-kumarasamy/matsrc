@@ -21,6 +21,29 @@ function summarizeQuantities(lineItems: Array<{ quantity: number; product?: { un
 }
 
 /**
+ * Dynamic suffix for the approved `supplier_po_alert` Meta URL button
+ * ("View Purchase Order"). CONFIRMED LIVE directly against the Graph API
+ * (GET /{WABA_ID}/message_templates?name=supplier_po_alert, verified
+ * 2026-10-12 — the button was upgraded from a static QUICK_REPLY to a URL
+ * CTA; the body (3 parameters: PO/order ID, material, quantity) is
+ * UNCHANGED): approved fixed URL prefix is
+ * `https://supplier.buildohub.in/purchase-orders/{{1}}` — the
+ * `/purchase-orders/` segment is already part of the fixed prefix, NOT the
+ * dynamic `{{1}}` parameter, so only the BARE `purchaseOrderId` is ever sent
+ * as the button's dynamic parameter, resolving to
+ * `https://supplier.buildohub.in/purchase-orders/{purchaseOrderId}` — which
+ * matches the existing, already-authenticated supplier PO detail page at
+ * `apps/supplier/app/(supplier)/purchase-orders/[id]/page.tsx` (route
+ * unchanged by this task). That page's `getSupplierPurchaseOrderDetail()`
+ * re-authenticates the session and re-scopes the Prisma lookup to
+ * `supplierId: supplierProfile.id` — this button never grants access to a
+ * PO merely because its id appears in the URL.
+ */
+function buildPurchaseOrderButtonUrlSuffix(purchaseOrderId: string): string {
+  return purchaseOrderId;
+}
+
+/**
  * SupplierPoReceivedNotificationService — the single call site every
  * PO-issuance code path in apps/api (PurchaseOrdersService.approve) calls to
  * fire the supplier-facing `supplier_po_alert` WhatsApp Utility template
@@ -31,6 +54,15 @@ function summarizeQuantities(lineItems: Array<{ quantity: number; product?: { un
  * in `notification-event-types.ts` and already seeded in
  * `packages/db/scripts/seed-notification-templates.js` (templateName
  * "supplier_po_alert", metaTemplateId "1999605497419495", language "en").
+ *
+ * CONFIRMED LIVE FROM META GRAPH API (GET /{WABA_ID}/message_templates?name=supplier_po_alert,
+ * 2026-10-12): body is unchanged — 3 parameters (PO/order display ID,
+ * material, quantity) — the only change is the button, upgraded from a
+ * static "View Purchase Order" QUICK_REPLY to a "View Purchase Order" URL
+ * CTA with approved fixed prefix
+ * `https://supplier.buildohub.in/purchase-orders/{{1}}`. See
+ * `buildPurchaseOrderButtonUrlSuffix`'s doc comment above for the exact
+ * dynamic-parameter format.
  *
  * Deliberately NOT a new/parallel notification system — mirrors
  * `SupplierRfqReceivedNotificationService` exactly. apps/web (a separate
@@ -103,6 +135,7 @@ export class SupplierPoReceivedNotificationService {
           parameters: [poDisplayId, material, quantity],
           title: "Purchase Order Issued",
           body: `A purchase order ${poDisplayId} has been issued to you by Buildohub. Material: ${material}. Quantity: ${quantity}. Please review the purchase order on Buildohub.`,
+          buttonUrlSuffix: buildPurchaseOrderButtonUrlSuffix(purchaseOrderId),
           dedupeKey,
           payload: { purchaseOrderId, orderId: po.orderId, supplierId, poNumber: poDisplayId, material, quantity },
         },

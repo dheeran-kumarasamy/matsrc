@@ -147,3 +147,103 @@ describe("SupplierPoReceivedNotificationService.notify", () => {
     await expect(service.notify("po-1")).resolves.toBeUndefined();
   });
 });
+
+describe("SupplierPoReceivedNotificationService — live Meta payload (View Purchase Order URL button)", () => {
+  it("live mode: sends exactly 3 body parameters (unchanged) plus the approved dynamic View Purchase Order URL button", async () => {
+    const { service, prisma } = buildHarness({ mode: "live" });
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ messages: [{ id: "wamid.PO-1" }] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await service.notify("po-1");
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    expect(sentBody.template.name).toBe("supplier_po_alert");
+    expect(sentBody.template.components).toHaveLength(2);
+
+    const bodyComponent = sentBody.template.components.find((c: any) => c.type === "body");
+    // Body parameters are UNCHANGED — still 3, same order, same meanings.
+    expect(bodyComponent.parameters).toEqual([
+      { type: "text", text: "PO-2026-00001" },
+      { type: "text", text: "TMT Bar 12mm" },
+      { type: "text", text: "50 BAG" },
+    ]);
+
+    // Dynamic URL button — Meta's approved fixed prefix is
+    // https://supplier.buildohub.in/purchase-orders/{{1}}, so only the bare
+    // purchaseOrderId (po.id, NEVER po.poNumber) is ever sent.
+    const buttonComponent = sentBody.template.components.find((c: any) => c.type === "button");
+    expect(buttonComponent).toEqual({
+      type: "button",
+      sub_type: "url",
+      index: 0,
+      parameters: [{ type: "text", text: "po-1" }],
+    });
+    expect(sentBody.template.components.some((c: any) => c.type === "header")).toBe(false);
+  });
+
+  it("the button parameter is the PurchaseOrder's own id, never its human-readable poNumber or a full URL", async () => {
+    const { service, prisma } = buildHarness({
+      mode: "live",
+      po: makePurchaseOrder({ id: "po-77", poNumber: "PO-2026-00099" }),
+    });
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ messages: [{ id: "wamid.PO-2" }] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await service.notify("po-77");
+
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    const buttonComponent = sentBody.template.components.find((c: any) => c.type === "button");
+    expect(buttonComponent.parameters[0].text).toBe("po-77");
+    expect(buttonComponent.parameters[0].text).not.toBe("PO-2026-00099");
+    expect(buttonComponent.parameters[0].text).not.toMatch(/^https?:\/\//);
+    expect(buttonComponent.parameters[0].text).not.toContain("buildohub.in");
+    expect(buttonComponent.parameters[0].text).not.toContain("purchase-orders/");
+  });
+
+  it("resolves to the correct supplier purchase-order page for a representative PO id, with no duplicated path segment", async () => {
+    const { service, prisma } = buildHarness({ mode: "live", po: makePurchaseOrder({ id: "po-abc123" }) });
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ messages: [{ id: "wamid.PO-3" }] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await service.notify("po-abc123");
+
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    const buttonText = sentBody.template.components.find((c: any) => c.type === "button").parameters[0].text;
+    const resolvedUrl = `https://supplier.buildohub.in/purchase-orders/${buttonText}`;
+    expect(resolvedUrl).toBe("https://supplier.buildohub.in/purchase-orders/po-abc123");
+    expect(resolvedUrl).not.toContain("purchase-orders/purchase-orders");
+  });
+
+  it("live mode: a Meta API failure is recorded as failed and never throws", async () => {
+    const { service, prisma } = buildHarness({ mode: "live" });
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      json: async () => ({ error: { message: "Internal error", code: 999 } }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(service.notify("po-1")).resolves.toBeUndefined();
+
+    expect(prisma.whatsAppMessageLog.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
+    );
+  });
+});

@@ -3,6 +3,7 @@ import {
   notifySupplierPoReceived,
   getSupplierPoReceivedWhatsAppMode,
   buildSupplierPoReceivedDedupeKey,
+  buildPurchaseOrderButtonUrlSuffix,
   summarizePoMaterials,
   summarizePoQuantities,
 } from "./supplier-po-received-notification";
@@ -86,6 +87,22 @@ describe("buildSupplierPoReceivedDedupeKey", () => {
   it("builds a key distinguishing purchaseOrderId + supplierId", () => {
     expect(buildSupplierPoReceivedDedupeKey("po-1", "sup-1")).toBe("SUPPLIER_PO_RECEIVED:po-1:sup-1");
     expect(buildSupplierPoReceivedDedupeKey("po-1", "sup-2")).not.toBe(buildSupplierPoReceivedDedupeKey("po-1", "sup-1"));
+  });
+});
+
+describe("buildPurchaseOrderButtonUrlSuffix", () => {
+  it("builds the bare purchaseOrderId suffix, never a full URL or the poNumber", () => {
+    expect(buildPurchaseOrderButtonUrlSuffix("po-1")).toBe("po-1");
+    expect(buildPurchaseOrderButtonUrlSuffix("po-1")).not.toMatch(/^https?:\/\//);
+    expect(buildPurchaseOrderButtonUrlSuffix("po-1")).not.toContain("buildohub.in");
+    expect(buildPurchaseOrderButtonUrlSuffix("po-1")).not.toContain("purchase-orders/");
+  });
+
+  it("resolves to the correct destination URL for a representative PO id, with no duplicated path segment", () => {
+    const suffix = buildPurchaseOrderButtonUrlSuffix("abc123");
+    const resolvedUrl = `https://supplier.buildohub.in/purchase-orders/${suffix}`;
+    expect(resolvedUrl).toBe("https://supplier.buildohub.in/purchase-orders/abc123");
+    expect(resolvedUrl).not.toContain("purchase-orders/purchase-orders");
   });
 });
 
@@ -309,9 +326,9 @@ describe("notifySupplierPoReceived — dry-run mode", () => {
   });
 });
 
-// Test J — live mode: Meta adapter receives the correct template and variables
+// Test J — live mode: Meta adapter receives the correct template, variables, and button
 describe("notifySupplierPoReceived — live mode (Meta Cloud API)", () => {
-  it("calls Meta exactly once with templateName supplier_po_alert and exactly 3 body parameters, no header/buttons", async () => {
+  it("calls Meta exactly once with templateName supplier_po_alert, exactly 3 (unchanged) body parameters, and the approved dynamic View Purchase Order URL button", async () => {
     const { prisma } = buildHarness();
     process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "live";
     process.env.WHATSAPP_PHONE_NUMBER_ID = "PHONE_ID";
@@ -328,9 +345,24 @@ describe("notifySupplierPoReceived — live mode (Meta Cloud API)", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
     expect(sentBody.template.name).toBe("supplier_po_alert");
-    expect(sentBody.template.components).toHaveLength(1);
-    expect(sentBody.template.components[0].parameters).toHaveLength(3);
-    expect(sentBody.template.components.some((c: any) => c.type === "button")).toBe(false);
+    expect(sentBody.template.components).toHaveLength(2);
+
+    const bodyComponent = sentBody.template.components.find((c: any) => c.type === "body");
+    // Body parameters are UNCHANGED — still 3, same order, same meanings
+    // (PO/order display ID, material, quantity).
+    expect(bodyComponent.parameters).toHaveLength(3);
+    expect(bodyComponent.parameters[0]).toEqual({ type: "text", text: "PO-2026-00001" });
+
+    // Dynamic URL button — Meta's approved fixed prefix is
+    // https://supplier.buildohub.in/purchase-orders/{{1}}, so only the bare
+    // purchaseOrderId (po.id) is ever sent, never a full URL or poNumber.
+    const buttonComponent = sentBody.template.components.find((c: any) => c.type === "button");
+    expect(buttonComponent).toEqual({
+      type: "button",
+      sub_type: "url",
+      index: 0,
+      parameters: [{ type: "text", text: "po-1" }],
+    });
     expect(sentBody.template.components.some((c: any) => c.type === "header")).toBe(false);
     expect(prisma.whatsAppMessageLog.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "sent", metaMessageId: "wamid.PO-LIVE-1" }) })
@@ -338,5 +370,49 @@ describe("notifySupplierPoReceived — live mode (Meta Cloud API)", () => {
     expect(prisma.notificationEvent.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: "sent" } })
     );
+  });
+
+  it("uses the triggering PurchaseOrder's own id for the button suffix, never its poNumber or a different PO", async () => {
+    const { prisma } = buildHarness({ po: makePurchaseOrder({ id: "po-55", poNumber: "PO-2026-00777" }) });
+    process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "live";
+    process.env.WHATSAPP_PHONE_NUMBER_ID = "PHONE_ID";
+    process.env.WHATSAPP_ACCESS_TOKEN = "SECRET_TOKEN";
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ messages: [{ id: "wamid.PO-LIVE-2" }] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await notifySupplierPoReceived(prisma, { purchaseOrderId: "po-55" });
+
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    const buttonComponent = sentBody.template.components.find((c: any) => c.type === "button");
+    expect(buttonComponent.parameters[0].text).toBe("po-55");
+    expect(buttonComponent.parameters[0].text).not.toBe("PO-2026-00777");
+    expect(buttonComponent.parameters[0].text).not.toMatch(/^https?:\/\//);
+    expect(buttonComponent.parameters[0].text).not.toContain("buildohub.in");
+    expect(buttonComponent.parameters[0].text).not.toContain("purchase-orders/");
+  });
+
+  it("resolves to the correct supplier purchase-order page for a representative PO id, with no duplicated path segment", async () => {
+    const { prisma } = buildHarness({ po: makePurchaseOrder({ id: "po-abc123" }) });
+    process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "live";
+    process.env.WHATSAPP_PHONE_NUMBER_ID = "PHONE_ID";
+    process.env.WHATSAPP_ACCESS_TOKEN = "SECRET_TOKEN";
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ messages: [{ id: "wamid.PO-LIVE-3" }] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await notifySupplierPoReceived(prisma, { purchaseOrderId: "po-abc123" });
+
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    const buttonText = sentBody.template.components.find((c: any) => c.type === "button").parameters[0].text;
+    const resolvedUrl = `https://supplier.buildohub.in/purchase-orders/${buttonText}`;
+    expect(resolvedUrl).toBe("https://supplier.buildohub.in/purchase-orders/po-abc123");
+    expect(resolvedUrl).not.toContain("purchase-orders/purchase-orders");
   });
 });

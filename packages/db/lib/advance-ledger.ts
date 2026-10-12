@@ -1,7 +1,6 @@
 // packages/db/lib/advance-ledger.ts
 //
 // Buildohub Advance Balance — shared, framework-agnostic ledger helpers.
-//
 // The CustomerAdvanceTransaction table is the single source of truth for a
 // buyer's advance balance. CustomerAdvanceAccount.availableBalance is only a
 // cached, denormalized value — it must NEVER be written without a
@@ -15,6 +14,8 @@
 // packages/db/lib/business-number.ts) before reading/incrementing the
 // balance, so two concurrent debits/credits against the same account can
 // never race.
+
+import { generateAdvanceReceiptNumber } from "./business-number";
 
 export type AdvanceTransactionTypeValue =
   | "CREDIT"
@@ -462,4 +463,79 @@ export async function releaseAdvanceReservation(tx: AdvanceReservationTxClient, 
   });
 
   return { reservation: updated, availableAfter, reservedAfter, amount, transaction };
+}
+
+// ─────────────────────────────────────────────
+// Advance Payment Receipt generation — see AdvanceReceipt model
+// (schema.prisma) for the full documentation of when/why this is created.
+// ─────────────────────────────────────────────
+
+export type AdvanceReceiptTxClient = {
+  $queryRaw: (...args: any[]) => Promise<any>;
+  businessSequence: {
+    upsert: (args: any) => Promise<any>;
+    update: (args: any) => Promise<{ value: number }>;
+  };
+  advanceReceipt: {
+    create: (args: any) => Promise<any>;
+  };
+};
+
+export type CreateAdvanceReceiptParams = {
+  // The CREDIT CustomerAdvanceTransaction this receipt documents — the
+  // genuine settlement event. One receipt per transaction
+  // (AdvanceReceipt.transactionId @unique in the schema enforces this at
+  // the database level as a backstop).
+  transactionId: string;
+  advanceAccountId: string;
+  buyerId: string;
+  advancePaymentId?: string | null;
+  // Frozen snapshot values — read from inside the SAME locked transaction
+  // as the CREDIT ledger entry, never recomputed later.
+  amount: number;
+  balanceAfter: number;
+  currency?: string;
+  paymentMethod?: "MANUAL" | "PAYMENT_GATEWAY" | null;
+  paymentReferenceNo?: string | null;
+  buyerName?: string | null;
+  buyerEmail?: string | null;
+  buyerPhone?: string | null;
+  issuedAt?: Date;
+};
+
+/**
+ * Creates the single AdvanceReceipt row for a just-settled (CREDIT) advance
+ * transaction. MUST be called from inside the SAME `prisma.$transaction`
+ * callback that wrote the CREDIT CustomerAdvanceTransaction (see
+ * AdvancePaymentsService.approve) — never as a separate commit, so an
+ * approved payment can never end up without a receipt (or vice versa).
+ *
+ * Idempotency: the caller (AdvancePaymentsService.approve) already
+ * re-checks `AdvancePayment.status === PENDING` inside the same locked
+ * transaction before reaching this point, so a retried/duplicate approval
+ * request can never call this twice for the same payment. The schema's
+ * `transactionId @unique` constraint is a hard backstop against ever
+ * creating two receipts for the same settlement, even under a future bug.
+ */
+export async function createAdvanceReceipt(tx: AdvanceReceiptTxClient, params: CreateAdvanceReceiptParams) {
+  const receiptNumber = await generateAdvanceReceiptNumber(tx as any, params.issuedAt ?? new Date());
+
+  return tx.advanceReceipt.create({
+    data: {
+      receiptNumber,
+      issuedAt: params.issuedAt ?? new Date(),
+      transactionId: params.transactionId,
+      advanceAccountId: params.advanceAccountId,
+      buyerId: params.buyerId,
+      advancePaymentId: params.advancePaymentId ?? null,
+      amount: params.amount,
+      balanceAfter: params.balanceAfter,
+      currency: params.currency ?? "INR",
+      paymentMethod: params.paymentMethod ?? null,
+      paymentReferenceNo: params.paymentReferenceNo ?? null,
+      buyerName: params.buyerName ?? null,
+      buyerEmail: params.buyerEmail ?? null,
+      buyerPhone: params.buyerPhone ?? null,
+    },
+  });
 }

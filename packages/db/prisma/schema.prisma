@@ -156,6 +156,7 @@ model User {
   advanceAccount      CustomerAdvanceAccount?
   advancePayments     AdvancePayment[]
   advanceReservations AdvanceReservation[]
+  advanceReceipts     AdvanceReceipt[]
 
   // Legacy contractor-prefix code used only by pre-existing enquiry IDs in
   // the previous "<CONTRACTOR_CODE>-<SITE_CODE>-<SEQUENCE>" format (e.g.
@@ -1022,6 +1023,7 @@ model CustomerAdvanceAccount {
   payments     AdvancePayment[]
   transactions CustomerAdvanceTransaction[]
   reservations AdvanceReservation[]
+  receipts     AdvanceReceipt[]
 
   @@index([buyerId])
   @@index([status])
@@ -1085,6 +1087,7 @@ model AdvancePayment {
   updatedAt DateTime @updatedAt
 
   creditTransaction CustomerAdvanceTransaction?
+  receipts          AdvanceReceipt[]
 
   @@index([advanceAccountId])
   @@index([buyerId])
@@ -1142,10 +1145,90 @@ model CustomerAdvanceTransaction {
 
   createdAt DateTime @default(now())
 
+  // Advance Payment Receipt — generated exactly once, atomically, at the
+  // moment this transaction is created, but ONLY for CREDIT transactions
+  // (see AdvanceReceipt model below). Nullable 1:1 — every other
+  // transaction type (ORDER_PAYMENT/REFUND/REVERSAL/ADJUSTMENT/
+  // ADVANCE_RESERVATION/ADVANCE_RELEASE) never has a receipt.
+  receipt AdvanceReceipt?
+
   @@index([accountId])
   @@index([type])
   @@index([orderId])
   @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────
+// Advance Payment Receipt
+//
+// Generated exactly once, atomically, inside the SAME transaction that
+// writes the CREDIT CustomerAdvanceTransaction row (see
+// AdvancePaymentsService.approve) — i.e. only once the buyer's advance
+// payment has genuinely been settled (admin-approved and the ledger
+// credited). Submitting/uploading an AdvancePayment, or an order merely
+// RESERVING advance against it, NEVER generates a receipt — only the
+// CREDIT settlement event does.
+//
+// Every financial figure below is a frozen SNAPSHOT captured at generation
+// time (buyer name/amount/balance-after) — mirrors the existing
+// Invoice/InvoiceLineItem and PurchaseOrderLineItem snapshot convention
+// elsewhere in this schema. Never recomputed from live account state when
+// later viewed/downloaded.
+//
+// One receipt per settlement (transactionId @unique) — idempotent by
+// construction: AdvancePaymentsService.approve() already re-checks
+// AdvancePayment.status === PENDING inside the same locked transaction
+// before writing the CREDIT row, so a retried/duplicate approval attempt
+// can never reach this model twice for the same payment.
+//
+// A reversed/refunded advance payment NEVER rewrites or deletes the
+// original receipt — see CustomerAdvanceTransaction.reversalOfTransactionId
+// above; any REVERSAL is its own separate ledger row (and, by construction,
+// never itself eligible for a receipt, since only CREDIT rows are).
+model AdvanceReceipt {
+  id String @id @default(cuid())
+
+  // Unique, server-generated, human-readable receipt number — format
+  // "AR/<FY><MM>/<SSSSS>" (e.g. "AR/2601/00001"), generated via
+  // generateAdvanceReceiptNumber() / packages/db/lib/business-number.ts.
+  // Its own independent serial sequence (BusinessSequence key "AR_<fy>") —
+  // never shares the EQ/OD/IN/AP counters. Immutable once generated.
+  receiptNumber String   @unique
+  issuedAt      DateTime @default(now())
+
+  transactionId String                     @unique
+  transaction   CustomerAdvanceTransaction @relation(fields: [transactionId], references: [id])
+
+  advanceAccountId String
+  advanceAccount   CustomerAdvanceAccount @relation(fields: [advanceAccountId], references: [id])
+
+  buyerId String
+  buyer   User   @relation(fields: [buyerId], references: [id])
+
+  advancePaymentId String?
+  advancePayment   AdvancePayment? @relation(fields: [advancePaymentId], references: [id])
+
+  // Frozen snapshot of the settled amount (the CREDIT transaction's own
+  // `amount` — never a requested/intended figure) and the resulting
+  // available balance immediately after settlement.
+  amount             Decimal @db.Decimal(12, 2)
+  balanceAfter       Decimal @db.Decimal(12, 2)
+  currency           String  @default("INR")
+  paymentMethod      AdvancePaymentMethod?
+  paymentReferenceNo String?
+
+  // Denormalized, display-only buyer snapshot — Order.enquiryId's own doc
+  // comment above explains why this pattern (copy once, never re-derive)
+  // is used consistently across this schema.
+  buyerName  String?
+  buyerEmail String?
+  buyerPhone String?
+
+  createdAt DateTime @default(now())
+
+  @@index([buyerId])
+  @@index([advanceAccountId])
+  @@index([advancePaymentId])
 }
 
 // Represents advance balance temporarily committed to a specific order

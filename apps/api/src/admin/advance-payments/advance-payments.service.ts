@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { appendLedgerEntry, lockAdvanceAccountRow } from "@matsrc/db";
+import { appendLedgerEntry, createAdvanceReceipt, lockAdvanceAccountRow } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationService } from "src/notifications/notification.service";
 
@@ -52,6 +52,27 @@ export class AdvancePaymentsService {
       throw new NotFoundException("No advance-payment screenshot found");
     }
     return payment as { screenshotData: Buffer; screenshotMimeType: string; screenshotFileName: string };
+  }
+
+  // Support/reconciliation access to a settled Advance Payment's receipt.
+  // Reuses the EXACT SAME stored AdvanceReceipt row the buyer-facing route
+  // reads (apps/web's /api/builder/advance/receipts/[id]/pdf) — this method
+  // NEVER generates a new receipt (only AdvancePaymentsService.approve does
+  // that, atomically alongside the CREDIT ledger entry) and never mutates
+  // the existing row. Ownership here is verified via the authoritative
+  // advancePaymentId relationship (the receipt the admin requested must
+  // belong to the AdvancePayment id in the URL) rather than trusting a
+  // bare receipt id alone, so an admin/support agent working one payment's
+  // ticket can never be handed an unrelated buyer's receipt by a typo'd id.
+  async getReceipt(advancePaymentId: string) {
+    const receipt = await this.prisma.advanceReceipt.findFirst({
+      where: { advancePaymentId },
+      include: { advancePayment: { select: { referenceNumber: true } } },
+    });
+    if (!receipt) {
+      throw new NotFoundException("No receipt exists for this advance payment");
+    }
+    return receipt;
   }
 
   // Approval is a financial operation and must be atomic (spec §16):
@@ -110,6 +131,27 @@ export class AdvancePaymentsService {
         approvedAt: now,
       });
 
+      // Advance Payment Receipt — generated atomically in the SAME
+      // transaction as the CREDIT ledger entry above, so an approved
+      // payment can never end up without a receipt (or a receipt without a
+      // genuinely-settled CREDIT behind it). See AdvanceReceipt model
+      // (schema.prisma) and createAdvanceReceipt (advance-ledger.ts) for
+      // full documentation.
+      const receipt = await createAdvanceReceipt(tx as any, {
+        transactionId: transaction.id,
+        advanceAccountId: payment.advanceAccountId,
+        buyerId: payment.buyerId,
+        advancePaymentId: payment.id,
+        amount: Number(payment.amount),
+        balanceAfter,
+        paymentMethod: payment.paymentMethod,
+        paymentReferenceNo: payment.paymentReference,
+        buyerName: payment.buyer.name,
+        buyerEmail: payment.buyer.email,
+        buyerPhone: payment.buyer.phone,
+        issuedAt: now,
+      });
+
       const approvedPayment = await tx.advancePayment.update({
         where: { id },
         data: { status: "APPROVED", approvedAt: now, approvedBy: actorId, rejectedAt: null, rejectedBy: null, rejectionReason: null },
@@ -121,7 +163,13 @@ export class AdvancePaymentsService {
           action: "ADVANCE_PAYMENT_APPROVED",
           entityType: "AdvancePayment",
           entityId: payment.id,
-          metadata: { amount: Number(payment.amount), balanceAfter, ledgerTransactionId: transaction.id },
+          metadata: {
+            amount: Number(payment.amount),
+            balanceAfter,
+            ledgerTransactionId: transaction.id,
+            receiptId: receipt.id,
+            receiptNumber: receipt.receiptNumber,
+          },
         },
       });
 

@@ -35,6 +35,11 @@ export async function GET(request: Request) {
         createdAt: true,
         order: { select: { id: true, enquiryId: true, orderNumber: true } },
         advancePayment: { select: { id: true, referenceNumber: true } },
+        // Advance Payment Receipt — present only for CREDIT (settled)
+        // transactions, see AdvanceReceipt model (schema.prisma). Exposes
+        // just the id + number here so the history UI can render a
+        // "Download Receipt" link without a second round-trip.
+        receipt: { select: { id: true, receiptNumber: true } },
       },
     });
 
@@ -48,6 +53,8 @@ export async function GET(request: Request) {
         orderId: t.order?.id ?? null,
         orderReference: t.order?.enquiryId ?? t.order?.orderNumber ?? null,
         advancePaymentReference: t.advancePayment?.referenceNumber ?? null,
+        receiptId: t.receipt?.id ?? null,
+        receiptNumber: t.receipt?.receiptNumber ?? null,
         createdAt: t.createdAt,
       })),
     });

@@ -92,16 +92,28 @@ export function AdvancePaymentQueue({ items }: { items: AdvancePaymentItem[] }) 
                 Submitted {new Date(item.submittedAt).toLocaleString("en-IN")}
               </p>
 
-              {item.screenshotFileName ? (
-                <div className="mt-3">
-                  <a
-                    href={item.screenshotUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
-                  >
-                    View Payment Screenshot
-                  </a>
+              {item.screenshotFileName || item.status === "APPROVED" ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {item.screenshotFileName ? (
+                    <a
+                      href={item.screenshotUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
+                    >
+                      View Payment Screenshot
+                    </a>
+                  ) : null}
+                  {item.status === "APPROVED" ? (
+                    <a
+                      href={`/api/admin/advance-payments/${item.id}/receipt/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
+                    >
+                      Download Receipt
+                    </a>
+                  ) : null}
                 </div>
               ) : null}
 

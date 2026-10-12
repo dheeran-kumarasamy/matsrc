@@ -6,6 +6,7 @@ import { RoleGuard } from "src/auth/role.guard";
 import { CurrentUser } from "src/auth/current-user.decorator";
 import { AdvancePaymentsService } from "./advance-payments.service";
 import { RejectAdvancePaymentDto } from "./dto/reject-advance-payment.dto";
+import { renderAdvanceReceiptPdf } from "./advance-receipt-pdf.util";
 
 // Admin-only Buildohub Advance Payments queue. Mirrors the existing
 // admin/payments controller pattern exactly: OptionalJwtAuthGuard resolves
@@ -37,6 +38,36 @@ export class AdvancePaymentsController {
     res.setHeader("Content-Disposition", `inline; filename="${screenshot.screenshotFileName}"`);
     res.setHeader("Cache-Control", "private, no-store");
     res.send(Buffer.from(screenshot.screenshotData));
+  }
+
+  // Admin/support-only receipt download for a settled Advance Payment.
+  // Reuses the EXACT SAME stored AdvanceReceipt row the buyer's own receipt
+  // download route reads (apps/web's /api/builder/advance/receipts/[id]/pdf)
+  // — never generates a second receipt, never recomputes figures from live
+  // account state. 404s (not an empty/blank PDF) when the payment has no
+  // receipt yet (i.e. not yet approved), consistent with this controller's
+  // existing not-found handling.
+  @Get(":id/receipt/pdf")
+  async getReceiptPdf(@Param("id") id: string, @Res() res: Response) {
+    const receipt = await this.advancePaymentsService.getReceipt(id);
+    const buffer = await renderAdvanceReceiptPdf({
+      receiptNumber: receipt.receiptNumber,
+      issuedAt: receipt.issuedAt,
+      amount: Number(receipt.amount),
+      balanceAfter: Number(receipt.balanceAfter),
+      currency: receipt.currency,
+      paymentMethod: receipt.paymentMethod,
+      paymentReferenceNo: receipt.paymentReferenceNo,
+      buyerName: receipt.buyerName,
+      buyerEmail: receipt.buyerEmail,
+      buyerPhone: receipt.buyerPhone,
+      advancePaymentReference: (receipt as any).advancePayment?.referenceNumber ?? null,
+    });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${receipt.receiptNumber.replace(/\//g, "-")}.pdf"`);
+    // Never cached/publicly stored — this is a sensitive financial document.
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(buffer);
   }
 
   @Patch(":id/approve")

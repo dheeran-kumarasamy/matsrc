@@ -7,6 +7,7 @@ import {
   upsertAdvanceReservation,
   consumeAdvanceReservation,
   releaseAdvanceReservation,
+  createAdvanceReceipt,
   AdvanceReservationError,
 } from "./advance-ledger";
 
@@ -597,5 +598,152 @@ describe("lockAdvanceAccountRow", () => {
   it("throws when the account does not exist", async () => {
     const tx = { $queryRaw: vi.fn().mockResolvedValue([]) };
     await expect(lockAdvanceAccountRow(tx as any, "missing")).rejects.toThrow(/not found/);
+  });
+});
+
+// Advance Payment Receipt generation — see createAdvanceReceipt's own doc
+// comment and the AdvanceReceipt model (schema.prisma) for full context.
+// Mirrors this file's existing createFakeTx-style fixture pattern, extended
+// with a minimal fake businessSequence (mirroring business-number.spec.ts's
+// own fixture) and advanceReceipt.create.
+function createFakeReceiptTx(options: { sequenceValue?: number; receiptCreateImpl?: (args: any) => Promise<any> } = {}) {
+  let sequenceValue = options.sequenceValue ?? 0;
+  const receipts: any[] = [];
+
+  const tx = {
+    $queryRaw: vi.fn().mockResolvedValue([{ value: sequenceValue }]),
+    businessSequence: {
+      upsert: vi.fn().mockResolvedValue({}),
+      update: vi.fn(async () => {
+        sequenceValue += 1;
+        return { value: sequenceValue };
+      }),
+    },
+    advanceReceipt: {
+      create: vi.fn(
+        options.receiptCreateImpl ??
+          (async ({ data }: any) => {
+            const row = { id: `receipt-${receipts.length + 1}`, ...data };
+            receipts.push(row);
+            return row;
+          })
+      ),
+    },
+  };
+
+  return { tx, receipts, getSequenceValue: () => sequenceValue };
+}
+
+describe("createAdvanceReceipt", () => {
+  it("creates a receipt correctly linked to the CREDIT transaction, account, buyer, and advance payment, with the settled amount and resulting balance", async () => {
+    const { tx, receipts } = createFakeReceiptTx();
+
+    const receipt = await createAdvanceReceipt(tx as any, {
+      transactionId: "tx-1",
+      advanceAccountId: "acct-1",
+      buyerId: "buyer-1",
+      advancePaymentId: "ap-1",
+      amount: 50000,
+      balanceAfter: 50000,
+      paymentMethod: "MANUAL",
+      paymentReferenceNo: "UTR123456",
+      buyerName: "Builder",
+      buyerEmail: "builder@example.com",
+      buyerPhone: "9876543210",
+    });
+
+    expect(receipts).toHaveLength(1);
+    expect(receipt.transactionId).toBe("tx-1");
+    expect(receipt.advanceAccountId).toBe("acct-1");
+    expect(receipt.buyerId).toBe("buyer-1");
+    expect(receipt.advancePaymentId).toBe("ap-1");
+    expect(receipt.amount).toBe(50000);
+    expect(receipt.balanceAfter).toBe(50000);
+    expect(receipt.paymentMethod).toBe("MANUAL");
+    expect(receipt.paymentReferenceNo).toBe("UTR123456");
+    expect(receipt.buyerName).toBe("Builder");
+    expect(receipt.buyerEmail).toBe("builder@example.com");
+    expect(receipt.buyerPhone).toBe("9876543210");
+    expect(receipt.currency).toBe("INR");
+    // Format: AR/<YYMM>/<SSSSS>
+    expect(receipt.receiptNumber).toMatch(/^AR\/\d{4}\/\d{5}$/);
+  });
+
+  it("defaults advancePaymentId/paymentMethod/paymentReferenceNo/buyer fields to null when omitted", async () => {
+    const { tx } = createFakeReceiptTx();
+
+    const receipt = await createAdvanceReceipt(tx as any, {
+      transactionId: "tx-2",
+      advanceAccountId: "acct-1",
+      buyerId: "buyer-1",
+      amount: 1000,
+      balanceAfter: 1000,
+    });
+
+    expect(receipt.advancePaymentId).toBeNull();
+    expect(receipt.paymentMethod).toBeNull();
+    expect(receipt.paymentReferenceNo).toBeNull();
+    expect(receipt.buyerName).toBeNull();
+    expect(receipt.buyerEmail).toBeNull();
+    expect(receipt.buyerPhone).toBeNull();
+  });
+
+  it("generates strictly increasing receipt numbers across successive calls against the same sequence", async () => {
+    const { tx } = createFakeReceiptTx();
+
+    const first = await createAdvanceReceipt(tx as any, {
+      transactionId: "tx-1",
+      advanceAccountId: "acct-1",
+      buyerId: "buyer-1",
+      amount: 1000,
+      balanceAfter: 1000,
+    });
+    const second = await createAdvanceReceipt(tx as any, {
+      transactionId: "tx-2",
+      advanceAccountId: "acct-1",
+      buyerId: "buyer-1",
+      amount: 2000,
+      balanceAfter: 3000,
+    });
+
+    expect(first.receiptNumber).not.toBe(second.receiptNumber);
+    const firstSerial = Number(first.receiptNumber.split("/")[2]);
+    const secondSerial = Number(second.receiptNumber.split("/")[2]);
+    expect(secondSerial).toBe(firstSerial + 1);
+  });
+
+  it("propagates a receipt-number-generation failure (e.g. sequence exhausted) without creating a receipt row", async () => {
+    const { tx, receipts } = createFakeReceiptTx({ sequenceValue: 99999 });
+
+    await expect(
+      createAdvanceReceipt(tx as any, {
+        transactionId: "tx-1",
+        advanceAccountId: "acct-1",
+        buyerId: "buyer-1",
+        amount: 1000,
+        balanceAfter: 1000,
+      })
+    ).rejects.toThrow(/exceeds the 5-digit serial capacity/);
+
+    expect(receipts).toHaveLength(0);
+  });
+
+  it("propagates a database insertion failure from advanceReceipt.create", async () => {
+    const dbError = new Error("simulated unique constraint violation");
+    const { tx } = createFakeReceiptTx({
+      receiptCreateImpl: async () => {
+        throw dbError;
+      },
+    });
+
+    await expect(
+      createAdvanceReceipt(tx as any, {
+        transactionId: "tx-1",
+        advanceAccountId: "acct-1",
+        buyerId: "buyer-1",
+        amount: 1000,
+        balanceAfter: 1000,
+      })
+    ).rejects.toThrow(dbError);
   });
 });

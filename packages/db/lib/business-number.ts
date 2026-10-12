@@ -1,31 +1,35 @@
 // packages/db/lib/business-number.ts
 //
-// New EQ, OD, IN and AP Business Numbering implementation.
+// New EQ, OD, IN, AP and AR Business Numbering implementation.
 //
 // Formats:
 //   EQ/YYMM/SSSSS  (Enquiry)
 //   OD/YYMM/SSSSS  (Order)
 //   IN/YYMM/SSSSS  (Invoice)
 //   AP/YYMM/SSSSS  (Advance Payment — Buildohub Advance Balance)
+//   AR/YYMM/SSSSS  (Advance Receipt — settled Buildohub Advance Payment)
 //
 // Where:
 //   YY    = 2-digit financial-year start year (April–March)
 //   MM    = 2-digit financial-year month (April=01, May=02 ... March=12)
 //   SSSSS = 5-digit zero-padded sequential serial per (type + FY)
 //
-// AP uses its own independent BusinessSequence row (key "AP_<fy>") — it
-// never shares or perturbs the EQ/OD/IN counters.
+// AP and AR each use their own independent BusinessSequence row (keys
+// "AP_<fy>" / "AR_<fy>") — neither shares or perturbs the EQ/OD/IN/each
+// other's counters.
 
 export const EQ_REGEX = /^EQ\/[0-9]{4,6}\/[0-9]{5}$/;
 export const OD_REGEX = /^OD\/[0-9]{4,6}\/[0-9]{5}$/;
 export const IN_REGEX = /^IN\/[0-9]{4,6}\/[0-9]{5}$/;
 export const AP_REGEX = /^AP\/[0-9]{4,6}\/[0-9]{5}$/;
+export const AR_REGEX = /^AR\/[0-9]{4,6}\/[0-9]{5}$/;
 
-export function validateBusinessNumber(type: "EQ" | "OD" | "IN" | "AP", value: string): boolean {
+export function validateBusinessNumber(type: "EQ" | "OD" | "IN" | "AP" | "AR", value: string): boolean {
   if (type === "EQ") return EQ_REGEX.test(value);
   if (type === "OD") return OD_REGEX.test(value);
   if (type === "IN") return IN_REGEX.test(value);
   if (type === "AP") return AP_REGEX.test(value);
+  if (type === "AR") return AR_REGEX.test(value);
   return false;
 }
 
@@ -75,7 +79,7 @@ type TxClient = {
  */
 export async function nextBusinessSequence(
   tx: TxClient,
-  type: "EQ" | "OD" | "IN" | "AP",
+  type: "EQ" | "OD" | "IN" | "AP" | "AR",
   date: Date = new Date()
 ): Promise<{ serial: number; yymm: string }> {
   const { fyShort, yymm } = getFinancialYearMonth(date);
@@ -107,7 +111,7 @@ export async function nextBusinessSequence(
 
 export async function generateBusinessNumber(
   tx: TxClient,
-  type: "EQ" | "OD" | "IN" | "AP",
+  type: "EQ" | "OD" | "IN" | "AP" | "AR",
   date: Date = new Date()
 ): Promise<string> {
   const { serial, yymm } = await nextBusinessSequence(tx, type, date);
@@ -144,4 +148,17 @@ export async function generateAdvancePaymentNumber(
   date: Date = new Date()
 ): Promise<string> {
   return generateBusinessNumber(tx, "AP", date);
+}
+
+// Advance Receipt number (e.g. "AR/2601/00001") — generated exactly once,
+// atomically, at the moment a Buildohub Advance Payment is genuinely
+// SETTLED (the CREDIT ledger entry is written — see
+// AdvancePaymentsService.approve). Its own independent serial sequence
+// (BusinessSequence key "AR_<fy>"). Never reuses or perturbs the
+// EQ/OD/IN/AP counters.
+export async function generateAdvanceReceiptNumber(
+  tx: TxClient,
+  date: Date = new Date()
+): Promise<string> {
+  return generateBusinessNumber(tx, "AR", date);
 }

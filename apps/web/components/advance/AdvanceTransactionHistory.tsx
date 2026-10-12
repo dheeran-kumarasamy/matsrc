@@ -11,6 +11,11 @@ type Transaction = {
   reference: string | null;
   orderReference: string | null;
   advancePaymentReference: string | null;
+  // Present only for CREDIT (settled) transactions — see AdvanceReceipt
+  // model (packages/db/prisma/schema.prisma). Null for every other
+  // transaction type, since only a genuine settlement generates a receipt.
+  receiptId: string | null;
+  receiptNumber: string | null;
   createdAt: string;
 };
 
@@ -96,6 +101,16 @@ export default function AdvanceTransactionHistory() {
                   {IS_CREDIT[t.type] ? "+" : "-"} ₹{t.amount.toLocaleString("en-IN")}
                 </p>
                 <p className="text-xs text-[color:var(--posh-fg-muted)]">Balance: ₹{t.balanceAfter.toLocaleString("en-IN")}</p>
+                {t.receiptId ? (
+                  <a
+                    href={`/api/builder/advance/receipts/${t.receiptId}/pdf`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-block text-xs font-semibold text-[color:var(--posh-primary)] underline"
+                  >
+                    Download Receipt
+                  </a>
+                ) : null}
               </div>
             </div>
           ))}

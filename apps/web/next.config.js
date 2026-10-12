@@ -19,6 +19,17 @@ const nextConfig = {
         "../../node_modules/.pnpm/@prisma+client@*/node_modules/@prisma/client/**/*",
       ],
     },
+    // pdfkit (used by the builder PO/invoice PDF export routes) resolves its
+    // standard font data at runtime via Node's `module.createRequire()` +
+    // its own package.json `imports` map (`#standard-fonts/*`), keyed off
+    // `__filename` of pdfkit's own module file. When webpack bundles the
+    // route handler into a single server chunk, `__filename` no longer
+    // points at pdfkit's real location inside node_modules, so that
+    // self-require fails at request time and the route throws — surfacing
+    // as a generic 500 on GET .../export?format=pdf (and the equivalent
+    // invoice PDF route). Excluding pdfkit from server bundling keeps it as
+    // a plain native `require()` from its real on-disk location instead.
+    serverComponentsExternalPackages: ["pdfkit"],
   },
   images: {
     domains: ["matsrc-docs.s3.ap-south-1.amazonaws.com"],

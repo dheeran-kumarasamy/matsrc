@@ -212,7 +212,13 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
       {po.approvedAt ? (
         <div className="panel border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] p-4 text-sm font-medium text-[color:var(--posh-fg)]">
           Digitally approved{po.approvedBy ? ` by ${po.approvedBy}` : ""} on{" "}
-          {new Date(po.approvedAt).toLocaleString()}. This OTP-based approval is the legal e-signature equivalent —
+          {/* Hydration fix: toLocaleString() with no explicit locale falls back
+              to the runtime's default locale, which differs between the Node.js
+              SSR pass and the browser's own locale on hydration (e.g. en-US vs
+              en-IN) — causing "Text content does not match server-rendered
+              HTML" (React error #425). Pin the locale explicitly, matching the
+              "en-IN" convention already used elsewhere in this file/app. */}
+          {new Date(po.approvedAt).toLocaleString("en-IN")}. This OTP-based approval is the legal e-signature equivalent —
           no physical signature was required.
         </div>
       ) : null}
@@ -261,7 +267,9 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                       />
                     ) : (
                       <span className="text-slate-700">
-                        {li.deliveryDate ? new Date(li.deliveryDate).toLocaleDateString() : "—"}
+                        {/* Same hydration fix as above — explicit locale so SSR
+                            and client hydration always render identical text. */}
+                        {li.deliveryDate ? new Date(li.deliveryDate).toLocaleDateString("en-IN") : "—"}
                       </span>
                     )}
                   </td>

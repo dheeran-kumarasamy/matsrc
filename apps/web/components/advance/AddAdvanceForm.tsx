@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Upload, X } from "lucide-react";
 import { builderApiUpload } from "@/lib/api";
+import { formatAmountIndian, getFormattedCursorIndex, stripAmountFormatting } from "@/lib/amount-input-format";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png"];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
@@ -13,6 +14,13 @@ type SubmitResult = { id: string; referenceNumber: string; amount: number; statu
 // Add Advance — buyer submission form (spec §12/§13). Reuses the EXACT SAME
 // screenshot upload/validation UX as BankTransferPaymentPanel (order
 // payment-proof flow) instead of introducing a second upload component.
+//
+// Amount input: `amount` always holds the RAW, unformatted numeric string
+// (e.g. "100000") — it starts blank and is NEVER prefilled with a
+// suggested/default/available-balance value. The input displays an
+// Indian-style comma-grouped version of this raw value (formatAmountIndian)
+// purely for presentation; every validation, submission and financial
+// calculation below continues to use the raw `amount` string untouched.
 export default function AddAdvanceForm({ onSubmitted }: { onSubmitted: (result: SubmitResult) => void }) {
   const [amount, setAmount] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
@@ -22,6 +30,30 @@ export default function AddAdvanceForm({ onSubmitted }: { onSubmitted: (result: 
   const [confirmation, setConfirmation] = useState<SubmitResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const amountInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Reformats whatever the user just typed/edited/pasted into the Indian
+  // comma-grouped display, while keeping `amount` itself raw/clean and
+  // restoring the caret to the equivalent position so editing digits in the
+  // middle of the amount (or deleting/inserting) never jumps the cursor.
+  function handleAmountChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.target;
+    const rawCursor = input.selectionStart ?? input.value.length;
+    const digitsBeforeCursor = input.value.slice(0, rawCursor).replace(/[^0-9.]/g, "").length;
+
+    const nextRaw = stripAmountFormatting(input.value);
+    setAmount(nextRaw);
+
+    // Restore the caret after React re-renders with the newly formatted
+    // display value.
+    requestAnimationFrame(() => {
+      const el = amountInputRef.current;
+      if (!el) return;
+      const formatted = formatAmountIndian(nextRaw);
+      const nextCursor = getFormattedCursorIndex(digitsBeforeCursor, formatted);
+      el.setSelectionRange(nextCursor, nextCursor);
+    });
+  }
 
   function validateAndSetFile(selected: File | null) {
     setError(null);
@@ -98,11 +130,11 @@ export default function AddAdvanceForm({ onSubmitted }: { onSubmitted: (result: 
       <div>
         <p className="posh-label mb-2">Amount</p>
         <input
-          type="number"
-          min={1}
-          step="0.01"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          ref={amountInputRef}
+          type="text"
+          inputMode="decimal"
+          value={formatAmountIndian(amount)}
+          onChange={handleAmountChange}
           placeholder="Enter amount"
           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
         />

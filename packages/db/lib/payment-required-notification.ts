@@ -60,67 +60,56 @@
 // `notifyCustomerOrderStatusChanged` (order.user.whatsappNumber || .phone),
 // never a new/duplicated phone lookup.
 //
-// Approved Meta template contract (fetched directly from the Graph API
-// message_templates endpoint using this repo's own configured
-// WHATSAPP_BUSINESS_ACCOUNT_ID / WHATSAPP_ACCESS_TOKEN — not invented):
+// Approved Meta template contract — CONFIRMED LIVE directly against the
+// Graph API (GET /{WABA_ID}/message_templates?name=payment_required_v2,
+// using this repo's own configured WHATSAPP_BUSINESS_ACCOUNT_ID /
+// WHATSAPP_ACCESS_TOKEN, verified 2026-10-12). IMPORTANT — this is NOT the
+// same body as the superseded "payment_required" template: an earlier
+// revision of this file incorrectly assumed the body/parameter contract was
+// unchanged across the template rename, which caused every live
+// payment_required_v2 send to be rejected by Meta with HTTP 400
+// code=132000 "Number of parameters does not match the expected number of
+// params" (confirmed production incident — order EQ/2607/00003 and every
+// other PAYMENT_REQUIRED send since the payment_required_v2 cutover never
+// delivered). Never assume a template's body/parameter contract carries
+// over across a Meta template name change without re-verifying via the
+// Graph API.
 //   Template name:   payment_required_v2
 //   Meta Template ID: 1645900400305073
 //   Language:        en
 //   Category:        UTILITY
-//   Body: "Payment is required for your Buildohub requirement {{1}}.
+//   Body: "Hi {{1}},
 //
-//          Amount payable: {{2}}
-//          Payment deadline: {{3}}
+//          Payment is pending for your BuildOhub order {{2}}.
 //
-//          Please complete the payment to proceed with your order."
-//          (identical body/parameter-count/order to the superseded
-//          "payment_required" template — only the button changed.)
+//          Please open your order to review the details and complete payment.
+//
+//          Thank you,
+//          Team BuildOhub"
+//          Exactly TWO body variables — no amount-payable or
+//          payment-deadline variable exists in the approved copy at all.
 //   Buttons: one dynamic URL button ("Complete Payment"), approved FIXED
 //          prefix `https://buildohub.in/orders/payment/` (note: `/payment/`
 //          is part of the fixed prefix itself, NOT the dynamic `{{1}}`
-//          parameter — this differs from the superseded "payment_required"
-//          template, whose fixed prefix was only `https://buildohub.in/orders/`).
-//          Only the BARE `orderId` (built by `buildPaymentButtonUrlSuffix`
-//          below) is ever sent as the button's `{{1}}` parameter — never the
-//          full URL, and never the old `payment/{orderId}` suffix, which
-//          would now resolve to a broken double `/payment/payment/` URL.
-//          Resolved destination: `https://buildohub.in/orders/payment/{orderId}`,
-//          matching the existing `/orders/payment/[id]` route (unchanged by
-//          this task). Previously a static QUICK_REPLY button ("Make
-//          Payment", identical to `supplier_po_alert`'s "View Purchase
-//          Order" handling) before Meta approved this URL-button upgrade.
-//   {{1}} = enquiry/order display ID  = Order.enquiryId ?? Order.id (the
+//          parameter). Only the BARE `orderId` (built by
+//          `buildPaymentButtonUrlSuffix` below) is ever sent as the
+//          button's `{{1}}` parameter — never the full URL, and never a
+//          `payment/{orderId}` suffix, which would resolve to a broken
+//          double `/payment/payment/` URL. Resolved destination:
+//          `https://buildohub.in/orders/payment/{orderId}`, matching the
+//          existing `/orders/payment/[id]` route.
+//   {{1}} = buyer display name        = User.name, falling back to a
+//          generic "Customer" greeting when empty (never left blank — Meta
+//          rejects an empty body parameter).
+//   {{2}} = enquiry/order display ID  = Order.enquiryId ?? Order.id (the
 //          exact same canonical display-ID fallback used by
 //          `customer_order_status` / `supplier_po_alert`).
-//   {{2}} = amount payable            = Order.totalAmount (the canonical,
-//          single order total already shown to the customer on the
-//          payment page — apps/web/app/(builder)/orders/payment/[id]/page.tsx
-//          — and the exact same amount PaymentVerification.amount is set to
-//          when a proof is later submitted, see payment-proof/route.ts:
-//          `amount: order.totalAmount`). Never independently
-//          recalculated/derived — this schema has no partial-payment,
-//          already-paid, or outstanding-balance concept at this point in the
-//          lifecycle (PaymentStatus is a simple
-//          PENDING -> PENDING_VERIFICATION -> PAID state machine with no
-//          amount tracking of its own), so `totalAmount` IS the canonical
-//          "amount currently payable" figure. Formatted with the exact same
-//          `₹${n.toLocaleString("en-IN")}` convention already used by
-//          apps/web/lib/builder-db.ts's formatCurrency (what the customer
-//          sees on the payment page), so the WhatsApp message always matches
-//          the UI.
-//   {{3}} = payment deadline          = There is no due-date column on Order
-//          anywhere in the schema (confirmed — no `dueAt`/`deadline`/
-//          `paymentDeadline` field exists on Order, Invoice, or
-//          PaymentVerification). Rather than inventing a stored field or a
-//          second payment-calculation service, this mirrors the existing,
-//          explicitly-sanctioned pattern of introducing a clean,
-//          environment-driven configuration value when no such table/column
-//          exists yet (see apps/web/lib/bank-account-config.ts's own doc
-//          comment for the identical justification) — PAYMENT_DUE_DAYS
-//          (default 2 days), computed as `now + N days` at the moment this
-//          transition is processed and formatted with the exact same
-//          `toLocaleDateString("en-IN")` convention already used by
-//          apps/web/lib/builder-db.ts's formatDate.
+//
+// `formatPaymentAmount`/`formatPaymentDeadline`/`PAYMENT_DUE_DAYS` below are
+// kept (still exported, still unit-tested) for any other caller that may
+// want the order's payable amount/deadline for a different purpose (e.g. an
+// in-app surface), but are NO LONGER passed to the WhatsApp send — the
+// approved payment_required_v2 body has no corresponding variables.
 //
 // Deduplication: dedupe key is `PAYMENT_REQUIRED:{orderId}` — the
 // PLACED -> PROCESSING transition is a one-directional, one-time event per
@@ -255,6 +244,14 @@ export function buildPaymentButtonUrlSuffix(orderId: string): string {
   return orderId;
 }
 
+/**
+ * Fallback display name when the recipient's User.name is empty — mirrors
+ * apps/api's identical fallback (PaymentRequiredNotificationService) so both
+ * send paths never leave the approved template's {{1}} body parameter
+ * blank, which Meta rejects.
+ */
+const DEFAULT_BUYER_NAME = "Customer";
+
 type MetaGraphErrorBody = {
   error?: { message?: string; code?: number; error_subcode?: number };
 };
@@ -271,9 +268,12 @@ function formatMetaError(status: number, body: MetaGraphErrorBody): string {
 }
 
 /**
- * Low-level Meta Cloud API template send — exactly 3 body parameters, no
- * header, plus an optional dynamic URL `button` component when
- * `buttonUrlSuffix` is supplied. The approved template's button was
+ * Low-level Meta Cloud API template send — exactly 2 body parameters
+ * ([buyerName, enquiryDisplayId], matching payment_required_v2's actually
+ * approved body — see this file's top doc comment for the confirmed
+ * incident where sending 3 parameters caused every live send to be
+ * rejected), no header, plus an optional dynamic URL `button` component
+ * when `buttonUrlSuffix` is supplied. The approved template's button was
  * originally a static "Make Payment" QUICK_REPLY (rendered automatically by
  * WhatsApp from the template definition, no extra component needed), then
  * re-approved as a dynamic "Complete Payment" URL button under the
@@ -474,8 +474,7 @@ export async function notifyPaymentRequired(
 
     const phone = order.user.whatsappNumber?.trim() || order.user.phone?.trim() || null;
     const enquiryDisplayId = order.enquiryId ?? order.id;
-    const amountPayable = formatPaymentAmount(order.totalAmount);
-    const paymentDeadline = formatPaymentDeadline();
+    const buyerName = order.user.name?.trim() || DEFAULT_BUYER_NAME;
 
     const dedupeKey = buildPaymentRequiredDedupeKey(orderId);
 
@@ -490,7 +489,7 @@ export async function notifyPaymentRequired(
           entityType: "Order",
           entityId: orderId,
           channel: CHANNEL,
-          payload: { orderId, enquiryDisplayId, amountPayable, paymentDeadline },
+          payload: { orderId, enquiryDisplayId, buyerName },
           status: "suppressed",
           suppressReason: decision.reason,
         },
@@ -508,7 +507,7 @@ export async function notifyPaymentRequired(
         entityId: orderId,
         channel: CHANNEL,
         dedupeKey,
-        payload: { orderId, enquiryDisplayId, amountPayable, paymentDeadline },
+        payload: { orderId, enquiryDisplayId, buyerName },
         status: "created",
       },
     });
@@ -523,7 +522,9 @@ export async function notifyPaymentRequired(
       prisma,
       phone,
       decision.templateName,
-      [enquiryDisplayId, amountPayable, paymentDeadline],
+      // Exactly 2 parameters, matching the approved payment_required_v2
+      // template's actual body contract — see this file's top doc comment.
+      [buyerName, enquiryDisplayId],
       onLog,
       buildPaymentButtonUrlSuffix(orderId)
     );

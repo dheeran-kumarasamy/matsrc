@@ -38,7 +38,7 @@ function makeOrder(overrides: Partial<any> = {}) {
     enquiryId: "BH-2026-00452",
     totalAmount: 50000,
     paymentStatus: PaymentStatus.PENDING,
-    user: { id: "user-1", phone: "919876543210", whatsappNumber: null },
+    user: { id: "user-1", name: "Rahul Sharma", phone: "919876543210", whatsappNumber: null },
     ...overrides,
   };
 }
@@ -109,9 +109,20 @@ describe("PaymentRequiredNotificationService.notifyIfTransitioned", () => {
       expect.objectContaining({ data: expect.objectContaining({ templateName: "payment_required_v2" }) })
     );
     const params = prisma.whatsAppMessageLog.create.mock.calls[0][0].data.parameters;
-    expect(params).toHaveLength(3);
-    expect(params[0]).toBe("BH-2026-00452");
-    expect(params[1]).toBe("₹50,000");
+    // Exactly 2 parameters matching payment_required_v2's actual approved
+    // body contract: [buyerName, enquiryDisplayId] — no amount/deadline.
+    expect(params).toHaveLength(2);
+    expect(params[0]).toBe("Rahul Sharma");
+    expect(params[1]).toBe("BH-2026-00452");
+  });
+
+  it("falls back to a generic 'Customer' greeting when the buyer has no name on file", async () => {
+    const { service, prisma } = buildHarness({ order: makeOrder({ user: { id: "user-1", name: null, phone: "919876543210", whatsappNumber: null } }) });
+
+    await service.notifyIfTransitioned({ orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+
+    const params = prisma.whatsAppMessageLog.create.mock.calls[0][0].data.parameters;
+    expect(params[0]).toBe("Customer");
   });
 
   it("does NOT notify when the order is already PAID (e.g. admin payment-approval path)", async () => {
@@ -209,8 +220,8 @@ describe("PaymentRequiredNotificationService — dedupe / recipient / policy / M
 });
 
 describe("PaymentRequiredNotificationService — live Meta payload / failure handling", () => {
-  // D/E. Template variables + amount, live mode
-  it("live mode: sends exactly three body parameters, no header, correct template name, and the approved dynamic Complete Payment URL button", async () => {
+  // D/E. Template variables, live mode
+  it("live mode: sends exactly two body parameters, no header, correct template name, and the approved dynamic Complete Payment URL button", async () => {
     const { service, prisma } = buildHarness({ mode: "live" });
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
@@ -233,13 +244,17 @@ describe("PaymentRequiredNotificationService — live Meta payload / failure han
     expect(sentBody.template.components).toHaveLength(2);
 
     const bodyComponent = sentBody.template.components.find((c: any) => c.type === "body");
-    expect(bodyComponent.parameters).toHaveLength(3);
-    expect(bodyComponent.parameters[0]).toEqual({ type: "text", text: "BH-2026-00452" });
-    expect(bodyComponent.parameters[1]).toEqual({ type: "text", text: "₹50,000" });
+    // Exactly 2 parameters, matching the approved payment_required_v2 body
+    // contract ("Hi {{1}}, ... order {{2}}. ...") — never the old 3-param
+    // (enquiry id, amount, deadline) "payment_required" contract, which Meta
+    // rejects with HTTP 400 code=132000 for this template.
+    expect(bodyComponent.parameters).toHaveLength(2);
+    expect(bodyComponent.parameters[0]).toEqual({ type: "text", text: "Rahul Sharma" });
+    expect(bodyComponent.parameters[1]).toEqual({ type: "text", text: "BH-2026-00452" });
 
-    // Dynamic URL button — Meta's approved base is
-    // https://buildohub.in/orders/{{1}}, so only the suffix (orderId/payment)
-    // is ever sent, never a full URL.
+    // Dynamic URL button — Meta's approved fixed prefix is
+    // https://buildohub.in/orders/payment/{{1}}, so only the bare orderId is
+    // ever sent, never a full URL.
     const buttonComponent = sentBody.template.components.find((c: any) => c.type === "button");
     expect(buttonComponent).toEqual({
       type: "button",

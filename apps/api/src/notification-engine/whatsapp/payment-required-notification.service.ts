@@ -3,24 +3,13 @@ import { OrderStatus, PaymentStatus } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationEngineService } from "../notification-engine.service";
 
-/** Mirrors apps/web/lib/builder-db.ts's formatCurrency exactly — see packages/db/lib/payment-required-notification.ts's doc comment for why this is the canonical amount formatting. */
-function formatAmount(amount: { toNumber?: () => number } | number | string): string {
-  const n = Number(amount);
-  return `₹${n.toLocaleString("en-IN")}`;
-}
-
-/** Days before the payment deadline shown in {{3}} — same PAYMENT_DUE_DAYS env var/default as packages/db/lib/payment-required-notification.ts (never a second/duplicated config surface). */
-function getPaymentDueDays(): number {
-  const raw = process.env.PAYMENT_DUE_DAYS;
-  const parsed = raw ? Number(raw) : NaN;
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 2;
-}
-
-function formatDeadline(from: Date = new Date()): string {
-  const deadline = new Date(from);
-  deadline.setDate(deadline.getDate() + getPaymentDueDays());
-  return deadline.toLocaleDateString("en-IN");
-}
+/**
+ * Fallback display name when the recipient's User.name is empty — mirrors
+ * the identical fallback already used by other Meta templates for a
+ * personalized greeting (e.g. login OTP flows default to a generic term
+ * rather than leaving {{1}} blank, which Meta rejects).
+ */
+const DEFAULT_BUYER_NAME = "Customer";
 
 /**
  * Dynamic suffix for the approved `payment_required_v2` Meta URL button
@@ -63,6 +52,21 @@ function buildPaymentButtonUrlSuffix(orderId: string): string {
  * "payment_required_v2", metaTemplateId "1645900400305073", language "en" —
  * upgraded from the original "payment_required"/"1457666726425273" once
  * Meta approved the dynamic "Complete Payment" URL button).
+ *
+ * CONFIRMED LIVE FROM META GRAPH API (GET /{WABA_ID}/message_templates?name=payment_required_v2,
+ * 2026-10-12 — this is the actual approved template, NOT the same body as
+ * the superseded "payment_required"): body is "Hi {{1}},\n\nPayment is
+ * pending for your BuildOhub order {{2}}.\n\nPlease open your order to
+ * review the details and complete payment.\n\nThank you,\nTeam BuildOhub" —
+ * exactly TWO body variables, {{1}}=buyer display name, {{2}}=order display
+ * ID. There is NO amount-payable or payment-deadline variable in the
+ * approved copy — sending 3 parameters (the old "payment_required"
+ * contract) is REJECTED by Meta with HTTP 400 code=132000 "Number of
+ * parameters does not match the expected number of params". This was a
+ * real production incident (order EQ/2607/00003 and likely every
+ * PAYMENT_REQUIRED send since the payment_required_v2 cutover never
+ * delivered) — never assume a template's body contract is unchanged across
+ * a Meta template name change without verifying via the Graph API.
  *
  * Deliberately NOT a new/parallel notification system — mirrors
  * `CustomerOrderStatusNotificationService` exactly. apps/supplier (a
@@ -127,8 +131,7 @@ export class PaymentRequiredNotificationService {
 
       const phone = order.user.whatsappNumber?.trim() || order.user.phone?.trim() || null;
       const enquiryDisplayId = order.enquiryId ?? order.id;
-      const amountPayable = formatAmount(order.totalAmount as any);
-      const paymentDeadline = formatDeadline();
+      const buyerName = order.user.name?.trim() || DEFAULT_BUYER_NAME;
 
       const dedupeKey = `PAYMENT_REQUIRED:${orderId}`;
 
@@ -140,16 +143,17 @@ export class PaymentRequiredNotificationService {
           entityType: "Order",
           entityId: orderId,
           phone,
-          parameters: [enquiryDisplayId, amountPayable, paymentDeadline],
+          // Exactly 2 parameters, matching the approved payment_required_v2
+          // template's actual body contract — see class doc comment above.
+          parameters: [buyerName, enquiryDisplayId],
           title: "Payment Required",
-          body: `Payment is required for your Buildohub requirement ${enquiryDisplayId}. Amount payable: ${amountPayable}. Payment deadline: ${paymentDeadline}. Please complete the payment to proceed with your order.`,
+          body: `Hi ${buyerName}, payment is pending for your BuildOhub order ${enquiryDisplayId}. Please open your order to review the details and complete payment.`,
           buttonUrlSuffix: buildPaymentButtonUrlSuffix(orderId),
           dedupeKey,
           payload: {
             orderId,
             enquiryDisplayId,
-            amountPayable,
-            paymentDeadline,
+            buyerName,
             entityType: "Order",
             entityId: orderId,
           },

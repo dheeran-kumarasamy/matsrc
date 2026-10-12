@@ -31,7 +31,7 @@ function makeOrder(overrides: Partial<any> = {}) {
     enquiryId: "BH-2026-00452",
     totalAmount: 50000,
     paymentStatus: PaymentStatus.PENDING,
-    user: { id: "user-1", phone: "919876543210", whatsappNumber: null },
+    user: { id: "user-1", name: "Rahul Sharma", phone: "919876543210", whatsappNumber: null },
     ...overrides,
   };
 }
@@ -205,6 +205,16 @@ describe("notifyPaymentRequired — dry-run mode", () => {
   });
 });
 
+describe("notifyPaymentRequired — buyer name fallback", () => {
+  it("falls back to a generic 'Customer' greeting when the buyer has no name on file", async () => {
+    const { prisma } = buildHarness({ order: makeOrder({ user: { id: "user-1", name: null, phone: "919876543210", whatsappNumber: null } }) });
+    await notifyPaymentRequired(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+
+    const params = prisma.whatsAppMessageLog.create.mock.calls[0][0].data.parameters;
+    expect(params[0]).toBe("Customer");
+  });
+});
+
 describe("buildPaymentButtonUrlSuffix", () => {
   it("builds the bare orderId suffix (never a full URL, and never the old payment/{orderId} format)", () => {
     expect(buildPaymentButtonUrlSuffix("order-1")).toBe("order-1");
@@ -222,7 +232,7 @@ describe("buildPaymentButtonUrlSuffix", () => {
 });
 
 describe("notifyPaymentRequired — live mode (Meta Cloud API)", () => {
-  it("calls Meta exactly once with the correct template name, exactly 3 body parameters, and the approved dynamic Complete Payment URL button", async () => {
+  it("calls Meta exactly once with the correct template name, exactly 2 body parameters, and the approved dynamic Complete Payment URL button", async () => {
     const { prisma } = buildHarness();
     process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "live";
     process.env.WHATSAPP_PHONE_NUMBER_ID = "PHONE_ID";
@@ -242,9 +252,13 @@ describe("notifyPaymentRequired — live mode (Meta Cloud API)", () => {
     expect(sentBody.template.components).toHaveLength(2);
 
     const bodyComponent = sentBody.template.components.find((c: any) => c.type === "body");
-    expect(bodyComponent.parameters).toHaveLength(3);
-    expect(bodyComponent.parameters[0]).toEqual({ type: "text", text: "BH-2026-00452" });
-    expect(bodyComponent.parameters[1]).toEqual({ type: "text", text: "₹50,000" });
+    // Exactly 2 parameters ([buyerName, enquiryDisplayId]) — matches the
+    // approved payment_required_v2 body contract ("Hi {{1}}, ... order
+    // {{2}}. ..."). Never the old 3-param (enquiry id, amount, deadline)
+    // "payment_required" contract, which Meta rejects for this template.
+    expect(bodyComponent.parameters).toHaveLength(2);
+    expect(bodyComponent.parameters[0]).toEqual({ type: "text", text: "Rahul Sharma" });
+    expect(bodyComponent.parameters[1]).toEqual({ type: "text", text: "BH-2026-00452" });
 
     const buttonComponent = sentBody.template.components.find((c: any) => c.type === "button");
     expect(buttonComponent).toEqual({

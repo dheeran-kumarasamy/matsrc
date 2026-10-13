@@ -100,6 +100,12 @@ function serializeForExport(po: any) {
     quantity: li.quantity,
     unitPrice: toNumber(li.unitPrice),
     tax: toNumber(li.tax),
+    // The GST rate (percentage) used to compute `tax` above — null only
+    // for pre-migration line items created before this column existed
+    // (see PurchaseOrderLineItem's doc comment in schema.prisma); the PDF
+    // must show a generic "Tax" label for those rather than fabricating
+    // a rate.
+    taxRatePercent: li.taxRatePercent !== null && li.taxRatePercent !== undefined ? toNumber(li.taxRatePercent) : null,
     deliveryDate: li.deliveryDate,
     fulfilledQuantity: li.fulfilledQuantity,
     lineTotal: toNumber(li.unitPrice) * li.quantity + toNumber(li.tax),
@@ -154,6 +160,12 @@ function serializeForExport(po: any) {
     builder: { id: po.builder.id, name: po.builder.name, email: po.builder.email },
     deliverTo,
     lineItems,
+    // Explicit subtotal/GST breakdown — mirrors the Invoice's own
+    // subtotal/taxAmount so the PO PDF can show the same
+    // "Subtotal + GST = Total" structure instead of folding tax silently
+    // into a single Total figure.
+    subtotal: lineItems.reduce((acc: number, li: any) => acc + li.unitPrice * li.quantity, 0),
+    taxAmount: lineItems.reduce((acc: number, li: any) => acc + li.tax, 0),
     total: lineItems.reduce((acc: number, li: any) => acc + li.lineTotal, 0),
   };
 }

@@ -71,6 +71,11 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
                 <p className="font-bold" style={{ color: "var(--posh-fg)" }}>{li.productName}</p>
                 <p className="posh-label mt-1">
                   {li.quantity} × ₹{li.unitPrice.toLocaleString("en-IN")}
+                  {/* typeof check (not a truthy check) so a genuine 0% GST
+                      line still shows its explicit rate/amount rather than
+                      silently disappearing — only a null taxRate
+                      (pre-migration row) omits this entirely. */}
+                  {typeof li.taxRate === "number" ? ` · GST ${li.taxRate}% (₹${li.taxAmount.toLocaleString("en-IN")})` : ""}
                 </p>
               </div>
               <p className="font-bold" style={{ color: "var(--posh-fg)" }}>₹{li.total.toLocaleString("en-IN")}</p>
@@ -79,7 +84,15 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
         </div>
         <div className="text-right text-sm">
           <p className="posh-subtitle">Subtotal: ₹{invoice.subtotal.toLocaleString("en-IN")}</p>
-          <p className="posh-subtitle">Tax: ₹{invoice.taxAmount.toLocaleString("en-IN")}</p>
+          <p className="posh-subtitle">
+            {(() => {
+              const rates = Array.from(
+                new Set(invoice.lineItems.map((li) => li.taxRate).filter((r): r is number => typeof r === "number"))
+              );
+              const label = rates.length === 1 ? `GST @ ${rates[0]}%` : "Tax";
+              return `${label}: ₹${invoice.taxAmount.toLocaleString("en-IN")}`;
+            })()}
+          </p>
           <p className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>
             Total: ₹{invoice.totalAmount.toLocaleString("en-IN")}
           </p>

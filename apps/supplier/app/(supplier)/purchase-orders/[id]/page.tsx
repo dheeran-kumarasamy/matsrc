@@ -59,6 +59,7 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
                 <th className="px-4 py-2 font-semibold">Product</th>
                 <th className="px-4 py-2 font-semibold">Qty</th>
                 <th className="px-4 py-2 font-semibold">Unit Price</th>
+                <th className="px-4 py-2 font-semibold">GST %</th>
                 <th className="px-4 py-2 font-semibold">Tax</th>
                 <th className="px-4 py-2 font-semibold">Delivery</th>
                 <th className="px-4 py-2 font-semibold">Fulfilled</th>
@@ -73,6 +74,9 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
                     {li.quantity} {li.unit}
                   </td>
                   <td className="px-4 py-2 text-slate-700">₹{li.unitPrice.toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-2 text-slate-700">
+                    {typeof li.taxRatePercent === "number" ? `${li.taxRatePercent}%` : "—"}
+                  </td>
                   <td className="px-4 py-2 text-slate-700">₹{li.tax.toLocaleString("en-IN")}</td>
                   <td className="px-4 py-2 text-slate-700">
                     {li.deliveryDate ? new Date(li.deliveryDate).toLocaleDateString() : "—"}
@@ -88,9 +92,29 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
-          <span className="text-sm text-slate-500">Total</span>
-          <span className="text-lg font-extrabold text-slate-900">₹{po.total.toLocaleString("en-IN")}</span>
+        <div className="space-y-1 border-t border-slate-200 px-4 py-3">
+          {/* Explicit Subtotal / GST / Total breakdown — mirrors the PDF's
+              own structure (see lib/purchase-order-pdf.ts) instead of
+              folding tax silently into a single Total figure. */}
+          <div className="flex items-center justify-between text-sm text-slate-600">
+            <span>Subtotal (Taxable Value)</span>
+            <span>₹{po.subtotal.toLocaleString("en-IN")}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm text-slate-600">
+            <span>
+              {(() => {
+                const rates = Array.from(
+                  new Set(po.lineItems.map((li) => li.taxRatePercent).filter((r) => typeof r === "number"))
+                );
+                return rates.length === 1 ? `GST @ ${rates[0]}%` : "GST";
+              })()}
+            </span>
+            <span>₹{po.taxAmount.toLocaleString("en-IN")}</span>
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-sm text-slate-500">Total</span>
+            <span className="text-lg font-extrabold text-slate-900">₹{po.total.toLocaleString("en-IN")}</span>
+          </div>
         </div>
       </div>
 

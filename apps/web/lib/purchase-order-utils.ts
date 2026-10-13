@@ -38,6 +38,14 @@ export function buildPurchaseOrderLineItemData(item: {
     quantity: item.quantity,
     unitPrice: gst.unitPrice,
     tax: gst.gstAmount,
+    // Persist the RATE alongside the computed amount — previously only
+    // `tax` (the amount) was stored, so the PO PDF/UI could never show an
+    // explicit "GST @ 18%" breakdown, only a silent lump-sum figure.
+    // gst.gstRatePercent is always a resolved number here (never null —
+    // calculateLineGst() already applies DEFAULT_TAX_RATE_PERCENT when the
+    // input omitted it), so this is never left unset for a newly created
+    // line item.
+    taxRatePercent: gst.gstRatePercent,
     deliveryDate: item.deliveryDate ?? fallbackDeliveryDate ?? null,
   };
 }
@@ -129,10 +137,22 @@ export function serializePurchaseOrder(po: any) {
       quantity: li.quantity,
       unitPrice: toNumber(li.unitPrice),
       tax: toNumber(li.tax),
+      // The GST rate (percentage) used to compute `tax` above — null only
+      // for pre-migration line items created before this column existed
+      // (see PurchaseOrderLineItem's doc comment in schema.prisma); the
+      // PDF/UI must show a generic "Tax" label for those rather than
+      // fabricating a rate.
+      taxRatePercent: li.taxRatePercent !== null && li.taxRatePercent !== undefined ? toNumber(li.taxRatePercent) : null,
       deliveryDate: li.deliveryDate,
       fulfilledQuantity: li.fulfilledQuantity,
       lineTotal: toNumber(li.unitPrice) * li.quantity + toNumber(li.tax),
     })),
+    // Explicit subtotal/GST/grand-total breakdown — mirrors the Invoice's
+    // own subtotal/taxAmount/totalAmount fields so the PO PDF/UI can show
+    // the same "Subtotal + GST = Total" structure instead of folding tax
+    // silently into a single TOTAL figure.
+    subtotal: po.lineItems.reduce((acc: number, li: any) => acc + toNumber(li.unitPrice) * li.quantity, 0),
+    taxAmount: po.lineItems.reduce((acc: number, li: any) => acc + toNumber(li.tax), 0),
     total: po.lineItems.reduce(
       (acc: number, li: any) => acc + toNumber(li.unitPrice) * li.quantity + toNumber(li.tax),
       0

@@ -32,10 +32,22 @@ export type SupplierPurchaseOrderDetail = SupplierPurchaseOrderRow & {
     quantity: number;
     unitPrice: number;
     tax: number;
+    // The GST rate (percentage) used to compute `tax` above — null only
+    // for pre-migration line items created before this column existed
+    // (see PurchaseOrderLineItem's doc comment in schema.prisma); the UI
+    // must show a generic "Tax" label for those rather than fabricating
+    // a rate.
+    taxRatePercent: number | null;
     deliveryDate: string | null;
     fulfilledQuantity: number;
     lineTotal: number;
   }>;
+  // Explicit subtotal/GST breakdown — mirrors the Invoice's own
+  // subtotal/taxAmount so the PO detail page can show the same
+  // "Subtotal + GST = Total" structure instead of folding tax silently
+  // into a single Total figure.
+  subtotal: number;
+  taxAmount: number;
   exportUrl: string;
 };
 
@@ -97,6 +109,7 @@ export async function getSupplierPurchaseOrderDetail(
     quantity: li.quantity,
     unitPrice: toNumber(li.unitPrice),
     tax: toNumber(li.tax),
+    taxRatePercent: li.taxRatePercent !== null && li.taxRatePercent !== undefined ? toNumber(li.taxRatePercent) : null,
     deliveryDate: li.deliveryDate ? li.deliveryDate.toISOString() : null,
     fulfilledQuantity: li.fulfilledQuantity,
     lineTotal: toNumber(li.unitPrice) * li.quantity + toNumber(li.tax),
@@ -111,6 +124,8 @@ export async function getSupplierPurchaseOrderDetail(
     orderId: po.orderId,
     orderReference: resolveSupplierOrderReference(po.order),
     total: lineItems.reduce((acc, li) => acc + li.lineTotal, 0),
+    subtotal: lineItems.reduce((acc, li) => acc + li.unitPrice * li.quantity, 0),
+    taxAmount: lineItems.reduce((acc, li) => acc + li.tax, 0),
     itemCount: lineItems.length,
     approvedAt: po.approvedAt ? po.approvedAt.toISOString() : null,
     approvedBy: po.approvedBy,

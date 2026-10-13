@@ -29,10 +29,20 @@ type PurchaseOrderDetail = {
     quantity: number;
     unitPrice: number;
     tax: number;
+    // The GST rate (percentage) used to compute `tax` above — null only
+    // for pre-migration line items created before this column existed
+    // (see PurchaseOrderLineItem's doc comment in schema.prisma).
+    taxRatePercent: number | null;
     deliveryDate: string | null;
     fulfilledQuantity: number;
     lineTotal: number;
   }>;
+  // Explicit subtotal/GST breakdown — mirrors the Invoice's own
+  // subtotal/taxAmount so PurchaseOrderApprovalCard can show the same
+  // "Subtotal + GST = Total" structure instead of folding tax silently
+  // into a single Total figure.
+  subtotal?: number;
+  taxAmount?: number;
   total: number;
   exportUrl: string;
 };

@@ -21,6 +21,11 @@ type PurchaseOrderLineItem = {
   quantity: number;
   unitPrice: number;
   tax: number;
+  // The GST rate (percentage) used to compute `tax` above — null only for
+  // pre-migration line items created before this column existed (see
+  // PurchaseOrderLineItem's doc comment in schema.prisma); the UI shows a
+  // generic "Tax" label for those rather than fabricating a rate.
+  taxRatePercent: number | null;
   deliveryDate: string | null;
   fulfilledQuantity: number;
   lineTotal: number;
@@ -44,6 +49,12 @@ type PurchaseOrderDetail = {
   supplier: { id: string; companyName: string };
   builder: { id: string; name: string; email: string };
   lineItems: PurchaseOrderLineItem[];
+  // Explicit subtotal/GST breakdown — mirrors the Invoice's own
+  // subtotal/taxAmount so this card can show the same
+  // "Subtotal + GST = Total" structure instead of folding tax silently
+  // into a single Total figure.
+  subtotal?: number;
+  taxAmount?: number;
   total: number;
   exportUrl: string;
 };
@@ -241,6 +252,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                 <th className="px-4 py-2 font-semibold">Product</th>
                 <th className="px-4 py-2 font-semibold">Qty</th>
                 <th className="px-4 py-2 font-semibold">Unit Price</th>
+                <th className="px-4 py-2 font-semibold">GST %</th>
                 <th className="px-4 py-2 font-semibold">Delivery</th>
                 <th className="px-4 py-2 font-semibold">Line Total</th>
               </tr>
@@ -258,6 +270,9 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                     </span>
                   </td>
                   <td className="px-4 py-2 text-slate-700">₹{li.unitPrice.toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-2 text-slate-700">
+                    {typeof li.taxRatePercent === "number" ? `${li.taxRatePercent}%` : "—"}
+                  </td>
                   <td className="px-4 py-2">
                     {isDraft ? (
                       <input
@@ -282,9 +297,30 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
-          <span className="text-sm text-slate-500">Total</span>
-          <span className="text-lg font-extrabold text-slate-900">₹{po.total.toLocaleString("en-IN")}</span>
+        <div className="space-y-1 border-t border-slate-200 px-4 py-3">
+          {/* Explicit Subtotal / GST / Total breakdown — mirrors the PDF's
+              own structure (see lib/purchase-order-pdf.ts) instead of
+              folding tax silently into a single Total figure. Falls back
+              to deriving subtotal from total - taxAmount for older POs
+              fetched before the API started returning `subtotal`
+              directly. */}
+          <div className="flex items-center justify-between text-sm text-slate-600">
+            <span>Subtotal (Taxable Value)</span>
+            <span>₹{(po.subtotal ?? po.total - (po.taxAmount ?? 0)).toLocaleString("en-IN")}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm text-slate-600">
+            <span>
+              {(() => {
+                const rates = Array.from(new Set(lineItems.map((li) => li.taxRatePercent).filter((r) => typeof r === "number")));
+                return rates.length === 1 ? `GST @ ${rates[0]}%` : "GST";
+              })()}
+            </span>
+            <span>₹{(po.taxAmount ?? 0).toLocaleString("en-IN")}</span>
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-sm text-slate-500">Total</span>
+            <span className="text-lg font-extrabold text-slate-900">₹{po.total.toLocaleString("en-IN")}</span>
+          </div>
         </div>
       </div>
 

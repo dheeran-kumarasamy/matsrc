@@ -48,14 +48,31 @@ function renderInvoicePdf(invoice: any): Promise<Buffer> {
     doc.fontSize(12).text("Products / Services", { underline: true });
     doc.moveDown(0.3);
     for (const li of invoice.lineItems) {
+      // Explicit GST rate per line — "—" (never a fabricated rate) for
+      // pre-migration line items that have no stored taxRate (nullable —
+      // see InvoiceLineItem.taxRate in schema.prisma).
+      const gstLabel = typeof li.taxRate === "number" ? `${li.taxRate}%` : "\u2014";
       doc
         .fontSize(9)
-        .text(`${li.productName} — ${li.quantity} x ${money(li.unitPrice, invoice.currency)} = ${money(li.total, invoice.currency)}`);
+        .text(
+          `${li.productName} — ${li.quantity} x ${money(li.unitPrice, invoice.currency)} ` +
+            `(GST ${gstLabel}: ${money(li.taxAmount, invoice.currency)}) = ${money(li.total, invoice.currency)}`
+        );
     }
+
+    // Explicit Subtotal / GST / Total breakdown — the GST line is labelled
+    // with the actual rate when every line item shares one (the common
+    // case), since a single "@X%" suffix would misstate an invoice with
+    // genuinely mixed per-line rates.
+    const distinctRates = Array.from(
+      new Set(invoice.lineItems.map((li: any) => (typeof li.taxRate === "number" ? li.taxRate : null)))
+    );
+    const uniformRate = distinctRates.length === 1 ? distinctRates[0] : null;
+    const taxLabel = uniformRate !== null ? `GST @ ${uniformRate}%` : "Tax";
 
     doc.moveDown();
     doc.fontSize(10).text(`Subtotal: ${money(invoice.subtotal, invoice.currency)}`, { align: "right" });
-    doc.text(`Tax: ${money(invoice.taxAmount, invoice.currency)}`, { align: "right" });
+    doc.text(`${taxLabel}: ${money(invoice.taxAmount, invoice.currency)}`, { align: "right" });
     doc.fontSize(12).text(`Total: ${money(invoice.totalAmount, invoice.currency)}`, { align: "right" });
 
     doc.end();

@@ -272,19 +272,32 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
   // ---- Line-item table ---------------------------------------------
   const tableLeft = marginLeft;
   const tableWidth = contentWidth;
-  // SR.NO | Item description | Qty | Rate | Amount — same column order as
-  // the reference's row 19 header (B/C/E/F/G); the reference's blank D
-  // column was pure spreadsheet spacing, not a distinct field.
+  // SR.NO | Item description | Qty | Rate | GST% | Amount — same base
+  // column order as the reference's row 19 header (B/C/E/F/G; the
+  // reference's blank D column was pure spreadsheet spacing, not a
+  // distinct field), with an additional GST% column so the tax rate
+  // applied to each line is always shown explicitly, never folded
+  // silently into Amount.
   const colSr = tableLeft;
-  const colSrW = 35;
+  const colSrW = 30;
   const colDesc = colSr + colSrW;
-  const colDescW = tableWidth * 0.4;
+  const colDescW = tableWidth * 0.33;
   const colQty = colDesc + colDescW;
-  const colQtyW = tableWidth * 0.12;
+  const colQtyW = tableWidth * 0.1;
   const colRate = colQty + colQtyW;
-  const colRateW = tableWidth * 0.2;
-  const colAmount = colRate + colRateW;
-  const colAmountW = tableWidth - colSrW - colDescW - colQtyW - colRateW;
+  const colRateW = tableWidth * 0.16;
+  const colGstRate = colRate + colRateW;
+  const colGstRateW = tableWidth * 0.11;
+  const colAmount = colGstRate + colGstRateW;
+  const colAmountW = tableWidth - colSrW - colDescW - colQtyW - colRateW - colGstRateW;
+
+  // Formats a line item's GST rate as an explicit percentage label (e.g.
+  // "18%"), or "—" for pre-migration rows that have no stored rate (see
+  // PurchaseOrderLineItem.taxRatePercent's doc comment) — never a
+  // fabricated rate.
+  function gstRateLabel(li: any): string {
+    return typeof li.taxRatePercent === "number" ? `${li.taxRatePercent}%` : "\u2014";
+  }
 
   function drawTableHeader(headerY: number): number {
     doc.font(PDF_BASE_FONT_BOLD).fontSize(9).fillColor(ACCENT);
@@ -292,6 +305,7 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
     doc.text("ITEM DESCRIPTION", colDesc, headerY, { width: colDescW });
     doc.text("QTY", colQty, headerY, { width: colQtyW, align: "right" });
     doc.text("RATE", colRate, headerY, { width: colRateW, align: "right" });
+    doc.text("GST %", colGstRate, headerY, { width: colGstRateW, align: "right" });
     doc.text("AMOUNT", colAmount, headerY, { width: colAmountW, align: "right" });
     doc.fillColor(TEXT);
     const headerBottom = headerY + 16;
@@ -325,6 +339,7 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
     doc.text(li.productName + (li.unit ? ` (${li.unit})` : ""), colDesc, y, { width: colDescW });
     doc.text(String(li.quantity), colQty, y, { width: colQtyW, align: "right" });
     doc.text(money(li.unitPrice), colRate, y, { width: colRateW, align: "right" });
+    doc.text(gstRateLabel(li), colGstRate, y, { width: colGstRateW, align: "right" });
     doc.text(money(li.lineTotal), colAmount, y, { width: colAmountW, align: "right" });
 
     y += rowHeight;
@@ -333,6 +348,38 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
   y += 4;
   doc.moveTo(tableLeft, y).lineTo(tableLeft + tableWidth, y).strokeColor("#D0D0D0").lineWidth(0.5).stroke();
   y += 10;
+
+  // ---- Explicit Subtotal / GST / Total breakdown ---------------------
+  // Previously a single orange TOTAL band folded tax silently into the
+  // grand total with no visible calculation. Now shows the taxable value
+  // (Subtotal), the GST amount actually applied (explicitly labelled with
+  // the rate when every line shares one, since that is by far the common
+  // case — a PO with mixed per-line rates still shows the correct total
+  // GST amount, just without a single "@X%" suffix that could misstate a
+  // mixed-rate PO), and the grand Total — mirroring the Invoice PDF's own
+  // Subtotal/Tax/Total structure.
+  const summaryLabelX = colQty;
+  const summaryValueX = colAmount;
+
+  const distinctRates = Array.from(
+    new Set(po.lineItems.map((li: any) => (typeof li.taxRatePercent === "number" ? li.taxRatePercent : null)))
+  );
+  const uniformRate = distinctRates.length === 1 ? distinctRates[0] : null;
+  const gstLabel = uniformRate !== null ? `GST @ ${uniformRate}%` : "GST";
+
+  if (y + 70 > pageBottom) {
+    doc.addPage();
+    y = marginLeft;
+  }
+
+  doc.font("PDFBaseFont").fontSize(10).fillColor(TEXT);
+  doc.text("Subtotal (Taxable Value)", summaryLabelX, y, { width: colQtyW + colRateW });
+  doc.text(money(po.subtotal ?? po.total - po.taxAmount), summaryValueX, y, { width: colAmountW, align: "right" });
+  y += 16;
+
+  doc.text(gstLabel, summaryLabelX, y, { width: colQtyW + colRateW });
+  doc.text(money(po.taxAmount ?? 0), summaryValueX, y, { width: colAmountW, align: "right" });
+  y += 20;
 
   // ---- Total band (orange, reference's row-33 styling) --------------
   if (y + 28 > pageBottom) {
@@ -345,7 +392,7 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
     .font(PDF_BASE_FONT_BOLD)
     .fontSize(11)
     .fillColor("#FFFFFF")
-    .text("TOTAL", colDesc, y + 6, { width: colQtyW + colRateW });
+    .text("TOTAL", colDesc, y + 6, { width: colQtyW + colRateW + colGstRateW });
   doc.text(money(po.total), colAmount, y + 6, { width: colAmountW, align: "right" });
   doc.fillColor(TEXT);
   y += totalBandHeight + 20;

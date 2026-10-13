@@ -1786,6 +1786,15 @@ model PurchaseOrderLineItem {
   quantity          Int
   unitPrice         Decimal       @db.Decimal(12, 2)
   tax               Decimal       @default(0) @db.Decimal(12, 2)
+  // GST tax rate (percentage, e.g. 18.00) applied to compute `tax` above —
+  // mirrors OrderItem.taxRatePercent / InvoiceLineItem.taxRate. Previously
+  // only the computed tax AMOUNT was stored, with no explicit rate anywhere
+  // on the PO, so the PDF/UI could only show a silent lump-sum tax figure,
+  // never an explicit "GST @ 18%" breakdown. Nullable so existing
+  // pre-migration rows (computed before this column existed) remain valid;
+  // the PDF/UI fall back to a generic "Tax" label when null rather than
+  // fabricating a rate for historical POs.
+  taxRatePercent    Decimal?      @db.Decimal(5, 2)
   deliveryDate      DateTime?
   fulfilledQuantity Int           @default(0)
 

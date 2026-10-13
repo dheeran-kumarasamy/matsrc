@@ -117,30 +117,45 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
     const startX = doc.x;
     let y = doc.y;
     doc.fontSize(9).fillColor("#64748b");
-    doc.text("Item", startX, y, { width: 150, continued: false });
-    doc.text("Qty", startX + 150, y, { width: 50 });
-    doc.text("Unit Price", startX + 200, y, { width: 80 });
-    doc.text("Tax", startX + 280, y, { width: 60 });
-    doc.text("Total", startX + 340, y, { width: 80 });
+    doc.text("Item", startX, y, { width: 130, continued: false });
+    doc.text("Qty", startX + 130, y, { width: 40 });
+    doc.text("Unit Price", startX + 170, y, { width: 70 });
+    doc.text("GST %", startX + 240, y, { width: 50 });
+    doc.text("Tax", startX + 290, y, { width: 60 });
+    doc.text("Total", startX + 350, y, { width: 80 });
     doc.fillColor("#0f172a");
     y += 16;
-    doc.moveTo(startX, y).lineTo(startX + 420, y).strokeColor("#e2e8f0").stroke();
+    doc.moveTo(startX, y).lineTo(startX + 430, y).strokeColor("#e2e8f0").stroke();
     y += 6;
 
     for (const li of invoice.lineItems) {
       doc.fontSize(9);
-      doc.text(li.productName, startX, y, { width: 150 });
-      doc.text(String(li.quantity), startX + 150, y, { width: 50 });
-      doc.text(money(li.unitPrice, invoice.currency), startX + 200, y, { width: 80 });
-      doc.text(money(li.taxAmount, invoice.currency), startX + 280, y, { width: 60 });
-      doc.text(money(li.total, invoice.currency), startX + 340, y, { width: 80 });
+      doc.text(li.productName, startX, y, { width: 130 });
+      doc.text(String(li.quantity), startX + 130, y, { width: 40 });
+      doc.text(money(li.unitPrice, invoice.currency), startX + 170, y, { width: 70 });
+      // Explicit GST rate per line — "—" (never a fabricated rate) for
+      // pre-migration line items that have no stored taxRate (nullable —
+      // see InvoiceLineItem.taxRate in schema.prisma).
+      doc.text(typeof li.taxRate === "number" ? `${li.taxRate}%` : "\u2014", startX + 240, y, { width: 50 });
+      doc.text(money(li.taxAmount, invoice.currency), startX + 290, y, { width: 60 });
+      doc.text(money(li.total, invoice.currency), startX + 350, y, { width: 80 });
       y += 18;
     }
+
+    // Explicit Subtotal / GST / Total breakdown — the GST line is labelled
+    // with the actual rate when every line item shares one (the common
+    // case), since a single "@X%" suffix would misstate an invoice with
+    // genuinely mixed per-line rates.
+    const distinctRates = Array.from(
+      new Set(invoice.lineItems.map((li) => (typeof li.taxRate === "number" ? li.taxRate : null)))
+    );
+    const uniformRate = distinctRates.length === 1 ? distinctRates[0] : null;
+    const taxLabel = uniformRate !== null ? `GST @ ${uniformRate}%` : "Tax";
 
     doc.moveDown();
     doc.fontSize(10);
     doc.text(`Subtotal: ${money(invoice.subtotal, invoice.currency)}`, { align: "right" });
-    doc.text(`Tax: ${money(invoice.taxAmount, invoice.currency)}`, { align: "right" });
+    doc.text(`${taxLabel}: ${money(invoice.taxAmount, invoice.currency)}`, { align: "right" });
     doc.fontSize(12).text(`Total: ${money(invoice.totalAmount, invoice.currency)}`, { align: "right" });
 
     if (invoice.amountPaid !== null || invoice.amountDue !== null) {

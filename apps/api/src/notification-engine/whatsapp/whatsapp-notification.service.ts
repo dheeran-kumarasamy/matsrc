@@ -46,11 +46,14 @@ type MetaGraphErrorBody = {
  * and, when the caller supplies one, an additional `button` component for
  * a *dynamic* Meta URL button. A Meta Utility template's static
  * Quick-Reply/Call-to-Action button (e.g. "supplier_rfq_reminder"'s static
- * "Submit Quote" button, or "supplier_quote_alert"'s "Review RFQ" button)
- * is rendered automatically by WhatsApp from the approved template
- * definition itself — it requires no extra `components` entry. A
- * *dynamic* URL button (e.g. "payment_required_v2"'s approved "Complete
- * Payment" button, fixed prefix `https://buildohub.in/orders/payment/{{1}}`)
+ * "Submit Quote" button) is rendered automatically by WhatsApp from the
+ * approved template definition itself — it requires no extra `components`
+ * entry. A *dynamic* URL button (e.g. "payment_required_v2"'s approved
+ * "Complete Payment" button, fixed prefix
+ * `https://buildohub.in/orders/payment/{{1}}`; "supplier_po_alert"'s "View
+ * Purchase Order" button, fixed prefix
+ * `https://supplier.buildohub.in/purchase-orders/{{1}}`; "supplier_quote_alert"'s
+ * "Review RFQ" button, fixed prefix `https://supplier.buildohub.in/orders/{{1}}`)
  * DOES require an explicit `type: "button", sub_type: "url", index: 0`
  * component carrying only the per-recipient dynamic suffix — never the
  * full URL — exactly mirroring the existing, already-approved

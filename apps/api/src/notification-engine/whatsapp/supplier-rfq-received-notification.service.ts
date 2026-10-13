@@ -16,6 +16,43 @@ function formatQuoteDeadlineLabel(value: Date): string {
 }
 
 /**
+ * Dynamic suffix for the approved `supplier_quote_alert` Meta URL button
+ * ("Review RFQ"). CONFIRMED LIVE directly against the Graph API (GET
+ * /{WABA_ID}/message_templates?name=supplier_quote_alert, verified
+ * 2026-10-12 — the button was upgraded from a static QUICK_REPLY to a URL
+ * CTA; the body (4 parameters: material, quantity, delivery location, quote
+ * deadline) is UNCHANGED): approved fixed URL prefix is
+ * `https://supplier.buildohub.in/orders/{{1}}` — NO query string/`respond`
+ * parameter is part of the approved configuration (Meta URL buttons only
+ * support a single trailing dynamic path segment, never a dynamic query
+ * string). The destination page
+ * (`apps/supplier/app/(supplier)/orders/[id]/page.tsx`) has no `searchParams`
+ * prop at all and unconditionally renders the quotation form whenever the
+ * underlying Order is still PLACED, so a `?respond=` suffix was never
+ * required for this destination in the first place (that query param only
+ * applies to the separate `/rfqs` page, which serves `QuickRequest` rows —
+ * an entity this event does NOT fire for; see this file's class doc comment
+ * / packages/db/lib/supplier-rfq-received-notification.ts's top doc comment
+ * for the full audit of the real OrderItem-based trigger).
+ *
+ * The dynamic `{{1}}` is the OrderItem's PARENT Order id (`orderItem.orderId`)
+ * — never the OrderItem's own id — because the destination route
+ * `/orders/[id]` is keyed by Order.id (confirmed via
+ * `getSupplierOrderDetail(orderId, email)`'s `prisma.orderItem.findFirst({
+ * where: { orderId, supplierId } })` lookup in apps/supplier/lib/supplier-data.ts,
+ * and by `RfqCard.tsx`'s existing `/orders/${rfq.id}` link, where `rfq.id` is
+ * already `item.orderId` for this exact ENQUIRY-sourced card type). That
+ * page's `getSupplierOrderDetail()` re-authenticates the session and
+ * re-scopes the Prisma lookup to `supplierId: supplierProfile.id` — this
+ * button never grants access to an order merely because its id appears in
+ * the URL, and it only ever navigates to a read/quote-form page, never
+ * auto-submits a quote.
+ */
+function buildRfqButtonUrlSuffix(orderId: string): string {
+  return orderId;
+}
+
+/**
  * SupplierRfqReceivedNotificationService — the single call site every
  * RFQ-dispatch-to-supplier code path in apps/api (BuilderOrdersService.create
  * and OrdersService's candidate-promotion decline cascade) calls to fire the
@@ -27,6 +64,14 @@ function formatQuoteDeadlineLabel(value: Date): string {
  * `notification-event-types.ts` and already seeded in
  * `packages/db/scripts/seed-notification-templates.js` (templateName
  * "supplier_quote_alert", metaTemplateId "2046949149261282").
+ *
+ * CONFIRMED LIVE FROM META GRAPH API (GET /{WABA_ID}/message_templates?name=supplier_quote_alert,
+ * 2026-10-12): body is unchanged — 4 parameters (material, quantity,
+ * delivery location, quote deadline) — the only change is the button,
+ * upgraded from a static "Review RFQ" QUICK_REPLY to a "Review RFQ" URL CTA
+ * with approved fixed prefix `https://supplier.buildohub.in/orders/{{1}}`
+ * (no query string). See `buildRfqButtonUrlSuffix`'s doc comment above for
+ * the exact dynamic-parameter format and why no `?respond=` suffix is sent.
  *
  * Deliberately NOT a new/parallel notification system — mirrors
  * `CustomerOrderStatusNotificationService` exactly. apps/web and
@@ -97,6 +142,7 @@ export class SupplierRfqReceivedNotificationService {
           parameters: [material, quantity, deliveryLocation, quoteDeadline],
           title: "New RFQ Received",
           body: `New quotation request from Buildohub. Material: ${material}. Quantity: ${quantity}. Delivery location: ${deliveryLocation}. Quote by: ${quoteDeadline}.`,
+          buttonUrlSuffix: buildRfqButtonUrlSuffix(orderItem.orderId),
           dedupeKey,
           payload: {
             orderItemId,

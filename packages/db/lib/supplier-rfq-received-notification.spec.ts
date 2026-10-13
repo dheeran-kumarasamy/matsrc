@@ -4,6 +4,7 @@ import {
   getSupplierRfqReceivedWhatsAppMode,
   buildSupplierRfqReceivedDedupeKey,
   resolveSupplierQuoteDeadline,
+  buildRfqButtonUrlSuffix,
 } from "./supplier-rfq-received-notification";
 
 // End-to-end style tests exercising the REAL policy-evaluation and Meta-send
@@ -338,9 +339,10 @@ describe("notifySupplierRfqReceived — dry-run mode", () => {
   });
 });
 
-// Test I — live mode: Meta adapter receives the correct template and variables
+// Test I — live mode: Meta adapter receives the correct template, body
+// variables, and the dynamic URL button.
 describe("notifySupplierRfqReceived — live mode (Meta Cloud API)", () => {
-  it("calls Meta exactly once with templateName supplier_quote_alert and exactly 4 body parameters, no header/buttons", async () => {
+  it("calls Meta exactly once with templateName supplier_quote_alert, exactly 4 body parameters, and a dynamic URL button, no header", async () => {
     const { prisma } = buildHarness();
     process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "live";
     process.env.WHATSAPP_PHONE_NUMBER_ID = "PHONE_ID";
@@ -357,9 +359,24 @@ describe("notifySupplierRfqReceived — live mode (Meta Cloud API)", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
     expect(sentBody.template.name).toBe("supplier_quote_alert");
-    expect(sentBody.template.components).toHaveLength(1);
-    expect(sentBody.template.components[0].parameters).toHaveLength(4);
-    expect(sentBody.template.components.some((c: any) => c.type === "button")).toBe(false);
+    expect(sentBody.template.components).toHaveLength(2);
+
+    const bodyComponent = sentBody.template.components.find((c: any) => c.type === "body");
+    expect(bodyComponent.parameters).toHaveLength(4);
+    expect(bodyComponent.parameters[0]).toEqual({ type: "text", text: "TMT Bar 12mm" });
+
+    // Dynamic URL button — Meta's approved fixed prefix is
+    // https://supplier.buildohub.in/orders/{{1}}, so only the bare parent
+    // Order id (orderItem.orderId — "order-1" — NEVER the OrderItem's own
+    // id "item-1") is sent, and NO query-string/`respond` suffix is ever
+    // included.
+    const buttonComponent = sentBody.template.components.find((c: any) => c.type === "button");
+    expect(buttonComponent).toEqual({
+      type: "button",
+      sub_type: "url",
+      index: 0,
+      parameters: [{ type: "text", text: "order-1" }],
+    });
     expect(sentBody.template.components.some((c: any) => c.type === "header")).toBe(false);
     expect(prisma.whatsAppMessageLog.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "sent", metaMessageId: "wamid.RFQ-LIVE-1" }) })
@@ -367,5 +384,61 @@ describe("notifySupplierRfqReceived — live mode (Meta Cloud API)", () => {
     expect(prisma.notificationEvent.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: "sent" } })
     );
+  });
+
+  it("uses the triggering OrderItem's parent Order id for the button suffix, never the OrderItem's own id or a full URL", async () => {
+    const { prisma } = buildHarness({ orderItem: makeOrderItem({ id: "item-99", orderId: "order-55" }) });
+    process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "live";
+    process.env.WHATSAPP_PHONE_NUMBER_ID = "PHONE_ID";
+    process.env.WHATSAPP_ACCESS_TOKEN = "SECRET_TOKEN";
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ messages: [{ id: "wamid.RFQ-LIVE-2" }] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await notifySupplierRfqReceived(prisma, { orderItemId: "item-99" });
+
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    const buttonComponent = sentBody.template.components.find((c: any) => c.type === "button");
+    expect(buttonComponent.parameters[0].text).toBe("order-55");
+    expect(buttonComponent.parameters[0].text).not.toBe("item-99");
+    expect(buttonComponent.parameters[0].text).not.toMatch(/^https?:\/\//);
+    expect(buttonComponent.parameters[0].text).not.toContain("buildohub.in");
+    expect(buttonComponent.parameters[0].text).not.toContain("orders/");
+    expect(buttonComponent.parameters[0].text).not.toContain("?");
+    expect(buttonComponent.parameters[0].text).not.toContain("respond");
+  });
+
+  it("resolves to the correct supplier order page for a representative order id, with no duplicated path segment or query string", async () => {
+    const { prisma } = buildHarness({ orderItem: makeOrderItem({ orderId: "order-abc123" }) });
+    process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "live";
+    process.env.WHATSAPP_PHONE_NUMBER_ID = "PHONE_ID";
+    process.env.WHATSAPP_ACCESS_TOKEN = "SECRET_TOKEN";
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ messages: [{ id: "wamid.RFQ-LIVE-3" }] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await notifySupplierRfqReceived(prisma, { orderItemId: "item-1" });
+
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    const buttonText = sentBody.template.components.find((c: any) => c.type === "button").parameters[0].text;
+    const resolvedUrl = `https://supplier.buildohub.in/orders/${buttonText}`;
+    expect(resolvedUrl).toBe("https://supplier.buildohub.in/orders/order-abc123");
+    expect(resolvedUrl).not.toContain("orders/orders");
+    expect(resolvedUrl).not.toContain("?");
+  });
+});
+
+describe("buildRfqButtonUrlSuffix", () => {
+  it("returns the bare orderId with no query string, path prefix, or scheme", () => {
+    expect(buildRfqButtonUrlSuffix("order-xyz")).toBe("order-xyz");
+    expect(buildRfqButtonUrlSuffix("order-xyz")).not.toContain("?");
+    expect(buildRfqButtonUrlSuffix("order-xyz")).not.toContain("respond");
+    expect(buildRfqButtonUrlSuffix("order-xyz")).not.toMatch(/^https?:\/\//);
   });
 });

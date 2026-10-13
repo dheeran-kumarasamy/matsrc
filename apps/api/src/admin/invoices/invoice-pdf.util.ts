@@ -130,6 +130,17 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
 
     for (const li of invoice.lineItems) {
       doc.fontSize(9);
+      // BUG FIX: this previously advanced y by a fixed 18px per row
+      // regardless of how many lines li.productName actually wrapped to,
+      // so any description longer than the 130px Item column caused the
+      // next row to start drawing while the current row's wrapped text
+      // was still rendering — visually merging the two rows together.
+      // Measuring the exact string/width/font used to render it (plus
+      // generous padding) fixes that, mirroring the same row-height fix
+      // already applied to the Purchase Order PDF (see
+      // apps/web/lib/purchase-order-pdf.ts).
+      const descHeight = doc.heightOfString(li.productName, { width: 130 });
+      const rowHeight = Math.max(20, descHeight + 12);
       doc.text(li.productName, startX, y, { width: 130 });
       doc.text(String(li.quantity), startX + 130, y, { width: 40 });
       doc.text(money(li.unitPrice, invoice.currency), startX + 170, y, { width: 70 });
@@ -139,7 +150,7 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
       doc.text(typeof li.taxRate === "number" ? `${li.taxRate}%` : "\u2014", startX + 240, y, { width: 50 });
       doc.text(money(li.taxAmount, invoice.currency), startX + 290, y, { width: 60 });
       doc.text(money(li.total, invoice.currency), startX + 350, y, { width: 80 });
-      y += 18;
+      y += rowHeight;
     }
 
     // Explicit Subtotal / GST / Total breakdown — the GST line is labelled

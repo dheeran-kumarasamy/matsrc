@@ -319,9 +319,24 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
   po.lineItems.forEach((li: any, index: number) => {
     // Estimate row height from the description's wrapped line count so
     // long descriptions never overlap the next row.
+    //
+    // BUG FIX: this previously measured ONLY li.productName, but the text
+    // actually rendered below is `li.productName + " (unit)"` — a trailing
+    // word pdfkit may wrap onto an extra line that the height estimate
+    // never accounted for, understating rowHeight and letting the next
+    // row (and its zebra-stripe background) start drawing before the
+    // current row's wrapped description had finished, visually merging
+    // the two rows together. Measuring the exact same string that gets
+    // rendered (and the same font/size — fontSize(9) below) eliminates
+    // that mismatch.
+    const descriptionText = li.productName + (li.unit ? ` (${li.unit})` : "");
     doc.font("PDFBaseFont").fontSize(9);
-    const descHeight = doc.heightOfString(li.productName, { width: colDescW });
-    const rowHeight = Math.max(18, descHeight + 6);
+    const descHeight = doc.heightOfString(descriptionText, { width: colDescW });
+    // Extra vertical padding (14, up from 6) between wrapped description
+    // text and the next row's top edge/zebra-stripe band, so dense
+    // multi-line descriptions never visually crowd or merge into the row
+    // below even if the height estimate is off by a point or two.
+    const rowHeight = Math.max(22, descHeight + 14);
 
     if (y + rowHeight > pageBottom) {
       doc.addPage();
@@ -336,7 +351,7 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
 
     doc.font("PDFBaseFont").fontSize(9).fillColor(TEXT);
     doc.text(String(index + 1), colSr, y, { width: colSrW });
-    doc.text(li.productName + (li.unit ? ` (${li.unit})` : ""), colDesc, y, { width: colDescW });
+    doc.text(descriptionText, colDesc, y, { width: colDescW });
     doc.text(String(li.quantity), colQty, y, { width: colQtyW, align: "right" });
     doc.text(money(li.unitPrice), colRate, y, { width: colRateW, align: "right" });
     doc.text(gstRateLabel(li), colGstRate, y, { width: colGstRateW, align: "right" });

@@ -32,16 +32,22 @@ import path from "path";
 // (same class of gap as the pdfkit standard-fonts asset issue it already
 // works around).
 const FONT_PATH = path.join(process.cwd(), "lib", "assets", "fonts", "DejaVuSans.ttf");
+const FONT_PATH_BOLD = path.join(process.cwd(), "lib", "assets", "fonts", "DejaVuSans-Bold.ttf");
 
 export const PDF_BASE_FONT = "PDFBaseFont";
+export const PDF_BASE_FONT_BOLD = "PDFBaseFontBold";
 
 /**
- * Registers the embedded rupee-capable font on a freshly-created
- * PDFDocument and makes it the active font, so every subsequent `.text()`
- * call (including currency strings built by a `money()` helper) renders ₹
- * correctly instead of silently dropping the glyph.
+ * Registers the embedded rupee-capable font (regular + bold) on a
+ * freshly-created PDFDocument and makes the regular weight the active
+ * font, so every subsequent `.text()` call (including currency strings
+ * built by a `money()` helper) renders ₹ correctly instead of silently
+ * dropping the glyph. Use `doc.font(PDF_BASE_FONT_BOLD)` for bold text
+ * (e.g. section labels/headings) — pdfkit has no synthetic/faux-bold, so a
+ * real bold font file must be registered and switched to explicitly.
  */
 export function useRupeeCapableFont(doc: PDFKit.PDFDocument): void {
   doc.registerFont(PDF_BASE_FONT, FONT_PATH);
+  doc.registerFont(PDF_BASE_FONT_BOLD, FONT_PATH_BOLD);
   doc.font(PDF_BASE_FONT);
 }

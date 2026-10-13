@@ -5,6 +5,7 @@ import { prisma } from "@matsrc/db";
 import { ensureSupplierContext } from "@/lib/supplier-data";
 import { resolveSupplierOrderReference } from "@/lib/order-display";
 import { useRupeeCapableFont } from "@/lib/pdf-fonts";
+import { renderPoPdfContent } from "@/lib/purchase-order-pdf";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,10 +39,19 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const po = await prisma.purchaseOrder.findFirst({
       where: { id: params.id, supplierId: supplierProfile.id },
       include: {
-        supplier: true,
+        supplier: { include: { user: { select: { email: true, phone: true } } } },
         builder: true,
         lineItems: { include: { product: true } },
-        order: { select: { enquiryId: true, orderNumber: true } },
+        order: {
+          select: {
+            enquiryId: true,
+            orderNumber: true,
+            deliveryAddress: true,
+            site: {
+              select: { name: true, addressLine: true, city: true, state: true, pincode: true, gstin: true },
+            },
+          },
+        },
       },
     });
 
@@ -95,6 +105,25 @@ function serializeForExport(po: any) {
     lineTotal: toNumber(li.unitPrice) * li.quantity + toNumber(li.tax),
   }));
 
+  // The order's delivery/"ship to" destination — see apps/web's
+  // purchase-order-utils.ts's serializePurchaseOrder for the identical
+  // derivation (tagged Site, falling back to the order's free-text
+  // deliveryAddress). Always kept separate from BUYER DETAILS
+  // (BuildOhub) — the delivery recipient is the builder's construction
+  // site, never the purchasing party.
+  const deliverTo = po.order?.site
+    ? {
+        name: po.order.site.name,
+        addressLine: po.order.site.addressLine ?? null,
+        city: po.order.site.city ?? null,
+        state: po.order.site.state ?? null,
+        pincode: po.order.site.pincode ?? null,
+        gstin: po.order.site.gstin ?? null,
+      }
+    : po.order?.deliveryAddress
+      ? { name: null, addressLine: po.order.deliveryAddress, city: null, state: null, pincode: null, gstin: null }
+      : null;
+
   return {
     documentType: "PURCHASE_ORDER",
     generatedAt: new Date().toISOString(),
@@ -105,19 +134,41 @@ function serializeForExport(po: any) {
     notes: po.notes,
     approvedAt: po.approvedAt,
     approvedBy: po.approvedBy,
+    createdAt: po.createdAt,
     orderId: po.orderId,
     enquiryId: resolveSupplierOrderReference(po.order ?? {}),
-    supplier: { id: po.supplier.id, companyName: po.supplier.companyName },
+    orderNumber: po.order?.orderNumber ?? null,
+    // SELLER / SUPPLIER DETAILS on the PDF — the real supplier fulfilling
+    // this PO, never BuildOhub. BUYER DETAILS is rendered separately by
+    // renderPoPdfContent from BUILDOHUB_COMPANY, never from `builder`
+    // below (the end customer, who must never be shown as purchasing
+    // directly from the supplier).
+    supplier: {
+      id: po.supplier.id,
+      companyName: po.supplier.companyName,
+      gstin: po.supplier.gstin ?? null,
+      region: po.supplier.region ?? null,
+      email: po.supplier.user?.email ?? null,
+      phone: po.supplier.user?.phone ?? null,
+    },
     builder: { id: po.builder.id, name: po.builder.name, email: po.builder.email },
+    deliverTo,
     lineItems,
     total: lineItems.reduce((acc: number, li: any) => acc + li.lineTotal, 0),
   };
 }
 
-// Byte-for-byte the same rendering logic as apps/web's
-// app/api/builder/purchase-orders/[id]/export/route.ts renderPoPdf — kept
-// duplicated (not shared via packages/db) because pdfkit requires the
-// Node.js runtime and each app already duplicates small, framework-adjacent
+// Renders the supplier-facing Purchase Order PDF via the shared
+// renderPoPdfContent (see lib/purchase-order-pdf.ts for the full
+// reference-fidelity write-up — reproduces purchase-order-template.xlsx's
+// layout: BUYER DETAILS = BuildOhub, SELLER / SUPPLIER DETAILS = this
+// route's `supplier` field, a separate shaded DELIVER TO band, the
+// SR.NO/Item description/Qty/Rate/Amount line-item table, and the orange
+// Total band). Byte-for-byte the same rendering logic as apps/web's
+// app/api/builder/purchase-orders/[id]/export/route.ts (both import their
+// own per-app copy of lib/purchase-order-pdf.ts) — kept duplicated per-app
+// rather than shared via packages/db, since pdfkit requires the Node.js
+// runtime and each app already duplicates small, framework-adjacent
 // render/notify helpers this way (see e.g. notifySupplierOrderSubmitted vs
 // apps/supplier's own notify helpers) rather than forcing a shared package
 // to carry a rendering dependency only two of several apps need.
@@ -130,43 +181,7 @@ function renderPoPdf(po: any): Promise<Buffer> {
     doc.on("error", reject);
     useRupeeCapableFont(doc);
 
-    doc.fontSize(18).text(`Purchase Order ${po.poNumber}`);
-    doc
-      .fontSize(10)
-      .fillColor("#64748b")
-      .text(`Status: ${po.status} \u00b7 Version ${po.version}`)
-      .text(`Generated: ${new Date(po.generatedAt).toLocaleString("en-IN")}`)
-      .text(`Buyer: ${po.builder?.name ?? po.builder?.email ?? "Builder"}`)
-      .text(`Supplier: ${po.supplier?.companyName ?? "Supplier"}`)
-      .text(`Enquiry/Order ref: ${po.enquiryId ?? po.orderId}`)
-      .text(
-        po.approvedAt
-          ? `Approved: ${new Date(po.approvedAt).toLocaleString("en-IN")} by ${po.approvedBy ?? ""}`
-          : "Awaiting approval"
-      )
-      .fillColor("#0f172a");
-
-    doc.moveDown();
-    doc.fontSize(12).text("Line Items", { underline: true });
-    doc.moveDown(0.3);
-    for (const li of po.lineItems) {
-      const deliveryLabel = li.deliveryDate ? new Date(li.deliveryDate).toLocaleDateString("en-IN") : "TBD";
-      doc
-        .fontSize(9)
-        .text(
-          `${li.productName} \u2014 ${li.quantity} ${li.unit ?? ""} x \u20b9${Number(li.unitPrice).toLocaleString("en-IN")} ` +
-            `+ \u20b9${Number(li.tax).toLocaleString("en-IN")} tax = \u20b9${Number(li.lineTotal).toLocaleString("en-IN")} ` +
-            `(delivery: ${deliveryLabel})`
-        );
-    }
-
-    doc.moveDown();
-    doc.fontSize(12).text(`Total: \u20b9${Number(po.total).toLocaleString("en-IN")}`, { align: "right" });
-
-    if (po.notes) {
-      doc.moveDown();
-      doc.fontSize(10).fillColor("#64748b").text(`Notes: ${po.notes}`).fillColor("#0f172a");
-    }
+    renderPoPdfContent(doc, po);
 
     doc.end();
   });

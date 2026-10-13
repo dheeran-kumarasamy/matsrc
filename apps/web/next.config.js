@@ -42,6 +42,9 @@ const nextConfig = {
         // reliably follow (same class of gap as the pdfkit asset issue
         // above), so it must be explicitly included here too.
         "lib/assets/fonts/**/*",
+        // (apps/web/lib/assets/fonts/**/* above already covers the bold
+        // variant, DejaVuSans-Bold.ttf, added for the supplier-facing
+        // Purchase Order PDF's section headings/labels.)
       ],
     },
     // pdfkit (used by the builder PO/invoice PDF export routes) resolves its

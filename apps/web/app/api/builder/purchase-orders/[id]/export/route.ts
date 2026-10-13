@@ -3,6 +3,7 @@ import PDFDocument from "pdfkit";
 import { prisma, getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
 import { serializePurchaseOrder, purchaseOrderInclude } from "@/lib/purchase-order-utils";
 import { useRupeeCapableFont } from "@/lib/pdf-fonts";
+import { renderPoPdfContent } from "@/lib/purchase-order-pdf";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -79,12 +80,37 @@ export async function GET(request: Request, { params }: { params: { id: string }
   }
 }
 
-// C39 fix: generates an actual PDF buffer (replacing the previous HTML
-// string that could never be a real downloadable .pdf) using pdfkit — the
-// same library/pattern as app/api/builder/orders/[id]/invoice/pdf/route.ts,
-// so no second PDF framework is introduced. Renders the identical content
-// the old HTML template showed (status, version, buyer/supplier, line
-// items, total, notes) from the same serialized PO payload.
+// Renders the supplier-facing Purchase Order PDF, reproducing the layout
+// structure of the attached purchase-order-template.xlsx design reference
+// (inspected cell-by-cell with openpyxl) as closely as reasonably possible
+// in pdfkit:
+//   - Right-aligned "PURCHASE ORDER" heading + "Purchase order# - <PO>"
+//     beneath it, mirroring the reference's F3/F4 cells.
+//   - A left "BUYER DETAILS" block and a right "SELLER / SUPPLIER
+//     DETAILS" block placed side-by-side, per the reference's layout.
+//   - A shaded "DELIVER TO" band (reference's row-9 #F9F9F9 fill) with
+//     Order date / Delivery date on the right (reference's B9/F9/G9).
+//   - A line-item table: SR.NO / Item description / Qty / Rate / Amount
+//     (reference's row 19 header, same column order), alternating row
+//     shading (reference's #D9D9D9/#FFFFFF banding).
+//   - An orange Total band (reference's #F66E3D row 33) and a Notes
+//     footer (reference's row 39 "Notes" heading).
+//
+// Deliberate, documented departures from the reference:
+//   - No logo — required by the task, and the reference itself has none.
+//   - Font: DejaVu Sans (regular/bold) instead of the reference's
+//     Trebuchet MS/Arial, which don't ship with this server runtime;
+//     DejaVu Sans is already embedded everywhere in this app so the ₹
+//     glyph renders (see lib/pdf-fonts.ts) and is a metrically similar
+//     sans-serif.
+//   - Accent color #C8532A (slightly deeper than the reference's #F66E3D)
+//     and near-black body text instead of the reference's pale #8A8A8A,
+//     for print/screen readability (task's explicit readability
+//     requirement).
+//   - Pagination: the reference is a fixed single-page spreadsheet with a
+//     hard-coded 5-row item area; this renderer paginates and repeats the
+//     table header for any number of line items, since a real PO can have
+//     more rows than the reference's fixed spreadsheet layout allows.
 function renderPoPdf(po: any): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 40 });
@@ -94,43 +120,7 @@ function renderPoPdf(po: any): Promise<Buffer> {
     doc.on("error", reject);
     useRupeeCapableFont(doc);
 
-    doc.fontSize(18).text(`Purchase Order ${po.poNumber}`);
-    doc
-      .fontSize(10)
-      .fillColor("#64748b")
-      .text(`Status: ${po.status} · Version ${po.version}`)
-      .text(`Generated: ${new Date(po.generatedAt).toLocaleString("en-IN")}`)
-      .text(`Buyer: ${po.builder?.name ?? po.builder?.email ?? "Builder"}`)
-      .text(`Supplier: ${po.supplier?.companyName ?? "Supplier"}`)
-      .text(`Enquiry/Order ref: ${po.enquiryId ?? po.orderId}`)
-      .text(
-        po.approvedAt
-          ? `Approved: ${new Date(po.approvedAt).toLocaleString("en-IN")} by ${po.approvedBy ?? ""}`
-          : "Awaiting approval"
-      )
-      .fillColor("#0f172a");
-
-    doc.moveDown();
-    doc.fontSize(12).text("Line Items", { underline: true });
-    doc.moveDown(0.3);
-    for (const li of po.lineItems) {
-      const deliveryLabel = li.deliveryDate ? new Date(li.deliveryDate).toLocaleDateString("en-IN") : "TBD";
-      doc
-        .fontSize(9)
-        .text(
-          `${li.productName} — ${li.quantity} ${li.unit ?? ""} x ₹${Number(li.unitPrice).toLocaleString("en-IN")} ` +
-            `+ ₹${Number(li.tax).toLocaleString("en-IN")} tax = ₹${Number(li.lineTotal).toLocaleString("en-IN")} ` +
-            `(delivery: ${deliveryLabel})`
-        );
-    }
-
-    doc.moveDown();
-    doc.fontSize(12).text(`Total: ₹${Number(po.total).toLocaleString("en-IN")}`, { align: "right" });
-
-    if (po.notes) {
-      doc.moveDown();
-      doc.fontSize(10).fillColor("#64748b").text(`Notes: ${po.notes}`).fillColor("#0f172a");
-    }
+    renderPoPdfContent(doc, po);
 
     doc.end();
   });

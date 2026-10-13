@@ -73,6 +73,7 @@ export function serializePurchaseOrder(po: any) {
     // the caller's query included the `order` relation (see
     // `purchaseOrderInclude` below). See packages/db/lib/enquiry-id.ts.
     enquiryId: po.order?.enquiryId ?? po.orderId,
+    orderNumber: po.order?.orderNumber ?? null,
     // Underlying Order.status (PLACED/PROCESSING/.../CANCELLED) — surfaced so
     // the PO screen can offer "Cancel Order" only when the order is still in
     // a builder-cancellable state, without a second round-trip. Only present
@@ -88,12 +89,38 @@ export function serializePurchaseOrder(po: any) {
     supplier: {
       id: po.supplier.id,
       companyName: po.supplier.companyName,
+      gstin: po.supplier.gstin ?? null,
+      region: po.supplier.region ?? null,
+      email: po.supplier.user?.email ?? null,
+      phone: po.supplier.user?.phone ?? null,
     },
     builder: {
       id: po.builder.id,
       name: po.builder.name,
       email: po.builder.email,
+      phone: po.builder.phone ?? null,
     },
+    // The order's delivery/"ship to" destination — the Purchase Order PDF
+    // (see app/api/builder/purchase-orders/[id]/export/route.ts) displays
+    // this as a DELIVER TO section that is always kept separate from the
+    // BUYER DETAILS (BuildOhub) section, even though BuildOhub is the
+    // buyer: the delivery recipient is legitimately the builder's own
+    // construction site, never the purchasing party. Falls back to the
+    // order's free-text deliveryAddress when no Site is tagged. Only
+    // present when the caller's query included the `order` relation with
+    // `site` selected (see `purchaseOrderInclude` below).
+    deliverTo: po.order?.site
+      ? {
+          name: po.order.site.name,
+          addressLine: po.order.site.addressLine ?? null,
+          city: po.order.site.city ?? null,
+          state: po.order.site.state ?? null,
+          pincode: po.order.site.pincode ?? null,
+          gstin: po.order.site.gstin ?? null,
+        }
+      : po.order?.deliveryAddress
+        ? { name: null, addressLine: po.order.deliveryAddress, city: null, state: null, pincode: null, gstin: null }
+        : null,
     lineItems: po.lineItems.map((li: any) => ({
       id: li.id,
       productId: li.productId,
@@ -115,10 +142,21 @@ export function serializePurchaseOrder(po: any) {
 }
 
 export const purchaseOrderInclude = {
-  supplier: true,
+  supplier: { include: { user: { select: { email: true, phone: true } } } },
   builder: true,
   lineItems: { include: { product: true } },
-  order: { select: { enquiryId: true, status: true, siteId: true } },
+  order: {
+    select: {
+      enquiryId: true,
+      orderNumber: true,
+      status: true,
+      siteId: true,
+      deliveryAddress: true,
+      site: {
+        select: { name: true, addressLine: true, city: true, state: true, pincode: true, gstin: true },
+      },
+    },
+  },
 } as const;
 
 export { PurchaseOrderStatus };

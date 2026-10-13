@@ -139,4 +139,24 @@ describe("GET /api/supplier/purchase-orders/[id]/export", () => {
     expect(data.documentType).toBe("PURCHASE_ORDER");
     expect(data.poNumber).toBe("PO-2026-00001");
   });
+
+  // Buyer-Facing/Supplier-Facing PO Identity fix regression guard: this
+  // supplier-portal route must keep naming the download after the
+  // PurchaseOrder's own poNumber — never the Order's separate orderNumber,
+  // even when one has been assigned (e.g. after payment approval) — that
+  // number belongs exclusively to the builder-portal's own, separately
+  // rendered buyer-facing document (see apps/web's equivalent route/spec).
+  it("always names the downloaded PDF after poNumber, even when the order has an orderNumber", async () => {
+    purchaseOrderFindFirst.mockResolvedValue(fakePo({ order: { enquiryId: "EQ-1", orderNumber: "OD/2601/00042" } }));
+
+    const { GET } = await import("@/app/api/supplier/purchase-orders/[id]/export/route");
+    const res = await GET(
+      makeRequest("https://supplier.example.com/api/supplier/purchase-orders/po-1/export?format=pdf"),
+      { params: { id: "po-1" } }
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Disposition")).toContain('filename="PO-2026-00001.pdf"');
+    expect(res.headers.get("Content-Disposition")).not.toContain("OD/2601/00042");
+  });
 });

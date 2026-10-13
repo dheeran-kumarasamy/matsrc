@@ -3,7 +3,7 @@ import PDFDocument from "pdfkit";
 import { prisma, getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
 import { serializePurchaseOrder, purchaseOrderInclude } from "@/lib/purchase-order-utils";
 import { useRupeeCapableFont } from "@/lib/pdf-fonts";
-import { renderPoPdfContent } from "@/lib/purchase-order-pdf";
+import { renderPoPdfContent, type PoDocumentMode } from "@/lib/purchase-order-pdf";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -44,23 +44,33 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const url = new URL(request.url);
     const format = url.searchParams.get("format");
 
+    // Buyer-Facing/Supplier-Facing PO Identity fix: this route is the
+    // CUSTOMER/builder-portal download of their own order from BuildOhub —
+    // the builder must be shown as BUYER and BuildOhub as SELLER (never the
+    // reverse, which this previously got wrong by unconditionally reusing
+    // the supplier-facing rendering), and the printed document number must
+    // be the Order's own independent, already-authoritative orderNumber
+    // (OD/YYMM/SSSSS) rather than the separate PurchaseOrder.poNumber series
+    // reused by the supplier-facing document (see
+    // apps/supplier/app/api/supplier/purchase-orders/[id]/export/route.ts,
+    // which keeps the original "SUPPLIER" mode/poNumber behaviour
+    // unchanged). Falls back to poNumber for the filename only when an
+    // order genuinely has no orderNumber yet (pre-payment-approval).
+    const documentNumber = payload.orderNumber ?? payload.poNumber;
+
     if (format === "pdf") {
       const buffer = await renderPoPdf(payload);
-      // Meaningful filename using the real PO reference already issued
-      // for this order (po.poNumber, e.g. "PO-2026-00001") — matches the
-      // existing naming convention used elsewhere in the PO flow, rather
-      // than inventing a new one.
       return new NextResponse(buffer as unknown as BodyInit, {
         headers: {
           "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="${payload.poNumber}.pdf"`,
+          "Content-Disposition": `attachment; filename="${documentNumber}.pdf"`,
         },
       });
     }
 
     return NextResponse.json(payload, {
       headers: {
-        "Content-Disposition": `attachment; filename="${payload.poNumber}.json"`,
+        "Content-Disposition": `attachment; filename="${documentNumber}.json"`,
       },
     });
   } catch (error: any) {
@@ -111,6 +121,15 @@ export async function GET(request: Request, { params }: { params: { id: string }
 //     hard-coded 5-row item area; this renderer paginates and repeats the
 //     table header for any number of line items, since a real PO can have
 //     more rows than the reference's fixed spreadsheet layout allows.
+// Always rendered in "BUYER" mode — see renderPoPdfContent's PoDocumentMode
+// doc comment: this route is the customer/builder's own download, so the
+// builder is shown as BUYER and BuildOhub as SELLER, printing the Order's
+// own orderNumber as the document number (never the PurchaseOrder's
+// poNumber, which remains the supplier-facing document's own, separate
+// identifier — see apps/supplier's equivalent route, which still renders
+// in the original "SUPPLIER" mode).
+const DOCUMENT_MODE: PoDocumentMode = "BUYER";
+
 function renderPoPdf(po: any): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 40 });
@@ -120,7 +139,7 @@ function renderPoPdf(po: any): Promise<Buffer> {
     doc.on("error", reject);
     useRupeeCapableFont(doc);
 
-    renderPoPdfContent(doc, po);
+    renderPoPdfContent(doc, po, DOCUMENT_MODE);
 
     doc.end();
   });

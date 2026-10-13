@@ -60,7 +60,7 @@ function fakePo(overrides: Partial<Record<string, unknown>> = {}) {
         fulfilledQuantity: 0,
       },
     ],
-    order: { enquiryId: "EQ-1", status: "PLACED", siteId: null },
+    order: { enquiryId: "EQ-1", orderNumber: "OD/2601/00042", status: "PLACED", siteId: null },
     ...overrides,
   };
 }
@@ -129,5 +129,39 @@ describe("GET /api/builder/purchase-orders/[id]/export", () => {
     const data = await res.json();
     expect(data.documentType).toBe("PURCHASE_ORDER");
     expect(data.poNumber).toBe("PO-2026-00001");
+  });
+
+  // Buyer-Facing/Supplier-Facing PO Identity fix: this is the
+  // CUSTOMER/builder portal's own download, so the filename (and the PDF
+  // itself — see purchase-order-pdf.spec.ts for the party-mapping
+  // coverage) must use the Order's own orderNumber, never the separate
+  // PurchaseOrder.poNumber that the supplier-facing document uses.
+  it("names the downloaded PDF after the Order's orderNumber, not the PurchaseOrder's poNumber", async () => {
+    purchaseOrderFindFirst.mockResolvedValue(fakePo());
+
+    const { GET } = await import("@/app/api/builder/purchase-orders/[id]/export/route");
+    const res = await GET(
+      makeRequest("https://example.com/api/builder/purchase-orders/po-1/export?format=pdf"),
+      { params: { id: "po-1" } }
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Disposition")).toContain('filename="OD/2601/00042.pdf"');
+    expect(res.headers.get("Content-Disposition")).not.toContain("PO-2026-00001");
+  });
+
+  it("falls back to the poNumber for the filename when the order has no orderNumber yet (pre-payment-approval)", async () => {
+    purchaseOrderFindFirst.mockResolvedValue(
+      fakePo({ order: { enquiryId: "EQ-1", orderNumber: null, status: "PLACED", siteId: null } })
+    );
+
+    const { GET } = await import("@/app/api/builder/purchase-orders/[id]/export/route");
+    const res = await GET(
+      makeRequest("https://example.com/api/builder/purchase-orders/po-1/export?format=pdf"),
+      { params: { id: "po-1" } }
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Disposition")).toContain('filename="PO-2026-00001.pdf"');
   });
 });

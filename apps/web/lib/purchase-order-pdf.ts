@@ -1,25 +1,109 @@
 import { PDF_BASE_FONT_BOLD } from "@/lib/pdf-fonts";
 import { BUILDOHUB_COMPANY } from "@/lib/company-info";
 
-// Draws the full supplier-facing Purchase Order document body onto an
-// already-created PDFDocument (see app/api/builder/purchase-orders/[id]/
-// export/route.ts's renderPoPdf, which creates the doc, calls
-// useRupeeCapableFont(doc), calls this function, then doc.end()s it).
-// Reproduces purchase-order-template.xlsx's layout — see renderPoPdf's own
-// header comment in the export route for the full reference-fidelity
-// write-up and documented departures (no logo, substitute font, deeper
-// accent color for readability, and real pagination instead of the
-// reference's fixed 5-row spreadsheet area).
+// Which commercial direction this PDF represents — the two directions
+// share every layout/table/pagination detail below and differ ONLY in
+// which party is printed as BUYER vs SELLER and which number is printed
+// as "the" document number. See the Buyer-Facing/Supplier-Facing PO
+// identity fix:
+//   - "SUPPLIER" (default, unchanged behaviour): the document BuildOhub
+//     issues to the real supplier. BUYER DETAILS = BUILDOHUB_COMPANY,
+//     SELLER / SUPPLIER DETAILS = po.supplier (the real supplier). Document
+//     number = po.poNumber (PurchaseOrder's own "PO-YYYY-SSSSS" series).
+//     Used by apps/supplier's export route and must never change.
+//   - "BUYER": the document shown/downloaded by the customer/builder who
+//     bought from BuildOhub. BUYER DETAILS = po.builder (the real
+//     customer), SELLER DETAILS = BUILDOHUB_COMPANY. Document number =
+//     po.orderNumber (the underlying Order's own independent,
+//     already-authoritative "OD/YYMM/SSSSS" business number — see
+//     packages/db/lib/business-number.ts — falling back to po.poNumber
+//     only for pre-payment-approval orders that have not yet been
+//     assigned one). Used by apps/web's builder-facing export route.
+// Never infer the direction from anything other than this explicit
+// parameter — the underlying `po` object is otherwise identical in both
+// cases (same PurchaseOrder row), so there is no other reliable signal.
+export type PoDocumentMode = "SUPPLIER" | "BUYER";
+
+export type PoPartyBlock = {
+  name: string;
+  addressLine: string | null;
+  gstin: string | null;
+  contact: string | null;
+};
+
+export type PoDocumentView = {
+  documentNumber: string;
+  buyer: PoPartyBlock;
+  seller: PoPartyBlock;
+};
+
+// Pure, pdfkit-free data-mapping helper factored out of renderPoPdfContent
+// so the party-mapping/numbering logic (the actual subject of the
+// Buyer-Facing/Supplier-Facing PO identity fix) can be unit-tested without
+// having to parse rendered PDF bytes. renderPoPdfContent below calls this
+// internally for the exact same values it draws onto the page — there is
+// no second, divergent code path.
+export function resolvePoDocumentView(po: any, mode: PoDocumentMode): PoDocumentView {
+  const isBuyerFacing = mode === "BUYER";
+
+  const buildohub: PoPartyBlock = {
+    name: BUILDOHUB_COMPANY.name,
+    addressLine: BUILDOHUB_COMPANY.addressLine,
+    gstin: BUILDOHUB_COMPANY.gstin,
+    contact: [BUILDOHUB_COMPANY.email, BUILDOHUB_COMPANY.phone].filter(Boolean).join(" \u00b7 ") || null,
+  };
+
+  const supplier: PoPartyBlock = {
+    name: po.supplier?.companyName ?? "Supplier",
+    addressLine: po.supplier?.addressLine ?? null,
+    gstin: po.supplier?.gstin ?? null,
+    contact: [po.supplier?.email, po.supplier?.phone].filter(Boolean).join(" \u00b7 ") || null,
+  };
+
+  const builder: PoPartyBlock = {
+    name: po.builder?.name ?? "Customer",
+    addressLine: po.deliverTo?.addressLine ?? null,
+    gstin: po.deliverTo?.gstin ?? null,
+    contact: [po.builder?.email, po.builder?.phone].filter(Boolean).join(" \u00b7 ") || null,
+  };
+
+  return {
+    documentNumber: isBuyerFacing ? po.orderNumber ?? po.poNumber : po.poNumber,
+    buyer: isBuyerFacing ? builder : buildohub,
+    seller: isBuyerFacing ? buildohub : supplier,
+  };
+}
+
+// Draws the full Purchase Order document body onto an already-created
+// PDFDocument (see app/api/builder/purchase-orders/[id]/export/route.ts's
+// renderPoPdf, which creates the doc, calls useRupeeCapableFont(doc),
+// calls this function, then doc.end()s it). Reproduces
+// purchase-order-template.xlsx's layout — see renderPoPdf's own header
+// comment in the export route for the full reference-fidelity write-up and
+// documented departures (no logo, substitute font, deeper accent color for
+// readability, and real pagination instead of the reference's fixed 5-row
+// spreadsheet area).
 //
-// `po` is the exact object serializePurchaseOrder() returns, with BUYER
-// DETAILS always sourced from BUILDOHUB_COMPANY (never po.builder — the
-// end customer must never be shown as the party purchasing from the
-// supplier) and SELLER DETAILS always sourced from po.supplier (the real
-// supplier, never BuildOhub). po.deliverTo is a separate, optional
-// delivery/"ship to" destination — see purchase-order-utils.ts's
-// serializePurchaseOrder for how it's derived from the order's tagged
-// Site or free-text deliveryAddress.
-export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any): void {
+// `po` is the exact object serializePurchaseOrder() returns. `mode`
+// (default "SUPPLIER" to preserve every existing call site's behaviour)
+// selects which party is BUYER vs SELLER and which number is printed as
+// the document number — see PoDocumentMode above. po.deliverTo is always a
+// separate, optional delivery/"ship to" destination regardless of mode —
+// see purchase-order-utils.ts's serializePurchaseOrder for how it's
+// derived from the order's tagged Site or free-text deliveryAddress.
+export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDocumentMode = "SUPPLIER"): void {
+  const isBuyerFacing = mode === "BUYER";
+  // The buyer-facing document is its own commercial record (the customer's
+  // order confirmation from BuildOhub) and must never reuse the supplier
+  // PO's own number as its identity — see the Order model's independent,
+  // atomically-generated orderNumber (OD/YYMM/SSSSS business number).
+  // Falls back to poNumber only when an order genuinely has none yet
+  // (orderNumber is only assigned once payment is approved — see
+  // apps/api's PaymentsService.approve), so a pre-payment PO can still be
+  // downloaded/previewed without a blank document number. Computed via the
+  // same resolvePoDocumentView() used by the unit tests, so there is no
+  // second, divergent definition of "the document number" to drift.
+  const { documentNumber } = resolvePoDocumentView(po, mode);
   const ACCENT = "#C8532A";
   const TEXT = "#1A1A1A";
   const MUTED = "#5A5A5A";
@@ -58,34 +142,58 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any): void {
     .font("PDFBaseFont")
     .fontSize(10)
     .fillColor(MUTED)
-    .text(`Purchase order # - ${po.poNumber}`, { width: contentWidth, align: "right" });
+    .text(`Purchase order # - ${documentNumber}`, { width: contentWidth, align: "right" });
   doc.fillColor(TEXT);
 
   let y = doc.y + 10;
 
-  // ---- BUYER DETAILS (BuildOhub) / SELLER DETAILS (supplier) ------
+  // ---- BUYER DETAILS / SELLER DETAILS ------------------------------
+  // SUPPLIER mode (unchanged): BuildOhub is the buyer, the real supplier
+  // is the seller. BUYER mode: the real customer (po.builder) is the
+  // buyer, BuildOhub is the seller — never the other way round, and never
+  // a mix of the two (see PoDocumentMode's doc comment above).
   doc.font(PDF_BASE_FONT_BOLD).fontSize(11).fillColor(ACCENT).text("BUYER DETAILS", colLeftX, y, { width: colWidth });
   doc.text("SELLER / SUPPLIER DETAILS", colRightX, y, { width: colWidth });
   y = doc.y + 4;
 
   doc.font("PDFBaseFont").fontSize(10).fillColor(TEXT);
-  const buyerBlock = [
+
+  const buildohubBlock = [
     BUILDOHUB_COMPANY.name,
     BUILDOHUB_COMPANY.addressLine ? addressLines(BUILDOHUB_COMPANY) : "Registered address: Not configured",
     BUILDOHUB_COMPANY.gstin ? `GSTIN: ${BUILDOHUB_COMPANY.gstin}` : "GSTIN: Not configured",
     [BUILDOHUB_COMPANY.email, BUILDOHUB_COMPANY.phone].filter(Boolean).join(" \u00b7 ") || null,
   ].filter(Boolean) as string[];
-  doc.text(buyerBlock.join("\n"), colLeftX, y, { width: colWidth });
-  const buyerBottom = doc.y;
 
-  const sellerAddress = addressLines(po.supplier ?? {});
-  const sellerBlock = [
+  const supplierBlock = [
     po.supplier?.companyName ?? "Supplier",
-    sellerAddress || null,
+    addressLines(po.supplier ?? {}) || null,
     po.supplier?.region ? `Region: ${po.supplier.region}` : null,
     po.supplier?.gstin ? `GSTIN: ${po.supplier.gstin}` : "GSTIN: Not available",
     [po.supplier?.email, po.supplier?.phone].filter(Boolean).join(" \u00b7 ") || null,
   ].filter(Boolean) as string[];
+
+  // The real customer/builder has no registered-address or GSTIN fields in
+  // the schema today (see User model) — falls back to the order's own
+  // deliverTo/ship-to address (the closest authoritative address on file)
+  // and an explicit "Not configured" GSTIN label, mirroring BUILDOHUB_
+  // COMPANY's own documented fallback for the same genuine data gap,
+  // rather than fabricating a registered address.
+  const builderAddress = po.deliverTo ? addressLines(po.deliverTo) : null;
+  const builderBlock = [
+    po.builder?.name ?? "Customer",
+    builderAddress || "Registered address: Not configured",
+    po.deliverTo?.gstin ? `GSTIN: ${po.deliverTo.gstin}` : "GSTIN: Not configured",
+    [po.builder?.email, po.builder?.phone].filter(Boolean).join(" \u00b7 ") || null,
+  ].filter(Boolean) as string[];
+
+  const buyerBlock = isBuyerFacing ? builderBlock : buildohubBlock;
+  const sellerBlock = isBuyerFacing ? buildohubBlock : supplierBlock;
+
+  doc.text(buyerBlock.join("\n"), colLeftX, y, { width: colWidth });
+  const buyerBottom = doc.y;
+
+  doc.font("PDFBaseFont").fontSize(10).fillColor(TEXT);
   doc.text(sellerBlock.join("\n"), colRightX, y, { width: colWidth });
   const sellerBottom = doc.y;
 

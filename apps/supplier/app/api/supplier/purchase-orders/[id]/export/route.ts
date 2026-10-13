@@ -5,7 +5,7 @@ import { prisma } from "@matsrc/db";
 import { ensureSupplierContext } from "@/lib/supplier-data";
 import { resolveSupplierOrderReference } from "@/lib/order-display";
 import { useRupeeCapableFont } from "@/lib/pdf-fonts";
-import { renderPoPdfContent } from "@/lib/purchase-order-pdf";
+import { renderPoPdfContent, type PoDocumentMode } from "@/lib/purchase-order-pdf";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -172,6 +172,16 @@ function serializeForExport(po: any) {
 // render/notify helpers this way (see e.g. notifySupplierOrderSubmitted vs
 // apps/supplier's own notify helpers) rather than forcing a shared package
 // to carry a rendering dependency only two of several apps need.
+// Explicitly "SUPPLIER" mode (the default, unchanged) — this route is the
+// real supplier's own download, so it must keep showing BuildOhub as BUYER
+// and the real supplier as SELLER, printing PurchaseOrder.poNumber as the
+// document number. See apps/web's equivalent route, which renders the
+// SAME underlying PurchaseOrder row in "BUYER" mode for the
+// customer/builder portal instead — the two document numbers
+// (po.poNumber vs po.orderNumber) are deliberately independent business
+// numbers, never derived from one another.
+const DOCUMENT_MODE: PoDocumentMode = "SUPPLIER";
+
 function renderPoPdf(po: any): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 40 });
@@ -181,7 +191,7 @@ function renderPoPdf(po: any): Promise<Buffer> {
     doc.on("error", reject);
     useRupeeCapableFont(doc);
 
-    renderPoPdfContent(doc, po);
+    renderPoPdfContent(doc, po, DOCUMENT_MODE);
 
     doc.end();
   });

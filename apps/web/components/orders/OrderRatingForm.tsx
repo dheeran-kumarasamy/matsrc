@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Upload, X } from "lucide-react";
-import { builderApiPost, builderApiUpload } from "@/lib/api";
+import { builderApiGet, builderApiPost, builderApiUpload } from "@/lib/api";
 
 type Props = {
   orderId: string;
@@ -12,6 +12,11 @@ const ALLOWED_RECEIPT_TYPES = ["image/jpeg", "image/jpg", "image/png", "applicat
 const MAX_RECEIPT_SIZE_BYTES = 5 * 1024 * 1024;
 
 type ReceiptUploadState = "idle" | "uploading" | "success" | "error";
+
+type ReceiptMetadata = {
+  exists: boolean;
+  fileName: string | null;
+};
 
 export default function OrderRatingForm({ orderId }: Props) {
   const [deliveryRating, setDeliveryRating] = useState(5);
@@ -28,6 +33,28 @@ export default function OrderRatingForm({ orderId }: Props) {
   const [receiptState, setReceiptState] = useState<ReceiptUploadState>("idle");
   const [uploadedReceiptName, setUploadedReceiptName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // A previously uploaded receipt (from an earlier visit/session) — fetched
+  // from the existing metadata-only GET endpoint, which never returns raw
+  // bytes. Lets the form show a "View/Download Receipt" link even after a
+  // page reload, without re-selecting/re-uploading a file.
+  const [existingReceipt, setExistingReceipt] = useState<ReceiptMetadata | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    builderApiGet<ReceiptMetadata>(`/orders/${orderId}/rating/receipt`)
+      .then((data) => {
+        if (!cancelled) setExistingReceipt(data);
+      })
+      .catch(() => {
+        // No rating/receipt yet, or not authorized — simply don't show the
+        // existing-receipt link; never surfaced as a page-level error.
+        if (!cancelled) setExistingReceipt(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId]);
 
   function validateAndSetReceipt(selected: File | null) {
     setReceiptError(null);
@@ -63,6 +90,7 @@ export default function OrderRatingForm({ orderId }: Props) {
       formData.append("file", receiptFile);
       const result = await builderApiUpload<{ fileName: string }>(`/orders/${orderId}/rating/receipt`, formData);
       setUploadedReceiptName(result.fileName);
+      setExistingReceipt({ exists: true, fileName: result.fileName });
       setReceiptState("success");
     } catch {
       // Rating save (if any) already succeeded independently — only the
@@ -146,6 +174,20 @@ export default function OrderRatingForm({ orderId }: Props) {
       <div className="space-y-2">
         <p className="text-sm font-medium text-slate-700">Receipt copy (optional)</p>
         <p className="text-xs text-slate-500">Accepted formats: JPG, PNG or PDF. Max size 5 MB.</p>
+
+        {existingReceipt?.exists && !receiptFile ? (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
+            <span className="truncate text-emerald-800">{existingReceipt.fileName}</span>
+            <a
+              href={`/api/builder/orders/${orderId}/rating/receipt/download`}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 rounded-md border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+            >
+              View/Download
+            </a>
+          </div>
+        ) : null}
 
         {!receiptFile ? (
           <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500 hover:border-slate-400">

@@ -27,6 +27,7 @@ import { CatalogModule } from "./admin/catalog/catalog.module";
 import { PaymentsModule } from "./admin/payments/payments.module";
 import { AdvancePaymentsModule } from "./admin/advance-payments/advance-payments.module";
 import { InvoicesModule } from "./admin/invoices/invoices.module";
+import { AdminRatingsModule } from "./admin/ratings/ratings.module";
 
 import { NotificationsModule } from "./notifications/notifications.module";
 import { PublicInsightsModule } from "./public-insights/public-insights.module";
@@ -80,6 +81,7 @@ import { AdminNotificationEngineModule } from "./notification-engine/admin/admin
     PaymentsModule,
     AdvancePaymentsModule,
     InvoicesModule,
+    AdminRatingsModule,
 
     WhatsAppModule,
     PricingModule,

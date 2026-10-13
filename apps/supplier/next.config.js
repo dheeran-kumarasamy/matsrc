@@ -24,6 +24,15 @@ const nextConfig = {
         // via Next's tracer instead of Vercel's generic Node function one.
         "../../node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/standard-fonts/**/*",
         "../../node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/data/**/*",
+        // Custom embedded font (DejaVu Sans, subsetted) used by the PO PDF
+        // export route so the ₹ (U+20B9) rupee glyph actually renders —
+        // pdfkit's built-in Standard 14 fonts (Helvetica etc.) only cover
+        // WinAnsi/Latin-1 and silently drop non-ASCII glyphs like ₹. Read at
+        // runtime via fs.readFileSync(path.join(process.cwd(), ...)) in
+        // lib/pdf-fonts.ts, which Next's output-file-tracer does not
+        // reliably follow (same class of gap as the pdfkit asset issue
+        // above), so it must be explicitly included here too.
+        "lib/assets/fonts/**/*",
       ],
     },
     // pdfkit (used by the supplier PO PDF export route) resolves its

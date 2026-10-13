@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import { prisma, getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
 import { serializePurchaseOrder, purchaseOrderInclude } from "@/lib/purchase-order-utils";
+import { useRupeeCapableFont } from "@/lib/pdf-fonts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -91,6 +92,7 @@ function renderPoPdf(po: any): Promise<Buffer> {
     doc.on("data", (chunk) => chunks.push(chunk as Buffer));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
+    useRupeeCapableFont(doc);
 
     doc.fontSize(18).text(`Purchase Order ${po.poNumber}`);
     doc

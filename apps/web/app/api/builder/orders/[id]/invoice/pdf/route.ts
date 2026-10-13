@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { useRupeeCapableFont } from "@/lib/pdf-fonts";
 import { serializeInvoice, invoiceInclude } from "@/lib/invoice-utils";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ function renderInvoicePdf(invoice: any): Promise<Buffer> {
     doc.on("data", (chunk) => chunks.push(chunk as Buffer));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
+    useRupeeCapableFont(doc);
 
     doc.fontSize(18).text(`Invoice ${invoice.invoiceNumber}`);
     doc

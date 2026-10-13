@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import { prisma, getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
+import { useRupeeCapableFont } from "@/lib/pdf-fonts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,6 +36,7 @@ function renderReceiptPdf(receipt: ReceiptPdfData): Promise<Buffer> {
     doc.on("data", (chunk) => chunks.push(chunk as Buffer));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
+    useRupeeCapableFont(doc);
 
     doc.fontSize(18).text("Buildohub");
     doc.fontSize(12).fillColor("#64748b").text("Advance Payment Receipt").fillColor("#0f172a");

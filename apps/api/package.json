@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
+    "postbuild": "node -e \"require('fs').mkdirSync('dist/common/pdf-fonts',{recursive:true});require('fs').copyFileSync('src/common/pdf-fonts/DejaVuSans.ttf','dist/common/pdf-fonts/DejaVuSans.ttf')\"",
     "start": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "type-check": "tsc --noEmit",

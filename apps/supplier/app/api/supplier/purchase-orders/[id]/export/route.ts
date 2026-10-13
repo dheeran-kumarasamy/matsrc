@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@matsrc/db";
 import { ensureSupplierContext } from "@/lib/supplier-data";
 import { resolveSupplierOrderReference } from "@/lib/order-display";
+import { useRupeeCapableFont } from "@/lib/pdf-fonts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -127,6 +128,7 @@ function renderPoPdf(po: any): Promise<Buffer> {
     doc.on("data", (chunk) => chunks.push(chunk as Buffer));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
+    useRupeeCapableFont(doc);
 
     doc.fontSize(18).text(`Purchase Order ${po.poNumber}`);
     doc

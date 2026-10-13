@@ -6,7 +6,7 @@
   "functions": {
     "api/index.ts": {
       "maxDuration": 30,
-      "includeFiles": "../../node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/{standard-fonts,data}/**"
+      "includeFiles": "{../../node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/{standard-fonts,data}/**,dist/common/pdf-fonts/**}"
     }
   },
   "rewrites": [

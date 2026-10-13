@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import { useRupeeCapableFont } from "src/common/pdf-fonts";
 
 // Renders the STORED AdvanceReceipt snapshot (never live account/ledger
 // state) as a PDF buffer, for the Admin-only receipt download route
@@ -34,6 +35,7 @@ export function renderAdvanceReceiptPdf(receipt: AdvanceReceiptPdfData): Promise
     doc.on("data", (chunk) => chunks.push(chunk as Buffer));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
+    useRupeeCapableFont(doc);
 
     doc.fontSize(18).text("Buildohub");
     doc.fontSize(12).fillColor("#64748b").text("Advance Payment Receipt").fillColor("#0f172a");

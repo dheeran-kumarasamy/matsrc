@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import { useRupeeCapableFont } from "src/common/pdf-fonts";
 
 // Renders the STORED invoice snapshot (never live order/product pricing) as
 // a PDF buffer. Reused by both the Admin app and the Contractor/Client
@@ -55,6 +56,7 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
     doc.on("data", (chunk) => chunks.push(chunk as Buffer));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
+    useRupeeCapableFont(doc);
 
     doc.fontSize(18).text(`Invoice ${invoice.invoiceNumber}`, { align: "left" });
     doc

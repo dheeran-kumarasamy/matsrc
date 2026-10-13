@@ -57,20 +57,28 @@ export async function GET(request: Request, { params }: { params: { id: string }
     // unchanged). Falls back to poNumber for the filename only when an
     // order genuinely has no orderNumber yet (pre-payment-approval).
     const documentNumber = payload.orderNumber ?? payload.poNumber;
+    // Business numbers like "OD/2607/00042" contain literal "/" characters
+    // (see packages/db/lib/business-number.ts), which are path separators
+    // in a filename — sanitized for the Content-Disposition filename only
+    // (never for the printed document number itself), mirroring the exact
+    // same convention already used for AdvanceReceipt downloads (see
+    // app/api/builder/advance/receipts/[id]/pdf/route.ts). poNumber (e.g.
+    // "PO-2026-00001") has no slashes and is unaffected either way.
+    const documentFilename = documentNumber.replace(/\//g, "-");
 
     if (format === "pdf") {
       const buffer = await renderPoPdf(payload);
       return new NextResponse(buffer as unknown as BodyInit, {
         headers: {
           "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="${documentNumber}.pdf"`,
+          "Content-Disposition": `attachment; filename="${documentFilename}.pdf"`,
         },
       });
     }
 
     return NextResponse.json(payload, {
       headers: {
-        "Content-Disposition": `attachment; filename="${documentNumber}.json"`,
+        "Content-Disposition": `attachment; filename="${documentFilename}.json"`,
       },
     });
   } catch (error: any) {

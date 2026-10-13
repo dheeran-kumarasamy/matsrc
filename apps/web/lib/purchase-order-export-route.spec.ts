@@ -135,7 +135,11 @@ describe("GET /api/builder/purchase-orders/[id]/export", () => {
   // CUSTOMER/builder portal's own download, so the filename (and the PDF
   // itself — see purchase-order-pdf.spec.ts for the party-mapping
   // coverage) must use the Order's own orderNumber, never the separate
-  // PurchaseOrder.poNumber that the supplier-facing document uses.
+  // PurchaseOrder.poNumber that the supplier-facing document uses. The
+  // literal "/" characters in a business number (e.g. "OD/2601/00042")
+  // are sanitized to "-" for the filename only (mirrors the existing
+  // AdvanceReceipt download convention) — the printed document number
+  // inside the PDF itself is unaffected (see purchase-order-pdf.spec.ts).
   it("names the downloaded PDF after the Order's orderNumber, not the PurchaseOrder's poNumber", async () => {
     purchaseOrderFindFirst.mockResolvedValue(fakePo());
 
@@ -146,7 +150,7 @@ describe("GET /api/builder/purchase-orders/[id]/export", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(res.headers.get("Content-Disposition")).toContain('filename="OD/2601/00042.pdf"');
+    expect(res.headers.get("Content-Disposition")).toContain('filename="OD-2601-00042.pdf"');
     expect(res.headers.get("Content-Disposition")).not.toContain("PO-2026-00001");
   });
 

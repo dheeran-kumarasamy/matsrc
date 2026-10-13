@@ -7,8 +7,16 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged, notifyPaymentRequired, waitUntilMock } = vi.hoisted(() => {
-  const orderRows = new Map<string, { id: string; status: string; items: any[]; paymentStatus: string }>();
+const {
+  orderRows,
+  findUniqueCalls,
+  updateCalls,
+  notifyCustomerOrderStatusChanged,
+  notifyPaymentRequired,
+  waitUntilMock,
+  generateOrderNumberMock,
+} = vi.hoisted(() => {
+  const orderRows = new Map<string, { id: string; status: string; items: any[]; paymentStatus: string; orderNumber?: string | null }>();
   const findUniqueCalls: any[] = [];
   const updateCalls: any[] = [];
   const notifyCustomerOrderStatusChanged = vi.fn(() => Promise.resolve());
@@ -18,7 +26,21 @@ const { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChange
   // the HTTP response) rather than fired off as a detached `void` promise
   // that Vercel's serverless runtime may kill before it settles.
   const waitUntilMock = vi.fn();
-  return { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged, notifyPaymentRequired, waitUntilMock };
+  // Business Numbering: a fresh, incrementing fake "OD/..." number per call
+  // — real uniqueness/atomicity is covered by business-number.ts's own
+  // tests; these tests only need to assert WHEN this is (and isn't) called
+  // and that its result is persisted onto the order.
+  let seq = 0;
+  const generateOrderNumberMock = vi.fn(async () => `OD/TEST/${String(++seq).padStart(5, "0")}`);
+  return {
+    orderRows,
+    findUniqueCalls,
+    updateCalls,
+    notifyCustomerOrderStatusChanged,
+    notifyPaymentRequired,
+    waitUntilMock,
+    generateOrderNumberMock,
+  };
 });
 
 vi.mock("@vercel/functions", () => ({
@@ -26,38 +48,51 @@ vi.mock("@vercel/functions", () => ({
 }));
 
 vi.mock("@matsrc/db", () => {
-  return {
-    prisma: {
-      order: {
-        findUnique: vi.fn((args: any) => {
-          findUniqueCalls.push(args);
-          const row = orderRows.get(args.where.id);
-          if (!row) return Promise.resolve(null);
-          if (args.select) {
-            const picked: any = {};
-            for (const key of Object.keys(args.select)) picked[key] = (row as any)[key];
-            return Promise.resolve(picked);
-          }
-          return Promise.resolve(row);
-        }),
-        update: vi.fn((args: any) => {
-          updateCalls.push(args);
-          const row = orderRows.get(args.where.id);
-          const updated = { ...row, ...args.data };
-          orderRows.set(args.where.id, updated as any);
-          return Promise.resolve(updated);
-        }),
-      },
-      orderTracking: {
-        create: vi.fn(() => Promise.resolve({})),
-      },
-      orderItemSupplierCandidate: {
-        update: vi.fn(() => Promise.resolve({})),
-      },
-      orderItem: {
-        update: vi.fn(() => Promise.resolve({})),
-      },
+  const orderFindUnique = vi.fn((args: any) => {
+    findUniqueCalls.push(args);
+    const row = orderRows.get(args.where.id);
+    if (!row) return Promise.resolve(null);
+    if (args.select) {
+      const picked: any = {};
+      for (const key of Object.keys(args.select)) picked[key] = (row as any)[key];
+      return Promise.resolve(picked);
+    }
+    return Promise.resolve(row);
+  });
+  const orderUpdate = vi.fn((args: any) => {
+    updateCalls.push(args);
+    const row = orderRows.get(args.where.id);
+    const updated = { ...row, ...args.data };
+    orderRows.set(args.where.id, updated as any);
+    return Promise.resolve(updated);
+  });
+
+  const prisma: any = {
+    order: {
+      findUnique: orderFindUnique,
+      update: orderUpdate,
     },
+    orderTracking: {
+      create: vi.fn(() => Promise.resolve({})),
+    },
+    orderItemSupplierCandidate: {
+      update: vi.fn(() => Promise.resolve({})),
+    },
+    orderItem: {
+      update: vi.fn(() => Promise.resolve({})),
+    },
+  };
+  // updateSupplierOrderStatus wraps its status update + Business Numbering
+  // (orderNumber) assignment in a single prisma.$transaction((tx) => ...)
+  // call (mirrors apps/api's PaymentsService.approve /
+  // OrdersService.updateStatus) — reuse the same mocked order
+  // findUnique/update implementations as the "tx" client so both the
+  // top-level prisma and the transaction client observe/mutate the same
+  // in-memory orderRows map.
+  prisma.$transaction = vi.fn((callback: any) => callback(prisma));
+
+  return {
+    prisma,
     // customer_order_status Meta WhatsApp notification (Notification Engine
     // pipeline — see packages/db/lib/customer-order-status-notification.ts).
     // Spied directly (not re-implemented) so these tests assert exactly
@@ -71,6 +106,11 @@ vi.mock("@matsrc/db", () => {
     // internals (PLACED -> PROCESSING + paymentStatus PENDING guard) are
     // covered separately in packages/db/lib/payment-required-notification.spec.ts.
     notifyPaymentRequired,
+    // Business Numbering (packages/db/lib/business-number.ts) — mocked here
+    // rather than exercising the real BusinessSequence/row-lock logic
+    // (covered by business-number.ts's own tests); these tests only assert
+    // that updateSupplierOrderStatus calls it exactly when it should.
+    generateOrderNumber: generateOrderNumberMock,
   };
 });
 
@@ -87,14 +127,17 @@ beforeEach(() => {
   notifyCustomerOrderStatusChanged.mockClear();
   notifyPaymentRequired.mockClear();
   waitUntilMock.mockClear();
+  generateOrderNumberMock.mockClear();
 });
 
 // paymentStatus defaults to "PAID" so every existing transition-guard test
 // below (none of which is exercising the C34 payment-before-delivery rule)
 // keeps passing unchanged — pass an explicit paymentStatus to test that
 // rule specifically (see the dedicated describe block further down).
-function seedOrder(id: string, status: string, paymentStatus: string = "PAID") {
-  orderRows.set(id, { id, status, items: [], paymentStatus });
+// orderNumber defaults to null (not yet assigned), matching a real
+// newly-created order.
+function seedOrder(id: string, status: string, paymentStatus: string = "PAID", orderNumber: string | null = null) {
+  orderRows.set(id, { id, status, items: [], paymentStatus, orderNumber });
 }
 
 describe("updateSupplierOrderStatus — backend transition guard", () => {
@@ -158,6 +201,58 @@ describe("updateSupplierOrderStatus — backend transition guard", () => {
     await expect(updateSupplierOrderStatus("missing-order", "PROCESSING" as any)).rejects.toThrow(
       /Order not found/
     );
+  });
+});
+
+// Buyer-Facing/Supplier-Facing PO Identity fix: this is the supplier
+// portal's single-supplier "Confirm Enquiry" path for the PLACED ->
+// PROCESSING transition (no competing RFQ quotes) — the same transition
+// apps/api's PaymentsService.approve / OrdersService.updateStatus already
+// generate Order.orderNumber at. Verifies this path no longer leaves
+// orderNumber permanently null, and that it is a genuinely independent,
+// generated-once value (never copied from or equal to any PurchaseOrder
+// poNumber, and never regenerated on an already-numbered order).
+describe("updateSupplierOrderStatus — Business Numbering (orderNumber)", () => {
+  it("generates and persists a brand-new orderNumber on PLACED -> PROCESSING when the order has none yet", async () => {
+    seedOrder("order-40", "PLACED", "PAID", null);
+
+    const result = await updateSupplierOrderStatus("order-40", "PROCESSING" as any);
+
+    expect(generateOrderNumberMock).toHaveBeenCalledTimes(1);
+    expect(result.orderNumber).toBeTruthy();
+    expect(result.orderNumber).toMatch(/^OD\//);
+  });
+
+  it("never regenerates or overwrites an orderNumber the order already has", async () => {
+    seedOrder("order-41", "PLACED", "PAID", "OD/2601/00099");
+
+    const result = await updateSupplierOrderStatus("order-41", "PROCESSING" as any);
+
+    expect(generateOrderNumberMock).not.toHaveBeenCalled();
+    expect(result.orderNumber).toBe("OD/2601/00099");
+  });
+
+  it("never generates an orderNumber for transitions other than PLACED -> PROCESSING", async () => {
+    seedOrder("order-42", "PROCESSING", "PAID", null);
+
+    await updateSupplierOrderStatus("order-42", "DISPATCHED" as any);
+
+    expect(generateOrderNumberMock).not.toHaveBeenCalled();
+  });
+
+  it("does not assign a second, different orderNumber if the status update is retried", async () => {
+    seedOrder("order-43", "PLACED", "PAID", null);
+
+    const first = await updateSupplierOrderStatus("order-43", "PROCESSING" as any);
+    // A real retry would be rejected by the transition guard (PROCESSING ->
+    // PROCESSING is invalid) before ever reaching the numbering logic again
+    // — this asserts that guard, and that the original number is untouched.
+    await expect(updateSupplierOrderStatus("order-43", "PROCESSING" as any)).rejects.toThrow(
+      /Invalid order status transition/
+    );
+
+    expect(generateOrderNumberMock).toHaveBeenCalledTimes(1);
+    expect(orderRows.get("order-43")?.orderNumber).toBe(first.orderNumber);
   });
 });
 

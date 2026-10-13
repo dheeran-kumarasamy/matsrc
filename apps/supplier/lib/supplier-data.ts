@@ -6,6 +6,7 @@ import {
   parseQuotedPrice,
   lockAdvanceAccountRow,
   releaseAdvanceReservation,
+  generateOrderNumber,
 } from "@matsrc/db";
 import { waitUntil } from "@vercel/functions";
 import { parsePhoneNumber } from "libphonenumber-js";
@@ -1873,9 +1874,41 @@ export async function updateSupplierOrderStatus(
     additionalData.quoteSelectionCompletedAt = new Date();
   }
 
-  const order = await prisma.order.update({
-    where: { id: orderId },
-    data: { status, ...additionalData },
+  // Business Numbering (Buyer-Facing/Supplier-Facing PO Identity fix):
+  // Order.orderNumber (the "OD/YYMM/SSSSS" business number — see
+  // packages/db/lib/business-number.ts) is the buyer-facing document
+  // number printed on the customer/builder portal's Purchase Order PDF
+  // (apps/web's renderPoPdfContent in "BUYER" mode) — it must never be
+  // confused with the separate PurchaseOrder.poNumber series the
+  // supplier-facing document uses. apps/api's PaymentsService.approve and
+  // OrdersService.updateStatus both already generate this atomically the
+  // moment an order genuinely transitions PLACED -> PROCESSING; this
+  // function is the supplier portal's OWN single-supplier "Confirm
+  // Enquiry" path (no competing RFQ quotes) for that exact same
+  // transition, and was previously missing this assignment entirely —
+  // leaving orderNumber permanently null for every order confirmed
+  // through this path, which silently fell back to displaying the
+  // supplier's poNumber on the buyer-facing PDF instead of its own,
+  // independent number. Generated inside the same transaction as the
+  // status update (row-locked via generateOrderNumber's own FOR UPDATE on
+  // the BusinessSequence row), so concurrent confirmations can never be
+  // handed duplicate numbers, and a number already assigned (e.g. by a
+  // retried/duplicate call) is never regenerated or overwritten.
+  const order = await prisma.$transaction(async (tx) => {
+    const existingOrderNumber = await tx.order.findUnique({
+      where: { id: orderId },
+      select: { orderNumber: true },
+    });
+
+    let orderNumber = existingOrderNumber?.orderNumber ?? null;
+    if (!orderNumber && status === "PROCESSING") {
+      orderNumber = await generateOrderNumber(tx as any);
+    }
+
+    return tx.order.update({
+      where: { id: orderId },
+      data: { status, ...additionalData, ...(orderNumber ? { orderNumber } : {}) },
+    });
   });
 
   await prisma.orderTracking.create({

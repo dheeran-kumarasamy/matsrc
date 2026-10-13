@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { builderApiGet } from "@/lib/api";
 import type { SiteWiseReportResponse } from "@/lib/reports-types";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 const STATUS_OPTIONS = ["PLACED", "PROCESSING", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
 
@@ -164,9 +165,9 @@ export default function SiteWiseReportPage() {
             className="w-full rounded-xl border border-slate-200 px-2.5 py-2 text-sm font-semibold text-slate-800"
           >
             <option value="">All suppliers</option>
-            {options?.suppliers.map((s) => (
+            {options?.suppliers.map((s, idx) => (
               <option key={s.id} value={s.id}>
-                {s.name}
+                {getSupplierDisplayName(s.name, s.id, idx)}
               </option>
             ))}
           </select>
@@ -299,7 +300,12 @@ export default function SiteWiseReportPage() {
               <ResponsiveContainer width="100%" height={240}>
                 {/* Monochrome chart palette — bars, lines, axes and ticks are
                     all black to match the site-wide black & white design. */}
-                <BarChart data={summary.spendBySupplier.slice(0, 8)}>
+                <BarChart
+                  data={summary.spendBySupplier.slice(0, 8).map((s, idx) => ({
+                    ...s,
+                    supplierName: getSupplierDisplayName(s.supplierName, s.supplierId, idx),
+                  }))}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--posh-border)" />
                   <XAxis
                     dataKey="supplierName"
@@ -373,7 +379,9 @@ export default function SiteWiseReportPage() {
                         </Link>
                       </td>
                       <td className="py-3 pr-3 font-semibold text-slate-800">{row.siteName}</td>
-                      <td className="py-3 pr-3 font-medium text-slate-600">{row.supplierName}</td>
+                      <td className="py-3 pr-3 font-medium text-slate-600">
+                        {getSupplierDisplayName(row.supplierName, row.supplierId, idx)}
+                      </td>
                       <td className="py-3 pr-3 font-semibold text-slate-800">{row.productName}</td>
                       <td className="py-3 pr-3 text-right font-medium text-slate-600">
                         {row.quantity} {row.unit}

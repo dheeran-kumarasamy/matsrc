@@ -3,8 +3,15 @@
 // anonymized as "Supplier 1", "Supplier 2", etc.
 //
 // Change HIDE_SUPPLIER_NAMES to false when you want to display real supplier names on the website.
+//
+// Flipped to true: the buyer portal must stop displaying real supplier
+// names anywhere a supplier identity is shown to a builder/buyer (orders,
+// cart, checkout, sourcing assistant, price comparison/reports, product
+// cards, purchase orders, disputes, group orders, dashboard). Every one of
+// those surfaces now routes through getSupplierDisplayName() below so they
+// all pick up the same anonymized "Supplier 1"/"Supplier 2" labelling.
 
-export const HIDE_SUPPLIER_NAMES = false;
+export const HIDE_SUPPLIER_NAMES = true;
 
 const supplierIndexMap = new Map<string, number>();
 

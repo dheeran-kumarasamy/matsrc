@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getOrCreateBuilder, getUserCtx, prisma } from "@/lib/builder-db";
 import { createOrdersFromCart } from "@/lib/order-checkout";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 import {
   getRecommendations,
   getSession,
@@ -217,7 +218,7 @@ async function performApprovedSourcing(params: {
     {
       message: "Enquiry submitted to the selected supplier.",
       orders: result.orders,
-      supplierName: approved.supplier.companyName,
+      supplierName: getSupplierDisplayName(approved.supplier.companyName, approved.supplierId),
     },
     { status: 201 }
   );

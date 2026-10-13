@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { builderApiGet } from "@/lib/api";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 type PurchaseOrderListItem = {
   id: string;
@@ -104,7 +105,7 @@ export default async function PurchaseOrdersPage({
         </div>
       ) : (
         <div className="posh-card divide-y divide-[color:var(--posh-border)]">
-          {purchaseOrders.map((po) => (
+          {purchaseOrders.map((po, idx) => (
             <div key={po.id} className="flex flex-wrap items-center justify-between gap-3 p-5">
               <div>
                 <p className="text-base font-bold tracking-tight text-[color:var(--posh-fg)]">
@@ -114,7 +115,7 @@ export default async function PurchaseOrdersPage({
                   ) : null}
                 </p>
                 <p className="mt-1 text-xs font-semibold text-[color:var(--posh-fg-muted)]">
-                  {po.supplier.companyName} · {po.lineItems.length} items · ₹{po.total.toLocaleString("en-IN")}
+                  {getSupplierDisplayName(po.supplier.companyName, po.supplier.id, idx)} · {po.lineItems.length} items · ₹{po.total.toLocaleString("en-IN")}
                 </p>
               </div>
               <div className="flex items-center gap-4">

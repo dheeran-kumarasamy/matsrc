@@ -112,7 +112,10 @@ describe("getSupplierOrders — S06 brand resolution", () => {
     const result = await getSupplierOrders("supplier@example.com");
     expect(result[0]).toMatchObject({
       id: "order-4",
-      buyer: "Builder Co",
+      // Buyer portal name masking (HIDE_BUYER_NAMES) — the supplier portal
+      // no longer surfaces the real buyer name, so this now asserts the
+      // anonymized "Buyer N" label rather than the underlying "Builder Co".
+      buyer: "Buyer 1",
       material: "TMT Bar",
       qty: "7 MT",
       status: "DISPATCHED",

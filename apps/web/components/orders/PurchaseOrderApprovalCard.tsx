@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { builderApiPatch, builderApiPost } from "@/lib/api";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   CANCELLATION_REASONS,
@@ -202,7 +203,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
             {po.poNumber}
             {po.version > 1 ? <span className="ml-2 text-sm text-slate-400">v{po.version}</span> : null}
           </h2>
-          <p className="text-sm text-slate-600">Supplier: {po.supplier.companyName}</p>
+          <p className="text-sm text-slate-600">Supplier: {getSupplierDisplayName(po.supplier.companyName, po.supplier.id)}</p>
         </div>
         <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${STATUS_STYLES[po.status] ?? ""}`}>
           {po.status}

@@ -1,6 +1,7 @@
 import { prisma } from "@matsrc/db";
 import { ensureSupplierContext } from "./supplier-data";
 import { resolveSupplierOrderReference } from "./order-display";
+import { getBuyerDisplayName } from "./buyer-display";
 
 export type SupplierPurchaseOrderRow = {
   id: string;
@@ -57,12 +58,12 @@ export async function getSupplierPurchaseOrders(email: string): Promise<Supplier
     orderBy: { createdAt: "desc" },
   });
 
-  return purchaseOrders.map((po) => ({
+  return purchaseOrders.map((po, idx) => ({
     id: po.id,
     poNumber: po.poNumber,
     status: po.status,
     version: po.version,
-    buyerName: po.builder.name ?? po.builder.email ?? "Builder",
+    buyerName: getBuyerDisplayName(po.builder.name ?? po.builder.email, po.builder.id, idx),
     orderId: po.orderId,
     orderReference: resolveSupplierOrderReference(po.order),
     total: po.lineItems.reduce((acc, li) => acc + toNumber(li.unitPrice) * li.quantity + toNumber(li.tax), 0),
@@ -106,7 +107,7 @@ export async function getSupplierPurchaseOrderDetail(
     poNumber: po.poNumber,
     status: po.status,
     version: po.version,
-    buyerName: po.builder.name ?? po.builder.email ?? "Builder",
+    buyerName: getBuyerDisplayName(po.builder.name ?? po.builder.email, po.builder.id),
     orderId: po.orderId,
     orderReference: resolveSupplierOrderReference(po.order),
     total: lineItems.reduce((acc, li) => acc + li.lineTotal, 0),

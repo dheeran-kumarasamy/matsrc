@@ -18,6 +18,7 @@
 import { OrderStatus, PaymentStatus, PaymentMethod, generateEnquiryId, notifySupplierRfqReceived } from "@matsrc/db";
 import { prisma, resolveUnitPrice } from "@/lib/builder-db";
 import { notifySupplierOrderSubmitted } from "@/lib/notify";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 import {
   resolveLowestPriceForQuantity,
   resolvePriceRange,
@@ -381,7 +382,9 @@ export async function createOrdersFromCart(
     select: { name: true, email: true },
   });
 
+  let groupIdx = 0;
   for (const group of groups.values()) {
+    const currentGroupIdx = groupIdx++;
     const totalAmount = group.items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
     const resolvedAt = new Date();
 
@@ -484,7 +487,7 @@ export async function createOrdersFromCart(
       id: order.id,
       enquiryId: order.enquiryId ?? order.id,
       orderNumber: (order as any).orderNumber ?? null,
-      supplierName: group.supplierName,
+      supplierName: getSupplierDisplayName(group.supplierName, group.supplierId, currentGroupIdx),
       total: totalAmount,
       itemCount: group.items.length,
       status: order.status,

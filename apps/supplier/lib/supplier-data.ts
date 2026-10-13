@@ -22,6 +22,7 @@ import {
 import { sendWhatsAppMessage } from "./twilio-whatsapp";
 import { isValidOrderStatusTransition } from "./order-status-transitions";
 import { resolveSupplierOrderReference } from "./order-display";
+import { getBuyerDisplayName } from "./buyer-display";
 
 
 
@@ -1261,13 +1262,13 @@ export async function getSupplierOrders(email: string): Promise<SupplierOrderRow
     orderBy: { order: { createdAt: "desc" } },
   });
 
-  return items.map((item: any) => ({
+  return items.map((item: any, idx: number) => ({
     id: item.orderId,
     // S15: canonical supplier-facing Order reference (orderNumber ??
     // enquiryId, never the raw `id` above) — see
     // apps/supplier/lib/order-display.ts.
     displayOrderNumber: resolveSupplierOrderReference(item.order),
-    buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
+    buyer: getBuyerDisplayName(item.order.user.name ?? item.order.user.phone, item.order.user.id, idx),
     material: item.product.name,
     // S06: Brand resolution prefers the FK-linked Brand master-data record
     // (product.brandRef), falling back to the deprecated free-text
@@ -1449,7 +1450,7 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     // enquiryId, never the raw `id` above) — see
     // apps/supplier/lib/order-display.ts.
     displayOrderNumber: resolveSupplierOrderReference(item.order),
-    buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
+    buyer: getBuyerDisplayName(item.order.user.name ?? item.order.user.phone, item.order.user.id),
     deliveryDate: formatDate(item.deliveryDate ?? item.order.deliveryDate),
     quantity: `${item.quantity} ${item.product.unit}`,
     material: item.product.name,

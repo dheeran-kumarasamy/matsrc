@@ -24,6 +24,11 @@ export type SupplierListing = {
   // apps/supplier/lib/supplier-data.ts `getPublicSupplierListings()`.
   brand?: string;
   grade: string;
+  // Physical size/diameter spec (e.g. "8mm") — null/absent when the
+  // product has no distinct size. See apps/supplier/lib/supplier-data.ts
+  // `getPublicSupplierListings()` / the CanonicalProduct grouping fix this
+  // field was added for.
+  sizeLabel?: string | null;
   unit: string;
   price: string;
   stock: string;

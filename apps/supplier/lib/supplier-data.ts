@@ -63,6 +63,11 @@ type ListingInput = {
   title: string;
   category: string;
   grade: string;
+  // Physical size/diameter spec (e.g. "8mm", "16mm") — optional. Feeds the
+  // cross-supplier CanonicalProduct grouping key (see
+  // resolveCanonicalAssignment() below) so listings that only differ by
+  // size are never collapsed into a single buyer-facing PLP card.
+  sizeLabel?: string;
   unit: string;
   maxServiceableQty: string;
   price: string;
@@ -600,6 +605,11 @@ export async function getPublicSupplierListings() {
       // any legacy rows created before brandRef existed.
       brand: product.brandRef?.name ?? product.brand ?? "",
       grade: product.grade ?? "NA",
+      // Physical size/diameter spec (e.g. "8mm") — null when the product
+      // has no distinct size. Exposed so the buyer-facing PLP/PDP can
+      // display it alongside grade (see the CanonicalProduct grouping fix
+      // this field was added for in resolveCanonicalAssignment()).
+      sizeLabel: product.sizeLabel ?? null,
       unit: product.unit,
       price: `${formatCurrency(product.basePrice.toString())} / ${product.unit}`,
       stock: `${product.stock} ${product.unit}`,
@@ -846,6 +856,7 @@ export async function getSupplierListingById(id: string, email: string) {
     title: product.name,
     category: product.category.name,
     grade: product.grade ?? "",
+    sizeLabel: product.sizeLabel ?? "",
     unit: product.unit,
     maxServiceableQty: String(product.maxServiceableQty ?? product.stock),
     price: product.basePrice.toString(),
@@ -989,11 +1000,16 @@ async function resolveCanonicalAssignment(
     categoryName: string;
     brandName?: string | null;
     gradeName?: string | null;
+    // Normalized free-text size/diameter (e.g. "8mm"). Included in the
+    // canonicalKey below so two listings that only differ by size (same
+    // category/brand/grade/unit) are never merged into the same
+    // CanonicalProduct — see that model's doc comment in schema.prisma.
+    sizeLabel?: string | null;
     unitValue: string;
     title: string;
   }
 ) {
-  const { categoryId, categoryName, brandName, gradeName, unitValue, title } = params;
+  const { categoryId, categoryName, brandName, gradeName, sizeLabel, unitValue, title } = params;
 
   let brandId: string | null = null;
   if (brandName && brandName.trim()) {
@@ -1044,11 +1060,25 @@ async function resolveCanonicalAssignment(
     }
   }
 
-  const canonicalKey = [categoryId, brandId ?? "none", gradeId ?? "none", unitId ?? "none"].join(":");
+  // Normalized the same way regardless of whether this exact string has
+  // been seen before — unlike brand/grade/unit, size is NOT its own FK
+  // master-data table (free-text is sufficient: there is no autocomplete/
+  // reuse benefit to a separate Size entity), so it participates in the
+  // key as a plain normalized string rather than an id.
+  const normalizedSizeLabel = sizeLabel && sizeLabel.trim() ? sizeLabel.trim() : null;
+
+  const canonicalKey = [
+    categoryId,
+    brandId ?? "none",
+    gradeId ?? "none",
+    unitId ?? "none",
+    normalizedSizeLabel ?? "none",
+  ].join(":");
 
   let canonical = await transaction.canonicalProduct.findUnique({ where: { canonicalKey } });
   if (!canonical) {
-    const canonicalTitle = [categoryName, brandName, gradeName].filter(Boolean).join(" ") || title;
+    const canonicalTitle =
+      [categoryName, brandName, gradeName, normalizedSizeLabel].filter(Boolean).join(" ") || title;
     canonical = await transaction.canonicalProduct.create({
       data: {
         canonicalKey,
@@ -1056,6 +1086,7 @@ async function resolveCanonicalAssignment(
         brandId: brandId ?? undefined,
         gradeId: gradeId ?? undefined,
         unitId: unitId ?? undefined,
+        sizeLabel: normalizedSizeLabel ?? undefined,
         title: canonicalTitle,
       },
     });
@@ -1086,6 +1117,7 @@ export async function createSupplierListing(input: ListingInput, email: string) 
         categoryName: category.name,
         brandName: input.brand,
         gradeName: input.grade,
+        sizeLabel: input.sizeLabel,
         unitValue: input.unit,
         title: input.title,
       });
@@ -1098,6 +1130,7 @@ export async function createSupplierListing(input: ListingInput, email: string) 
           slug: `${slugBase}-${suffix}`,
           brand: input.brand?.trim() || null,
           grade: input.grade.trim() || null,
+          sizeLabel: input.sizeLabel?.trim() || null,
           brandId: assignment.brandId ?? undefined,
           gradeId: assignment.gradeId ?? undefined,
           unitId: assignment.unitId ?? undefined,
@@ -1174,6 +1207,7 @@ export async function updateSupplierListing(id: string, input: ListingInput, ema
         categoryName: category.name,
         brandName: input.brand,
         gradeName: input.grade,
+        sizeLabel: input.sizeLabel,
         unitValue: input.unit,
         title: input.title,
       });
@@ -1185,6 +1219,7 @@ export async function updateSupplierListing(id: string, input: ListingInput, ema
           name: input.title.trim(),
           brand: input.brand?.trim() || null,
           grade: input.grade.trim() || null,
+          sizeLabel: input.sizeLabel?.trim() || null,
           brandId: assignment.brandId ?? undefined,
           gradeId: assignment.gradeId ?? undefined,
           unitId: assignment.unitId ?? undefined,

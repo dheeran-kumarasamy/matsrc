@@ -5,9 +5,11 @@
 //   2. Creates/normalizes corresponding Brand / Grade / Unit master rows (best-effort:
 //      trim + collapse whitespace, slug/code derived from the normalized label).
 //   3. Sets Product.brandId / gradeId / unitId FK columns accordingly.
-//   4. Computes a deterministic canonicalKey (categoryId + brandId + gradeId + unitId)
-//      for every Product, creates/links a CanonicalProduct row, and sets
-//      Product.canonicalProductId.
+//   4. Computes a deterministic canonicalKey (categoryId + brandId + gradeId + unitId
+//      + sizeLabel) for every Product, creates/links a CanonicalProduct row, and
+//      sets Product.canonicalProductId. sizeLabel participates as a plain
+//      normalized string (not an FK) — see the CanonicalProduct model's doc
+//      comment in schema.prisma for why it was added.
 //
 // Safe to re-run (idempotent): uses upsert/find-or-create patterns throughout, and only
 // ever fills in null FK columns — never overwrites already-resolved values.
@@ -131,12 +133,19 @@ async function findOrCreateUnit(rawName, cache) {
   return unit;
 }
 
-function canonicalKeyFor({ categoryId, brandId, gradeId, unitId }) {
-  return [categoryId, brandId ?? "none", gradeId ?? "none", unitId ?? "none"].join(":");
+// sizeLabel participates in the key as a plain normalized string (not an
+// id) — unlike brand/grade/unit it is NOT its own FK master-data table.
+// See the CanonicalProduct model's doc comment in schema.prisma for why
+// this was added: two listings that only differ by size (e.g. an 8mm vs.
+// 16mm TMT bar, same category/brand/grade/unit) previously computed an
+// IDENTICAL canonicalKey and were silently merged, hiding every size
+// except the group's lowest-priced one from the buyer-facing PLP.
+function canonicalKeyFor({ categoryId, brandId, gradeId, unitId, sizeLabel }) {
+  return [categoryId, brandId ?? "none", gradeId ?? "none", unitId ?? "none", sizeLabel ?? "none"].join(":");
 }
 
-async function findOrCreateCanonicalProduct({ categoryId, brandId, gradeId, unitId, title }, cache) {
-  const key = canonicalKeyFor({ categoryId, brandId, gradeId, unitId });
+async function findOrCreateCanonicalProduct({ categoryId, brandId, gradeId, unitId, sizeLabel, title }, cache) {
+  const key = canonicalKeyFor({ categoryId, brandId, gradeId, unitId, sizeLabel });
   if (cache.has(key)) return cache.get(key);
 
   let canonical = await prisma.canonicalProduct.findUnique({ where: { canonicalKey: key } });
@@ -152,6 +161,7 @@ async function findOrCreateCanonicalProduct({ categoryId, brandId, gradeId, unit
           brandId: brandId ?? undefined,
           gradeId: gradeId ?? undefined,
           unitId: unitId ?? undefined,
+          sizeLabel: sizeLabel ?? undefined,
           title,
         },
       });
@@ -220,7 +230,7 @@ async function main() {
         .filter(Boolean)
         .join(" ") || product.name;
       const canonical = await findOrCreateCanonicalProduct(
-        { categoryId: product.categoryId, brandId, gradeId, unitId, title },
+        { categoryId: product.categoryId, brandId, gradeId, unitId, sizeLabel: product.sizeLabel ?? null, title },
         canonicalCache
       );
       canonicalProductId = canonical.id;

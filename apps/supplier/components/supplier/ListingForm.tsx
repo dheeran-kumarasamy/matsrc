@@ -66,6 +66,13 @@ type ListingFormProps = {
     title: string;
     category: string;
     grade: string;
+    // Physical size/diameter spec (e.g. "8mm", "16mm") — optional, since
+    // many categories (cement, bricks) have no meaningful size dimension.
+    // Feeds the cross-supplier CanonicalProduct grouping key so listings
+    // that only differ by size are never collapsed into a single
+    // buyer-facing PLP card (see apps/supplier/lib/supplier-data.ts
+    // resolveCanonicalAssignment()).
+    sizeLabel?: string;
     unit: string;
     maxServiceableQty: string;
     price: string;
@@ -88,6 +95,7 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
         title: "",
         category: "",
         grade: "",
+        sizeLabel: "",
         unit: "",
         maxServiceableQty: "",
         price: "",
@@ -419,6 +427,20 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
             ))}
           </datalist>
           <p className="text-xs text-slate-500">Pick an existing grade/spec or type a new one.</p>
+        </label>
+
+        <label className="space-y-1 text-sm text-slate-700">
+          <span>Size / Diameter (optional)</span>
+          <input
+            value={form.sizeLabel ?? ""}
+            onChange={(e) => updateField("sizeLabel", e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            placeholder="e.g. 8mm, 16mm, 20mm"
+          />
+          <p className="text-xs text-slate-500">
+            For products that come in different sizes (e.g. TMT bars), enter the size here so each size shows as
+            its own listing to buyers — leave blank if this product has no distinct size.
+          </p>
         </label>
 
         <label className="space-y-1 text-sm text-slate-700">

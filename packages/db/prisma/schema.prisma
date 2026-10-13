@@ -452,8 +452,18 @@ model Unit {
 
 // Canonical "same physical product across suppliers" grouping.
 // A CanonicalProduct is derived deterministically from
-// category + brand + grade + unit (all now FK-constrained master data)
-// so matching is exact, not fuzzy.
+// category + brand + grade + unit + sizeLabel (all now FK-constrained
+// master data, except sizeLabel which is a normalized free-text spec like
+// "8mm"/"16mm") so matching is exact, not fuzzy.
+//
+// sizeLabel added (bug fix): without it, two listings that only differ by
+// physical size/diameter (e.g. an 8mm TMT bar vs. a 16mm TMT bar from the
+// same brand+grade) computed an IDENTICAL canonicalKey and were silently
+// merged into a single CanonicalProduct — the buyer-facing PLP only shows
+// one card per CanonicalProduct (see apps/web/lib/listings.ts
+// dedupeByCanonicalGroup()), so every size except the group's
+// lowest-priced one was invisible to buyers even though its Product row
+// was fully active. See packages/db/prisma/migrations/<ts>_add_size_label/.
 model CanonicalProduct {
   id           String   @id @default(cuid())
   canonicalKey String   @unique
@@ -465,9 +475,14 @@ model CanonicalProduct {
   grade        Grade?   @relation(fields: [gradeId], references: [id])
   unitId       String?
   unit         Unit?    @relation(fields: [unitId], references: [id])
-  title        String // display name for the merged discovery card
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  // Normalized free-text size/diameter spec (e.g. "8mm", "16mm", "20mm").
+  // Null is a distinct, valid grouping bucket (products with no meaningful
+  // size dimension, e.g. cement bags) — never coerced to "" so it doesn't
+  // collide with an explicit empty-size listing.
+  sizeLabel String?
+  title     String // display name for the merged discovery card
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   products       Product[]
   priceSnapshots PriceSnapshot[]
@@ -498,6 +513,13 @@ model Product {
   // configurable default at report/export time when absent.
   hsnCode     String?
   description String?
+  // Normalized free-text size/diameter spec (e.g. "8mm", "16mm", "20mm").
+  // Feeds the CanonicalProduct grouping key (see that model's doc comment)
+  // so listings that are the same brand/grade but a different physical
+  // size are never collapsed into a single buyer-facing PLP card. Optional
+  // — many product categories (e.g. cement, bricks) have no meaningful
+  // size dimension and simply leave this null.
+  sizeLabel String?
 
   unit              String // deprecated free-text value (MT | BAG | SQM | PCS), retained for backfill/history only
   basePrice         Decimal  @db.Decimal(12, 2)

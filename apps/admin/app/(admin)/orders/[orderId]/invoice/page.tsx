@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { adminApiGet } from "@/lib/api";
 import { requireAdminAccess } from "@/lib/rbac";
+import { BUILDOHUB_COMPANY } from "@/lib/company-info";
 
 type InvoiceDetail = {
   id: string;
@@ -84,6 +85,21 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
+      {/* Platform identity — the registered parent company operating
+          BuildOhub (Triad Build Tech Private Limited). Shown here so the
+          GSTIN-bearing invoice detail page matches the PDF's own header
+          (see apps/api/src/admin/invoices/invoice-pdf.util.ts). */}
+      <div className="panel p-4 text-sm text-slate-600">
+        <p className="text-base font-extrabold text-slate-950">{BUILDOHUB_COMPANY.name}</p>
+        <p className="font-semibold text-slate-800">{BUILDOHUB_COMPANY.legalName}</p>
+        <p>
+          {[BUILDOHUB_COMPANY.addressLine, BUILDOHUB_COMPANY.city, BUILDOHUB_COMPANY.state, BUILDOHUB_COMPANY.pincode]
+            .filter(Boolean)
+            .join(", ")}
+        </p>
+        <p>GSTIN: {BUILDOHUB_COMPANY.gstin}</p>
+      </div>
+
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Invoice</p>

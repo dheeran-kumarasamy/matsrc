@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import { prisma, getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
 import { useRupeeCapableFont } from "@/lib/pdf-fonts";
+import { BUILDOHUB_COMPANY } from "@/lib/company-info";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,7 +39,18 @@ function renderReceiptPdf(receipt: ReceiptPdfData): Promise<Buffer> {
     doc.on("error", reject);
     useRupeeCapableFont(doc);
 
-    doc.fontSize(18).text("Buildohub");
+    // Platform identity — the registered parent company operating BuildOhub
+    // (Triad Build Tech Private Limited), shown at the top of every receipt
+    // alongside its GSTIN/registered address. See lib/company-info.ts for
+    // the single source of truth this is read from.
+    doc.fontSize(18).text(BUILDOHUB_COMPANY.name);
+    doc
+      .fontSize(9)
+      .fillColor("#64748b")
+      .text(BUILDOHUB_COMPANY.legalName)
+      .text([BUILDOHUB_COMPANY.addressLine, BUILDOHUB_COMPANY.city, BUILDOHUB_COMPANY.state, BUILDOHUB_COMPANY.pincode].filter(Boolean).join(", "))
+      .text(`GSTIN: ${BUILDOHUB_COMPANY.gstin}`)
+      .fillColor("#0f172a");
     doc.fontSize(12).fillColor("#64748b").text("Advance Payment Receipt").fillColor("#0f172a");
 
     doc.moveDown();

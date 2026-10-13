@@ -3,6 +3,7 @@ import PDFDocument from "pdfkit";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
 import { useRupeeCapableFont } from "@/lib/pdf-fonts";
 import { serializeInvoice, invoiceInclude } from "@/lib/invoice-utils";
+import { BUILDOHUB_COMPANY } from "@/lib/company-info";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,6 +21,20 @@ function renderInvoicePdf(invoice: any): Promise<Buffer> {
     doc.on("error", reject);
     useRupeeCapableFont(doc);
 
+    // Platform identity — the registered parent company operating BuildOhub
+    // (Triad Build Tech Private Limited), shown at the top of every invoice
+    // alongside its GSTIN/registered address. See lib/company-info.ts for
+    // the single source of truth this is read from.
+    doc.fontSize(14).text(BUILDOHUB_COMPANY.name);
+    doc
+      .fontSize(9)
+      .fillColor("#64748b")
+      .text(BUILDOHUB_COMPANY.legalName)
+      .text([BUILDOHUB_COMPANY.addressLine, BUILDOHUB_COMPANY.city, BUILDOHUB_COMPANY.state, BUILDOHUB_COMPANY.pincode].filter(Boolean).join(", "))
+      .text(`GSTIN: ${BUILDOHUB_COMPANY.gstin}`)
+      .fillColor("#0f172a");
+
+    doc.moveDown();
     doc.fontSize(18).text(`Invoice ${invoice.invoiceNumber}`);
     doc
       .fontSize(10)

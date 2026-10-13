@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import { useRupeeCapableFont } from "src/common/pdf-fonts";
+import { BUILDOHUB_COMPANY } from "src/common/company-info";
 
 // Renders the STORED invoice snapshot (never live order/product pricing) as
 // a PDF buffer. Reused by both the Admin app and the Contractor/Client
@@ -58,6 +59,20 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
     doc.on("error", reject);
     useRupeeCapableFont(doc);
 
+    // Platform identity — the registered parent company operating BuildOhub
+    // (Triad Build Tech Private Limited), shown at the top of every invoice
+    // alongside its GSTIN/registered address. See src/common/company-info.ts
+    // for the single source of truth this is read from.
+    doc.fontSize(14).text(BUILDOHUB_COMPANY.name);
+    doc
+      .fontSize(9)
+      .fillColor("#64748b")
+      .text(BUILDOHUB_COMPANY.legalName)
+      .text([BUILDOHUB_COMPANY.addressLine, BUILDOHUB_COMPANY.city, BUILDOHUB_COMPANY.state, BUILDOHUB_COMPANY.pincode].filter(Boolean).join(", "))
+      .text(`GSTIN: ${BUILDOHUB_COMPANY.gstin}`)
+      .fillColor("#0f172a");
+
+    doc.moveDown();
     doc.fontSize(18).text(`Invoice ${invoice.invoiceNumber}`, { align: "left" });
     doc
       .fontSize(10)

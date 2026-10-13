@@ -160,6 +160,10 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
 
   const buildohubBlock = [
     BUILDOHUB_COMPANY.name,
+    // Registered parent company name — shown directly under the trading
+    // name so the GSTIN/address below are unambiguously tied to the legal
+    // entity that holds them (Triad Build Tech Private Limited).
+    BUILDOHUB_COMPANY.legalName,
     BUILDOHUB_COMPANY.addressLine ? addressLines(BUILDOHUB_COMPANY) : "Registered address: Not configured",
     BUILDOHUB_COMPANY.gstin ? `GSTIN: ${BUILDOHUB_COMPANY.gstin}` : "GSTIN: Not configured",
     [BUILDOHUB_COMPANY.email, BUILDOHUB_COMPANY.phone].filter(Boolean).join(" \u00b7 ") || null,

@@ -59,10 +59,12 @@ POLICIES.push(
   // apps/api/src/notification-engine/supplier-daily-price/supplier-daily-price-reminder.service.ts.
   { eventType: "SUPPLIER_DAILY_PRICE_UPDATE_REQUIRED", channel: "WHATSAPP", templateName: "supplier_price_update", metaTemplateId: "1889118722523200", displayName: "Daily Price Update Required", description: "Reminds a supplier that today's price list update is incomplete for one or more active listings.", priority: "P1", cooldownMinutes: null, maxPerDay: 1, businessHoursOnly: true },
   // Meta template mapping: approved Utility template (ID 1055000930652376,
-  // language "en"), static "View Quote" QUICK_REPLY button (not a dynamic
-  // URL button), exactly 3 body variables ({{1}}=enquiry/RFQ ID,
-  // {{2}}=material, {{3}}=quantity) — see
-  // apps/api/src/notification-engine/whatsapp/quote-received-notification.service.ts.
+  // language "en"), exactly 3 body variables ({{1}}=enquiry/order display
+  // ID, {{2}}=material, {{3}}=quantity). The "View Quote" button was
+  // upgraded from a static QUICK_REPLY to a dynamic URL CTA with approved
+  // fixed prefix https://buildohub.in/orders/{{1}} (no query string) — see
+  // apps/api/src/notification-engine/whatsapp/quote-received-notification.service.ts
+  // for the full Graph-API-verified audit.
   { eventType: "QUOTE_RECEIVED", channel: "WHATSAPP", templateName: "quote_received", metaTemplateId: "1055000930652376", displayName: "Quote Received", description: "Notifies a customer that a supplier has responded to their RFQ with a quote.", priority: "P1", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   { eventType: "QUOTE_COMPARISON_READY", channel: "WHATSAPP", templateName: "quote_comparison_ready", displayName: "Quote Comparison Ready", description: "Notifies a customer that enough quotes have been received to compare and select.", priority: "P1", cooldownMinutes: null, maxPerDay: 1, businessHoursOnly: false },
   { eventType: "QUOTE_EXPIRY_REMINDER", channel: "WHATSAPP", templateName: "quote_expiry_reminder", displayName: "Quote Expiry Reminder", description: "Reminds a customer that a received quote is about to expire.", priority: "P1", cooldownMinutes: 240, maxPerDay: 1, businessHoursOnly: true },

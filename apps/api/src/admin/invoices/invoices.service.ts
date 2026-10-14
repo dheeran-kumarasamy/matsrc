@@ -15,12 +15,22 @@ import { PrismaService } from "src/prisma/prisma.service";
 //      Order.paymentStatus === PAID, never merely PENDING_VERIFICATION
 //      (i.e. a payment screenshot upload alone is NEVER sufficient).
 //   4. The order has at least one line item to invoice.
-//   5. No invoice already exists for the order (idempotent — a repeat call
+//   5. Supplier Invoice Upload / Admin Verification workflow: the order's
+//      SupplierInvoice (see apps/api/src/admin/supplier-invoices) must be
+//      CONFIRMED — i.e. an Admin has uploaded-and-reviewed the supplier's
+//      own invoice, entered the ACTUAL invoiced quantities/weights and
+//      commercial values, and explicitly confirmed them. Uploading a
+//      supplier invoice alone (PENDING_REVIEW/REJECTED) is never
+//      sufficient — only SupplierInvoicesService.confirm() satisfies this.
+//   6. No invoice already exists for the order (idempotent — a repeat call
 //      simply returns the existing invoice instead of creating a duplicate).
 //
-// All financial values are read from the database (OrderItem rows) — never
-// accepted from the caller/frontend — and frozen into Invoice/
-// InvoiceLineItem rows that are never recomputed from live pricing again.
+// Financial values are read from the CONFIRMED SupplierInvoice/
+// SupplierInvoiceLineItem snapshot (actual invoiced quantity x approved
+// rate, plus the admin-reviewed freight/discount/rounding adjustments) —
+// never accepted from the caller/frontend, never recomputed from live
+// OrderItem/Product pricing — and frozen into Invoice/InvoiceLineItem rows
+// that are themselves never recomputed again afterwards.
 @Injectable()
 export class InvoicesService {
   private readonly logger = new Logger(InvoicesService.name);
@@ -39,6 +49,7 @@ export class InvoicesService {
         site: true,
         user: true,
         invoice: true,
+        supplierInvoice: { include: { lineItems: true, supplier: { select: { region: true } } } },
       },
     });
 
@@ -70,6 +81,22 @@ export class InvoicesService {
       if (!item.product?.supplier) {
         return { eligible: false as const, reason: "This order is missing required supplier data", order };
       }
+    }
+
+    // Supplier Invoice Upload / Admin Verification gate — the supplier must
+    // have uploaded their own invoice AND an Admin must have reviewed +
+    // explicitly CONFIRMED the actual invoiced quantities/values before a
+    // BuildOhub buyer invoice can be generated. See SupplierInvoicesService
+    // for the upload/review/confirm lifecycle this reads.
+    if (!order.supplierInvoice) {
+      return { eligible: false as const, reason: "The supplier has not yet uploaded an invoice for this order", order };
+    }
+    if (order.supplierInvoice.status !== "CONFIRMED") {
+      return {
+        eligible: false as const,
+        reason: "The supplier invoice has not yet been reviewed and confirmed by an Admin",
+        order,
+      };
     }
 
     return { eligible: true as const, reason: undefined as string | undefined, order };
@@ -116,33 +143,60 @@ export class InvoicesService {
     }
     const supplierId = order.items[0].supplierId as string;
 
-    // Frozen financial snapshot, computed server-side from the order's
-    // final OrderItem rows — never from live Product/SupplierProfile
-    // pricing, and never accepted from the request body.
-    const lineItems = order.items.map((item: any) => {
-      const unitPrice = new Prisma.Decimal(item.unitPrice.toString());
-      const quantity = item.quantity as number;
-      const taxRate = item.taxRatePercent ? new Prisma.Decimal(item.taxRatePercent.toString()) : null;
-      const lineSubtotal = unitPrice.mul(quantity);
-      const lineTax = taxRate ? lineSubtotal.mul(taxRate).div(100) : new Prisma.Decimal(0);
-      const lineTotal = lineSubtotal.plus(lineTax);
+    // Frozen financial snapshot, built from the CONFIRMED
+    // SupplierInvoiceLineItem rows (actual invoiced quantity x
+    // admin-approved rate) — never from raw OrderItem pricing and never
+    // accepted from the request body. checkEligibility() has already
+    // guaranteed order.supplierInvoice.status === "CONFIRMED" at this point.
+    const supplierInvoice = (order as any).supplierInvoice;
+    const orderItemById = new Map(order.items.map((item: any) => [item.id, item]));
+
+    const lineItems = supplierInvoice.lineItems.map((sli: any) => {
+      const item = orderItemById.get(sli.orderItemId);
+      const taxRate = sli.taxRatePercent !== null && sli.taxRatePercent !== undefined ? new Prisma.Decimal(sli.taxRatePercent.toString()) : null;
 
       return {
-        productId: item.productId as string,
-        productName: (item.product?.name as string) ?? "Product",
-        description: (item.product?.description as string | null) ?? null,
-        quantity,
-        unitPrice,
+        productId: (item?.productId as string) ?? null,
+        productName: (item?.product?.name as string) ?? "Product",
+        description: (item?.product?.description as string | null) ?? null,
+        quantity: Number(sli.actualQuantity),
+        unitPrice: new Prisma.Decimal(sli.approvedUnitPrice.toString()),
         taxRate,
-        taxAmount: lineTax,
-        subtotal: lineSubtotal,
-        total: lineTotal,
+        taxAmount: new Prisma.Decimal(sli.lineTaxAmount.toString()),
+        subtotal: new Prisma.Decimal(sli.lineSubtotal.toString()),
+        total: new Prisma.Decimal(sli.lineTotal.toString()),
       };
     });
 
-    const subtotal = lineItems.reduce((acc, li) => acc.plus(li.subtotal), new Prisma.Decimal(0));
-    const taxAmount = lineItems.reduce((acc, li) => acc.plus(li.taxAmount), new Prisma.Decimal(0));
-    const totalAmount = subtotal.plus(taxAmount);
+    // Audit fix (financial transparency): `subtotal` is now the PURE sum of
+    // this invoice's own line items — exactly what a reader gets by adding
+    // up the line items shown on the document — never the post-adjustment
+    // `confirmedTaxableValue` (which silently folded in freight/other
+    // charges/discount with no visible trace). The invoice-level
+    // adjustments are copied verbatim as their own fields below, and
+    // `taxableValue` records the post-adjustment figure explicitly so the
+    // full chain (subtotal -> + adjustments -> taxableValue -> + tax ->
+    // totalAmount) is reconstructable from stored data alone.
+    const subtotal = lineItems.reduce((acc: Prisma.Decimal, li: (typeof lineItems)[number]) => acc.plus(li.subtotal), new Prisma.Decimal(0));
+    const freightChargeAmount = new Prisma.Decimal(supplierInvoice.freightChargeAmount.toString());
+    const otherChargesAmount = new Prisma.Decimal(supplierInvoice.otherChargesAmount.toString());
+    const discountAmount = new Prisma.Decimal(supplierInvoice.discountAmount.toString());
+    const roundingAdjustment = new Prisma.Decimal(supplierInvoice.roundingAdjustment.toString());
+    const taxAmount = new Prisma.Decimal(supplierInvoice.confirmedTaxAmount.toString());
+    // taxableValue/totalAmount are still read from the confirmed snapshot
+    // (never re-derived here) as the authoritative source of truth — but we
+    // also assert they reconcile with the itemized fields above, so a bug
+    // in either computation surfaces immediately instead of silently
+    // diverging again.
+    const taxableValue = new Prisma.Decimal(supplierInvoice.confirmedTaxableValue.toString());
+    const totalAmount = new Prisma.Decimal(supplierInvoice.confirmedTotalAmount.toString());
+
+    const expectedTaxableValue = subtotal.plus(freightChargeAmount).plus(otherChargesAmount).minus(discountAmount);
+    if (!expectedTaxableValue.equals(taxableValue)) {
+      throw new BadRequestException(
+        "The confirmed supplier invoice totals do not reconcile with its line items — re-review before confirming"
+      );
+    }
 
     // Payment snapshot — derived from the application's existing
     // PaymentStatus, taken at generation time only.
@@ -166,6 +220,15 @@ export class InvoicesService {
 
         const invoiceNumber = await generateInvoiceNumber(tx as any, now);
 
+        // Ship-from / ship-to snapshot — deliberately NEVER includes the
+        // supplier's company name/identity (see the buyer-facing privacy
+        // requirement). Ship-from falls back to the supplier's `region`
+        // free-text field (no structured address exists on SupplierProfile
+        // today — see this feature's Final Report) rather than fabricating
+        // a city/state. Ship-to is the order's own Site address, exactly
+        // like the Purchase Order PDF's existing "Deliver To" block.
+        const site = (order as any).site;
+
         const created = await tx.invoice.create({
           data: {
             invoiceNumber,
@@ -175,7 +238,18 @@ export class InvoicesService {
             builderId: order.userId,
             siteId: order.siteId,
             supplierId,
+            supplierInvoiceId: supplierInvoice.id,
+            shipFromState: supplierInvoice.supplier?.region ?? null,
+            shipToAddressLine: site?.addressLine ?? null,
+            shipToCity: site?.city ?? null,
+            shipToState: site?.state ?? null,
+            shipToPincode: site?.pincode ?? null,
             subtotal,
+            taxableValue,
+            freightChargeAmount,
+            otherChargesAmount,
+            discountAmount,
+            roundingAdjustment,
             taxAmount,
             totalAmount,
             currency: "INR",
@@ -185,7 +259,7 @@ export class InvoicesService {
             generatedById: actorId,
             generatedAt: now,
             lineItems: {
-              create: lineItems.map((li) => ({
+              create: lineItems.map((li: (typeof lineItems)[number]) => ({
                 productId: li.productId,
                 productName: li.productName,
                 description: li.description,
@@ -266,12 +340,18 @@ export class InvoicesService {
     return this.serialize(invoice);
   }
 
+  // NOTE: deliberately does NOT include `supplier` — the generated
+  // BuildOhub buyer invoice must never disclose the supplier's identity
+  // (name/GSTIN/contact) to the Contractor/Client, and an Admin reviewing
+  // supplier details uses the separate Order/SupplierInvoice admin
+  // endpoints instead (see SupplierInvoicesService). Ship-from/ship-to are
+  // the invoice's own frozen address-only snapshot columns (see schema.prisma),
+  // never re-derived from the live SupplierProfile here.
   private detailInclude() {
     return {
       order: { select: { id: true, enquiryId: true } },
       builder: { select: { id: true, name: true, email: true, phone: true } },
       site: { select: { id: true, name: true, addressLine: true, city: true, state: true, pincode: true, gstin: true } },
-      supplier: { select: { id: true, companyName: true, gstin: true, user: { select: { email: true, phone: true } } } },
       generatedBy: { select: { id: true, name: true, email: true } },
       lineItems: true,
     } satisfies Prisma.InvoiceInclude;
@@ -300,21 +380,33 @@ export class InvoicesService {
             gstin: invoice.site.gstin,
           }
         : null,
-      supplier: invoice.supplier
-        ? {
-            id: invoice.supplier.id,
-            companyName: invoice.supplier.companyName,
-            gstin: invoice.supplier.gstin,
-            email: invoice.supplier.user?.email ?? null,
-            phone: invoice.supplier.user?.phone ?? null,
-          }
-        : null,
+      // Ship-from/ship-to — never the supplier's identity (name/GSTIN/
+      // contact), only location, per the buyer-facing privacy requirement.
+      // See Invoice.shipFrom*/shipTo* in schema.prisma.
+      shipFrom:
+        invoice.shipFromAddressLine || invoice.shipFromCity || invoice.shipFromState || invoice.shipFromPincode
+          ? {
+              addressLine: invoice.shipFromAddressLine ?? null,
+              city: invoice.shipFromCity ?? null,
+              state: invoice.shipFromState ?? null,
+              pincode: invoice.shipFromPincode ?? null,
+            }
+          : null,
+      shipTo:
+        invoice.shipToAddressLine || invoice.shipToCity || invoice.shipToState || invoice.shipToPincode
+          ? {
+              addressLine: invoice.shipToAddressLine ?? null,
+              city: invoice.shipToCity ?? null,
+              state: invoice.shipToState ?? null,
+              pincode: invoice.shipToPincode ?? null,
+            }
+          : null,
       lineItems: (invoice.lineItems ?? []).map((li: any) => ({
         id: li.id,
         productId: li.productId,
         productName: li.productName,
         description: li.description,
-        quantity: li.quantity,
+        quantity: Number(li.quantity),
         unitPrice: Number(li.unitPrice),
         taxRate: li.taxRate !== null && li.taxRate !== undefined ? Number(li.taxRate) : null,
         taxAmount: Number(li.taxAmount),
@@ -322,6 +414,21 @@ export class InvoicesService {
         total: Number(li.total),
       })),
       subtotal: Number(invoice.subtotal),
+      // Invoice-level adjustments — surfaced explicitly (audit fix) so the
+      // displayed line items + adjustments + tax visibly reconcile to
+      // totalAmount, rather than an invisible gap between subtotal and the
+      // sum of the line items. `taxableValue` falls back to `subtotal` for
+      // historical invoices generated before this field existed (where
+      // subtotal already WAS the taxable value, since no adjustment fields
+      // existed yet — see Invoice.taxableValue's schema doc comment).
+      freightChargeAmount: Number(invoice.freightChargeAmount ?? 0),
+      otherChargesAmount: Number(invoice.otherChargesAmount ?? 0),
+      discountAmount: Number(invoice.discountAmount ?? 0),
+      roundingAdjustment: Number(invoice.roundingAdjustment ?? 0),
+      taxableValue:
+        invoice.taxableValue !== null && invoice.taxableValue !== undefined
+          ? Number(invoice.taxableValue)
+          : Number(invoice.subtotal),
       taxAmount: Number(invoice.taxAmount),
       totalAmount: Number(invoice.totalAmount),
       currency: invoice.currency,

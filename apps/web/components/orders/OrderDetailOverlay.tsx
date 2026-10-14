@@ -17,6 +17,7 @@ import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import OrderRatingForm from "@/components/orders/OrderRatingForm";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
+import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
 
 
 export type OverlayOrderDetail = {
@@ -42,6 +43,11 @@ export type OverlayOrderDetail = {
   priceBeforeAggregation?: number | null;
   priceAfterAggregation?: number | null;
   purchaseOrder?: { id: string; poNumber: string; status: string; version: number } | null;
+  // The Order's own already-authoritative business number
+  // ("OD/YYMM/SSSSS") — the same number the downloaded buyer-facing PO PDF
+  // displays/names its file after. See
+  // lib/purchase-order-utils.ts's resolveBuyerPoDocumentNumber.
+  orderNumber?: string | null;
   siteId?: string | null;
   siteName?: string;
   items: Array<{
@@ -218,7 +224,7 @@ export default function OrderDetailOverlay({ order }: Props) {
               {order.purchaseOrder ? (
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-slate-600">
-                    {order.purchaseOrder.poNumber}
+                    {resolveBuyerPoDocumentNumber({ orderNumber: order.orderNumber, poNumber: order.purchaseOrder.poNumber })}
                     {order.purchaseOrder.version > 1 ? ` (v${order.purchaseOrder.version})` : ""} ·{" "}
                     <span className="font-semibold">{order.purchaseOrder.status}</span>
                   </p>

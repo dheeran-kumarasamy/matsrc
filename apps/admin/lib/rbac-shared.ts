@@ -9,6 +9,7 @@ export const MENU_CONFIG = [
   { key: "disputes", href: "/disputes", label: "Disputes" },
   { key: "payments", href: "/payments", label: "Payment Verification" },
   { key: "advance-payments", href: "/advance-payments", label: "Advance Payments" },
+  { key: "supplier-invoices", href: "/supplier-invoices", label: "Supplier Invoices" },
   { key: "aggregation", href: "/aggregation", label: "Aggregation Pools" },
   { key: "catalog", href: "/catalog", label: "Catalog Master Data" },
   { key: "pricing", href: "/pricing", label: "Price Intelligence" },

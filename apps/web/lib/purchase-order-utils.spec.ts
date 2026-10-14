@@ -6,7 +6,7 @@
 // regression tests.
 
 import { describe, it, expect } from "vitest";
-import { buildPurchaseOrderLineItemData } from "./purchase-order-utils";
+import { buildPurchaseOrderLineItemData, resolveBuyerPoDocumentNumber } from "./purchase-order-utils";
 
 describe("buildPurchaseOrderLineItemData", () => {
   // Catalogue price = ₹400, Supplier RFQ quote = ₹425 (already reflected on
@@ -72,5 +72,40 @@ describe("buildPurchaseOrderLineItemData", () => {
       fallback
     );
     expect(result.deliveryDate).toBe(fallback);
+  });
+});
+
+// Buyer Portal PO Display / Downloaded PDF Number mismatch fix — unit
+// tests for resolveBuyerPoDocumentNumber(), the pure helper both the
+// buyer-portal PO list/detail pages and the order-detail "PO summary"
+// surfaces (orders/[id], orders/payment/[id], OrderDetailOverlay) now use
+// to display the SAME document number the downloaded buyer-facing PDF
+// already prints/names its file after (see
+// app/api/builder/purchase-orders/[id]/export/route.ts's identical
+// `payload.orderNumber ?? payload.poNumber` expression, which this
+// function mirrors exactly rather than diverging from it).
+describe("resolveBuyerPoDocumentNumber", () => {
+  it("prefers the Order's own orderNumber (OD/YYMM/SSSSS) over the PurchaseOrder's separate poNumber series", () => {
+    const result = resolveBuyerPoDocumentNumber({ orderNumber: "OD/2601/00042", poNumber: "PO-2026-00001" });
+    expect(result).toBe("OD/2601/00042");
+    expect(result).not.toBe("PO-2026-00001");
+  });
+
+  it("falls back to poNumber only when the order has no orderNumber yet (pre-payment-approval)", () => {
+    const result = resolveBuyerPoDocumentNumber({ orderNumber: null, poNumber: "PO-2026-00001" });
+    expect(result).toBe("PO-2026-00001");
+  });
+
+  it("falls back to poNumber when orderNumber is undefined (field omitted entirely)", () => {
+    const result = resolveBuyerPoDocumentNumber({ poNumber: "PO-2026-00001" });
+    expect(result).toBe("PO-2026-00001");
+  });
+
+  it("matches the exact fallback expression used by the buyer-facing PDF export route, for the same PO data", () => {
+    const po = { orderNumber: "OD/2607/00042", poNumber: "PO-2026-00001" };
+    // Mirrors app/api/builder/purchase-orders/[id]/export/route.ts's
+    // `const documentNumber = payload.orderNumber ?? payload.poNumber;`
+    const pdfDocumentNumber = po.orderNumber ?? po.poNumber;
+    expect(resolveBuyerPoDocumentNumber(po)).toBe(pdfDocumentNumber);
   });
 });

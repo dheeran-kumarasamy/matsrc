@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { builderApiPatch, builderApiPost } from "@/lib/api";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
+import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   CANCELLATION_REASONS,
@@ -34,6 +35,13 @@ type PurchaseOrderLineItem = {
 type PurchaseOrderDetail = {
   id: string;
   poNumber: string;
+  // The underlying Order's own independent, already-authoritative
+  // business number ("OD/YYMM/SSSSS") — the SAME number the downloaded
+  // buyer-facing PDF prints/names its file after (see
+  // lib/purchase-order-utils.ts's resolveBuyerPoDocumentNumber). Null only
+  // for a pre-payment-approval order that has not yet been assigned one —
+  // see resolveBuyerPoDocumentNumber's fallback to poNumber for that case.
+  orderNumber?: string | null;
   status: "DRAFT" | "ISSUED" | "ACKNOWLEDGED" | "FULFILLED";
   version: number;
   notes: string | null;
@@ -211,7 +219,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
       <div className="panel flex flex-wrap items-start justify-between gap-3 p-5">
         <div>
           <h2 className="text-xl font-extrabold text-slate-900">
-            {po.poNumber}
+            {resolveBuyerPoDocumentNumber(po)}
             {po.version > 1 ? <span className="ml-2 text-sm text-slate-400">v{po.version}</span> : null}
           </h2>
           <p className="text-sm text-slate-600">Supplier: {getSupplierDisplayName(po.supplier.companyName, po.supplier.id)}</p>

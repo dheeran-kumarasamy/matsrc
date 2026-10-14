@@ -8,11 +8,15 @@ export function toNumber(value: unknown): number {
   return value === null || value === undefined ? 0 : Number(value);
 }
 
+// NOTE: deliberately does NOT select `supplier` — the generated BuildOhub
+// buyer invoice must never disclose the supplier's identity (name/GSTIN/
+// contact) to the Contractor/Client. Ship-from/ship-to are the invoice's
+// own frozen address-only snapshot columns (see schema.prisma), selected
+// directly below instead.
 export const invoiceInclude = {
   order: { select: { id: true, enquiryId: true } },
   builder: { select: { id: true, name: true, email: true, phone: true } },
   site: { select: { id: true, name: true, addressLine: true, city: true, state: true, pincode: true, gstin: true } },
-  supplier: { select: { id: true, companyName: true, gstin: true, user: { select: { email: true, phone: true } } } },
   generatedBy: { select: { id: true, name: true, email: true } },
   lineItems: true,
 } as const;
@@ -39,21 +43,32 @@ export function serializeInvoice(invoice: any) {
           gstin: invoice.site.gstin,
         }
       : null,
-    supplier: invoice.supplier
-      ? {
-          id: invoice.supplier.id,
-          companyName: invoice.supplier.companyName,
-          gstin: invoice.supplier.gstin,
-          email: invoice.supplier.user?.email ?? null,
-          phone: invoice.supplier.user?.phone ?? null,
-        }
-      : null,
+    // Ship-from/ship-to — location only, never the supplier's identity, per
+    // the buyer-facing privacy requirement.
+    shipFrom:
+      invoice.shipFromAddressLine || invoice.shipFromCity || invoice.shipFromState || invoice.shipFromPincode
+        ? {
+            addressLine: invoice.shipFromAddressLine ?? null,
+            city: invoice.shipFromCity ?? null,
+            state: invoice.shipFromState ?? null,
+            pincode: invoice.shipFromPincode ?? null,
+          }
+        : null,
+    shipTo:
+      invoice.shipToAddressLine || invoice.shipToCity || invoice.shipToState || invoice.shipToPincode
+        ? {
+            addressLine: invoice.shipToAddressLine ?? null,
+            city: invoice.shipToCity ?? null,
+            state: invoice.shipToState ?? null,
+            pincode: invoice.shipToPincode ?? null,
+          }
+        : null,
     lineItems: (invoice.lineItems ?? []).map((li: any) => ({
       id: li.id,
       productId: li.productId,
       productName: li.productName,
       description: li.description,
-      quantity: li.quantity,
+      quantity: toNumber(li.quantity),
       unitPrice: toNumber(li.unitPrice),
       taxRate: li.taxRate !== null && li.taxRate !== undefined ? toNumber(li.taxRate) : null,
       taxAmount: toNumber(li.taxAmount),
@@ -61,6 +76,18 @@ export function serializeInvoice(invoice: any) {
       total: toNumber(li.total),
     })),
     subtotal: toNumber(invoice.subtotal),
+    // Invoice-level adjustments + reconciling taxable value (audit fix —
+    // see Invoice.taxableValue's schema doc comment). `taxableValue` falls
+    // back to `subtotal` for historical invoices generated before these
+    // fields existed, so those invoices keep rendering exactly as before.
+    freightChargeAmount: toNumber(invoice.freightChargeAmount),
+    otherChargesAmount: toNumber(invoice.otherChargesAmount),
+    discountAmount: toNumber(invoice.discountAmount),
+    roundingAdjustment: toNumber(invoice.roundingAdjustment),
+    taxableValue:
+      invoice.taxableValue !== null && invoice.taxableValue !== undefined
+        ? toNumber(invoice.taxableValue)
+        : toNumber(invoice.subtotal),
     taxAmount: toNumber(invoice.taxAmount),
     totalAmount: toNumber(invoice.totalAmount),
     currency: invoice.currency,

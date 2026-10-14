@@ -1,10 +1,16 @@
 import Link from "next/link";
 import { builderApiGet } from "@/lib/api";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
+import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
 
 type PurchaseOrderListItem = {
   id: string;
   poNumber: string;
+  // The underlying Order's own already-authoritative business number
+  // ("OD/YYMM/SSSSS") — the same number the downloaded buyer-facing PDF
+  // displays/names its file after. See
+  // lib/purchase-order-utils.ts's resolveBuyerPoDocumentNumber.
+  orderNumber?: string | null;
   status: "DRAFT" | "ISSUED" | "ACKNOWLEDGED" | "FULFILLED";
   version: number;
   total: number;
@@ -109,7 +115,7 @@ export default async function PurchaseOrdersPage({
             <div key={po.id} className="flex flex-wrap items-center justify-between gap-3 p-5">
               <div>
                 <p className="text-base font-bold tracking-tight text-[color:var(--posh-fg)]">
-                  {po.poNumber}
+                  {resolveBuyerPoDocumentNumber(po)}
                   {po.version > 1 ? (
                     <span className="posh-label ml-2 align-middle">v{po.version}</span>
                   ) : null}

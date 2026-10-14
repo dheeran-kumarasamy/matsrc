@@ -9,6 +9,7 @@ import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import OrderRatingForm from "@/components/orders/OrderRatingForm";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
+import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
 
 
 type OrderDetail = {
@@ -35,6 +36,11 @@ type OrderDetail = {
   priceAfterAggregation?: number | null;
   purchaseOrder?: { id: string; poNumber: string; status: string; version: number } | null;
   invoice?: { id: string; invoiceNumber: string } | null;
+  // The Order's own already-authoritative business number
+  // ("OD/YYMM/SSSSS") — the same number the downloaded buyer-facing PO PDF
+  // displays/names its file after. See
+  // lib/purchase-order-utils.ts's resolveBuyerPoDocumentNumber.
+  orderNumber?: string | null;
   siteId?: string | null;
   siteName?: string;
 
@@ -173,7 +179,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           {order.purchaseOrder ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
-                {order.purchaseOrder.poNumber}
+                {resolveBuyerPoDocumentNumber({ orderNumber: order.orderNumber, poNumber: order.purchaseOrder.poNumber })}
                 {order.purchaseOrder.version > 1 ? ` (v${order.purchaseOrder.version})` : ""} ·{" "}
                 <span className="font-bold" style={{ color: "var(--posh-fg)" }}>{order.purchaseOrder.status}</span>
               </p>

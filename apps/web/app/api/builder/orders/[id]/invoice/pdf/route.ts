@@ -12,6 +12,10 @@ function money(value: number, currency: string): string {
   return `${currency === "INR" ? "\u20B9" : currency + " "}${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
+// BuildOhub's brand olive accent (--posh-olive, #A8AE8A — see
+// apps/web/app/globals.css) used for this document's section headings.
+const OLIVE_ACCENT = "#A8AE8A";
+
 function renderInvoicePdf(invoice: any): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 40 });
@@ -35,7 +39,7 @@ function renderInvoicePdf(invoice: any): Promise<Buffer> {
       .fillColor("#0f172a");
 
     doc.moveDown();
-    doc.fontSize(18).text(`Invoice ${invoice.invoiceNumber}`);
+    doc.fontSize(18).fillColor(OLIVE_ACCENT).text(`Invoice ${invoice.invoiceNumber}`).fillColor("#0f172a");
     doc
       .fontSize(10)
       .fillColor("#64748b")
@@ -44,8 +48,36 @@ function renderInvoicePdf(invoice: any): Promise<Buffer> {
       .text(`Payment status: ${invoice.paymentStatus}`)
       .fillColor("#0f172a");
 
+    // Ship From / Ship To — location only, never the supplier's identity
+    // (the buyer-facing invoice must never disclose which supplier
+    // fulfilled the order — see the Supplier Invoice Upload / Admin
+    // Verification / Buyer Invoice Generation feature).
+    if (invoice.shipFrom) {
+      doc.moveDown(0.5);
+      doc.fontSize(12).fillColor(OLIVE_ACCENT).text("Ship From", { underline: true }).fillColor("#0f172a");
+      doc
+        .fontSize(10)
+        .text(
+          [invoice.shipFrom.addressLine, invoice.shipFrom.city, invoice.shipFrom.state, invoice.shipFrom.pincode]
+            .filter(Boolean)
+            .join(", ") || "Not configured"
+        );
+    }
+
+    if (invoice.shipTo) {
+      doc.moveDown(0.5);
+      doc.fontSize(12).fillColor(OLIVE_ACCENT).text("Ship To", { underline: true }).fillColor("#0f172a");
+      doc
+        .fontSize(10)
+        .text(
+          [invoice.shipTo.addressLine, invoice.shipTo.city, invoice.shipTo.state, invoice.shipTo.pincode]
+            .filter(Boolean)
+            .join(", ") || "Not configured"
+        );
+    }
+
     doc.moveDown();
-    doc.fontSize(12).text("Products / Services", { underline: true });
+    doc.fontSize(12).fillColor(OLIVE_ACCENT).text("Products / Services", { underline: true }).fillColor("#0f172a");
     doc.moveDown(0.3);
     for (const li of invoice.lineItems) {
       // Explicit GST rate per line — "—" (never a fabricated rate) for
@@ -70,9 +102,42 @@ function renderInvoicePdf(invoice: any): Promise<Buffer> {
     const uniformRate = distinctRates.length === 1 ? distinctRates[0] : null;
     const taxLabel = uniformRate !== null ? `GST @ ${uniformRate}%` : "Tax";
 
+    // Invoice-level adjustments (audit fix): shown explicitly, each on its
+    // own line, ONLY when non-zero — an invoice with no freight/other
+    // charges/discount/rounding renders exactly as before this fix. Every
+    // amount here is read directly from the stored, confirmed Invoice
+    // snapshot — never recomputed from live order/supplier data.
+    const hasAdjustments =
+      invoice.freightChargeAmount !== 0 ||
+      invoice.otherChargesAmount !== 0 ||
+      invoice.discountAmount !== 0 ||
+      invoice.roundingAdjustment !== 0;
+
     doc.moveDown();
     doc.fontSize(10).text(`Subtotal: ${money(invoice.subtotal, invoice.currency)}`, { align: "right" });
+
+    if (hasAdjustments) {
+      if (invoice.freightChargeAmount !== 0) {
+        doc.text(`Freight: ${money(invoice.freightChargeAmount, invoice.currency)}`, { align: "right" });
+      }
+      if (invoice.otherChargesAmount !== 0) {
+        doc.text(`Other Charges: ${money(invoice.otherChargesAmount, invoice.currency)}`, { align: "right" });
+      }
+      if (invoice.discountAmount !== 0) {
+        doc.text(`Discount: -${money(invoice.discountAmount, invoice.currency)}`, { align: "right" });
+      }
+      doc.text(`Taxable Value: ${money(invoice.taxableValue, invoice.currency)}`, { align: "right" });
+    }
+
     doc.text(`${taxLabel}: ${money(invoice.taxAmount, invoice.currency)}`, { align: "right" });
+
+    if (hasAdjustments && invoice.roundingAdjustment !== 0) {
+      doc.text(
+        `Rounding: ${invoice.roundingAdjustment > 0 ? "+" : "-"}${money(Math.abs(invoice.roundingAdjustment), invoice.currency)}`,
+        { align: "right" }
+      );
+    }
+
     doc.fontSize(12).text(`Total: ${money(invoice.totalAmount, invoice.currency)}`, { align: "right" });
 
     doc.end();

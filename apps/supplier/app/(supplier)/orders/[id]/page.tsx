@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { OrderStatusActions } from "@/components/supplier/OrderStatusActions";
 import { RfqQuotationForm } from "@/components/supplier/RfqQuotationForm";
+import { SupplierInvoiceUpload } from "@/components/supplier/SupplierInvoiceUpload";
 import { getSupplierOrderDetail } from "@/lib/supplier-data";
 
 type Props = {
@@ -83,6 +84,13 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
           ))}
           {order.tracking.length === 0 ? <p className="text-sm text-slate-500">No tracking events recorded yet.</p> : null}
         </div>
+
+        {/* Supplier Invoice Upload / Admin Verification workflow: shown
+            once the order has moved past the quotation stage (PLACED), so
+            the supplier can upload their own invoice for Admin review.
+            Uploading here never itself generates the BuildOhub buyer
+            invoice — only an Admin's explicit confirmation does that. */}
+        {order.status !== "PLACED" ? <SupplierInvoiceUpload orderId={order.id} /> : null}
       </section>
 
       <OrderStatusActions

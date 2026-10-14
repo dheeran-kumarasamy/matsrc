@@ -102,6 +102,13 @@ export * from "./lib/advance-ledger";
 // documentation.
 export * from "./lib/gst-calculation";
 
+// Supplier Invoice Upload / Admin Verification / Buyer Invoice Generation —
+// shared, framework-agnostic reconciliation math (actual quantity/weight x
+// agreed rate, rate-discrepancy flagging, invoice-level adjustment
+// aggregation) used by apps/api's SupplierInvoicesService. See
+// packages/db/lib/supplier-invoice-reconciliation.ts for full documentation.
+export * from "./lib/supplier-invoice-reconciliation";
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

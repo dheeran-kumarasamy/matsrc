@@ -11,6 +11,7 @@
     "postinstall": "prisma generate",
     "db:identity": "node scripts/db-identity.js",
     "db:verify-safety": "node scripts/verify-db-safety.js",
+    "db:verify-clear-transaction-data": "node scripts/verify-clear-transaction-data.js",
     "db:safety:preflight": "node scripts/db-safety-preflight-cmd.js",
     "db:safe:migrate-deploy": "node scripts/prisma-safe.js migrate-deploy",
     "db:safe:migrate-diff": "node scripts/prisma-safe.js migrate-diff",
@@ -19,6 +20,7 @@
     "db:seed-notification-templates": "node scripts/seed-notification-templates.js",
     "db:backfill-auth-identities": "node scripts/backfill-auth-identities.js",
     "db:reset-test-data": "node scripts/reset-test-data.js",
+    "db:clear-transaction-data": "node scripts/clear-transaction-data.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

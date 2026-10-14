@@ -5,6 +5,11 @@ import PurchaseOrderApprovalCard from "@/components/orders/PurchaseOrderApproval
 type PurchaseOrderDetail = {
   id: string;
   poNumber: string;
+  // The underlying Order's own already-authoritative business number
+  // ("OD/YYMM/SSSSS") — the same number the downloaded buyer-facing PDF
+  // displays/names its file after. See
+  // lib/purchase-order-utils.ts's resolveBuyerPoDocumentNumber.
+  orderNumber?: string | null;
   status: "DRAFT" | "ISSUED" | "ACKNOWLEDGED" | "FULFILLED";
   version: number;
   notes: string | null;

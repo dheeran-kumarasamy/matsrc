@@ -61,9 +61,9 @@ enum AuthIdentityProvider {
 // within the SAME portal/role — which is the actual duplicate-account bug
 // this model exists to close.
 model AuthIdentity {
-  id     String               @id @default(cuid())
+  id     String @id @default(cuid())
   userId String
-  user   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   provider AuthIdentityProvider
 
@@ -138,6 +138,10 @@ model User {
   // invoices; an admin/super-admin can be the generator of many invoices.
   invoicesAsBuilder Invoice[] @relation("InvoiceBuilder")
   invoicesGenerated Invoice[] @relation("InvoiceGeneratedBy")
+
+  // Supplier Invoice Upload — the supplier-side user account that uploaded
+  // each original supplier invoice document (see SupplierInvoice.uploadedBy).
+  supplierInvoicesUploaded SupplierInvoice[] @relation("SupplierInvoiceUploadedBy")
 
   notificationPreference NotificationPreference?
   creditProfile          CreditProfile?
@@ -375,6 +379,7 @@ model SupplierProfile {
   orderItemCandidates OrderItemSupplierCandidate[]
   priceSnapshots      PriceSnapshot[]
   invoices            Invoice[]
+  supplierInvoices    SupplierInvoice[]
 
   sourcingRecommendations SourcingRecommendation[] @relation("SupplierSourcingRecommendations")
 
@@ -479,10 +484,10 @@ model CanonicalProduct {
   // Null is a distinct, valid grouping bucket (products with no meaningful
   // size dimension, e.g. cement bags) — never coerced to "" so it doesn't
   // collide with an explicit empty-size listing.
-  sizeLabel String?
-  title     String // display name for the merged discovery card
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  sizeLabel    String?
+  title        String // display name for the merged discovery card
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   products       Product[]
   priceSnapshots PriceSnapshot[]
@@ -519,7 +524,7 @@ model Product {
   // size are never collapsed into a single buyer-facing PLP card. Optional
   // — many product categories (e.g. cement, bricks) have no meaningful
   // size dimension and simply leave this null.
-  sizeLabel String?
+  sizeLabel   String?
 
   unit              String // deprecated free-text value (MT | BAG | SQM | PCS), retained for backfill/history only
   basePrice         Decimal  @db.Decimal(12, 2)
@@ -896,6 +901,12 @@ model Order {
   // no invoice until an Admin explicitly generates one (see Invoice model).
   invoice Invoice?
 
+  // Supplier Invoice Upload / Admin Verification workflow: one-to-one — an
+  // order has at most one (current) supplier-uploaded invoice under
+  // review/confirmed. Nullable/additive; existing orders simply have none
+  // until the supplier uploads one (see SupplierInvoice model).
+  supplierInvoice SupplierInvoice?
+
   // Buildohub Advance Balance: zero or more ORDER_PAYMENT/REFUND/REVERSAL/
   // ADVANCE_RESERVATION/ADVANCE_RELEASE ledger entries recording advance-
   // balance usage against this order. Optional/additive — an order that
@@ -1036,8 +1047,8 @@ model CustomerAdvanceAccount {
   // total advance value (the money has now genuinely been spent).
   // Release moves reservedBalance back to availableBalance with no change
   // to the buyer's total advance value.
-  reservedBalance Decimal              @default(0) @db.Decimal(12, 2)
-  status          AdvanceAccountStatus @default(ACTIVE)
+  reservedBalance  Decimal              @default(0) @db.Decimal(12, 2)
+  status           AdvanceAccountStatus @default(ACTIVE)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1233,9 +1244,9 @@ model AdvanceReceipt {
   // Frozen snapshot of the settled amount (the CREDIT transaction's own
   // `amount` — never a requested/intended figure) and the resulting
   // available balance immediately after settlement.
-  amount             Decimal @db.Decimal(12, 2)
-  balanceAfter       Decimal @db.Decimal(12, 2)
-  currency           String  @default("INR")
+  amount             Decimal               @db.Decimal(12, 2)
+  balanceAfter       Decimal               @db.Decimal(12, 2)
+  currency           String                @default("INR")
   paymentMethod      AdvancePaymentMethod?
   paymentReferenceNo String?
 
@@ -1285,7 +1296,7 @@ model AdvanceReservation {
   orderId          String                 @unique
   order            Order                  @relation(fields: [orderId], references: [id])
 
-  amount Decimal                 @db.Decimal(12, 2)
+  amount Decimal                  @db.Decimal(12, 2)
   status AdvanceReservationStatus @default(ACTIVE)
 
   createdAt  DateTime  @default(now())
@@ -1360,11 +1371,41 @@ model Invoice {
   supplierId String
   supplier   SupplierProfile @relation(fields: [supplierId], references: [id])
 
-  // Frozen financial snapshot — see model doc comment above. Subtotal + Tax
-  // = Total, following the existing application's Decimal(12,2) convention
-  // (see Order.totalAmount / PurchaseOrderLineItem.unitPrice above). Never
+  // Frozen financial snapshot — see model doc comment above. Never
   // recomputed from live pricing after generation.
-  subtotal    Decimal @db.Decimal(12, 2)
+  //
+  // Audit fix (financial transparency): `subtotal` is the pure sum of this
+  // invoice's own InvoiceLineItem.subtotal rows — i.e. exactly what a
+  // reader sums by hand from the line items shown on the document. Invoice-
+  // level adjustments (freight/other charges/discount/rounding) are now
+  // their OWN explicit fields below rather than being silently folded into
+  // `subtotal` with no visible trace — previously `subtotal` was set to the
+  // supplier invoice's post-adjustment `confirmedTaxableValue`, which could
+  // differ from the sum of the displayed line items whenever any adjustment
+  // was non-zero, with no way for a buyer to see why. The reconciling
+  // arithmetic is now, in order:
+  //   taxableValue = subtotal + freightChargeAmount + otherChargesAmount - discountAmount
+  //   totalAmount  = taxableValue + taxAmount + roundingAdjustment
+  // `taxableValue` is nullable/additive: invoices generated before this fix
+  // have no value here (their `subtotal` already WAS the taxable value,
+  // since no adjustment fields existed yet) — serializers/PDF renderers
+  // fall back to `subtotal` when `taxableValue` is null, so historical
+  // invoices keep rendering exactly as before.
+  subtotal     Decimal  @db.Decimal(12, 2)
+  taxableValue Decimal? @db.Decimal(12, 2)
+
+  // Invoice-level adjustments, copied VERBATIM from the confirmed
+  // SupplierInvoice snapshot at generation time (see
+  // SupplierInvoicesService.reviewLineItems / aggregateSupplierInvoiceTotals
+  // in packages/db/lib/supplier-invoice-reconciliation.ts) — never
+  // recomputed here, never accepted from the request body. Defaulting to 0
+  // so historical (pre-fix) invoices and any invoice with no adjustments
+  // simply show nothing extra.
+  freightChargeAmount Decimal @default(0) @db.Decimal(12, 2)
+  otherChargesAmount  Decimal @default(0) @db.Decimal(12, 2)
+  discountAmount      Decimal @default(0) @db.Decimal(12, 2)
+  roundingAdjustment  Decimal @default(0) @db.Decimal(12, 2)
+
   taxAmount   Decimal @db.Decimal(12, 2)
   totalAmount Decimal @db.Decimal(12, 2)
   currency    String  @default("INR")
@@ -1388,6 +1429,37 @@ model Invoice {
 
   lineItems InvoiceLineItem[]
 
+  // Supplier Invoice Upload / Admin Verification / Buyer Invoice Generation
+  // workflow (additive). Backend/admin-only cross-reference to the supplier's
+  // originally-uploaded invoice + admin-confirmed actual values this Invoice
+  // was generated from — NEVER serialized to the buyer-facing or
+  // supplier-facing invoice responses/PDFs (see InvoicesService.serialize,
+  // which deliberately omits this field, and SupplierInvoicesService's own
+  // access-control boundary). Nullable because pre-existing invoices (and any
+  // invoice generated via the original direct-from-OrderItem path, which
+  // remains available) have no supplier-uploaded source document.
+  supplierInvoiceId String?          @unique
+  supplierInvoice   SupplierInvoice? @relation(fields: [supplierInvoiceId], references: [id])
+
+  // Ship-from / ship-to snapshot, frozen at generation time (mirrors every
+  // other financial/address figure on this model — never recomputed from
+  // live SupplierProfile/Site data afterwards). `shipFromCity`/`shipFromState`
+  // deliberately do NOT include the supplier's company name — see the
+  // Buyer-Facing/Supplier-Facing privacy requirement: the buyer invoice must
+  // never disclose the supplier's identity. Nullable/additive — existing
+  // invoices generated before this feature existed simply have no shipping
+  // snapshot (the PDF already falls back to "Not configured"-style text for
+  // any missing address field, consistent with the Purchase Order PDF's
+  // existing documented pattern).
+  shipFromAddressLine String?
+  shipFromCity        String?
+  shipFromState       String?
+  shipFromPincode     String?
+  shipToAddressLine   String?
+  shipToCity          String?
+  shipToState         String?
+  shipToPincode       String?
+
   @@index([orderId])
   @@index([builderId])
   @@index([siteId])
@@ -1406,7 +1478,14 @@ model InvoiceLineItem {
   productId   String?
   productName String
   description String?
-  quantity    Int
+  // Widened from Int -> Decimal(14,3) (Supplier Invoice Upload / Admin
+  // Verification workflow): the ACTUAL invoiced quantity/weight entered by
+  // an Admin from the supplier's own invoice (e.g. a weighbridge reading)
+  // may be fractional — see SupplierInvoiceLineItem.actualQuantity, whose
+  // confirmed value this column is copied from at generation time. Every
+  // pre-existing whole-number quantity remains numerically identical as a
+  // Decimal.
+  quantity    Decimal  @db.Decimal(14, 3)
   unitPrice   Decimal  @db.Decimal(12, 2)
   taxRate     Decimal? @db.Decimal(5, 2)
   taxAmount   Decimal  @db.Decimal(12, 2)
@@ -1426,18 +1505,262 @@ model InvoiceSequence {
   value Int    @default(0)
 }
 
+// ─────────────────────────────────────────────
+// Supplier Invoice Upload, Admin Verification & Buyer Invoice Generation
+//
+// The supplier's own invoice (in its own numbering/format) is a supporting
+// SOURCE DOCUMENT — never regenerated, never assigned a BuildOhub number,
+// and never itself "the" invoice shown to the buyer. It is reviewed by an
+// Admin, who enters the ACTUAL invoiced quantities/weights and commercial
+// values (which may differ from the original order's agreed
+// quantity/rate — e.g. steel ordered by estimated weight vs. actual
+// weighbridge figure on the supplier's invoice) and then explicitly
+// confirms. Only that confirmation (never the upload alone) authorizes
+// Invoice generation (see InvoicesService.generate, which now requires
+// SupplierInvoice.status === CONFIRMED).
+//
+// Lifecycle: PENDING_REVIEW (just uploaded) -> REJECTED (admin requests a
+// replacement; supplier re-uploads, which resets status back to
+// PENDING_REVIEW and clears the previous rejection reason) -> CONFIRMED
+// (admin has entered/approved the actual line values; immutable from this
+// point on — generating the Invoice reads this row and its line items as a
+// frozen snapshot, mirroring every other "generated from a locked snapshot,
+// never live data" model in this schema).
+//
+// One row per Order (orderId @unique) — mirrors Invoice.orderId's own
+// uniqueness; an order has at most one supplier invoice under review/
+// confirmed at a time. A rejected upload is REPLACED in place (same row,
+// new bytes) rather than creating a second row, so there is never more
+// than one "current" supplier invoice to review per order.
+enum SupplierInvoiceStatus {
+  PENDING_REVIEW
+  REJECTED
+  CONFIRMED
+}
+
+model SupplierInvoice {
+  id String @id @default(cuid())
+
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  supplierId String
+  supplier   SupplierProfile @relation(fields: [supplierId], references: [id])
+
+  // Optional link to the supplier-facing Purchase Order this invoice
+  // fulfils (admin/backend cross-reference only — never required, since a
+  // supplier invoice can in principle be uploaded even if no formal PO
+  // record exists for older orders).
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+
+  status SupplierInvoiceStatus @default(PENDING_REVIEW)
+
+  // Original file bytes — private, bytes-in-Postgres storage (never a
+  // public/static URL), mirroring PaymentVerification.screenshotData /
+  // SupplierRating.receiptData exactly. The ORIGINAL file is preserved
+  // byte-for-byte; it is never regenerated, edited, or re-rendered.
+  fileData     Bytes
+  fileMimeType String
+  // Server-generated safe filename — never the client-supplied filename
+  // (see buildSafeSupplierInvoiceFileName), mirroring the existing
+  // rating-receipt/payment-proof convention.
+  fileName     String
+  fileSize     Int
+
+  // The supplier's OWN invoice number/date, preserved as reference metadata
+  // only — never used as or confused with the BuildOhub invoice number
+  // (Invoice.invoiceNumber is always independently generated — see
+  // generateInvoiceNumber() / packages/db/lib/business-number.ts). Optional
+  // because a supplier may upload a scan before transcribing these, or an
+  // older invoice format may not expose them cleanly.
+  supplierInvoiceNumber String?
+  supplierInvoiceDate   DateTime?
+
+  uploadedAt DateTime @default(now())
+  uploadedBy String
+  uploader   User     @relation("SupplierInvoiceUploadedBy", fields: [uploadedBy], references: [id])
+
+  // Admin rejection (requests a replacement/correction) — cleared on the
+  // next successful re-upload. An already-CONFIRMED invoice can never be
+  // rejected (see SupplierInvoicesService.reject's guard) — correction
+  // after confirmation is a separate, explicit business process this phase
+  // does not implement (see Final Report's "unresolved" section).
+  rejectedAt      DateTime?
+  rejectedBy      String?
+  rejectionReason String?
+
+  // Admin confirmation — the explicit authorization to generate the
+  // BuildOhub buyer invoice (see Step D/E). Immutable once set: a
+  // CONFIRMED row is never un-confirmed or silently re-confirmed with
+  // different values (SupplierInvoicesService.confirm() is idempotent — a
+  // repeat call for an already-CONFIRMED row returns the existing
+  // confirmed state unchanged rather than re-computing/overwriting it).
+  confirmedAt DateTime?
+  confirmedBy String?
+
+  // Invoice-level adjustments entered/reviewed by the admin alongside the
+  // per-line actual values below (SupplierInvoiceLineItem) — freight/
+  // loading/handling charges, an overall discount, and a rounding
+  // adjustment are commonly invoice-level rather than per-line figures on a
+  // real supplier invoice. Nullable/default-0 so a supplier invoice with no
+  // such charges is unaffected. Only meaningful once status = CONFIRMED;
+  // left at their defaults while PENDING_REVIEW.
+  freightChargeAmount Decimal @default(0) @db.Decimal(12, 2)
+  otherChargesAmount  Decimal @default(0) @db.Decimal(12, 2)
+  discountAmount      Decimal @default(0) @db.Decimal(12, 2)
+  roundingAdjustment  Decimal @default(0) @db.Decimal(12, 2)
+
+  // Confirmed invoice-level totals — the sum of every confirmed line's
+  // taxable value / tax amount, PLUS the charges/discount/rounding above.
+  // Frozen at confirmation time; InvoicesService.generate() copies these
+  // (and the line items below) onto the resulting Invoice/InvoiceLineItem
+  // rows rather than re-deriving them a second time, so there is exactly
+  // one place "the confirmed total" is computed.
+  confirmedTaxableValue Decimal? @db.Decimal(12, 2)
+  confirmedTaxAmount    Decimal? @db.Decimal(12, 2)
+  confirmedTotalAmount  Decimal? @db.Decimal(12, 2)
+
+  // Explicit discrepancy flag + note — set when the admin-entered actual
+  // rate differs from the order's originally agreed OrderItem.unitPrice on
+  // ANY line, or any other reviewed figure does not reconcile cleanly (see
+  // SupplierInvoiceLineItem.rateDiscrepancy below for the per-line detail).
+  // A CONFIRMED invoice may still carry `hasDiscrepancy = true` — admin
+  // confirmation is the explicit record that the discrepancy was reviewed
+  // and accepted, not that it never existed. Never silently cleared.
+  hasDiscrepancy   Boolean @default(false)
+  discrepancyNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lineItems SupplierInvoiceLineItem[]
+  invoice   Invoice?
+
+  @@index([orderId])
+  @@index([supplierId])
+  @@index([purchaseOrderId])
+  @@index([status])
+}
+
+// Admin-entered ACTUAL invoiced quantity/weight and commercial values per
+// OrderItem — kept entirely separate from OrderItem itself (the original
+// ordered quantity/agreed unitPrice on OrderItem is NEVER overwritten by
+// this review process; see the model's own doc comment). One row per
+// OrderItem per SupplierInvoice (unique together) — a line is only ever
+// reviewed once per supplier-invoice upload, though a replacement upload
+// after rejection gets a fresh set of rows.
+model SupplierInvoiceLineItem {
+  id String @id @default(cuid())
+
+  supplierInvoiceId String
+  supplierInvoice   SupplierInvoice @relation(fields: [supplierInvoiceId], references: [id], onDelete: Cascade)
+
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+
+  // Read-only reference snapshot of the ORIGINAL order figures, copied at
+  // review-creation time purely for display/reconciliation convenience —
+  // OrderItem.quantity/unitPrice themselves remain the single source of
+  // truth and are never mutated by this workflow.
+  originalQuantity  Int
+  originalUnitPrice Decimal @db.Decimal(12, 2)
+
+  // Authoritative unit-of-measurement snapshot, frozen at review time from
+  // the underlying OrderItem.product (Product.unit, falling back to
+  // Product.unitRef.code/name — the SAME fields every other supplier/admin
+  // surface already displays, e.g. apps/supplier/lib/supplier-data.ts).
+  // Never inferred from the product name. Shown alongside the ordered and
+  // actual quantities in the Admin review UI so the admin can visually
+  // confirm the entered actualQuantity is genuinely in this unit before
+  // confirming — see unitConfirmed below for the explicit acknowledgment
+  // this system requires, since no automatic unit-compatibility check is
+  // possible (the supplier's uploaded document is an opaque file; its unit
+  // cannot be reliably parsed/verified automatically).
+  orderUnitLabel String?
+
+  // Explicit admin acknowledgment that the entered actualQuantity below is
+  // genuinely expressed in `orderUnitLabel`'s unit — i.e. "I have checked
+  // the supplier's invoice and confirm this quantity uses the same unit as
+  // the order, not a different unit (e.g. tonnes vs kg) that merely looks
+  // like an ordinary quantity change." Defaults to false; the Admin review
+  // API requires this to be explicitly set true before confirm() will
+  // accept the invoice (see SupplierInvoicesService.confirm). This is
+  // intentionally NOT an automatic conversion/validation — the domain
+  // model has no reliable, independent way to detect a unit mismatch, so
+  // the system requires an explicit human decision rather than pretending
+  // to have verified it itself.
+  unitConfirmed Boolean @default(false)
+
+  // Admin-entered ACTUAL invoiced quantity/weight, in the SAME unit of
+  // measurement as the original order line (see orderUnitLabel above) — no
+  // cross-unit conversion (e.g. kg <-> tonne) is performed by this
+  // workflow; this remains an explicit, unresolved product/domain
+  // limitation (no safe, general conversion system exists) rather than an
+  // invented one. A supplier invoice showing a different unit entirely is
+  // a discrepancy requiring explicit admin review (see unitConfirmed
+  // above), never a silent conversion.
+  actualQuantity Decimal @db.Decimal(14, 3)
+
+  // The rate actually used for this line's calculation (quantity x rate).
+  // Equal to originalUnitPrice when the agreed rate is unchanged (the
+  // common case: only the quantity/weight differs) — see
+  // supplier-invoice-reconciliation.ts's resolveLineAmount(). Only ever
+  // DIFFERENT from originalUnitPrice when an admin has explicitly reviewed
+  // and approved a rate change (rateDiscrepancy was true and has now been
+  // explicitly resolved) — never silently substituted.
+  approvedUnitPrice Decimal @db.Decimal(12, 2)
+
+  // The supplier-invoiced rate shown on the original document, if it
+  // differs from originalUnitPrice — purely informational/reconciliation
+  // unless and until an admin explicitly sets approvedUnitPrice to match
+  // it. Null when the supplier's invoice uses the same rate as agreed.
+  supplierInvoicedUnitPrice Decimal? @db.Decimal(12, 2)
+
+  // True whenever supplierInvoicedUnitPrice is present and differs from
+  // originalUnitPrice — computed and persisted at entry time so the admin
+  // confirmation UI/API can require this to be explicitly acknowledged
+  // before allowing confirmation, rather than silently accepting or
+  // overwriting the agreed rate.
+  rateDiscrepancy Boolean @default(false)
+
+  taxRatePercent Decimal? @db.Decimal(5, 2)
+
+  // Reconciled, confirmed figures for this line — computed via the shared
+  // calculateLineGst() helper from actualQuantity x approvedUnitPrice
+  // (never a client-supplied total), mirroring InvoiceLineItem's own
+  // subtotal/taxAmount/total shape exactly so InvoicesService.generate()
+  // can copy these across with no further recomputation.
+  lineSubtotal  Decimal @db.Decimal(12, 2)
+  lineTaxAmount Decimal @db.Decimal(12, 2)
+  lineTotal     Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([supplierInvoiceId, orderItemId])
+  @@index([supplierInvoiceId])
+  @@index([orderItemId])
+}
+
 model OrderItem {
-  id             String          @id @default(cuid())
-  orderId        String
-  order          Order           @relation(fields: [orderId], references: [id])
-  productId      String
-  product        Product         @relation(fields: [productId], references: [id])
-  supplierId     String
-  supplier       SupplierProfile @relation(fields: [supplierId], references: [id])
-  quantity       Int
-  unitPrice      Decimal         @db.Decimal(12, 2)
-  deliveryDate   DateTime?
-  supplierQuotes SupplierQuote[]
+  id                       String                    @id @default(cuid())
+  orderId                  String
+  order                    Order                     @relation(fields: [orderId], references: [id])
+  productId                String
+  product                  Product                   @relation(fields: [productId], references: [id])
+  supplierId               String
+  supplier                 SupplierProfile           @relation(fields: [supplierId], references: [id])
+  quantity                 Int
+  unitPrice                Decimal                   @db.Decimal(12, 2)
+  deliveryDate             DateTime?
+  supplierQuotes           SupplierQuote[]
+  // Admin-entered actual invoiced quantity/weight and commercial values for
+  // this line, across every supplier-invoice review this order item has
+  // ever had (see SupplierInvoiceLineItem model doc comment) — the
+  // original quantity/unitPrice fields above remain the single source of
+  // truth and are never overwritten by this relation's existence.
+  supplierInvoiceLineItems SupplierInvoiceLineItem[]
 
   // Cross-supplier resolution audit trail (additive). Captures which canonical
   // product/tier/listing this line item resolved to and when, so disputes/admin
@@ -1770,6 +2093,11 @@ model PurchaseOrder {
   updatedAt     DateTime            @updatedAt
 
   lineItems PurchaseOrderLineItem[]
+
+  // Admin/backend-only cross-reference: supplier invoices uploaded against
+  // this PO's underlying order (see SupplierInvoice.purchaseOrderId).
+  // Optional — never required for supplier-invoice upload.
+  supplierInvoices SupplierInvoice[]
 
   @@index([builderId])
   @@index([supplierId])

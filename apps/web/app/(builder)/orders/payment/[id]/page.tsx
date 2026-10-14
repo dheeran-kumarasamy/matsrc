@@ -6,6 +6,7 @@ import PaymentMethodSelector from "@/components/orders/PaymentMethodSelector";
 import OrderPaymentPanels from "@/components/orders/OrderPaymentPanels";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { getBankAccountDetails } from "@/lib/bank-account-config";
+import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
 
 type OrderPayment = {
   id: string;
@@ -23,6 +24,11 @@ type OrderPayment = {
   totalLabel: string;
   quoteAccepted: boolean;
   purchaseOrder: { id: string; poNumber: string; status: string; version: number } | null;
+  // The Order's own already-authoritative business number
+  // ("OD/YYMM/SSSSS") — the same number the downloaded buyer-facing PO PDF
+  // displays/names its file after. See
+  // lib/purchase-order-utils.ts's resolveBuyerPoDocumentNumber.
+  orderNumber?: string | null;
 };
 
 
@@ -116,7 +122,7 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
           {order.purchaseOrder ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm font-semibold text-[color:var(--posh-fg-muted)]">
-                {order.purchaseOrder.poNumber}
+                {resolveBuyerPoDocumentNumber({ orderNumber: order.orderNumber, poNumber: order.purchaseOrder.poNumber })}
                 {order.purchaseOrder.version > 1 ? ` (v${order.purchaseOrder.version})` : ""} ·{" "}
                 <span className="font-bold text-[color:var(--posh-fg)]">{order.purchaseOrder.status}</span>
               </p>

@@ -22,7 +22,7 @@ export const BUILDOHUB_COMPANY = {
   // Full registered office address, including the sub-district/taluk
   // (Ganapathy, Coimbatore North), formatted to render on one address line
   // above city/state/pincode (mirrors every other party block's layout).
-  addressLine: "No 87A FIRST FLOOR, MUNIAPPAKOIL THOTTAM, Ganapathy, Coimbatore North",
+  addressLine: "No 87A Sathy Road, Ganapathy, Coimbatore North",
   city: "Coimbatore",
   state: "Tamil Nadu",
   pincode: "641006",

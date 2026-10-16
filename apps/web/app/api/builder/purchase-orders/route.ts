@@ -6,6 +6,7 @@ import {
   purchaseOrderInclude,
   generatePoNumber,
   buildPurchaseOrderLineItemData,
+  isPurchaseOrderEligibleOrderStatus,
 } from "@/lib/purchase-order-utils";
 import { notifySupplierPurchaseOrderGenerated } from "@/lib/notify";
 
@@ -63,10 +64,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Enquiry/order not found" }, { status: 404 });
     }
 
-    // Trigger point: PO creation only available once a supplier has confirmed a quote.
-    if (!order.quoteSelectionCompletedAt || !order.selectedSupplierId) {
+    // Purchase-Order Generation Eligibility (Phase 5B) — see
+    // isPurchaseOrderEligibleOrderStatus's own doc comment
+    // (lib/purchase-order-utils.ts) for the full trace of why `status`
+    // (rather than quoteSelectionCompletedAt/selectedSupplierId) is the
+    // correct, already-persisted signal of genuine confirmation across
+    // ALL FOUR existing confirmation paths — not just the two RFQ-style
+    // ones that happen to set those two fields.
+    if (!isPurchaseOrderEligibleOrderStatus(order.status)) {
       return NextResponse.json(
-        { error: "Purchase order can only be created after a supplier quote has been accepted for this enquiry" },
+        {
+          error:
+            order.status === "CANCELLED"
+              ? "This order has been cancelled and can no longer have a purchase order generated"
+              : "Purchase order can only be created after this enquiry has been confirmed by a supplier or payment has been approved",
+        },
         { status: 400 }
       );
     }
@@ -86,13 +98,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Enquiry has no line items" }, { status: 400 });
     }
 
+    // Supplier resolution (Phase 5B) — order.selectedSupplierId is ONLY
+    // ever populated by the two RFQ-style confirmation paths (see
+    // isPurchaseOrderEligibleOrderStatus's doc comment). For an order
+    // confirmed via OrdersService.updateStatus or PaymentsService.approve
+    // (which never set it), fall back to the order's own, already-frozen
+    // OrderItem.supplierId — mirrors apps/api's PurchaseOrdersService.create
+    // identical fallback exactly, rather than inventing a second rule.
+    let supplierId: string | null = order.selectedSupplierId;
+    if (!supplierId) {
+      const supplierIds = new Set(order.items.map((item) => item.supplierId));
+      if (supplierIds.size > 1) {
+        return NextResponse.json(
+          { error: "This order spans multiple suppliers and cannot be represented as a single purchase order" },
+          { status: 400 }
+        );
+      }
+      supplierId = order.items[0].supplierId;
+    }
+
     const poNumber = await generatePoNumber(prisma);
 
     const created = await prisma.purchaseOrder.create({
       data: {
         poNumber,
         builderId: user.id,
-        supplierId: order.selectedSupplierId,
+        supplierId,
         orderId: order.id,
         status: PurchaseOrderStatus.DRAFT,
         version: 1,

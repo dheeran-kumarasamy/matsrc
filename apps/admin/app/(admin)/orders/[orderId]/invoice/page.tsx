@@ -42,6 +42,17 @@ type InvoiceDetail = {
   amountDue: number | null;
   generatedBy: { id: string; name: string | null; email: string | null } | null;
   generatedAt: string;
+  // Buyer Invoice / Frozen Order Snapshot Reconciliation (Phase 5B) — null
+  // when this invoice's calculated buyer payable/GST reconciled cleanly
+  // against the frozen Order.finalPayableAmount/taxAmount snapshot.
+  reconciliationDiscrepancy: {
+    flaggedAt: string;
+    expectedPayable: number | null;
+    calculatedPayable: number | null;
+    expectedTax: number | null;
+    calculatedTax: number | null;
+    reason: string | null;
+  } | null;
 };
 
 type RatingDetail = {
@@ -117,6 +128,29 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
           Download PDF
         </a>
       </header>
+
+      {/* Buyer Invoice / Frozen Order Snapshot Reconciliation (Phase 5B) —
+          admin-only, never shown on the buyer-facing invoice view. Surfaces
+          a reconciliation discrepancy recorded at generation time (see
+          InvoicesService.generate's doc comment) without ever altering the
+          invoice's own stored financial fields or the frozen Order
+          snapshot — purely informational, for admin follow-up. */}
+      {invoice.reconciliationDiscrepancy ? (
+        <section className="panel border-2 border-amber-400 bg-amber-50 p-4">
+          <p className="text-sm font-extrabold text-amber-900">⚠ Reconciliation discrepancy flagged for review</p>
+          <p className="mt-1 text-xs text-amber-800">{invoice.reconciliationDiscrepancy.reason}</p>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-amber-900">
+            <p>Expected (frozen) payable: ₹{invoice.reconciliationDiscrepancy.expectedPayable?.toLocaleString("en-IN") ?? "—"}</p>
+            <p>Calculated invoice total: ₹{invoice.reconciliationDiscrepancy.calculatedPayable?.toLocaleString("en-IN") ?? "—"}</p>
+            <p>Expected (frozen) GST: ₹{invoice.reconciliationDiscrepancy.expectedTax?.toLocaleString("en-IN") ?? "—"}</p>
+            <p>Calculated GST: ₹{invoice.reconciliationDiscrepancy.calculatedTax?.toLocaleString("en-IN") ?? "—"}</p>
+          </div>
+          <p className="mt-2 text-xs text-amber-700">
+            Flagged {new Date(invoice.reconciliationDiscrepancy.flaggedAt).toLocaleString("en-IN")}. The frozen order
+            amounts and this invoice's totals have NOT been altered — this is informational only.
+          </p>
+        </section>
+      ) : null}
 
       <section className="panel grid gap-4 p-5 sm:grid-cols-2">
         <div>

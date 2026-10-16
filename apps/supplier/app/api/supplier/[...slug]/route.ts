@@ -234,6 +234,17 @@ export async function PATCH(req: NextRequest) {
         ) {
           return NextResponse.json({ message: transitionError.message }, { status: 400 });
         }
+        // Duplicate supplier-action fix: rejecting a direct "Confirm Enquiry"
+        // call against a genuine competing-supplier RFQ (see
+        // updateSupplierOrderStatus's guard in lib/supplier-data.ts) is also
+        // a client error (stale UI / a direct API call bypassing the
+        // quotation requirement), not a server fault.
+        if (
+          typeof transitionError?.message === "string" &&
+          transitionError.message.includes("submit a quotation instead of confirming directly")
+        ) {
+          return NextResponse.json({ message: transitionError.message }, { status: 400 });
+        }
         if (transitionError?.message === "Order not found") {
           return NextResponse.json({ message: "Order not found" }, { status: 404 });
         }

@@ -57,8 +57,14 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
             let the supplier revise the quoted unit price per line item and
             review the GST-inclusive total before confirming. Once the order
             has moved past PLACED, the submitted quotation is final (spec
-            §14) — the form is no longer shown. */}
-        {order.status === "PLACED" ? (
+            §14) — the form is no longer shown.
+            Duplicate supplier-action fix: only rendered when this enquiry
+            genuinely requires a quotation (a competing-supplier RFQ — see
+            getSupplierOrderDetail's hasMultipleEligibleCandidates doc
+            comment in lib/supplier-data.ts). For the common single-supplier
+            case, OrderStatusActions's "Confirm Enquiry" is the only action
+            shown instead, so the two are never rendered together. */}
+        {order.status === "PLACED" && order.requiresQuotation ? (
           <div className="mt-4">
             <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Quotation</h4>
             <div className="mt-2">
@@ -103,6 +109,12 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
         // is what actually enforces the rule even if this prop is stale or
         // this check is bypassed entirely.
         paymentStatus={order.paymentStatus}
+        // Duplicate supplier-action fix: hides "Confirm Enquiry" when this
+        // enquiry genuinely requires a quotation first (RfqQuotationForm
+        // above is rendered for that case instead) — see
+        // getSupplierOrderDetail's hasMultipleEligibleCandidates doc comment
+        // in lib/supplier-data.ts.
+        requiresQuotation={order.requiresQuotation}
         // `label` already mirrors OrderTracking.note verbatim whenever a note
         // was recorded (see getSupplierOrderDetail's `label: entry.note ??
         // humanizeToken(entry.status)`), so it doubles as the `note` input

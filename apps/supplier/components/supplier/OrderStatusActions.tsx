@@ -30,6 +30,7 @@ export function OrderStatusActions({
   status,
   tracking = [],
   paymentStatus,
+  requiresQuotation = false,
 }: {
   orderId: string;
   status: OrderStatus;
@@ -46,6 +47,18 @@ export function OrderStatusActions({
   // prop only avoids a round-trip for the common case of a supplier
   // attempting delivery through this UI before payment is confirmed.
   paymentStatus?: "PENDING" | "PENDING_VERIFICATION" | "PAID" | "FAILED" | "REFUNDED";
+  // Duplicate supplier-action fix (Orders: "Review and Submit Quotation" vs.
+  // "Confirm Enquiry"): true only when this enquiry has a genuine
+  // competing-supplier RFQ (see getSupplierOrderDetail's
+  // hasMultipleEligibleCandidates doc comment in lib/supplier-data.ts). When
+  // true, "Confirm Enquiry" is hidden here — the order detail page instead
+  // renders RfqQuotationForm ("Review & Submit Quotation") for that case —
+  // so the two actions are never shown together. "Decline Enquiry" remains
+  // available either way, since declining doesn't depend on quotation
+  // status. UI-level only; the authoritative guard is the equivalent check
+  // in updateSupplierOrderStatus (lib/supplier-data.ts), which rejects a
+  // direct CONFIRM call even if this prop is stale or bypassed.
+  requiresQuotation?: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
@@ -78,7 +91,10 @@ export function OrderStatusActions({
   // Only the action(s) valid for the order's *current* status are ever
   // rendered — never a fixed list of all four possible actions. See
   // lib/order-status-transitions.ts for the underlying state machine.
-  const actions = getAvailableActions(status);
+  // Duplicate supplier-action fix: additionally drop "CONFIRM" whenever this
+  // enquiry requires a quotation first (RfqQuotationForm is rendered for
+  // that case instead) — "DECLINE" is unaffected.
+  const actions = getAvailableActions(status).filter((action) => !(requiresQuotation && action.key === "CONFIRM"));
   const readOnlyLabel = getReadOnlyStatusLabel(status, tracking);
 
   // C34 (UI-level prevention): a "DELIVER" action is disabled whenever

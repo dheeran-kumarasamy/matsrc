@@ -37,9 +37,17 @@ export class GstService {
   // unset global default — distinct from an explicit 0%, per the "explicit
   // 0% override must be valid and distinct from an unset configuration"
   // requirement — mirrors MarkupService.getGlobal exactly).
+  //
+  // Bug fix: Prisma's findUnique() cannot filter a compound-unique index
+  // (scope_scopeId) by a literal `null` on the nullable scopeId column —
+  // it throws "Argument `scopeId` must not be null" even though the
+  // database itself stores/allows NULL there (confirmed directly against
+  // the live database). findFirst() has no such restriction and is
+  // equally correct here since @@unique([scope, scopeId]) already
+  // guarantees at most one GLOBAL row exists.
   async getGlobal() {
-    return this.prisma.taxSetting.findUnique({
-      where: { scope_scopeId: { scope: "GLOBAL", scopeId: null as any } },
+    return this.prisma.taxSetting.findFirst({
+      where: { scope: "GLOBAL", scopeId: null },
     });
   }
 

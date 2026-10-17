@@ -4,6 +4,7 @@ import { GstService } from "./gst.service";
 
 function buildService(overrides: {
   taxSettingFindUnique?: any;
+  taxSettingFindFirst?: any;
   taxSettingFindMany?: any;
   categoryFindUnique?: any;
   productFindUnique?: any;
@@ -13,6 +14,13 @@ function buildService(overrides: {
   const prisma: any = {
     taxSetting: {
       findUnique: overrides.taxSettingFindUnique ?? vi.fn().mockResolvedValue(null),
+      // getGlobal() uses findFirst (see gst.service.ts's own doc comment —
+      // findUnique cannot filter a compound-unique index by a literal
+      // null). Defaults to resolving whatever taxSettingFindUnique's own
+      // override is set to, so every pre-existing test in this file that
+      // only overrides taxSettingFindUnique to simulate "the GLOBAL row
+      // already exists" continues to work against getGlobal() unmodified.
+      findFirst: overrides.taxSettingFindFirst ?? overrides.taxSettingFindUnique ?? vi.fn().mockResolvedValue(null),
       findMany: overrides.taxSettingFindMany ?? vi.fn().mockResolvedValue([]),
       create: vi.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: "tax-new", ...data })),
       update: vi.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: "tax-existing", ...data })),

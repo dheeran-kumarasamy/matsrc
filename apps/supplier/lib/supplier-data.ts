@@ -8,6 +8,9 @@ import {
   releaseAdvanceReservation,
   generateOrderNumber,
   resolveMarkupForProduct,
+  resolveEffectiveMarkupPercent,
+  calculateMarkup,
+  isValidSupplierPrice,
   resolveOrderConfirmationSnapshot,
   assertFullOrderSnapshotIntegrity,
   ConcurrentConfirmationLostError,
@@ -584,6 +587,43 @@ export async function getPublicSupplierListings() {
   }
 
 
+  // Admin-Configurable Product Markup — buyer-facing PLP/PDP display price
+  // fix: `/products` and the product detail page previously showed the
+  // supplier's own raw price, while only the cart (GET /api/builder/cart)
+  // and checkout/order actually applied markup — a visible mismatch once a
+  // non-zero markup is configured. Resolve the effective markup percentage
+  // for every distinct product/category in THIS listing batch in ONE query
+  // (never N+1/N*tiers per-product queries), then look each one up
+  // in-memory below via the SAME resolveEffectiveMarkupPercent()
+  // PRODUCT -> CATEGORY -> GLOBAL precedence every other buyer-price-
+  // setting call site already uses.
+  const distinctProductIds = Array.from(new Set(listings.map((p: any) => p.id)));
+  const distinctCategoryIds = Array.from(new Set(listings.map((p: any) => p.categoryId)));
+  const markupRows = await prisma.markupSetting.findMany({
+    where: {
+      OR: [
+        { scope: "PRODUCT", scopeId: { in: distinctProductIds } },
+        { scope: "CATEGORY", scopeId: { in: distinctCategoryIds } },
+        { scope: "GLOBAL", scopeId: null },
+      ],
+    },
+  });
+  const toMarkupTier = (scope: string, scopeId: string | null) => {
+    const row = markupRows.find((r: any) => r.scope === scope && r.scopeId === scopeId);
+    return row ? { percentage: Number(row.percentage), isEnabled: row.isEnabled } : null;
+  };
+  const globalMarkupTier = toMarkupTier("GLOBAL", null);
+
+  function resolveBuyerPrice(productId: string, categoryId: string, supplierPrice: number): number {
+    const percent = resolveEffectiveMarkupPercent({
+      product: toMarkupTier("PRODUCT", productId),
+      category: toMarkupTier("CATEGORY", categoryId),
+      global: globalMarkupTier,
+    });
+    if (percent === null || !isValidSupplierPrice(supplierPrice)) return supplierPrice;
+    return calculateMarkup({ supplierUnitPrice: supplierPrice, markupPercent: percent }).buyerUnitPrice;
+  }
+
   const mapped = listings.map((product: any) => {
     const fallbackMaxQty = product.maxServiceableQty ?? product.stock;
     const pricingTiers = Array.isArray(product.pricingTiers) && product.pricingTiers.length > 0
@@ -595,6 +635,21 @@ export async function getPublicSupplierListings() {
             tierPrice: product.basePrice,
           },
         ];
+
+    // IMPORTANT: markedUpTiers/the display fields derived from it below are
+    // ONLY used for PLP/PDP rendering — the separate `pricingTiersRaw`/
+    // `basePriceRaw` fields (the single source of truth for cart-add/
+    // checkout price RESOLUTION, see apps/web/app/api/builder/cart/items/
+    // route.ts's toResolutionCandidate and apps/web/lib/order-checkout.ts)
+    // remain the untouched, raw supplier price — those call sites already
+    // apply markup themselves at their own authoritative moment. Marking
+    // those up here too would double-apply markup.
+    const markedUpTiers = pricingTiers.map((tier: any) => ({
+      minQty: tier.minQty,
+      maxQty: tier.maxQty,
+      tierPrice: resolveBuyerPrice(product.id, product.categoryId, Number(tier.tierPrice)),
+    }));
+    const buyerBasePrice = resolveBuyerPrice(product.id, product.categoryId, Number(product.basePrice));
 
     return {
       id: product.id,
@@ -615,7 +670,10 @@ export async function getPublicSupplierListings() {
       // this field was added for in resolveCanonicalAssignment()).
       sizeLabel: product.sizeLabel ?? null,
       unit: product.unit,
-      price: `${formatCurrency(product.basePrice.toString())} / ${product.unit}`,
+      // Buyer-facing display price — marked up (see resolveBuyerPrice
+      // above). `_basePriceRaw` below (feeding cart-add/checkout
+      // resolution) deliberately stays the untouched supplier price.
+      price: `${formatCurrency(buyerBasePrice.toString())} / ${product.unit}`,
       stock: `${product.stock} ${product.unit}`,
       maxServiceableQty: `${fallbackMaxQty} ${product.unit}`,
       active: product.isActive,
@@ -629,7 +687,11 @@ export async function getPublicSupplierListings() {
       // so it can borrow a sibling listing's real photo before ever falling
       // back to a generic category image (see resolveGroupImages()).
       images: Array.isArray(product.images) ? product.images : [],
-      pricingTiers: pricingTiers.map((tier: any) => ({
+      // Buyer-facing tier prices (marked up) — shown on the PDP's "Pricing
+      // tiers" list and used by EnquiryPanel's pre-cart estimate. See
+      // `_pricingTiersRaw` below for the untouched supplier tiers cart-add/
+      // checkout resolution actually uses.
+      pricingTiers: markedUpTiers.map((tier: any) => ({
         minQty: String(tier.minQty),
         maxQty: String(tier.maxQty),
         price: String(tier.tierPrice),
@@ -638,11 +700,26 @@ export async function getPublicSupplierListings() {
       // Raw numeric fields kept alongside the formatted display fields above
       // (which existing consumers rely on) so the cross-supplier resolution
       // engine below can compute headline/grouped pricing without re-parsing
-      // formatted strings.
+      // formatted strings. These remain the UNTOUCHED supplier price —
+      // apps/web's cart-add/checkout re-resolution (toResolutionCandidate /
+      // order-checkout.ts) reads these exact field names and applies markup
+      // itself at that authoritative moment; marking these up here would
+      // double-apply markup there.
       _basePriceRaw: Number(product.basePrice),
       _stockRaw: Number(product.stock),
       _maxServiceableQtyRaw: Number(fallbackMaxQty),
       _pricingTiersRaw: pricingTiers.map((tier: any) => ({
+        minQty: Number(tier.minQty),
+        maxQty: Number(tier.maxQty),
+        tierPrice: Number(tier.tierPrice),
+      })),
+      // Buyer-facing (marked-up) parallel copies of the two fields above —
+      // used ONLY to build the display-only `candidates` array below
+      // (headline/range/startingPrice computation). Never exposed in the
+      // public API response itself (stripped alongside the other
+      // underscore-prefixed fields).
+      _markedUpBasePrice: buyerBasePrice,
+      _markedUpPricingTiersRaw: markedUpTiers.map((tier: any) => ({
         minQty: Number(tier.minQty),
         maxQty: Number(tier.maxQty),
         tierPrice: Number(tier.tierPrice),
@@ -663,13 +740,19 @@ export async function getPublicSupplierListings() {
     const groupKey = listing.canonicalProductId ?? listing.id;
     const group = groups.get(groupKey) ?? [listing];
 
+    // Display-only candidates — uses the marked-up (buyer-facing) price
+    // copies, NOT item._basePriceRaw/_pricingTiersRaw (those remain the
+    // untouched supplier price, reserved for cart-add/checkout resolution
+    // below). headline/range/startingPrice are purely PLP/PDP display
+    // computations, so they must reflect what the buyer will actually see
+    // and be charged, consistent with the cart/checkout price.
     const candidates: ResolutionCandidate[] = group.map((item: any) => ({
       listingId: item.id,
       supplierId: item.supplierId,
-      basePrice: item._basePriceRaw,
+      basePrice: item._markedUpBasePrice,
       stock: item._stockRaw,
       maxServiceableQty: item._maxServiceableQtyRaw,
-      pricingTiers: item._pricingTiersRaw,
+      pricingTiers: item._markedUpPricingTiersRaw,
       isActive: item.active,
     }));
 
@@ -688,6 +771,8 @@ export async function getPublicSupplierListings() {
       _stockRaw,
       _maxServiceableQtyRaw,
       _pricingTiersRaw,
+      _markedUpBasePrice,
+      _markedUpPricingTiersRaw,
       ...publicFields
     } = listing;
 

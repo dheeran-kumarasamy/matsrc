@@ -20,11 +20,22 @@ const { productRows } = vi.hoisted(() => {
   return { productRows: [] as any[] };
 });
 
-vi.mock("@matsrc/db", () => {
+vi.mock("@matsrc/db", async () => {
+  const actual = await vi.importActual<typeof import("@matsrc/db")>("@matsrc/db");
   return {
+    ...actual,
     prisma: {
       product: {
         findMany: vi.fn(() => Promise.resolve(productRows)),
+      },
+      // Admin-Configurable Product Markup: no markup configuration mocked
+      // (empty array) — resolveBuyerPrice's fail-safe fallback then returns
+      // the raw supplier price unchanged, preserving every pre-existing
+      // raw-price assertion in this file exactly. See the dedicated
+      // markup-specific starting-price tests below for non-zero-markup
+      // coverage.
+      markupSetting: {
+        findMany: vi.fn(() => Promise.resolve([])),
       },
     },
     // supplier-data.ts imports this at module load time — not exercised by

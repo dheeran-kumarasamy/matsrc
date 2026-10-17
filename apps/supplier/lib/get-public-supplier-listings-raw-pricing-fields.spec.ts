@@ -24,11 +24,22 @@ const { productRows } = vi.hoisted(() => {
   return { productRows: [] as any[] };
 });
 
-vi.mock("@matsrc/db", () => {
+vi.mock("@matsrc/db", async () => {
+  const actual = await vi.importActual<typeof import("@matsrc/db")>("@matsrc/db");
   return {
+    ...actual,
     prisma: {
       product: {
         findMany: vi.fn(() => Promise.resolve(productRows)),
+      },
+      // Admin-Configurable Product Markup: no markup configuration mocked —
+      // resolveBuyerPrice's fail-safe fallback returns the raw supplier
+      // price unchanged, preserving every raw-pricing-field assertion in
+      // this file exactly (this file specifically tests the untouched
+      // basePriceRaw/pricingTiersRaw fields, which markup must never touch
+      // regardless).
+      markupSetting: {
+        findMany: vi.fn(() => Promise.resolve([])),
       },
     },
     notifyCustomerOrderStatusChanged: vi.fn(() => Promise.resolve()),

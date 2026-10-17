@@ -248,6 +248,23 @@ export async function PATCH(req: NextRequest) {
         if (transitionError?.message === "Order not found") {
           return NextResponse.json({ message: "Order not found" }, { status: 404 });
         }
+        // Product-Level GST: confirming an enquiry whose product(s) have no
+        // valid effective GST rate configured at any tier (PRODUCT/CATEGORY/
+        // GLOBAL) is a configuration/client error — the admin must configure
+        // a rate before this order can be confirmed — not a server fault.
+        // Mirrors apps/api's identical handling of the same
+        // resolveOrderConfirmationSnapshot failure in
+        // OrdersService.updateStatus (400) and
+        // BestPriceSelectionService.selectAndFinalizeIfEligible (422). See
+        // updateSupplierOrderStatus's guard in lib/supplier-data.ts.
+        if (
+          typeof transitionError?.message === "string" &&
+          transitionError.message.startsWith(
+            "Cannot confirm this enquiry: one or more products have no valid effective GST rate configured."
+          )
+        ) {
+          return NextResponse.json({ message: transitionError.message }, { status: 400 });
+        }
         throw transitionError;
       }
     }

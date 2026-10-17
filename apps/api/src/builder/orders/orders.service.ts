@@ -9,6 +9,7 @@ import { NotificationService } from "src/notifications/notification.service";
 import { UpsertOrderRatingDto } from "./dto/upsert-order-rating.dto";
 import { WhatsAppLifecycleService } from "src/whatsapp/lifecycle/whatsapp-lifecycle.service";
 import { SupplierRfqReceivedNotificationService } from "src/notification-engine/whatsapp/supplier-rfq-received-notification.service";
+import { MarkupService } from "src/admin/markup/markup.service";
 
 function resolveUnitPrice(product: any, quantity: number) {
   const tiers = Array.isArray(product.pricingTiers) ? product.pricingTiers : [];
@@ -32,7 +33,8 @@ export class BuilderOrdersService {
     private readonly builderContext: BuilderContextService,
     private readonly notificationService: NotificationService,
     private readonly whatsAppLifecycleService: WhatsAppLifecycleService,
-    private readonly supplierRfqReceivedNotificationService: SupplierRfqReceivedNotificationService
+    private readonly supplierRfqReceivedNotificationService: SupplierRfqReceivedNotificationService,
+    private readonly markupService: MarkupService
   ) {}
 
   async findAll(userCtx: any) {
@@ -199,12 +201,34 @@ export class BuilderOrdersService {
       {
         supplierId: string;
         supplierName: string;
-        items: Array<{ productId: string; quantity: number; unitPrice: number }>;
+        items: Array<{
+          productId: string;
+          quantity: number;
+          unitPrice: number;
+          supplierUnitPrice: number;
+          markupPercent: number;
+          markupAmount: number;
+        }>;
       }
     >();
 
     for (const item of cartItems) {
-      const unitPrice = resolveUnitPrice(item.product, item.quantity);
+      const supplierUnitPrice = resolveUnitPrice(item.product, item.quantity);
+      // Admin-Configurable Product Markup: mirrors the identical fix in
+      // apps/web/lib/order-checkout.ts (the real production checkout
+      // pipeline) — this NestJS BuilderOrdersController.create() path is
+      // this app's own equivalent order-creation entry point and must
+      // apply the same markup so neither path can leave an order
+      // unmarked-up. Missing/disabled configuration fails safe to 0%.
+      const markup = await this.markupService
+        .resolveMarkupForProduct({
+          productId: item.productId,
+          categoryId: item.product.categoryId,
+          supplierUnitPrice,
+        })
+        .catch(() => null);
+      const resolved = markup ?? { buyerUnitPrice: supplierUnitPrice, markupPercent: 0, markupAmount: 0 };
+
       const currentGroup = groupedItems.get(item.product.supplierId) ?? {
         supplierId: item.product.supplierId,
         supplierName: item.product.supplier.companyName,
@@ -214,7 +238,10 @@ export class BuilderOrdersService {
       currentGroup.items.push({
         productId: item.productId,
         quantity: item.quantity,
-        unitPrice,
+        unitPrice: resolved.buyerUnitPrice,
+        supplierUnitPrice,
+        markupPercent: resolved.markupPercent,
+        markupAmount: resolved.markupAmount,
       });
 
       groupedItems.set(item.product.supplierId, currentGroup);
@@ -272,6 +299,11 @@ export class BuilderOrdersService {
                 supplierId: group.supplierId,
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
+                // Admin-Configurable Product Markup — frozen snapshot (see
+                // OrderItem's schema doc comment).
+                supplierUnitPrice: item.supplierUnitPrice,
+                markupPercent: item.markupPercent,
+                markupAmount: item.markupAmount,
                 deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : null,
               })),
             },

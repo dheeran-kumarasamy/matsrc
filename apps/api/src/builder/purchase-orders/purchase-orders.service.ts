@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { waitUntil } from "@vercel/functions";
-import { PurchaseOrderStatus, calculateLineGst } from "@matsrc/db";
+import { OrderStatus, PurchaseOrderStatus, calculateLineGst } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { BuilderContextService } from "src/builder/builder-context.service";
 import { NotificationService } from "src/notifications/notification.service";
@@ -18,6 +18,37 @@ import { ApprovePurchaseOrderDto } from "./dto/approve-purchase-order.dto";
 
 function toNumber(value: unknown): number {
   return value === null || value === undefined ? 0 : Number(value);
+}
+
+// Purchase-Order Generation Eligibility (Phase 5B) — replaces the previous
+// RFQ-metadata-only gate (`!order.quoteSelectionCompletedAt ||
+// !order.selectedSupplierId`), which incorrectly rejected a genuinely
+// confirmed order whenever it was confirmed through a path that never sets
+// those two fields. Phase 5A's audit traced every production writer of
+// Order.status and found exactly ONE way an order's status can ever leave
+// PLACED: a genuine supplier/payment confirmation through one of the four
+// existing confirmation paths —
+//   - BestPriceSelectionService.selectAndFinalizeIfEligible (multi-supplier
+//     RFQ) — DOES set quoteSelectionCompletedAt/selectedSupplierId.
+//   - apps/supplier's updateSupplierOrderStatus (single-supplier "Confirm
+//     Enquiry") — DOES set them too.
+//   - OrdersService.updateStatus's non-RFQ PLACED -> PROCESSING branch —
+//     does NOT set them (pre-existing, documented Phase 3B gap).
+//   - PaymentsService.approve's genuine-confirmation branch — does NOT set
+//     them either (Phase 4.2).
+// VALID_SUPPLIER_TRANSITIONS (apps/api/src/supplier/orders/orders.service.ts)
+// and the identical table in apps/supplier/lib/order-status-transitions.ts
+// are the single source of truth for the ENTIRE order-status state machine:
+// PLACED -> PROCESSING | CANCELLED is the only way out of PLACED, and
+// CANCELLED/DELIVERED are terminal. There is no code path anywhere in this
+// repository that moves Order.status away from PLACED other than those four
+// confirmation paths — so `status !== PLACED && status !== CANCELLED` is a
+// reliable, ALREADY-PERSISTED signal of genuine confirmation that works
+// identically across all four paths, without requiring
+// quoteSelectionCompletedAt/selectedSupplierId/bestPriceTotal/
+// tentativeDeliveryDate to ever be fabricated or backfilled.
+function isPurchaseOrderEligibleOrderStatus(status: OrderStatus): boolean {
+  return status !== OrderStatus.PLACED && status !== OrderStatus.CANCELLED;
 }
 
 @Injectable()
@@ -72,35 +103,62 @@ export class PurchaseOrdersService {
         name: po.builder.name,
         email: po.builder.email,
       },
-      lineItems: po.lineItems.map((li: any) => ({
-        id: li.id,
-        productId: li.productId,
-        productName: li.product.name,
-        unit: li.product.unit,
-        quantity: li.quantity,
-        unitPrice: toNumber(li.unitPrice),
-        tax: toNumber(li.tax),
-        // The GST rate (percentage) used to compute `tax` above — null only
-        // for pre-migration line items created before this column existed
-        // (see PurchaseOrderLineItem's doc comment in schema.prisma); the
-        // PDF/UI must show a generic "Tax" label for those rather than
-        // fabricating a rate.
-        taxRatePercent: li.taxRatePercent !== null && li.taxRatePercent !== undefined ? toNumber(li.taxRatePercent) : null,
-        deliveryDate: li.deliveryDate,
-        fulfilledQuantity: li.fulfilledQuantity,
-        lineTotal: toNumber(li.unitPrice) * li.quantity + toNumber(li.tax),
-      })),
-      // Explicit subtotal/GST/grand-total breakdown — mirrors the Invoice's
-      // own subtotal/taxAmount/totalAmount fields so the PO PDF/UI can show
-      // the same "Subtotal + GST = Total" structure instead of folding tax
-      // silently into a single TOTAL figure.
-      subtotal: po.lineItems.reduce((acc: number, li: any) => acc + toNumber(li.unitPrice) * li.quantity, 0),
-      taxAmount: po.lineItems.reduce((acc: number, li: any) => acc + toNumber(li.tax), 0),
-      total: po.lineItems.reduce(
-        (acc: number, li: any) => acc + toNumber(li.unitPrice) * li.quantity + toNumber(li.tax),
-        0
-      ),
+      lineItems: po.lineItems.map((li: any) => this.buildBuyerPoLineItemView(li)),
+      // Uniform GST on Marked-Up Buyer Price: this is the builder
+      // (buyer)-facing serialization — see this NestJS PurchaseOrdersModule's
+      // own doc comment, mirroring apps/web's lib/purchase-order-utils.ts
+      // serializePurchaseOrder exactly. subtotal/taxAmount/total reflect the
+      // buyer-facing marked-up basis; the ORIGINAL supplier rate/tax remain
+      // available per-line (see buildBuyerPoLineItemView) purely for
+      // traceability, never shown as this view's own top-level total.
+      subtotal: po.lineItems.reduce((acc: number, li: any) => acc + this.buildBuyerPoLineItemView(li).buyerUnitPrice * li.quantity, 0),
+      taxAmount: po.lineItems.reduce((acc: number, li: any) => acc + this.buildBuyerPoLineItemView(li).buyerTax, 0),
+      total: po.lineItems.reduce((acc: number, li: any) => acc + this.buildBuyerPoLineItemView(li).lineTotal, 0),
       exportUrl: `/builder/purchase-orders/${po.id}/export`,
+    };
+  }
+
+  // Uniform GST on Marked-Up Buyer Price — single shared per-line
+  // computation reused by both serialize()'s line items AND its top-level
+  // subtotal/taxAmount/total reducers above, so the two can never drift
+  // apart. GST on the marked-up buyer value is computed via the SAME
+  // shared calculateLineGst utility every other GST call site uses (never
+  // a second, parallel calculation) — mirrors apps/web's identical
+  // buildBuyerPoLineItemView helper exactly.
+  private buildBuyerPoLineItemView(li: any) {
+    const buyerUnitPrice =
+      li.buyerUnitPrice !== null && li.buyerUnitPrice !== undefined ? toNumber(li.buyerUnitPrice) : toNumber(li.unitPrice);
+    const taxRatePercent =
+      li.taxRatePercent !== null && li.taxRatePercent !== undefined ? toNumber(li.taxRatePercent) : null;
+
+    const buyerGst = calculateLineGst({ quantity: li.quantity, unitPrice: buyerUnitPrice, gstRatePercent: taxRatePercent });
+
+    return {
+      id: li.id,
+      productId: li.productId,
+      productName: li.product.name,
+      unit: li.product.unit,
+      quantity: li.quantity,
+      // Admin-Configurable Product Markup: `unitPrice` here is now the
+      // BUYER-FACING marked-up price (this serialization is buyer-only).
+      // `originalUnitPrice`/`originalTax` preserve the untouched
+      // supplier-side figures, purely for traceability.
+      unitPrice: buyerUnitPrice,
+      buyerUnitPrice,
+      originalUnitPrice: toNumber(li.unitPrice),
+      markupPercent: li.markupPercent !== null && li.markupPercent !== undefined ? toNumber(li.markupPercent) : 0,
+      markupAmount: li.markupAmount !== null && li.markupAmount !== undefined ? toNumber(li.markupAmount) : 0,
+      // Uniform GST on Marked-Up Buyer Price: `tax` is the GST computed on
+      // the marked-up buyer value — never the supplier-based `li.tax`
+      // persisted at PO-generation time. `originalTax` preserves that
+      // original supplier-based figure.
+      tax: buyerGst.gstAmount,
+      buyerTax: buyerGst.gstAmount,
+      originalTax: toNumber(li.tax),
+      taxRatePercent: buyerGst.gstRatePercent,
+      deliveryDate: li.deliveryDate,
+      fulfilledQuantity: li.fulfilledQuantity,
+      lineTotal: buyerGst.lineTotal,
     };
   }
 
@@ -167,9 +225,16 @@ export class PurchaseOrdersService {
       throw new NotFoundException("Enquiry/order not found");
     }
 
-    if (!order.quoteSelectionCompletedAt || !order.selectedSupplierId) {
+    // Purchase-Order Generation Eligibility (Phase 5B) — see
+    // isPurchaseOrderEligibleOrderStatus's own doc comment above for the
+    // full trace of why `status` (rather than quoteSelectionCompletedAt/
+    // selectedSupplierId) is the correct, already-persisted signal of
+    // genuine confirmation across ALL FOUR existing confirmation paths.
+    if (!isPurchaseOrderEligibleOrderStatus(order.status)) {
       throw new BadRequestException(
-        "Purchase order can only be created after a supplier quote has been accepted for this enquiry"
+        order.status === OrderStatus.CANCELLED
+          ? "This order has been cancelled and can no longer have a purchase order generated"
+          : "Purchase order can only be created after this enquiry has been confirmed by a supplier or payment has been approved"
       );
     }
 
@@ -192,13 +257,33 @@ export class PurchaseOrdersService {
       throw new BadRequestException("Enquiry has no line items");
     }
 
+    // Supplier resolution (Phase 5B) — order.selectedSupplierId is ONLY
+    // ever populated by the two RFQ-style confirmation paths (see
+    // isPurchaseOrderEligibleOrderStatus's doc comment). For an order
+    // confirmed via OrdersService.updateStatus or PaymentsService.approve
+    // (which never set it), fall back to the order's own, already-frozen
+    // OrderItem.supplierId — reusing the SAME single-supplier invariant
+    // InvoicesService.generate() already relies on (an Order is created
+    // per-supplier group at checkout, see order-checkout.ts), rather than
+    // inventing a new resolution rule or fabricating selectedSupplierId.
+    let supplierId = order.selectedSupplierId as string | null;
+    if (!supplierId) {
+      const supplierIds = new Set(order.items.map((item) => item.supplierId));
+      if (supplierIds.size > 1) {
+        throw new BadRequestException(
+          "This order spans multiple suppliers and cannot be represented as a single purchase order"
+        );
+      }
+      supplierId = order.items[0].supplierId;
+    }
+
     const poNumber = await this.generatePoNumber();
 
     const created = await this.prisma.purchaseOrder.create({
       data: {
         poNumber,
         builderId: user.id,
-        supplierId: order.selectedSupplierId,
+        supplierId,
         orderId: order.id,
         status: PurchaseOrderStatus.DRAFT,
         version: 1,
@@ -209,26 +294,37 @@ export class PurchaseOrdersService {
         },
         lineItems: {
           // Verify and Fix PO Generation to Use Accepted Supplier RFQ Price:
-          // `item.unitPrice` here is OrderItem.unitPrice, which
-          // BestPriceSelectionService.selectAndFinalizeIfEligible already
-          // overwrote with the accepted SupplierQuote.unitPrice at quote-
-          // acceptance time (see apps/api/src/supplier/rfqs/
-          // best-price-selection.service.ts) — NOT the product's current
-          // catalogue/tier price. The PO must never re-derive this from
-          // Product.basePrice/PricingTier, so this reads directly off the
-          // already-accepted OrderItem row and nothing else.
+          // the PO must never re-derive pricing from Product.basePrice/
+          // PricingTier, so this reads directly off the already-accepted
+          // OrderItem row and nothing else.
+          //
+          // Admin-Configurable Product Markup: this PurchaseOrder is the
+          // Buildohub<->SUPPLIER commercial document in its default
+          // "SUPPLIER" rendering mode (see PurchaseOrderLineItem's schema
+          // doc comment) — `unitPrice`/`tax` are computed from the
+          // ORIGINAL supplier rate (OrderItem.supplierUnitPrice, falling
+          // back to OrderItem.unitPrice only for legacy pre-migration rows
+          // with no recorded supplier price), never the buyer's marked-up
+          // OrderItem.unitPrice. `buyerUnitPrice`/markupPercent/
+          // markupAmount mirror the buyer-facing figures for the PO's
+          // "BUYER" rendering mode.
           //
           // `tax` was previously hard-coded to 0 (GST was never actually
           // computed into the PO at all, regardless of price source) — now
           // computed via the same shared calculateLineGst used by the RFQ
-          // quotation flow, from this same accepted unitPrice and the
-          // product's existing OrderItem.taxRatePercent (falls back to
+          // quotation flow, from the supplier rate and the product's
+          // existing OrderItem.taxRatePercent (falls back to
           // DEFAULT_TAX_RATE_PERCENT when absent — never hard-coded to a
           // single rate).
           create: order.items.map((item) => {
+            const supplierUnitPrice =
+              item.supplierUnitPrice !== null && item.supplierUnitPrice !== undefined
+                ? Number(item.supplierUnitPrice)
+                : Number(item.unitPrice);
+
             const gst = calculateLineGst({
               quantity: item.quantity,
-              unitPrice: Number(item.unitPrice),
+              unitPrice: supplierUnitPrice,
               gstRatePercent: item.taxRatePercent !== null && item.taxRatePercent !== undefined ? Number(item.taxRatePercent) : null,
             });
 
@@ -243,6 +339,9 @@ export class PurchaseOrdersService {
               // null — calculateLineGst() already applies
               // DEFAULT_TAX_RATE_PERCENT when the input omitted it).
               taxRatePercent: gst.gstRatePercent,
+              buyerUnitPrice: Number(item.unitPrice),
+              markupPercent: item.markupPercent !== null && item.markupPercent !== undefined ? Number(item.markupPercent) : 0,
+              markupAmount: item.markupAmount !== null && item.markupAmount !== undefined ? Number(item.markupAmount) : 0,
               deliveryDate: item.deliveryDate ?? order.tentativeDeliveryDate ?? null,
             };
           }),

@@ -15,7 +15,14 @@
 // is also exactly the "multi-supplier grouping" logic quick-request must
 // reuse rather than reimplement.
 
-import { OrderStatus, PaymentStatus, PaymentMethod, generateEnquiryId, notifySupplierRfqReceived } from "@matsrc/db";
+import {
+  OrderStatus,
+  PaymentStatus,
+  PaymentMethod,
+  generateEnquiryId,
+  notifySupplierRfqReceived,
+  resolveMarkupForProduct,
+} from "@matsrc/db";
 import { prisma, resolveUnitPrice } from "@/lib/builder-db";
 import { notifySupplierOrderSubmitted } from "@/lib/notify";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
@@ -202,6 +209,7 @@ export async function createOrdersFromCart(
         select: {
           supplierId: true,
           canonicalProductId: true,
+          categoryId: true,
           basePrice: true,
           supplier: { select: { companyName: true } },
           pricingTiers: {
@@ -256,10 +264,22 @@ export async function createOrdersFromCart(
   type ResolvedLine = {
     productId: string;
     quantity: number;
+    // Admin-Configurable Product Markup: `unitPrice` is now the BUYER-FACING
+    // marked-up price (what gets written onto OrderItem.unitPrice /
+    // Order.totalAmount) — `supplierUnitPrice` preserves the resolved
+    // ORIGINAL supplier price this was derived from. See the markup
+    // resolution pass immediately below this map(), the only place that
+    // turns one into the other.
     unitPrice: number;
+    supplierUnitPrice: number;
+    markupPercent: number;
+    markupAmount: number;
+    // REQ-06 askPrice remains the SUPPLIER-side figure (the only price
+    // surfaced to the supplier) — never marked up.
     askPrice: number | null;
     supplierId: string;
     supplierName: string;
+    categoryId: string;
     canonicalProductId: string | null;
     resolvedListingId: string | null;
     tierMinQty: number | null;
@@ -270,7 +290,13 @@ export async function createOrdersFromCart(
     candidates: ResolutionResult[];
   };
 
-  const resolvedLines: ResolvedLine[] = cartItems.map((item) => {
+  // Resolve each cart item's SUPPLIER-side price first (unchanged logic),
+  // then apply the admin-configured markup in a separate pass below — this
+  // keeps the two concerns (price resolution vs markup) independently
+  // testable and guarantees markup is computed exactly once per line, from
+  // the original supplier price only (never from an already-marked-up
+  // figure), preventing double markup.
+  const supplierResolvedLines = cartItems.map((item) => {
     const { resolution, minPrice, ranked } = resolveForProductId(
       item.productId,
       item.product.canonicalProductId,
@@ -282,7 +308,7 @@ export async function createOrdersFromCart(
       return {
         productId: item.productId,
         quantity: item.quantity,
-        unitPrice: resolution.unitPrice,
+        supplierUnitPrice: resolution.unitPrice,
         // REQ-06: askPrice is the minimum of the full canonical price
         // range shown to the builder — the only price figure surfaced
         // to the supplier. Falls back to the resolved unitPrice if no
@@ -290,6 +316,7 @@ export async function createOrdersFromCart(
         askPrice: minPrice ?? resolution.unitPrice,
         supplierId: resolution.supplierId,
         supplierName: item.product.supplier.companyName,
+        categoryId: item.product.categoryId,
         canonicalProductId: item.product.canonicalProductId,
         resolvedListingId: resolution.listingId,
         tierMinQty: resolution.tierMinQty,
@@ -304,10 +331,11 @@ export async function createOrdersFromCart(
     return {
       productId: item.productId,
       quantity: item.quantity,
-      unitPrice: fallbackUnitPrice,
+      supplierUnitPrice: fallbackUnitPrice,
       askPrice: minPrice ?? fallbackUnitPrice,
       supplierId: item.product.supplierId,
       supplierName: item.product.supplier.companyName,
+      categoryId: item.product.categoryId,
       canonicalProductId: item.product.canonicalProductId,
       resolvedListingId: null,
       tierMinQty: null,
@@ -315,6 +343,38 @@ export async function createOrdersFromCart(
       candidates: [],
     };
   });
+
+  // Admin-Configurable Product Markup — resolve PRODUCT -> CATEGORY ->
+  // GLOBAL precedence and compute the buyer-facing price for each line.
+  // Missing/disabled configuration fails safe to 0% (never blocks
+  // checkout) rather than throwing, mirroring
+  // BestPriceSelectionService.selectAndFinalizeIfEligible's identical
+  // fallback for the RFQ acceptance path.
+  const resolvedLines: ResolvedLine[] = await Promise.all(
+    supplierResolvedLines.map(async (line) => {
+      const markup = await resolveMarkupForProduct(prisma as any, {
+        productId: line.productId,
+        categoryId: line.categoryId,
+        supplierUnitPrice: line.supplierUnitPrice,
+      }).catch(() => null);
+
+      const resolved =
+        markup ?? {
+          supplierUnitPrice: line.supplierUnitPrice,
+          buyerUnitPrice: line.supplierUnitPrice,
+          markupPercent: 0,
+          markupAmount: 0,
+        };
+
+      return {
+        ...line,
+        unitPrice: resolved.buyerUnitPrice,
+        supplierUnitPrice: resolved.supplierUnitPrice,
+        markupPercent: resolved.markupPercent,
+        markupAmount: resolved.markupAmount,
+      };
+    })
+  );
 
 
   // Group by the RESOLVED supplier (routing-bug fix: an enquiry must be
@@ -430,6 +490,15 @@ export async function createOrdersFromCart(
             supplierId: group.supplierId,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
+            // Admin-Configurable Product Markup — frozen snapshot of the
+            // original supplier price + applied markup at initial
+            // checkout/enquiry-creation time. Re-frozen again (from the
+            // winning RFQ quote, if different) at RFQ acceptance by
+            // BestPriceSelectionService — see OrderItem's schema doc
+            // comment for the full snapshot lifecycle.
+            supplierUnitPrice: item.supplierUnitPrice,
+            markupPercent: item.markupPercent,
+            markupAmount: item.markupAmount,
             // REQ-06: the only price figure surfaced to the supplier —
             // the minimum of the canonical product's cross-supplier price
             // range at enquiry time (builder UI continues to show the
@@ -524,6 +593,19 @@ export async function createOrdersFromCart(
   // capture one PriceSnapshot row per confirmed order line at the moment
   // an order is placed (source: ORDER). Deliberately fire-and-forget so a
   // snapshot-write failure never affects the checkout response above.
+  //
+  // Admin-Configurable Product Markup: price-discovery/market intelligence
+  // (regional price comparison, trend reports consuming PriceSnapshot) must
+  // reflect the real SUPPLIER market price, never the buyer's marked-up
+  // figure — using item.unitPrice (post-markup) here would silently inflate
+  // every downstream market-price report by the platform's own margin.
+  // Mirrors the identical, already-correct fix in
+  // BestPriceSelectionService.recordRfqAcceptedSnapshots (source:
+  // RFQ_ACCEPTED), which this ORDER-source writer had not yet received.
+  // `item.supplierUnitPrice` is the quantity-tier-resolved ORIGINAL supplier
+  // price this line was priced from (see the markup-resolution pass above)
+  // — falls back to `item.unitPrice` only if markup resolution was
+  // unavailable (the 0%-fallback case, where the two are equal anyway).
   for (const group of groups.values()) {
     for (const item of group.items) {
       void prisma.priceSnapshot
@@ -532,7 +614,7 @@ export async function createOrdersFromCart(
             productId: item.productId,
             supplierId: group.supplierId,
             canonicalProductId: item.canonicalProductId ?? undefined,
-            price: item.unitPrice,
+            price: item.supplierUnitPrice,
             source: "ORDER",
           },
         })

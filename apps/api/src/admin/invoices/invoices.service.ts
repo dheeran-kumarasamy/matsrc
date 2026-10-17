@@ -1,6 +1,25 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { OrderStatus, PaymentStatus, Prisma, generateInvoiceNumber } from "@matsrc/db";
+import {
+  OrderStatus,
+  PaymentStatus,
+  Prisma,
+  generateInvoiceNumber,
+  calculateLineGst,
+  roundCurrency,
+  assertFullOrderSnapshotIntegrity,
+  InconsistentOrderSnapshotError,
+} from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
+
+// Buyer Invoice / Frozen Order Snapshot Reconciliation (Phase 5B) —
+// tolerance for comparing two already-independently-rounded currency
+// figures (the buyer invoice's own computed total/tax vs. the frozen
+// Order.finalPayableAmount/taxAmount snapshot). Mirrors the identical
+// CURRENCY_TOLERANCE convention already used by
+// packages/db/lib/order-confirmation-snapshot.ts's own arithmetic
+// validators — one cent, matching this schema's Decimal(12,2) precision.
+// This is a COMPARISON epsilon only, never a new rounding/calculation rule.
+const RECONCILIATION_TOLERANCE = 0.01;
 
 // Invoice Generation & Management — Admin-only.
 //
@@ -36,6 +55,49 @@ export class InvoicesService {
   private readonly logger = new Logger(InvoicesService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  // Buyer Invoice / Frozen Order Snapshot Reconciliation (Phase 5B) — pure,
+  // side-effect-free comparison between what this invoice is ABOUT TO bill
+  // the buyer (computed from the confirmed SupplierInvoice, see generate()'s
+  // own doc comment on why that computation is independent from the frozen
+  // Order snapshot) and the authoritative, frozen Order.finalPayableAmount/
+  // taxAmount snapshot written at supplier/payment confirmation time (see
+  // packages/db/lib/order-confirmation-snapshot.ts). Returns null when the
+  // two reconcile within RECONCILIATION_TOLERANCE — the ordinary,
+  // no-discrepancy path. Never called for a legacy order (frozenPayable
+  // null) — see generate()'s own guard, which skips this entirely for that
+  // case rather than fabricating a historical payable to compare against.
+  private computeReconciliationDiscrepancy(
+    computed: { totalAmount: number; taxAmount: number },
+    frozen: { finalPayableAmount: number; taxAmount: number }
+  ): { expectedPayable: number; calculatedPayable: number; expectedTax: number; calculatedTax: number; reason: string } | null {
+    const payableDiff = roundCurrency(computed.totalAmount - frozen.finalPayableAmount);
+    const taxDiff = roundCurrency(computed.taxAmount - frozen.taxAmount);
+
+    if (Math.abs(payableDiff) <= RECONCILIATION_TOLERANCE && Math.abs(taxDiff) <= RECONCILIATION_TOLERANCE) {
+      return null;
+    }
+
+    const reasons: string[] = [];
+    if (Math.abs(payableDiff) > RECONCILIATION_TOLERANCE) {
+      reasons.push(
+        `Calculated buyer payable (₹${computed.totalAmount}) differs from the frozen order payable (₹${frozen.finalPayableAmount}) by ₹${payableDiff}.`
+      );
+    }
+    if (Math.abs(taxDiff) > RECONCILIATION_TOLERANCE) {
+      reasons.push(
+        `Calculated GST (₹${computed.taxAmount}) differs from the frozen order GST (₹${frozen.taxAmount}) by ₹${taxDiff}.`
+      );
+    }
+
+    return {
+      expectedPayable: frozen.finalPayableAmount,
+      calculatedPayable: computed.totalAmount,
+      expectedTax: frozen.taxAmount,
+      calculatedTax: computed.taxAmount,
+      reason: reasons.join(" "),
+    };
+  }
 
   // Single source of truth for "can this order have an invoice generated
   // right now" — used by both generate() (server-side enforcement) and the
@@ -151,57 +213,158 @@ export class InvoicesService {
     const supplierInvoice = (order as any).supplierInvoice;
     const orderItemById = new Map(order.items.map((item: any) => [item.id, item]));
 
+    // Admin-Configurable Product Markup — IMPORTANT, EXPLICITLY DOCUMENTED
+    // ASSUMPTION requiring tax/accounting confirmation (see the investigation
+    // report's "GST treatment must not be guessed" finding): the confirmed
+    // SupplierInvoiceLineItem.approvedUnitPrice is the ADMIN-VERIFIED
+    // SUPPLIER settlement rate (see SupplierInvoicesService's own fix —
+    // originalUnitPrice/approvedUnitPrice are now sourced from
+    // OrderItem.supplierUnitPrice, never the buyer's marked-up price). The
+    // BUYER invoice must bill the marked-up selling price, not this raw
+    // supplier rate — this implementation marks up `approvedUnitPrice` using
+    // the ORIGINAL markup percentage frozen on the order at
+    // checkout/acceptance time (OrderItem.markupPercent — never a
+    // currently-configured admin percentage, so a later admin markup change
+    // can never silently alter an already-confirmed invoice), then
+    // RECOMPUTES GST on that marked-up taxable value. Computing GST on the
+    // buyer-billed value (rather than the supplier settlement value) is the
+    // only arithmetically consistent choice for an invoice addressed to the
+    // buyer; which legal basis applies (Buildohub as principal vs. a
+    // separate agent/commission invoice) is a distinct, UNRESOLVED
+    // tax/accounting question this implementation does not decide — see the
+    // Final Report's "tax/accounting decisions still requiring approval".
     const lineItems = supplierInvoice.lineItems.map((sli: any) => {
       const item = orderItemById.get(sli.orderItemId);
-      const taxRate = sli.taxRatePercent !== null && sli.taxRatePercent !== undefined ? new Prisma.Decimal(sli.taxRatePercent.toString()) : null;
+      const approvedUnitPrice = Number(sli.approvedUnitPrice);
+      const markupPercent =
+        item?.markupPercent !== null && item?.markupPercent !== undefined ? Number(item.markupPercent) : 0;
+      const buyerUnitPrice = Math.round((approvedUnitPrice * (1 + markupPercent / 100) + Number.EPSILON) * 100) / 100;
+      const markupAmount = Math.round((buyerUnitPrice - approvedUnitPrice + Number.EPSILON) * 100) / 100;
+
+      const gst = calculateLineGst({
+        quantity: Number(sli.actualQuantity),
+        unitPrice: buyerUnitPrice,
+        gstRatePercent: sli.taxRatePercent !== null && sli.taxRatePercent !== undefined ? Number(sli.taxRatePercent) : null,
+      });
 
       return {
         productId: (item?.productId as string) ?? null,
         productName: (item?.product?.name as string) ?? "Product",
         description: (item?.product?.description as string | null) ?? null,
         quantity: Number(sli.actualQuantity),
-        unitPrice: new Prisma.Decimal(sli.approvedUnitPrice.toString()),
-        taxRate,
-        taxAmount: new Prisma.Decimal(sli.lineTaxAmount.toString()),
-        subtotal: new Prisma.Decimal(sli.lineSubtotal.toString()),
-        total: new Prisma.Decimal(sli.lineTotal.toString()),
+        unitPrice: new Prisma.Decimal(gst.unitPrice.toString()),
+        taxRate: gst.gstRatePercent !== null ? new Prisma.Decimal(gst.gstRatePercent.toString()) : null,
+        taxAmount: new Prisma.Decimal(gst.gstAmount.toString()),
+        subtotal: new Prisma.Decimal(gst.lineSubtotal.toString()),
+        total: new Prisma.Decimal(gst.lineTotal.toString()),
+        // Admin-Configurable Product Markup — reconciliation traceability.
+        supplierUnitPrice: new Prisma.Decimal(approvedUnitPrice.toString()),
+        markupPercent: new Prisma.Decimal(markupPercent.toString()),
+        markupAmount: new Prisma.Decimal(markupAmount.toString()),
       };
     });
 
-    // Audit fix (financial transparency): `subtotal` is now the PURE sum of
+    // Audit fix (financial transparency): `subtotal` is the PURE sum of
     // this invoice's own line items — exactly what a reader gets by adding
-    // up the line items shown on the document — never the post-adjustment
-    // `confirmedTaxableValue` (which silently folded in freight/other
-    // charges/discount with no visible trace). The invoice-level
-    // adjustments are copied verbatim as their own fields below, and
-    // `taxableValue` records the post-adjustment figure explicitly so the
-    // full chain (subtotal -> + adjustments -> taxableValue -> + tax ->
-    // totalAmount) is reconstructable from stored data alone.
+    // up the line items shown on the document.
+    //
+    // Admin-Configurable Product Markup — IMPORTANT: taxableValue/taxAmount/
+    // totalAmount are now computed from the BUYER-facing (marked-up) line
+    // items above, NOT copied from supplierInvoice.confirmedTaxableValue/
+    // confirmedTaxAmount/confirmedTotalAmount — those remain the SUPPLIER
+    // settlement figures (admin-verified rate x actual quantity, before
+    // markup) and are intentionally never asserted to equal the buyer
+    // invoice's totals once a non-zero markup applies; the two are
+    // DIFFERENT by design (the gap IS the platform's gross markup, per the
+    // confirmed business model). Freight/other charges/discount/rounding
+    // are operational pass-through adjustments (never themselves marked
+    // up) and are added/subtracted identically to the previous behaviour.
     const subtotal = lineItems.reduce((acc: Prisma.Decimal, li: (typeof lineItems)[number]) => acc.plus(li.subtotal), new Prisma.Decimal(0));
     const freightChargeAmount = new Prisma.Decimal(supplierInvoice.freightChargeAmount.toString());
     const otherChargesAmount = new Prisma.Decimal(supplierInvoice.otherChargesAmount.toString());
     const discountAmount = new Prisma.Decimal(supplierInvoice.discountAmount.toString());
     const roundingAdjustment = new Prisma.Decimal(supplierInvoice.roundingAdjustment.toString());
-    const taxAmount = new Prisma.Decimal(supplierInvoice.confirmedTaxAmount.toString());
-    // taxableValue/totalAmount are still read from the confirmed snapshot
-    // (never re-derived here) as the authoritative source of truth — but we
-    // also assert they reconcile with the itemized fields above, so a bug
-    // in either computation surfaces immediately instead of silently
-    // diverging again.
-    const taxableValue = new Prisma.Decimal(supplierInvoice.confirmedTaxableValue.toString());
-    const totalAmount = new Prisma.Decimal(supplierInvoice.confirmedTotalAmount.toString());
-
-    const expectedTaxableValue = subtotal.plus(freightChargeAmount).plus(otherChargesAmount).minus(discountAmount);
-    if (!expectedTaxableValue.equals(taxableValue)) {
-      throw new BadRequestException(
-        "The confirmed supplier invoice totals do not reconcile with its line items — re-review before confirming"
-      );
-    }
+    const taxAmount = lineItems.reduce((acc: Prisma.Decimal, li: (typeof lineItems)[number]) => acc.plus(li.taxAmount), new Prisma.Decimal(0));
+    const taxableValue = subtotal.plus(freightChargeAmount).plus(otherChargesAmount).minus(discountAmount);
+    const totalAmount = taxableValue.plus(taxAmount).plus(roundingAdjustment);
 
     // Payment snapshot — derived from the application's existing
     // PaymentStatus, taken at generation time only.
     const amountPaid = order.paymentStatus === PaymentStatus.PAID ? totalAmount : new Prisma.Decimal(0);
     const amountDue = totalAmount.minus(amountPaid);
+
+    // Buyer Invoice / Frozen Order Snapshot Reconciliation (Phase 5B) —
+    // authoritative policy: Order.finalPayableAmount/taxAmount (frozen at
+    // supplier/payment confirmation time — see
+    // packages/db/lib/order-confirmation-snapshot.ts) are the buyer's
+    // actual, legally-owed payable/GST. A supplier-invoice rate override
+    // (or any other adjustment captured on the confirmed SupplierInvoice)
+    // may legitimately make the just-computed buyer invoice total/tax
+    // differ from that frozen snapshot — this is NEVER silently allowed to
+    // reprice the buyer or silently overwrite the frozen Order snapshot;
+    // it is instead recorded as a durable, admin-visible reconciliation
+    // discrepancy (see writeReconciliationDiscrepancy below) and the
+    // invoice generation itself proceeds — see this method's own
+    // doc comment and generate()'s "Important implementation boundary":
+    // neither amount is ever altered, and no discrepancy is ever silently
+    // marked resolved.
+    //
+    // Legacy orders (order.finalPayableAmount === null — this order was
+    // never confirmed through a snapshot-writing path, or predates the GST
+    // feature entirely) have no frozen GST-inclusive payable to compare
+    // against; reconciliation is skipped entirely rather than fabricating
+    // a historical payable from current configuration — the existing,
+    // pre-Phase-5B invoice-generation behaviour for such orders is fully
+    // preserved.
+    //
+    // A PARTIAL/INCONSISTENT snapshot (fails assertFullOrderSnapshotIntegrity)
+    // is NEVER treated as "legacy" — it fails closed with a blocking error,
+    // surfaced to the admin as a 400, rather than silently generating an
+    // invoice against financial data already known to be corrupt.
+    let reconciliationDiscrepancy: ReturnType<InvoicesService["computeReconciliationDiscrepancy"]> = null;
+    // Loose null check (== rather than ===) — deliberately treats BOTH a
+    // genuinely-null finalPayableAmount (a real legacy/unconfirmed order)
+    // AND an undefined one (a caller/fixture that never set the field at
+    // all) identically as "no frozen snapshot to reconcile against", since
+    // Prisma itself never returns `undefined` for a selected scalar column
+    // — only a caller that omitted the field from its include/select could
+    // produce `undefined`, which must be treated exactly like `null` here,
+    // never as "has a snapshot".
+    const frozenFinalPayableAmount = order.finalPayableAmount == null ? null : Number(order.finalPayableAmount);
+    if (frozenFinalPayableAmount !== null) {
+      try {
+        assertFullOrderSnapshotIntegrity(
+          order.id,
+          {
+            totalAmount: Number(order.totalAmount),
+            taxAmount: order.taxAmount !== null ? Number(order.taxAmount) : null,
+            finalPayableAmount: frozenFinalPayableAmount,
+            advancePercent: order.advancePercent !== null ? Number(order.advancePercent) : null,
+            requiredAdvanceAmount: order.requiredAdvanceAmount !== null ? Number(order.requiredAdvanceAmount) : null,
+          },
+          order.items.map((item: any) => ({
+            id: item.id,
+            taxRatePercent: item.taxRatePercent !== null ? Number(item.taxRatePercent) : null,
+            taxAmount: item.taxAmount !== null ? Number(item.taxAmount) : null,
+          }))
+        );
+      } catch (error) {
+        if (error instanceof InconsistentOrderSnapshotError) {
+          // Fail closed — a partial/inconsistent snapshot must never be
+          // treated as "legacy" or silently repaired by generating an
+          // invoice against it.
+          throw new BadRequestException(
+            `Cannot generate an invoice: this order's financial snapshot is inconsistent (${error.message}). An Admin must investigate before an invoice can be generated.`
+          );
+        }
+        throw error;
+      }
+
+      reconciliationDiscrepancy = this.computeReconciliationDiscrepancy(
+        { totalAmount: totalAmount.toNumber(), taxAmount: taxAmount.toNumber() },
+        { finalPayableAmount: frozenFinalPayableAmount, taxAmount: Number(order.taxAmount) }
+      );
+    }
 
     const now = new Date();
 
@@ -269,6 +432,11 @@ export class InvoicesService {
                 taxAmount: li.taxAmount,
                 subtotal: li.subtotal,
                 total: li.total,
+                // Admin-Configurable Product Markup — reconciliation
+                // traceability (see this method's doc comment above).
+                supplierUnitPrice: li.supplierUnitPrice,
+                markupPercent: li.markupPercent,
+                markupAmount: li.markupAmount,
               })),
             },
           },
@@ -288,6 +456,40 @@ export class InvoicesService {
           },
         });
 
+        // Buyer Invoice / Frozen Order Snapshot Reconciliation (Phase 5B) —
+        // the durable, admin-visible discrepancy record. Written in the
+        // SAME transaction as the Invoice row so a reconciliation
+        // discrepancy can never exist without its invoice (or vice versa).
+        // Uses the EXISTING, generic AuditLog model (no schema change) —
+        // see this service's own doc comment above and the Final Report's
+        // "exact admin-review mechanism used" for why no new model/field
+        // was introduced: AuditService (apps/api/src/admin/audit) already
+        // exposes a filterable GET /admin/audit?entityType=Invoice&
+        // action=INVOICE_RECONCILIATION_DISCREPANCY read surface with zero
+        // additional backend work, and this never marks itself "resolved"
+        // (AuditLog rows are append-only/immutable — there is no mutable
+        // status field here to silently flip). Never written for the
+        // no-discrepancy (reconciled) path.
+        if (reconciliationDiscrepancy) {
+          await tx.auditLog.create({
+            data: {
+              actorId,
+              action: "INVOICE_RECONCILIATION_DISCREPANCY",
+              entityType: "Invoice",
+              entityId: created.id,
+              metadata: {
+                orderId: order.id,
+                invoiceNumber: created.invoiceNumber,
+                expectedPayable: reconciliationDiscrepancy.expectedPayable,
+                calculatedPayable: reconciliationDiscrepancy.calculatedPayable,
+                expectedTax: reconciliationDiscrepancy.expectedTax,
+                calculatedTax: reconciliationDiscrepancy.calculatedTax,
+                reason: reconciliationDiscrepancy.reason,
+              },
+            },
+          });
+        }
+
         return created.id;
       },
       { maxWait: 10000, timeout: 15000 }
@@ -296,6 +498,33 @@ export class InvoicesService {
     return this.findById(invoiceId);
   }
 
+  // Buyer Invoice / Frozen Order Snapshot Reconciliation (Phase 5B) —
+  // admin-only lookup of the durable discrepancy record (if any) written by
+  // generate() alongside this invoice's own INVOICE_GENERATED entry (see
+  // that method's doc comment). Returns null when the invoice reconciled
+  // cleanly — the ordinary case — never a fabricated "no discrepancy"
+  // placeholder distinct from "never checked".
+  private async findReconciliationDiscrepancy(invoiceId: string) {
+    const entry = await this.prisma.auditLog.findFirst({
+      where: { entityType: "Invoice", entityId: invoiceId, action: "INVOICE_RECONCILIATION_DISCREPANCY" },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!entry) {
+      return null;
+    }
+    const metadata = (entry.metadata ?? {}) as Record<string, unknown>;
+    return {
+      flaggedAt: entry.createdAt,
+      expectedPayable: metadata.expectedPayable ?? null,
+      calculatedPayable: metadata.calculatedPayable ?? null,
+      expectedTax: metadata.expectedTax ?? null,
+      calculatedTax: metadata.calculatedTax ?? null,
+      reason: metadata.reason ?? null,
+    };
+  }
+
+  // Only ever called from generate() (admin-gated) — includes markup detail
+  // for the same reason findByOrderId does (see that method's doc comment).
   async findById(id: string) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
@@ -304,9 +533,16 @@ export class InvoicesService {
     if (!invoice) {
       throw new NotFoundException("Invoice not found");
     }
-    return this.serialize(invoice);
+    const reconciliationDiscrepancy = await this.findReconciliationDiscrepancy(invoice.id);
+    return { ...this.serialize(invoice, { includeMarkupDetail: true }), reconciliationDiscrepancy };
   }
 
+  // Admin-only read (see invoices.controller.ts's @Roles("ADMIN") guard).
+  // Admin-Configurable Product Markup: `includeMarkupDetail: true` surfaces
+  // supplierUnitPrice/markupPercent/markupAmount per line for platform
+  // gross-markup reconciliation — NEVER passed when serializing for the
+  // buyer (see findByOrderIdForUser below), since the buyer invoice must
+  // never disclose Buildohub's own margin/supplier cost.
   async findByOrderId(orderId: string) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { orderId },
@@ -315,7 +551,12 @@ export class InvoicesService {
     if (!invoice) {
       throw new NotFoundException("No invoice exists for this order");
     }
-    return this.serialize(invoice);
+    // Buyer Invoice / Frozen Order Snapshot Reconciliation (Phase 5B) —
+    // admin-only visibility, mirroring includeMarkupDetail's identical
+    // gating: a reconciliation discrepancy exposes the platform's own
+    // markup/supplier-settlement gap, which must never reach the buyer.
+    const reconciliationDiscrepancy = await this.findReconciliationDiscrepancy(invoice.id);
+    return { ...this.serialize(invoice, { includeMarkupDetail: true }), reconciliationDiscrepancy };
   }
 
   // Access-controlled read used by both the Admin app and the
@@ -337,7 +578,16 @@ export class InvoicesService {
       throw new ForbiddenException("You do not have access to this invoice");
     }
 
-    return this.serialize(invoice);
+    // Admin-Configurable Product Markup: only an admin caller (never the
+    // buyer, even when viewing their own invoice) sees the markup
+    // breakdown — see serialize()'s own doc comment.
+    //
+    // Buyer Invoice / Frozen Order Snapshot Reconciliation (Phase 5B): the
+    // SAME admin-only gating applies to a reconciliation discrepancy (if
+    // any) — it exposes the platform's own markup/supplier-settlement gap,
+    // which must never reach the buyer even on their own invoice.
+    const reconciliationDiscrepancy = isAdmin ? await this.findReconciliationDiscrepancy(invoice.id) : null;
+    return { ...this.serialize(invoice, { includeMarkupDetail: isAdmin }), reconciliationDiscrepancy };
   }
 
   // NOTE: deliberately does NOT include `supplier` — the generated
@@ -358,7 +608,16 @@ export class InvoicesService {
   }
 
 
-  private serialize(invoice: any) {
+  // Admin-Configurable Product Markup: `includeMarkupDetail` gates whether
+  // the per-line supplierUnitPrice/markupPercent/markupAmount
+  // reconciliation fields are included. Defaults to false (safest default)
+  // — only the explicit admin-only call sites above opt in. The buyer-
+  // facing invoice document/PDF itself never reads these fields at all
+  // (see invoice-pdf.util.ts's InvoicePdfData type, which has no markup
+  // fields), but the JSON API response is additionally gated here as
+  // defense in depth.
+  private serialize(invoice: any, options: { includeMarkupDetail?: boolean } = {}) {
+    const includeMarkupDetail = options.includeMarkupDetail ?? false;
     return {
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
@@ -412,6 +671,18 @@ export class InvoicesService {
         taxAmount: Number(li.taxAmount),
         subtotal: Number(li.subtotal),
         total: Number(li.total),
+        // Admin-Configurable Product Markup — platform gross-markup
+        // reconciliation traceability, admin-only (see includeMarkupDetail
+        // above). Null for invoices generated before this feature existed
+        // (see InvoiceLineItem's schema doc comment) or when the caller is
+        // not authorized to see it.
+        ...(includeMarkupDetail
+          ? {
+              supplierUnitPrice: li.supplierUnitPrice !== null && li.supplierUnitPrice !== undefined ? Number(li.supplierUnitPrice) : null,
+              markupPercent: li.markupPercent !== null && li.markupPercent !== undefined ? Number(li.markupPercent) : null,
+              markupAmount: li.markupAmount !== null && li.markupAmount !== undefined ? Number(li.markupAmount) : null,
+            }
+          : {}),
       })),
       subtotal: Number(invoice.subtotal),
       // Invoice-level adjustments — surfaced explicitly (audit fix) so the

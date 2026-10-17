@@ -7,6 +7,7 @@ import { CurrentUser } from "src/auth/current-user.decorator";
 import { SupplierInvoicesService } from "./supplier-invoices.service";
 import { RejectSupplierInvoiceDto } from "./dto/reject-supplier-invoice.dto";
 import { ReviewSupplierInvoiceLineItemsDto } from "./dto/review-line-items.dto";
+import { RecordSupplierPaymentDto } from "./dto/record-supplier-payment.dto";
 
 // Admin-only Supplier Invoice review/confirmation queue. Mirrors the
 // existing admin/advance-payments controller pattern exactly:
@@ -56,5 +57,17 @@ export class SupplierInvoicesController {
   @Post(":id/confirm")
   confirm(@Param("id") id: string, @CurrentUser() user: any) {
     return this.supplierInvoicesService.confirm(id, user.userId);
+  }
+
+  // Minimal Supplier Payment Tracking — admin-only, same guards as every
+  // other route on this controller (@Roles("ADMIN") above the class).
+  @Get(":id/payments")
+  getPaymentSummary(@Param("id") id: string) {
+    return this.supplierInvoicesService.getPaymentSummary(id);
+  }
+
+  @Post(":id/payments")
+  recordPayment(@Param("id") id: string, @Body() dto: RecordSupplierPaymentDto, @CurrentUser() user: any) {
+    return this.supplierInvoicesService.recordPayment(id, user.userId, dto);
   }
 }

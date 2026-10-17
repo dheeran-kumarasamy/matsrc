@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminApiPatch, adminApiPost } from "@/lib/api-client";
+import { SupplierPaymentPanel } from "./SupplierPaymentPanel";
 
 type LineItem = {
   id: string;
@@ -431,6 +432,8 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
           </div>
         ) : null}
       </section>
+
+      {invoice.status === "CONFIRMED" ? <SupplierPaymentPanel supplierInvoiceId={invoice.id} /> : null}
     </div>
   );
 }

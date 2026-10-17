@@ -1,34 +1,61 @@
-import { PurchaseOrderStatus, calculateLineGst } from "@matsrc/db";
+import { OrderStatus, PurchaseOrderStatus, calculateLineGst } from "@matsrc/db";
 
 export function toNumber(value: unknown): number {
   return value === null || value === undefined ? 0 : Number(value);
 }
 
+// Purchase-Order Generation Eligibility (Phase 5B) — mirrors
+// apps/api/src/builder/purchase-orders/purchase-orders.service.ts's own
+// identical function EXACTLY (see that file's doc comment for the full
+// trace of why `status` — not quoteSelectionCompletedAt/selectedSupplierId
+// — is the correct, already-persisted signal of genuine confirmation
+// across all four existing confirmation paths). This Next.js route
+// (POST /api/builder/purchase-orders) is a separate, independent
+// implementation of the SAME business rule (apps/api and apps/web are
+// separate deployables that don't share application code beyond
+// @matsrc/db), so both copies must be kept in sync whenever the rule
+// changes — never a weaker/parallel policy.
+export function isPurchaseOrderEligibleOrderStatus(status: OrderStatus): boolean {
+  return status !== OrderStatus.PLACED && status !== OrderStatus.CANCELLED;
+}
+
 // Verify and Fix PO Generation to Use Accepted Supplier RFQ Price.
 //
 // Builds a single PurchaseOrderLineItem.create payload from a confirmed
-// OrderItem. `item.unitPrice` is read as-is — it is ALREADY the accepted
-// supplier RFQ quotation price (overwritten from the winning
-// SupplierQuote.unitPrice by BestPriceSelectionService.
-// selectAndFinalizeIfEligible at quote-acceptance time — see
-// apps/api/src/supplier/rfqs/best-price-selection.service.ts). This
-// function never reads Product.basePrice/PricingTier, so a later catalogue
-// price change can never leak into a PO.
+// OrderItem. Admin-Configurable Product Markup: this PurchaseOrder is the
+// Buildohub<->SUPPLIER commercial document in its default "SUPPLIER"
+// rendering mode (see PurchaseOrderLineItem's schema doc comment) — its
+// own `unitPrice`/`tax` MUST therefore be computed from the ORIGINAL
+// supplier rate (`item.supplierUnitPrice`, falling back to `item.unitPrice`
+// only for legacy pre-migration rows with no recorded supplier price),
+// never the buyer's marked-up `item.unitPrice`. The separate
+// `buyerUnitPrice`/markupPercent/markupAmount fields capture the
+// buyer-facing figures for the PO's "BUYER" rendering mode. This function
+// never reads Product.basePrice/PricingTier, so a later catalogue price
+// change can never leak into a PO.
 //
 // `tax` is computed via the same shared calculateLineGst used by the RFQ
-// quotation flow, from this same accepted unitPrice and the OrderItem's own
+// quotation flow, from the supplier rate and the OrderItem's own
 // taxRatePercent (falls back to DEFAULT_TAX_RATE_PERCENT when absent —
 // never hard-coded to a single rate for every product).
 export function buildPurchaseOrderLineItemData(item: {
   productId: string;
   quantity: number;
   unitPrice: unknown;
+  supplierUnitPrice?: unknown;
+  markupPercent?: unknown;
+  markupAmount?: unknown;
   taxRatePercent?: unknown;
   deliveryDate?: Date | null;
 }, fallbackDeliveryDate: Date | null) {
+  const supplierUnitPrice =
+    item.supplierUnitPrice !== null && item.supplierUnitPrice !== undefined
+      ? toNumber(item.supplierUnitPrice)
+      : toNumber(item.unitPrice);
+
   const gst = calculateLineGst({
     quantity: item.quantity,
-    unitPrice: toNumber(item.unitPrice),
+    unitPrice: supplierUnitPrice,
     gstRatePercent:
       item.taxRatePercent !== null && item.taxRatePercent !== undefined ? toNumber(item.taxRatePercent) : null,
   });
@@ -46,6 +73,11 @@ export function buildPurchaseOrderLineItemData(item: {
     // input omitted it), so this is never left unset for a newly created
     // line item.
     taxRatePercent: gst.gstRatePercent,
+    // Admin-Configurable Product Markup — buyer-facing figures for the
+    // "BUYER" mode PO rendering, mirrored from the originating OrderItem.
+    buyerUnitPrice: toNumber(item.unitPrice),
+    markupPercent: item.markupPercent !== null && item.markupPercent !== undefined ? toNumber(item.markupPercent) : 0,
+    markupAmount: item.markupAmount !== null && item.markupAmount !== undefined ? toNumber(item.markupAmount) : 0,
     deliveryDate: item.deliveryDate ?? fallbackDeliveryDate ?? null,
   };
 }
@@ -151,35 +183,80 @@ export function serializePurchaseOrder(po: any) {
       : po.order?.deliveryAddress
         ? { name: null, addressLine: po.order.deliveryAddress, city: null, state: null, pincode: null, gstin: null }
         : null,
-    lineItems: po.lineItems.map((li: any) => ({
-      id: li.id,
-      productId: li.productId,
-      productName: li.product.name,
-      unit: li.product.unit,
-      quantity: li.quantity,
-      unitPrice: toNumber(li.unitPrice),
-      tax: toNumber(li.tax),
-      // The GST rate (percentage) used to compute `tax` above — null only
-      // for pre-migration line items created before this column existed
-      // (see PurchaseOrderLineItem's doc comment in schema.prisma); the
-      // PDF/UI must show a generic "Tax" label for those rather than
-      // fabricating a rate.
-      taxRatePercent: li.taxRatePercent !== null && li.taxRatePercent !== undefined ? toNumber(li.taxRatePercent) : null,
-      deliveryDate: li.deliveryDate,
-      fulfilledQuantity: li.fulfilledQuantity,
-      lineTotal: toNumber(li.unitPrice) * li.quantity + toNumber(li.tax),
-    })),
-    // Explicit subtotal/GST/grand-total breakdown — mirrors the Invoice's
-    // own subtotal/taxAmount/totalAmount fields so the PO PDF/UI can show
-    // the same "Subtotal + GST = Total" structure instead of folding tax
-    // silently into a single TOTAL figure.
-    subtotal: po.lineItems.reduce((acc: number, li: any) => acc + toNumber(li.unitPrice) * li.quantity, 0),
-    taxAmount: po.lineItems.reduce((acc: number, li: any) => acc + toNumber(li.tax), 0),
-    total: po.lineItems.reduce(
-      (acc: number, li: any) => acc + toNumber(li.unitPrice) * li.quantity + toNumber(li.tax),
-      0
-    ),
+    lineItems: po.lineItems.map((li: any) => buildBuyerPoLineItemView(li)),
+    // Uniform GST on Marked-Up Buyer Price: this JSON serialization is
+    // consumed ONLY by apps/web's builder (buyer)-facing routes
+    // (GET/POST/PATCH /api/builder/purchase-orders). subtotal/taxAmount/
+    // total MUST therefore reflect the buyer-facing marked-up basis so this
+    // JSON view, the PurchaseOrderApprovalCard/list-page UI that reads it,
+    // and the downloadable BUYER-mode PDF all reconcile to the SAME
+    // figures — never the ORIGINAL supplier rate, which remains available
+    // on each line item (see buildBuyerPoLineItemView) purely for
+    // traceability, and is never shown as this view's own top-level total.
+    // apps/supplier's own, completely separate serializeForExport() is
+    // unaffected and continues to show the supplier's original rate/tax.
+    subtotal: po.lineItems.reduce((acc: number, li: any) => acc + buildBuyerPoLineItemView(li).buyerUnitPrice * li.quantity, 0),
+    taxAmount: po.lineItems.reduce((acc: number, li: any) => acc + buildBuyerPoLineItemView(li).buyerTax, 0),
+    total: po.lineItems.reduce((acc: number, li: any) => acc + buildBuyerPoLineItemView(li).lineTotal, 0),
     exportUrl: `/api/builder/purchase-orders/${po.id}/export`,
+  };
+}
+
+// Uniform GST on Marked-Up Buyer Price — single shared per-line computation
+// reused by both serializePurchaseOrder's line items AND its top-level
+// subtotal/taxAmount/total reducers above, so the two can never drift out
+// of sync. Buyer-facing GST is computed via the SAME shared
+// calculateLineGst utility every other GST call site in this codebase
+// uses (never a second, parallel calculation), applied to buyerUnitPrice
+// (the marked-up price) rather than the original supplier rate — the
+// approved "GST on marked-up buyer price" policy. The original supplier
+// unitPrice/tax (computed at PO-generation time by
+// buildPurchaseOrderLineItemData from the supplier rate) remain available
+// under their own field names for traceability, never overwritten.
+function buildBuyerPoLineItemView(li: any) {
+  const buyerUnitPrice =
+    li.buyerUnitPrice !== null && li.buyerUnitPrice !== undefined ? toNumber(li.buyerUnitPrice) : toNumber(li.unitPrice);
+  const taxRatePercent =
+    li.taxRatePercent !== null && li.taxRatePercent !== undefined ? toNumber(li.taxRatePercent) : null;
+
+  // GST on the marked-up buyer value, via the single shared calculator —
+  // mirrors buildPurchaseOrderLineItemData's own identical call shape,
+  // differing only in which price (buyer vs supplier) is passed in.
+  const buyerGst = calculateLineGst({ quantity: li.quantity, unitPrice: buyerUnitPrice, gstRatePercent: taxRatePercent });
+
+  return {
+    id: li.id,
+    productId: li.productId,
+    productName: li.product.name,
+    unit: li.product.unit,
+    quantity: li.quantity,
+    // Admin-Configurable Product Markup: `unitPrice` here is now the
+    // BUYER-FACING marked-up price — this JSON view is buyer-only (see
+    // serializePurchaseOrder's own doc comment above). `originalUnitPrice`/
+    // `originalTax` preserve the untouched supplier-side figures this line
+    // was generated from, purely for traceability — never shown as this
+    // view's own top-level total.
+    unitPrice: buyerUnitPrice,
+    buyerUnitPrice,
+    originalUnitPrice: toNumber(li.unitPrice),
+    markupPercent: li.markupPercent !== null && li.markupPercent !== undefined ? toNumber(li.markupPercent) : 0,
+    markupAmount: li.markupAmount !== null && li.markupAmount !== undefined ? toNumber(li.markupAmount) : 0,
+    // Uniform GST on Marked-Up Buyer Price: `tax` is now the GST computed
+    // on the marked-up buyer value (buyerGst.gstAmount) — never the
+    // supplier-based `li.tax` persisted at PO-generation time.
+    // `originalTax` preserves that original supplier-based figure.
+    tax: buyerGst.gstAmount,
+    buyerTax: buyerGst.gstAmount,
+    originalTax: toNumber(li.tax),
+    // The GST rate (percentage) — the SAME rate applies to both the
+    // supplier and buyer bases (only the taxable VALUE differs); null only
+    // for pre-migration line items with no stored rate (see
+    // PurchaseOrderLineItem.taxRatePercent's doc comment) — the UI/PDF show
+    // a generic "Tax" label for those rather than fabricating a rate.
+    taxRatePercent: buyerGst.gstRatePercent,
+    deliveryDate: li.deliveryDate,
+    fulfilledQuantity: li.fulfilledQuantity,
+    lineTotal: buyerGst.lineTotal,
   };
 }
 

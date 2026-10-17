@@ -1,5 +1,6 @@
 import { PDF_BASE_FONT_BOLD } from "@/lib/pdf-fonts";
 import { BUILDOHUB_COMPANY } from "@/lib/company-info";
+import { calculateLineGst } from "@matsrc/db";
 
 // Which commercial direction this PDF represents — the two directions
 // share every layout/table/pagination detail below and differ ONLY in
@@ -72,6 +73,58 @@ export function resolvePoDocumentView(po: any, mode: PoDocumentMode): PoDocument
     buyer: isBuyerFacing ? builder : buildohub,
     seller: isBuyerFacing ? buildohub : supplier,
   };
+}
+
+export type PoDisplayLineItem = {
+  quantity: number;
+  displayUnitPrice: number;
+  displayTax: number;
+  displayLineTotal: number;
+};
+
+export type PoDisplayTotals = {
+  lineItems: PoDisplayLineItem[];
+  subtotal: number;
+  taxAmount: number;
+  total: number;
+};
+
+// Uniform GST on Marked-Up Buyer Price — pure, pdfkit-free computation
+// factored out of renderPoPdfContent (same rationale as
+// resolvePoDocumentView above) so the actual GST arithmetic — the subject
+// of this fix — can be unit-tested directly without parsing rendered PDF
+// bytes. renderPoPdfContent below calls this exact function for the values
+// it draws onto the page; there is no second, divergent calculation.
+//
+// SUPPLIER mode (unchanged): GST is taken as-is from each line's
+// persisted, supplier-rate-based `tax` (computed at PO-generation time —
+// see purchase-order-utils.ts's buildPurchaseOrderLineItemData).
+// BUYER mode: GST is recomputed here, at render time, on the marked-up
+// buyerUnitPrice via the SAME shared calculateLineGst utility every other
+// GST call site in this codebase uses (never a second, parallel
+// calculation) — this is the approved "GST on marked-up buyer price"
+// policy, matching the buyer Invoice's own treatment for the same order.
+export function resolvePoLineItemTotals(po: any, mode: PoDocumentMode): PoDisplayTotals {
+  const isBuyerFacing = mode === "BUYER";
+
+  const lineItems = (po.lineItems ?? []).map((li: any) => {
+    const displayUnitPrice = isBuyerFacing ? li.buyerUnitPrice ?? li.unitPrice : li.unitPrice;
+    const displayTax = isBuyerFacing
+      ? calculateLineGst({ quantity: li.quantity, unitPrice: displayUnitPrice, gstRatePercent: li.taxRatePercent }).gstAmount
+      : li.tax;
+    return {
+      quantity: li.quantity,
+      displayUnitPrice,
+      displayTax,
+      displayLineTotal: displayUnitPrice * li.quantity + displayTax,
+    };
+  });
+
+  const subtotal = lineItems.reduce((acc: number, li: PoDisplayLineItem) => acc + li.displayUnitPrice * li.quantity, 0);
+  const taxAmount = lineItems.reduce((acc: number, li: PoDisplayLineItem) => acc + li.displayTax, 0);
+  const total = subtotal + taxAmount;
+
+  return { lineItems, subtotal, taxAmount, total };
 }
 
 // Draws the full Purchase Order document body onto an already-created
@@ -316,7 +369,27 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
   const pageBottom = doc.page.height - doc.page.margins.bottom;
   y = drawTableHeader(y);
 
-  po.lineItems.forEach((li: any, index: number) => {
+  // Uniform GST on Marked-Up Buyer Price (approved policy): GST must be
+  // calculated once, on the applicable GST-taxable value — the BUYER-mode
+  // document's taxable value is the marked-up buyer price
+  // (li.buyerUnitPrice), never the original supplier rate (li.unitPrice).
+  // SUPPLIER mode (unchanged): uses the persisted, supplier-rate-based
+  // `li.tax` as-is. See resolvePoLineItemTotals's own doc comment for the
+  // full rationale — this mirrors the already-approved treatment
+  // InvoicesService.generate() applies to the buyer Invoice, so the PO and
+  // the eventual Invoice for the same order reconcile to the same basis.
+  const computedTotals = resolvePoLineItemTotals(po, mode);
+  const displayLineItems = po.lineItems.map((li: any, index: number) => ({
+    ...li,
+    displayUnitPrice: computedTotals.lineItems[index].displayUnitPrice,
+    displayTax: computedTotals.lineItems[index].displayTax,
+    displayLineTotal: computedTotals.lineItems[index].displayLineTotal,
+  }));
+  const displaySubtotal = computedTotals.subtotal;
+  const displayTaxAmount = computedTotals.taxAmount;
+  const displayTotal = computedTotals.total;
+
+  displayLineItems.forEach((li: any, index: number) => {
     // Estimate row height from the description's wrapped line count so
     // long descriptions never overlap the next row.
     //
@@ -353,9 +426,9 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
     doc.text(String(index + 1), colSr, y, { width: colSrW });
     doc.text(descriptionText, colDesc, y, { width: colDescW });
     doc.text(String(li.quantity), colQty, y, { width: colQtyW, align: "right" });
-    doc.text(money(li.unitPrice), colRate, y, { width: colRateW, align: "right" });
+    doc.text(money(li.displayUnitPrice), colRate, y, { width: colRateW, align: "right" });
     doc.text(gstRateLabel(li), colGstRate, y, { width: colGstRateW, align: "right" });
-    doc.text(money(li.lineTotal), colAmount, y, { width: colAmountW, align: "right" });
+    doc.text(money(li.displayLineTotal), colAmount, y, { width: colAmountW, align: "right" });
 
     y += rowHeight;
   });
@@ -387,13 +460,26 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
     y = marginLeft;
   }
 
+  // Uniform GST on Marked-Up Buyer Price: the Subtotal/GST/Total band now
+  // shows a real, reconciled figure in BOTH modes — BUYER mode's
+  // displaySubtotal/displayTaxAmount/displayTotal (computed alongside
+  // displayLineItems above) are GST calculated on the marked-up buyer
+  // value via the shared calculateLineGst utility, matching the buyer
+  // Invoice's own treatment for the same order.
   doc.font("PDFBaseFont").fontSize(10).fillColor(TEXT);
-  doc.text("Subtotal (Taxable Value)", summaryLabelX, y, { width: colQtyW + colRateW });
-  doc.text(money(po.subtotal ?? po.total - po.taxAmount), summaryValueX, y, { width: colAmountW, align: "right" });
+  doc.text("Subtotal (Taxable Value)", summaryLabelX, y, {
+    width: colQtyW + colRateW,
+  });
+  doc.text(money(displaySubtotal), summaryValueX, y, { width: colAmountW, align: "right" });
   y += 16;
 
-  doc.text(gstLabel, summaryLabelX, y, { width: colQtyW + colRateW });
-  doc.text(money(po.taxAmount ?? 0), summaryValueX, y, { width: colAmountW, align: "right" });
+  doc.text(gstLabel, summaryLabelX, y, {
+    width: colQtyW + colRateW,
+  });
+  doc.text(money(displayTaxAmount), summaryValueX, y, {
+    width: colAmountW,
+    align: "right",
+  });
   y += 20;
 
   // ---- Total band (orange, reference's row-33 styling) --------------
@@ -408,7 +494,7 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
     .fontSize(11)
     .fillColor("#FFFFFF")
     .text("TOTAL", colDesc, y + 6, { width: colQtyW + colRateW + colGstRateW });
-  doc.text(money(po.total), colAmount, y + 6, { width: colAmountW, align: "right" });
+  doc.text(money(displayTotal), colAmount, y + 6, { width: colAmountW, align: "right" });
   doc.fillColor(TEXT);
   y += totalBandHeight + 20;
 

@@ -5,6 +5,8 @@ import {
   upsertAdvanceReservation,
   consumeAdvanceReservation,
   AdvanceReservationError,
+  assertConsistentOrderSnapshot,
+  calculateRemainingBalance,
 } from "@matsrc/db";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
 import { computeOrderOutstandingAmount } from "@/lib/order-outstanding";
@@ -103,7 +105,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     const order = await prisma.order.findFirst({
       where: { id: params.id, userId: user.id },
-      select: { id: true, paymentStatus: true, status: true, enquiryId: true, orderNumber: true, totalAmount: true },
+      select: {
+        id: true,
+        paymentStatus: true,
+        status: true,
+        enquiryId: true,
+        orderNumber: true,
+        totalAmount: true,
+        taxAmount: true,
+        finalPayableAmount: true,
+        advancePercent: true,
+        requiredAdvanceAmount: true,
+      },
     });
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
@@ -114,6 +127,20 @@ export async function POST(request: Request, { params }: { params: { id: string 
     if (order.paymentStatus === PaymentStatus.PAID) {
       return NextResponse.json({ error: "This order has already been paid" }, { status: 400 });
     }
+
+    // Product-Level GST / GST-Inclusive Buyer Payable (Phase 4): reserve
+    // against the frozen GST-inclusive finalPayableAmount once this order
+    // has been confirmed through a snapshot-writing path; fall back to the
+    // pre-existing GST-exclusive totalAmount for a legacy/not-yet-confirmed
+    // order — same resolution rule as apps/web/lib/order-outstanding.ts, so
+    // the two never disagree on what "the order total" means.
+    assertConsistentOrderSnapshot(order.id, {
+      taxAmount: order.taxAmount == null ? null : Number(order.taxAmount),
+      finalPayableAmount: order.finalPayableAmount == null ? null : Number(order.finalPayableAmount),
+      advancePercent: order.advancePercent == null ? null : Number(order.advancePercent),
+      requiredAdvanceAmount: order.requiredAdvanceAmount == null ? null : Number(order.requiredAdvanceAmount),
+    });
+    const resolvedPayable = order.finalPayableAmount != null ? Number(order.finalPayableAmount) : Number(order.totalAmount ?? 0);
 
     const account = await prisma.customerAdvanceAccount.findUnique({
       where: { buyerId: user.id },
@@ -137,7 +164,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       // value supplied by the client. maxReservable excludes this order's
       // own currently-active reservation, so raising the reservation up to
       // the full outstanding amount is actually possible.
-      const { outstanding: maxReservable } = await computeSettledOutstandingTx(tx, order.id, Number(order.totalAmount));
+      const { outstanding: maxReservable } = await computeSettledOutstandingTx(tx, order.id, resolvedPayable);
 
       const { availableAfter, reservedAfter } = await upsertAdvanceReservation(tx as any, {
         accountId: account.id,
@@ -238,6 +265,6 @@ async function computeSettledOutstandingTx(tx: any, orderId: string, totalAmount
     else settledApplied -= amt;
   }
 
-  const outstanding = Math.max(0, Math.round((totalAmount - settledApplied) * 100) / 100);
+  const outstanding = calculateRemainingBalance(totalAmount, settledApplied);
   return { outstanding };
 }

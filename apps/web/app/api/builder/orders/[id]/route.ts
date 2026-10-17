@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { OrderStatus, PaymentStatus, PaymentMethod } from "@matsrc/db";
+import { OrderStatus, PaymentStatus, PaymentMethod, assertConsistentOrderSnapshot } from "@matsrc/db";
 import {
   prisma,
   formatCurrency,
@@ -30,6 +30,10 @@ export async function GET(
         paymentMethod: true,
         paymentStatus: true,
         totalAmount: true,
+        taxAmount: true,
+        finalPayableAmount: true,
+        advancePercent: true,
+        requiredAdvanceAmount: true,
         deliveryDate: true,
         quoteSelectionCompletedAt: true,
         isAggregated: true,
@@ -92,6 +96,23 @@ export async function GET(
       Boolean(creditProfile?.bankGuaranteeEnabled) &&
       (creditProfile?.bankGuaranteeStatus === "APPROVED" || creditProfile?.bankGuaranteeStatus === "ACTIVE");
 
+    // Product-Level GST / GST-Inclusive Buyer Payable (Phase 4): surface the
+    // frozen, GST-inclusive finalPayableAmount (and its tax breakdown) once
+    // this order has been confirmed through a snapshot-writing path; fall
+    // back to the pre-existing GST-exclusive totalAmount for a
+    // legacy/not-yet-confirmed order — never recomputed from current
+    // GST/markup configuration. Same resolution rule as
+    // apps/web/lib/order-outstanding.ts, so the payment page and this order
+    // detail page always agree on "the order total".
+    assertConsistentOrderSnapshot(order.id, {
+      taxAmount: order.taxAmount == null ? null : Number(order.taxAmount),
+      finalPayableAmount: order.finalPayableAmount == null ? null : Number(order.finalPayableAmount),
+      advancePercent: order.advancePercent == null ? null : Number(order.advancePercent),
+      requiredAdvanceAmount: order.requiredAdvanceAmount == null ? null : Number(order.requiredAdvanceAmount),
+    });
+    const hasGstSnapshot = order.finalPayableAmount != null;
+    const resolvedTotal = hasGstSnapshot ? Number(order.finalPayableAmount) : Number(order.totalAmount ?? 0);
+
     return NextResponse.json({
       id: order.id,
       enquiryId: order.enquiryId ?? order.id,
@@ -110,8 +131,16 @@ export async function GET(
 
       supplierId: order.items[0]?.product.supplier.id ?? null,
       primaryListingId: order.items[0]?.product.id ?? null,
-      total: Number(order.totalAmount),
-      totalLabel: formatCurrency(order.totalAmount),
+      total: resolvedTotal,
+      totalLabel: formatCurrency(resolvedTotal),
+      // GST breakdown — only ever populated once this order carries a
+      // frozen snapshot; null for a legacy/not-yet-confirmed order (never
+      // inferred as "zero tax").
+      gstInclusive: hasGstSnapshot,
+      subtotalBeforeTax: hasGstSnapshot ? Number(order.totalAmount) : null,
+      taxAmount: hasGstSnapshot ? Number(order.taxAmount) : null,
+      advancePercent: order.advancePercent == null ? null : Number(order.advancePercent),
+      requiredAdvanceAmount: order.requiredAdvanceAmount == null ? null : Number(order.requiredAdvanceAmount),
       deliveryDate: formatDate(order.deliveryDate),
       supplierName: getSupplierDisplayName(
         order.items[0]?.product.supplier.companyName,

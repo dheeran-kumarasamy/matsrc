@@ -7,6 +7,7 @@ import {
   resolveUserCtx,
 } from "@/lib/builder-db";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
+import { resolveMarkupForProduct } from "@matsrc/db";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export async function GET(request: Request) {
             name: true,
             unit: true,
             supplierId: true,
+            categoryId: true,
             basePrice: true,
             // C12 fix: the cart API never selected the product's `images`
             // field at all, so CartItem.image was always undefined
@@ -47,21 +49,37 @@ export async function GET(request: Request) {
       orderBy: { updatedAt: "desc" },
     });
 
-    const subtotal = items.reduce((acc, item) => {
-      const unitPrice =
-        item.resolvedUnitPrice != null
-          ? Number(item.resolvedUnitPrice)
-          : resolveUnitPrice(item.product, item.quantity);
-      return acc + unitPrice * item.quantity;
-    }, 0);
-
-    return NextResponse.json({
-      items: items.map((item) => {
-        const unitPrice =
+    // Admin-Configurable Product Markup: the cart is a buyer-facing preview
+    // of what checkout will charge — it must show the MARKED-UP price, not
+    // the raw supplier price, so a buyer never sees a different (lower)
+    // total in the cart than what createOrdersFromCart() actually charges
+    // at checkout. Resolved per item (supplier price is the markup base,
+    // never an already-marked-up value — see
+    // packages/db/lib/markup-calculation.ts). Missing/disabled
+    // configuration fails safe to 0% markup, mirroring every other
+    // pricing call site's identical fallback.
+    const itemsWithBuyerPrice = await Promise.all(
+      items.map(async (item) => {
+        const supplierUnitPrice =
           item.resolvedUnitPrice != null
             ? Number(item.resolvedUnitPrice)
             : resolveUnitPrice(item.product, item.quantity);
 
+        const markup = await resolveMarkupForProduct(prisma as any, {
+          productId: item.productId,
+          categoryId: item.product.categoryId,
+          supplierUnitPrice,
+        }).catch(() => null);
+
+        const unitPrice = markup ? markup.buyerUnitPrice : supplierUnitPrice;
+        return { item, unitPrice };
+      })
+    );
+
+    const subtotal = itemsWithBuyerPrice.reduce((acc, { unitPrice, item }) => acc + unitPrice * item.quantity, 0);
+
+    return NextResponse.json({
+      items: itemsWithBuyerPrice.map(({ item, unitPrice }) => {
         return {
           id: item.id,
           productId: item.productId,

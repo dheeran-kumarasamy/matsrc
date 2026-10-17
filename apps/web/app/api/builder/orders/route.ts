@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { OrderStatus, PaymentStatus, Prisma } from "@matsrc/db";
+import { OrderStatus, PaymentStatus, Prisma, assertConsistentOrderSnapshot } from "@matsrc/db";
 import {
   prisma,
   formatCurrency,
@@ -68,6 +68,10 @@ export async function GET(request: Request) {
         status: true,
         paymentStatus: true,
         totalAmount: true,
+        taxAmount: true,
+        finalPayableAmount: true,
+        advancePercent: true,
+        requiredAdvanceAmount: true,
         createdAt: true,
         isAggregated: true,
         aggregationPoolId: true,
@@ -89,15 +93,32 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(
-      orders.map((order, idx) => ({
+      orders.map((order, idx) => {
+        // Product-Level GST / GST-Inclusive Buyer Payable (Phase 4): same
+        // resolution rule as the order-detail route and
+        // apps/web/lib/order-outstanding.ts — prefer the frozen,
+        // GST-inclusive finalPayableAmount once confirmed; fall back to the
+        // pre-existing GST-exclusive totalAmount for a legacy/not-yet-
+        // confirmed order.
+        assertConsistentOrderSnapshot(order.id, {
+          taxAmount: order.taxAmount == null ? null : Number(order.taxAmount),
+          finalPayableAmount: order.finalPayableAmount == null ? null : Number(order.finalPayableAmount),
+          advancePercent: order.advancePercent == null ? null : Number(order.advancePercent),
+          requiredAdvanceAmount: order.requiredAdvanceAmount == null ? null : Number(order.requiredAdvanceAmount),
+        });
+        const hasGstSnapshot = order.finalPayableAmount != null;
+        const resolvedTotal = hasGstSnapshot ? Number(order.finalPayableAmount) : Number(order.totalAmount ?? 0);
+
+        return {
         id: order.id,
         enquiryId: order.enquiryId ?? order.id,
         orderNumber: order.orderNumber ?? null,
         status: order.status,
         paymentStatus: order.paymentStatus,
         itemCount: order.items.length,
-        total: Number(order.totalAmount),
-        totalLabel: formatCurrency(order.totalAmount),
+        total: resolvedTotal,
+        totalLabel: formatCurrency(resolvedTotal),
+        gstInclusive: hasGstSnapshot,
         createdAt: order.createdAt,
         isAggregated: order.isAggregated,
         aggregationPoolId: order.aggregationPoolId,
@@ -116,7 +137,8 @@ export async function GET(request: Request) {
         // Order reference number is always the LAST path segment — route
         // moved from /orders/[id]/payment -> /orders/payment/[id].
         paymentLink: `/orders/payment/${order.id}`,
-      }))
+        };
+      })
     );
   } catch (error) {
     console.error("Orders GET error:", error);

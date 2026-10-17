@@ -74,12 +74,25 @@ describe("BuilderOrdersService.create", () => {
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
+    // Admin-Configurable Product Markup: 0% (echoes the supplier price back
+    // unchanged) so every pre-existing total/price assertion in this file
+    // keeps passing unmodified.
+    const markupService = {
+      resolveMarkupForProduct: vi.fn(async (params: { supplierUnitPrice: number }) => ({
+        supplierUnitPrice: params.supplierUnitPrice,
+        buyerUnitPrice: params.supplierUnitPrice,
+        markupPercent: 0,
+        markupAmount: 0,
+      })),
+    };
+
     const service = new BuilderOrdersService(
       prisma as any,
       builderContext as any,
       notificationService as any,
       whatsAppLifecycleService as any,
-      supplierRfqReceivedNotificationService as any
+      supplierRfqReceivedNotificationService as any,
+      markupService as any
     );
 
     const result = await service.create(
@@ -143,12 +156,22 @@ describe("BuilderOrdersService.upsertRating", () => {
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
+    const markupService = {
+      resolveMarkupForProduct: vi.fn(async (params: { supplierUnitPrice: number }) => ({
+        supplierUnitPrice: params.supplierUnitPrice,
+        buyerUnitPrice: params.supplierUnitPrice,
+        markupPercent: 0,
+        markupAmount: 0,
+      })),
+    };
+
     const service = new BuilderOrdersService(
       prisma as any,
       builderContext as any,
       notificationService as any,
       whatsAppLifecycleService as any,
-      supplierRfqReceivedNotificationService as any
+      supplierRfqReceivedNotificationService as any,
+      markupService as any
     );
     return { service, prisma };
   }

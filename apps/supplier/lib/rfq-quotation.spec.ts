@@ -7,10 +7,15 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { orderRows, supplierQuoteRows, orderItemUpdateCalls } = vi.hoisted(() => ({
+const { orderRows, supplierQuoteRows, orderItemUpdateCalls, orderUpdateCalls, markupByProductId } = vi.hoisted(() => ({
   orderRows: new Map<string, any>(),
   supplierQuoteRows: [] as any[],
   orderItemUpdateCalls: [] as any[],
+  orderUpdateCalls: [] as any[],
+  // Admin-Configurable Product Markup: productId -> markup result the test
+  // wants resolveMarkupForProduct to return for that line. Defaults to null
+  // (no config -> 0% fail-safe fallback) unless a test explicitly seeds one.
+  markupByProductId: new Map<string, any>(),
 }));
 
 vi.mock("@matsrc/db", () => {
@@ -45,6 +50,29 @@ vi.mock("@matsrc/db", () => {
               orderItemUpdateCalls.push(args);
               return {};
             }),
+            // Order-Total Synchronization: returns every OrderItem belonging
+            // to the enquiry currently being quoted, reflecting the
+            // just-applied updates above, so the fix's totalAmount resync
+            // can be exercised realistically.
+            findMany: vi.fn(async (args: any) => {
+              const order = Array.from(orderRows.values()).find((o) =>
+                o.items.some((i: any) => i.id === args?.where?.orderId) || o.id === args?.where?.orderId
+              );
+              const baseItems = order ? order.items : [];
+              return baseItems.map((item: any) => {
+                const updated = orderItemUpdateCalls.find((c) => c.where.id === item.id);
+                return {
+                  unitPrice: updated ? updated.data.unitPrice : item.unitPrice ?? 0,
+                  quantity: item.quantity,
+                };
+              });
+            }),
+          },
+          order: {
+            update: vi.fn(async (args: any) => {
+              orderUpdateCalls.push(args);
+              return {};
+            }),
           },
         };
         return callback(tx);
@@ -73,6 +101,23 @@ vi.mock("@matsrc/db", () => {
       const parsed = typeof raw === "number" ? raw : Number(raw);
       return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
     },
+    // Admin-Configurable Product Markup: real resolution logic (product ->
+    // category -> global precedence, explicit-0%-vs-unset) is already
+    // covered by packages/db/lib/markup-calculation.spec.ts — this mock
+    // only needs to simulate "the configured markup for this product",
+    // seeded per-test via markupByProductId, with the same
+    // null-on-missing-config fail-safe contract as the real function.
+    resolveMarkupForProduct: vi.fn(async (_tx: any, params: { productId: string; supplierUnitPrice: number }) => {
+      const configured = markupByProductId.get(params.productId);
+      if (!configured) return null;
+      const buyerUnitPrice = Math.round((params.supplierUnitPrice * (1 + configured.markupPercent / 100) + Number.EPSILON) * 100) / 100;
+      return {
+        supplierUnitPrice: params.supplierUnitPrice,
+        buyerUnitPrice,
+        markupPercent: configured.markupPercent,
+        markupAmount: Math.round((buyerUnitPrice - params.supplierUnitPrice + Number.EPSILON) * 100) / 100,
+      };
+    }),
   };
 });
 
@@ -84,6 +129,8 @@ beforeEach(() => {
   orderRows.clear();
   supplierQuoteRows.length = 0;
   orderItemUpdateCalls.length = 0;
+  orderUpdateCalls.length = 0;
+  markupByProductId.clear();
 });
 
 function seedOrder(id: string, overrides: Partial<any> = {}) {
@@ -91,7 +138,9 @@ function seedOrder(id: string, overrides: Partial<any> = {}) {
     id,
     status: "PLACED",
     quoteSelectionCompletedAt: null,
-    items: [{ id: "line-1", supplierId: "sup-1", quantity: 10, taxRatePercent: null }],
+    items: [
+      { id: "line-1", productId: "prod-1", supplierId: "sup-1", quantity: 10, taxRatePercent: null, product: { categoryId: "cat-1" } },
+    ],
     ...overrides,
   });
 }
@@ -119,7 +168,18 @@ describe("createSupplierQuote — RFQ line-item quotation (lineQuotes path)", ()
   });
 
   // Test 15/22 — order uses submitted quote price, not catalogue price.
-  it("updates OrderItem.unitPrice to the submitted quote price", async () => {
+  // Admin-Configurable Product Markup — UPDATED: previously this test
+  // asserted the raw supplier quotation (425) as the correct
+  // OrderItem.unitPrice. That assertion documented the Finding 1 bug (the
+  // buyer was charged the supplier's own price with zero markup). Fixed
+  // behaviour: with no markup configured (the default, 0% fail-safe
+  // fallback), the buyer-facing price still legitimately equals the
+  // supplier price — so this specific 0%-config case still asserts 425,
+  // but now ALSO asserts supplierUnitPrice/markupPercent/markupAmount are
+  // explicitly recorded as the frozen 0%-markup snapshot, never left
+  // unset. See the dedicated markup tests below for the non-zero-markup
+  // case, which proves the bug is actually fixed.
+  it("updates OrderItem.unitPrice to the submitted quote price when no markup is configured (0% fail-safe)", async () => {
     seedOrder("enq-2");
 
     await createSupplierQuote(
@@ -129,7 +189,113 @@ describe("createSupplierQuote — RFQ line-item quotation (lineQuotes path)", ()
     );
 
     expect(orderItemUpdateCalls).toHaveLength(1);
-    expect(orderItemUpdateCalls[0]).toMatchObject({ where: { id: "line-1" }, data: { unitPrice: 425 } });
+    expect(orderItemUpdateCalls[0]).toMatchObject({
+      where: { id: "line-1" },
+      data: { unitPrice: 425, supplierUnitPrice: 425, markupPercent: 0, markupAmount: 0 },
+    });
+  });
+
+  // Admin-Configurable Product Markup — Finding 1 regression coverage.
+  describe("Admin-Configurable Product Markup", () => {
+    it("applies a 10% markup: buyer-facing OrderItem.unitPrice is marked up, SupplierQuote.unitPrice remains the original quote", async () => {
+      seedOrder("enq-markup-10");
+      markupByProductId.set("prod-1", { markupPercent: 10 });
+
+      await createSupplierQuote(
+        "enq-markup-10",
+        { price: "1000", lineQuotes: [{ lineItemId: "line-1", unitPrice: "1000" }] },
+        "supplier@example.com"
+      );
+
+      // The supplier's own quotation record must remain unmarked-up.
+      expect(supplierQuoteRows[0]).toMatchObject({ unitPrice: 1000, buyerUnitPrice: 1100, markupPercent: 10, markupAmount: 100 });
+
+      // The buyer-facing OrderItem must be marked up — never the raw ₹1,000 quote.
+      expect(orderItemUpdateCalls[0]).toMatchObject({
+        where: { id: "line-1" },
+        data: { unitPrice: 1100, supplierUnitPrice: 1000, markupPercent: 10, markupAmount: 100 },
+      });
+    });
+
+    it("honours an explicit 0% override distinctly from no configuration", async () => {
+      seedOrder("enq-markup-0");
+      markupByProductId.set("prod-1", { markupPercent: 0 });
+
+      await createSupplierQuote(
+        "enq-markup-0",
+        { price: "500", lineQuotes: [{ lineItemId: "line-1", unitPrice: "500" }] },
+        "supplier@example.com"
+      );
+
+      expect(orderItemUpdateCalls[0]).toMatchObject({
+        data: { unitPrice: 500, supplierUnitPrice: 500, markupPercent: 0, markupAmount: 0 },
+      });
+    });
+
+    it("applies a product-specific override (resolveMarkupForProduct is called with the line's own productId)", async () => {
+      seedOrder("enq-markup-product", {
+        items: [
+          { id: "line-1", productId: "prod-special", supplierId: "sup-1", quantity: 10, taxRatePercent: null, product: { categoryId: "cat-1" } },
+        ],
+      });
+      markupByProductId.set("prod-special", { markupPercent: 25 });
+
+      await createSupplierQuote(
+        "enq-markup-product",
+        { price: "400", lineQuotes: [{ lineItemId: "line-1", unitPrice: "400" }] },
+        "supplier@example.com"
+      );
+
+      expect(orderItemUpdateCalls[0]).toMatchObject({
+        data: { unitPrice: 500, supplierUnitPrice: 400, markupPercent: 25, markupAmount: 100 },
+      });
+    });
+
+    it("recalculates Order.totalAmount from the marked-up OrderItem price(s), never the stale/raw total", async () => {
+      seedOrder("enq-markup-total");
+      markupByProductId.set("prod-1", { markupPercent: 10 });
+
+      await createSupplierQuote(
+        "enq-markup-total",
+        { price: "1000", lineQuotes: [{ lineItemId: "line-1", unitPrice: "1000" }] },
+        "supplier@example.com"
+      );
+
+      const totalUpdate = orderUpdateCalls.find((c) => c.where.id === "enq-markup-total");
+      expect(totalUpdate).toBeDefined();
+      // quantity 10 * marked-up unit price 1100 = 11000 (never 10 * 1000 = 10000).
+      expect(totalUpdate.data.totalAmount).toBe(11000);
+    });
+
+    it("never applies markup twice: a subsequent RFQ finalization cannot re-mark-up an already-marked-up OrderItem.unitPrice", async () => {
+      // Once quoteSelectionCompletedAt is set (RFQ finalized), this function
+      // itself refuses further submissions — the authoritative guard
+      // against double markup for THIS code path (see the
+      // "rejects submission once the RFQ has already been finalized" test
+      // above, which already proves this). This test additionally confirms
+      // that resolveMarkupForProduct is always called with the ORIGINAL
+      // supplier-quoted price (never the previously-computed buyer price)
+      // on a fresh, still-open RFQ.
+      seedOrder("enq-markup-single-pass");
+      markupByProductId.set("prod-1", { markupPercent: 10 });
+
+      await createSupplierQuote(
+        "enq-markup-single-pass",
+        { price: "1000", lineQuotes: [{ lineItemId: "line-1", unitPrice: "1000" }] },
+        "supplier@example.com"
+      );
+
+      const { resolveMarkupForProduct } = await import("@matsrc/db");
+      expect(resolveMarkupForProduct).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ supplierUnitPrice: 1000 })
+      );
+      // Never called with the already-marked-up 1100 as the base.
+      expect(resolveMarkupForProduct).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ supplierUnitPrice: 1100 })
+      );
+    });
   });
 
   // Test 5 — Negative price

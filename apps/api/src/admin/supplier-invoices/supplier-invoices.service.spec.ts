@@ -50,11 +50,20 @@ function buildService(overrides: Partial<any> = {}) {
   // (changing this state) BETWEEN this transaction's outer pre-check and
   // its lock acquisition — exactly the interleaving the FOR UPDATE lock
   // must observe correctly.
-  const rowState = { status: invoice.status as string };
+  const rowState = {
+    status: invoice.status as string,
+    confirmedTotalAmount: invoice.confirmedTotalAmount as string | number | null,
+    payments: [] as any[],
+  };
 
   const prisma: any = {
     supplierInvoice: {
-      findUnique: vi.fn().mockResolvedValue(invoice),
+      // Dynamic (not a one-shot mockResolvedValue) so getPaymentSummary's
+      // `include: { payments }` always reflects the CURRENT rowState.payments
+      // — essential for recordPayment -> getPaymentSummary's own re-read.
+      findUnique: vi.fn().mockImplementation(() =>
+        Promise.resolve({ ...invoice, status: rowState.status, payments: rowState.payments })
+      ),
       findMany: vi.fn().mockResolvedValue([invoice]),
       update: vi.fn().mockImplementation(({ data }: any) => {
         if (typeof data.status === "string") {
@@ -75,11 +84,25 @@ function buildService(overrides: Partial<any> = {}) {
     auditLog: {
       create: vi.fn().mockResolvedValue({}),
     },
-    // Simulates `SELECT "status" FROM "SupplierInvoice" WHERE "id" = ... FOR
-    // UPDATE` — returns whatever rowState.status currently holds at the
-    // moment this is awaited, reflecting any concurrent writer that
-    // committed first.
-    $queryRaw: vi.fn().mockImplementation(() => Promise.resolve([{ status: rowState.status }])),
+    // Minimal Supplier Payment Tracking — in-memory store of SupplierPayment
+    // rows, shared across findMany/create so recordPayment's own
+    // read-then-write logic inside $transaction behaves realistically
+    // across multiple calls within and across tests.
+    supplierPayment: {
+      findMany: vi.fn().mockImplementation(() => Promise.resolve(rowState.payments)),
+      create: vi.fn().mockImplementation(({ data }: any) => {
+        const created = { id: `pay-${rowState.payments.length + 1}`, createdAt: new Date(), ...data };
+        rowState.payments.push(created);
+        return Promise.resolve(created);
+      }),
+    },
+    // Simulates `SELECT "status", "confirmedTotalAmount" FROM
+    // "SupplierInvoice" WHERE "id" = ... FOR UPDATE` — returns whatever
+    // rowState currently holds at the moment this is awaited, reflecting
+    // any concurrent writer that committed first.
+    $queryRaw: vi.fn().mockImplementation(() =>
+      Promise.resolve([{ status: rowState.status, confirmedTotalAmount: rowState.confirmedTotalAmount }])
+    ),
   };
   prisma.$transaction = vi.fn().mockImplementation((arg: any) => (Array.isArray(arg) ? Promise.all(arg) : arg(prisma)));
 
@@ -125,6 +148,52 @@ describe("SupplierInvoicesService.reviewLineItems", () => {
       (call: any) => call[0].data.confirmedTotalAmount !== undefined
     );
     expect(invoiceUpdateCall[0].data.hasDiscrepancy).toBe(false);
+  });
+
+  // Admin-Configurable Product Markup: this reconciliation workflow must
+  // compare the supplier's own invoiced rate against the ORIGINAL agreed
+  // SUPPLIER rate (OrderItem.supplierUnitPrice) — never the buyer's
+  // marked-up OrderItem.unitPrice, which would make every supplier invoice
+  // look like it has a rate discrepancy even when the supplier's own
+  // document correctly reflects the original agreed price.
+  it("uses OrderItem.supplierUnitPrice (not the buyer's marked-up unitPrice) as the agreed rate", async () => {
+    const { service, prisma } = buildService();
+    prisma.orderItem.findMany = vi.fn().mockResolvedValue([
+      {
+        id: "item-1",
+        quantity: 1000,
+        unitPrice: "49.50", // buyer-facing, marked-up price (45 * 1.10)
+        supplierUnitPrice: "45.00", // original supplier rate — must be used
+        taxRatePercent: "18.00",
+        product: { unit: "MT", unitRef: null },
+      },
+    ]);
+
+    await service.reviewLineItems("si-1", {
+      lines: [{ orderItemId: "item-1", actualQuantity: 1000, supplierInvoicedUnitPrice: 45 }],
+    } as any);
+
+    const upsertCall = prisma.supplierInvoiceLineItem.upsert.mock.calls[0][0];
+    expect(upsertCall.create.originalUnitPrice).toBe(45);
+    expect(upsertCall.create.approvedUnitPrice).toBe(45);
+    // The supplier's own invoice (45) matches the agreed supplier rate (45)
+    // — no discrepancy. Had this wrongly compared against the buyer price
+    // (49.50), it would have incorrectly flagged a discrepancy.
+    expect(upsertCall.create.rateDiscrepancy).toBe(false);
+  });
+
+  it("falls back to OrderItem.unitPrice for legacy rows with no recorded supplierUnitPrice", async () => {
+    const { service, prisma } = buildService();
+    prisma.orderItem.findMany = vi.fn().mockResolvedValue([
+      { id: "item-1", quantity: 1000, unitPrice: "45.00", supplierUnitPrice: null, taxRatePercent: "18.00", product: { unit: "MT", unitRef: null } },
+    ]);
+
+    await service.reviewLineItems("si-1", {
+      lines: [{ orderItemId: "item-1", actualQuantity: 1000 }],
+    } as any);
+
+    const upsertCall = prisma.supplierInvoiceLineItem.upsert.mock.calls[0][0];
+    expect(upsertCall.create.originalUnitPrice).toBe(45);
   });
 
   // Audit fix regression tests: unit display/validation.
@@ -313,5 +382,160 @@ describe("SupplierInvoicesService.confirm", () => {
     const { service, prisma } = buildService({ status: "CONFIRMED" });
     await service.confirm("si-1", "admin-1");
     expect(prisma.auditLog.create).not.toHaveBeenCalled();
+  });
+});
+
+// Minimal Supplier Payment Tracking.
+describe("SupplierInvoicesService.recordPayment / getPaymentSummary", () => {
+  function confirmedService(overrides: Partial<any> = {}) {
+    return buildService({
+      status: "CONFIRMED",
+      confirmedTotalAmount: 10000,
+      ...overrides,
+    });
+  }
+
+  it("rejects a non-admin actor", async () => {
+    const { service, prisma } = confirmedService();
+    prisma.user.findUnique = vi.fn().mockResolvedValue({ id: "supplier-1", role: "SUPPLIER" });
+    await expect(
+      service.recordPayment("si-1", "supplier-1", { amount: 1000, paymentDate: "2026-10-16" } as any)
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it("rejects payment against an unconfirmed (PENDING_REVIEW) invoice", async () => {
+    const { service } = buildService({ status: "PENDING_REVIEW", confirmedTotalAmount: null });
+    await expect(
+      service.recordPayment("si-1", "admin-1", { amount: 1000, paymentDate: "2026-10-16" } as any)
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("rejects a zero amount", async () => {
+    const { service } = confirmedService();
+    await expect(
+      service.recordPayment("si-1", "admin-1", { amount: 0, paymentDate: "2026-10-16" } as any)
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("rejects a negative amount", async () => {
+    const { service } = confirmedService();
+    await expect(
+      service.recordPayment("si-1", "admin-1", { amount: -500, paymentDate: "2026-10-16" } as any)
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("rejects an amount exceeding the confirmed total (excessive, no prior payments)", async () => {
+    const { service } = confirmedService();
+    await expect(
+      service.recordPayment("si-1", "admin-1", { amount: 10001, paymentDate: "2026-10-16" } as any)
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("records a valid full payment and reports PAID status with zero outstanding balance", async () => {
+    const { service } = confirmedService();
+    const summary = await service.recordPayment("si-1", "admin-1", {
+      amount: 10000,
+      paymentDate: "2026-10-16",
+      paymentMethod: "BANK_TRANSFER",
+      paymentReference: "UTR123",
+    } as any);
+
+    expect(summary.amountPaid).toBe(10000);
+    expect(summary.outstandingBalance).toBe(0);
+    expect(summary.paymentStatus).toBe("PAID");
+    expect(summary.payments).toHaveLength(1);
+  });
+
+  it("records multiple partial payments and reports PARTIALLY_PAID with the correct running balance", async () => {
+    const { service } = confirmedService();
+    await service.recordPayment("si-1", "admin-1", { amount: 4000, paymentDate: "2026-10-01" } as any);
+    const summary = await service.recordPayment("si-1", "admin-1", { amount: 3000, paymentDate: "2026-10-10" } as any);
+
+    expect(summary.amountPaid).toBe(7000);
+    expect(summary.outstandingBalance).toBe(3000);
+    expect(summary.paymentStatus).toBe("PARTIALLY_PAID");
+    expect(summary.payments).toHaveLength(2);
+  });
+
+  it("transitions UNPAID -> PARTIALLY_PAID -> PAID as payments accumulate exactly to the confirmed total", async () => {
+    const { service } = confirmedService();
+    const beforeAny = await service.getPaymentSummary("si-1");
+    expect(beforeAny.paymentStatus).toBe("UNPAID");
+
+    const afterPartial = await service.recordPayment("si-1", "admin-1", { amount: 6000, paymentDate: "2026-10-01" } as any);
+    expect(afterPartial.paymentStatus).toBe("PARTIALLY_PAID");
+
+    const afterFull = await service.recordPayment("si-1", "admin-1", { amount: 4000, paymentDate: "2026-10-02" } as any);
+    expect(afterFull.paymentStatus).toBe("PAID");
+    expect(afterFull.outstandingBalance).toBe(0);
+  });
+
+  it("rejects a second payment that would push the total above the remaining outstanding balance", async () => {
+    const { service } = confirmedService();
+    await service.recordPayment("si-1", "admin-1", { amount: 7000, paymentDate: "2026-10-01" } as any);
+    await expect(
+      service.recordPayment("si-1", "admin-1", { amount: 4000, paymentDate: "2026-10-02" } as any)
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it("prevents concurrent overpayment: a second call that would exceed the balance fails even when issued without awaiting the first", async () => {
+    const { service } = confirmedService();
+    const [first, second] = await Promise.allSettled([
+      service.recordPayment("si-1", "admin-1", { amount: 6000, paymentDate: "2026-10-01" } as any),
+      service.recordPayment("si-1", "admin-1", { amount: 6000, paymentDate: "2026-10-01" } as any),
+    ]);
+
+    const fulfilled = [first, second].filter((r) => r.status === "fulfilled");
+    const rejected = [first, second].filter((r) => r.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+  });
+
+  it("never mutates the confirmed invoice total when recording a payment", async () => {
+    const { service, prisma } = confirmedService();
+    await service.recordPayment("si-1", "admin-1", { amount: 2000, paymentDate: "2026-10-01" } as any);
+
+    const invoiceUpdateCalls = prisma.supplierInvoice.update.mock.calls;
+    const anyTotalMutation = invoiceUpdateCalls.some((call: any) => call[0]?.data?.confirmedTotalAmount !== undefined);
+    expect(anyTotalMutation).toBe(false);
+  });
+
+  it("isolates payment records between different supplier invoices (always scoped by supplierInvoiceId)", async () => {
+    const { service, prisma } = confirmedService();
+    await service.recordPayment("si-1", "admin-1", { amount: 1000, paymentDate: "2026-10-01" } as any);
+
+    const findManyCall = prisma.supplierPayment.findMany.mock.calls[0][0];
+    expect(findManyCall.where.supplierInvoiceId).toBe("si-1");
+  });
+
+  it("writes a durable audit log entry for every recorded payment", async () => {
+    const { service, prisma } = confirmedService();
+    await service.recordPayment("si-1", "admin-1", { amount: 1000, paymentDate: "2026-10-01" } as any);
+
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ action: "SUPPLIER_PAYMENT_RECORDED" }) })
+    );
+  });
+
+  it("displays payment history with method/reference/remarks and correctly calculated balances", async () => {
+    const { service } = confirmedService();
+    await service.recordPayment("si-1", "admin-1", {
+      amount: 2500,
+      paymentDate: "2026-10-05",
+      paymentMethod: "UPI",
+      paymentReference: "UPI-REF-1",
+      remarks: "First instalment",
+    } as any);
+
+    const summary = await service.getPaymentSummary("si-1");
+    expect(summary.payments[0]).toMatchObject({
+      amount: 2500,
+      paymentMethod: "UPI",
+      paymentReference: "UPI-REF-1",
+      remarks: "First instalment",
+    });
+    expect(summary.confirmedTotalAmount).toBe(10000);
+    expect(summary.amountPaid).toBe(2500);
+    expect(summary.outstandingBalance).toBe(7500);
   });
 });

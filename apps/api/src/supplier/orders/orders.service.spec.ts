@@ -21,25 +21,104 @@ vi.mock("@vercel/functions", () => ({
 // flow calling this service directly). Mirrors the equivalent guard/tests
 // for apps/supplier/lib/supplier-data.ts's updateSupplierOrderStatus.
 function buildService(orderRow: { status: OrderStatus; items?: any[]; paymentStatus?: PaymentStatus }) {
+  const currentOrder = {
+    id: "order-1",
+    userId: "user-1",
+    status: orderRow.status,
+    orderNumber: null,
+    totalAmount: 11000,
+    taxAmount: null,
+    finalPayableAmount: null,
+    advancePercent: null,
+    requiredAdvanceAmount: null,
+    items:
+      orderRow.items ?? [
+        {
+          id: "line-1",
+          productId: "prod-1",
+          quantity: 10,
+          unitPrice: 1100,
+          supplierUnitPrice: 1000,
+          markupPercent: 10,
+          product: { categoryId: "cat-1" },
+        },
+      ],
+  };
+
+  // Tracks the most recently written status/snapshot-fields across
+  // update/updateMany calls so findUniqueOrThrow's post-write re-read
+  // reflects whatever this test actually requested/computed, instead of
+  // hardcoding a single transition or ignoring the GST snapshot fields.
+  let writtenStatus: OrderStatus = orderRow.status;
+  const writtenSnapshotFields: Record<string, unknown> = {};
+
   const prisma: any = {
     order: {
-      update: vi.fn(async ({ data }: any) => ({
-        id: "order-1",
-        userId: "user-1",
-        status: data.status ?? orderRow.status,
+      update: vi.fn(async ({ data }: any) => {
+        if (data.status) writtenStatus = data.status;
+        return { ...currentOrder, status: data.status ?? orderRow.status, items: [{ supplier: { companyName: "Acme" } }] };
+      }),
+      updateMany: vi.fn(async ({ data }: any) => {
+        if (data.status) writtenStatus = data.status;
+        for (const key of ["taxAmount", "finalPayableAmount", "advancePercent", "requiredAdvanceAmount"]) {
+          if (key in data) writtenSnapshotFields[key] = data[key];
+        }
+        return { count: 1 };
+      }),
+      // Real OrdersService.updateStatus calls order.findUnique with
+      // different `select`/`include` shapes for different purposes
+      // (orderNumber-only lookup inside the transaction; the GST-snapshot
+      // items+product lookup; the plain existing-snapshot-consistency
+      // lookup; the post-loss-race re-read) — branch on the shape so each
+      // caller gets back data consistent with its own query.
+      findUnique: vi.fn(async (args: any) => {
+        if (args?.select?.orderNumber !== undefined && Object.keys(args.select).length === 1) {
+          return { orderNumber: currentOrder.orderNumber };
+        }
+        if (args?.include?.items?.include?.product) {
+          return currentOrder;
+        }
+        if (args?.select?.taxAmount !== undefined || args?.select?.items) {
+          return {
+            totalAmount: currentOrder.totalAmount,
+            taxAmount: currentOrder.taxAmount,
+            finalPayableAmount: currentOrder.finalPayableAmount,
+            advancePercent: currentOrder.advancePercent,
+            requiredAdvanceAmount: currentOrder.requiredAdvanceAmount,
+            items: currentOrder.taxAmount !== null
+              ? currentOrder.items.map((item: any) => ({ id: item.id, taxRatePercent: 18, taxAmount: 0 }))
+              : currentOrder.items.map((item: any) => ({ id: item.id, taxRatePercent: null, taxAmount: null })),
+          };
+        }
+        return {
+          ...currentOrder,
+          items: currentOrder.items.map((item: any) => ({
+            id: item.id,
+            taxRatePercent: currentOrder.taxAmount !== null ? 18 : null,
+            taxAmount: currentOrder.taxAmount !== null ? 0 : null,
+          })),
+        };
+      }),
+      findUniqueOrThrow: vi.fn(async () => ({
+        ...currentOrder,
+        ...writtenSnapshotFields,
+        status: writtenStatus,
         items: [{ supplier: { companyName: "Acme" } }],
       })),
-      findUnique: vi.fn(async () => ({
-        items: [{ candidates: [] }],
-        orderNumber: null,
-      })),
     },
-    orderItem: { findFirst: vi.fn(async () => ({ orderId: "order-1", supplierId: "sup-1" })) },
+    orderItem: {
+      findFirst: vi.fn(async () => ({ orderId: "order-1", supplierId: "sup-1" })),
+      update: vi.fn(async () => ({})),
+    },
     orderTracking: { create: vi.fn(async () => ({})) },
     businessSequence: {
       upsert: vi.fn(async () => ({})),
       update: vi.fn(async () => ({ value: 1 })),
     },
+    taxSetting: {
+      findMany: vi.fn(async () => [{ scope: "GLOBAL", scopeId: null, percentage: 18, isEnabled: true }]),
+    },
+    advanceConfig: { findUnique: vi.fn(async () => null) },
     $queryRaw: vi.fn(async () => ({})),
     // Minimal $transaction stub: just invokes the callback with the same
     // fake prisma object as `tx` (no real transaction semantics needed for
@@ -77,7 +156,7 @@ function buildService(orderRow: { status: OrderStatus; items?: any[]; paymentSta
     paymentStatus: orderRow.paymentStatus ?? PaymentStatus.PAID,
   } as any);
 
-  return { service, prisma, customerOrderStatusNotificationService, paymentRequiredNotificationService };
+  return { service, prisma, customerOrderStatusNotificationService, paymentRequiredNotificationService, currentOrder };
 }
 
 beforeEach(() => {
@@ -364,5 +443,182 @@ describe("OrdersService.updateStatus — payment_required notification routing",
 
     expect(waitUntilMock).not.toHaveBeenCalled();
     expect(rejectedDep.notifyIfTransitioned).not.toHaveBeenCalled();
+  });
+});
+
+// Product-Level GST / GST-Inclusive Buyer Payable (Phase 3B) — the
+// confirmation snapshot freeze through OrdersService.updateStatus (the
+// NestJS twin of apps/supplier's updateSupplierOrderStatus and
+// BestPriceSelectionService.selectAndFinalizeIfEligible).
+describe("OrdersService.updateStatus — GST snapshot freeze", () => {
+  it("freezes taxAmount/finalPayableAmount on Order and taxRatePercent/taxAmount on OrderItem for a genuine PLACED -> PROCESSING confirmation", async () => {
+    const { service, prisma } = buildService({ status: OrderStatus.PLACED });
+    await service.updateStatus("order-1", OrderStatus.PROCESSING, { userId: "u1" });
+
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: "order-1", status: OrderStatus.PLACED },
+      data: expect.objectContaining({
+        status: OrderStatus.PROCESSING,
+        taxAmount: 1980,
+        finalPayableAmount: 12980,
+        advancePercent: null,
+        requiredAdvanceAmount: null,
+      }),
+    });
+    expect(prisma.orderItem.update).toHaveBeenCalledWith({
+      where: { id: "line-1" },
+      data: { taxRatePercent: 18, taxAmount: 1980 },
+    });
+  });
+
+  it("calculates the informational required advance from the GST-inclusive payable when AdvanceConfig is enabled", async () => {
+    const { service, prisma } = buildService({ status: OrderStatus.PLACED });
+    prisma.advanceConfig.findUnique.mockResolvedValue({ percentage: 20, isEnabled: true });
+
+    await service.updateStatus("order-1", OrderStatus.PROCESSING, { userId: "u1" });
+
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: "order-1", status: OrderStatus.PLACED },
+      data: expect.objectContaining({ advancePercent: 20, requiredAdvanceAmount: 2596 }),
+    });
+  });
+
+  it("blocks confirmation with no partial writes when no GST configuration exists", async () => {
+    const { service, prisma } = buildService({ status: OrderStatus.PLACED });
+    prisma.taxSetting.findMany.mockResolvedValue([]);
+
+    await expect(service.updateStatus("order-1", OrderStatus.PROCESSING, { userId: "u1" })).rejects.toBeInstanceOf(
+      BadRequestException
+    );
+
+    expect(prisma.orderItem.update).not.toHaveBeenCalled();
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("applies markup exactly once (buyer price derived from the already-resolved markupPercent, never re-resolved)", async () => {
+    const { service, prisma } = buildService({
+      status: OrderStatus.PLACED,
+      items: [
+        {
+          id: "line-1",
+          productId: "prod-1",
+          quantity: 1,
+          unitPrice: 220,
+          supplierUnitPrice: 200,
+          markupPercent: 10,
+          product: { categoryId: "cat-1" },
+        },
+      ],
+    });
+
+    await service.updateStatus("order-1", OrderStatus.PROCESSING, { userId: "u1" });
+
+    // buyerUnitPrice = 200 * 1.1 = 220 (not 200*1.1*1.1=242 — proves markup
+    // is derived once from the stored markupPercent, never compounded);
+    // tax = 220 * 0.18 = 39.6.
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: "order-1", status: OrderStatus.PLACED },
+      data: expect.objectContaining({ taxAmount: 39.6 }),
+    });
+  });
+});
+
+describe("OrdersService.updateStatus — retry and concurrency safety", () => {
+  it("does not reapply markup or rewrite an existing complete snapshot for a non-confirmation transition", async () => {
+    const { service, prisma } = buildService({ status: OrderStatus.PROCESSING });
+    prisma.order.findUnique.mockImplementation(async (args: any) => {
+      if (args?.select?.orderNumber !== undefined && Object.keys(args.select).length === 1) {
+        return { orderNumber: "OD/2601/00001" };
+      }
+      if (args?.select?.taxAmount !== undefined) {
+        return {
+          totalAmount: 11000,
+          taxAmount: 1980,
+          finalPayableAmount: 12980,
+          advancePercent: null,
+          requiredAdvanceAmount: null,
+          items: [{ id: "line-1", taxRatePercent: 18, taxAmount: 1980 }],
+        };
+      }
+      return null;
+    });
+
+    await service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" });
+
+    expect(prisma.orderItem.update).not.toHaveBeenCalled();
+  });
+
+  it("fails safely (throws) rather than silently repairing a partially-populated snapshot", async () => {
+    const { service, prisma } = buildService({ status: OrderStatus.PROCESSING });
+    prisma.order.findUnique.mockImplementation(async (args: any) => {
+      if (args?.select?.orderNumber !== undefined && Object.keys(args.select).length === 1) {
+        return { orderNumber: "OD/2601/00001" };
+      }
+      if (args?.select?.taxAmount !== undefined) {
+        return {
+          totalAmount: 11000,
+          taxAmount: 1980,
+          finalPayableAmount: null,
+          advancePercent: null,
+          requiredAdvanceAmount: null,
+          items: [],
+        };
+      }
+      return null;
+    });
+
+    await expect(service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" })).rejects.toThrow(
+      /inconsistent financial snapshot/
+    );
+  });
+
+  it("loses a concurrent confirmation race safely: returns the winner's result without a second write", async () => {
+    const { service, prisma } = buildService({ status: OrderStatus.PLACED });
+    prisma.order.updateMany.mockResolvedValue({ count: 0 });
+    prisma.order.findUnique.mockImplementation(async (args: any) => {
+      if (args?.include?.items?.include?.product) {
+        return {
+          id: "order-1",
+          items: [
+            {
+              id: "line-1",
+              productId: "prod-1",
+              quantity: 10,
+              unitPrice: 1100,
+              supplierUnitPrice: 1000,
+              markupPercent: 10,
+              product: { categoryId: "cat-1" },
+            },
+          ],
+        };
+      }
+      return {
+        id: "order-1",
+        status: OrderStatus.PROCESSING,
+        totalAmount: 11000,
+        taxAmount: 1980,
+        finalPayableAmount: 12980,
+        advancePercent: null,
+        requiredAdvanceAmount: null,
+        items: [{ id: "line-1", taxRatePercent: 18, taxAmount: 1980 }],
+      };
+    });
+
+    const result: any = await service.updateStatus("order-1", OrderStatus.PROCESSING, { userId: "u1" });
+
+    expect(result.status).toBe(OrderStatus.PROCESSING);
+    expect(prisma.orderItem.update).not.toHaveBeenCalled();
+  });
+
+  it("rolls back all snapshot writes when the transaction fails", async () => {
+    const { service, prisma } = buildService({ status: OrderStatus.PLACED });
+    prisma.$transaction = vi.fn(async () => {
+      throw new Error("DB connection lost mid-transaction");
+    });
+
+    await expect(service.updateStatus("order-1", OrderStatus.PROCESSING, { userId: "u1" })).rejects.toThrow(
+      /DB connection lost/
+    );
+    expect(prisma.orderItem.update).not.toHaveBeenCalled();
   });
 });

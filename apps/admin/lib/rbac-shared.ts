@@ -12,6 +12,8 @@ export const MENU_CONFIG = [
   { key: "supplier-invoices", href: "/supplier-invoices", label: "Supplier Invoices" },
   { key: "aggregation", href: "/aggregation", label: "Aggregation Pools" },
   { key: "catalog", href: "/catalog", label: "Catalog Master Data" },
+  { key: "markup", href: "/markup", label: "Product Markup" },
+  { key: "gst", href: "/gst", label: "GST & Advance Configuration" },
   { key: "pricing", href: "/pricing", label: "Price Intelligence" },
   { key: "notifications", href: "/notifications", label: "Notification Engine" },
   { key: "whatsapp-alerts", href: "/whatsapp-alerts", label: "WhatsApp Alerts (Test)" },

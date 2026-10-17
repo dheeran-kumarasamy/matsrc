@@ -1,7 +1,16 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { resolveSupplierInvoiceLine, aggregateSupplierInvoiceTotals } from "@matsrc/db";
+import { resolveSupplierInvoiceLine, aggregateSupplierInvoiceTotals, roundCurrency } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { ReviewSupplierInvoiceLineItemsDto } from "./dto/review-line-items.dto";
+import { RecordSupplierPaymentDto } from "./dto/record-supplier-payment.dto";
+
+// Minimal Supplier Payment Tracking — comparison epsilon for the
+// "amount exceeds remaining outstanding balance" check, mirroring the
+// existing RECONCILIATION_TOLERANCE convention elsewhere in this codebase
+// (apps/api/src/admin/invoices/invoices.service.ts) — one cent, matching
+// this schema's Decimal(12,2) precision. Prevents a legitimate
+// penny-rounding difference from being rejected as "excessive".
+const PAYMENT_TOLERANCE = 0.01;
 
 function toNumber(value: unknown): number {
   return value === null || value === undefined ? 0 : Number(value);
@@ -181,6 +190,13 @@ export class SupplierInvoicesService {
         id: true,
         quantity: true,
         unitPrice: true,
+        // Admin-Configurable Product Markup — the ORIGINAL supplier rate
+        // Buildohub agreed to pay, preserved separately from the buyer's
+        // marked-up `unitPrice` (see OrderItem's schema doc comment). This
+        // supplier-invoice reconciliation workflow exists to verify what
+        // the SUPPLIER actually invoiced against the agreed SUPPLIER rate
+        // — it must never compare against the buyer's selling price.
+        supplierUnitPrice: true,
         taxRatePercent: true,
         // Unit display/validation (audit fix): same authoritative fields
         // used in loadDetail()'s include — see that method's doc comment.
@@ -197,9 +213,17 @@ export class SupplierInvoicesService {
 
     const resolvedLines = dto.lines.map((line) => {
       const orderItem = orderItemById.get(line.orderItemId)!;
+      // Admin-Configurable Product Markup: falls back to orderItem.unitPrice
+      // only for legacy pre-migration rows with no recorded
+      // supplierUnitPrice (implicit 0% markup) — never the buyer's
+      // marked-up price for a row that DOES have a recorded supplier rate.
+      const originalUnitPrice =
+        orderItem.supplierUnitPrice !== null && orderItem.supplierUnitPrice !== undefined
+          ? toNumber(orderItem.supplierUnitPrice)
+          : toNumber(orderItem.unitPrice);
       const resolution = resolveSupplierInvoiceLine({
         originalQuantity: orderItem.quantity,
-        originalUnitPrice: toNumber(orderItem.unitPrice),
+        originalUnitPrice,
         actualQuantity: line.actualQuantity,
         supplierInvoicedUnitPrice: line.supplierInvoicedUnitPrice ?? null,
         approvedUnitPriceOverride: line.approvedUnitPriceOverride ?? null,
@@ -208,7 +232,7 @@ export class SupplierInvoicesService {
       if (resolution.rateDiscrepancy) {
         hasDiscrepancy = true;
       }
-      return { line, orderItem, resolution };
+      return { line, orderItem, originalUnitPrice, resolution };
     });
 
     const totals = aggregateSupplierInvoiceTotals(
@@ -239,14 +263,17 @@ export class SupplierInvoicesService {
         throw new BadRequestException("A confirmed supplier invoice cannot be re-reviewed");
       }
 
-      for (const { line, orderItem, resolution } of resolvedLines) {
+      for (const { line, orderItem, originalUnitPrice, resolution } of resolvedLines) {
         await tx.supplierInvoiceLineItem.upsert({
           where: { supplierInvoiceId_orderItemId: { supplierInvoiceId: id, orderItemId: line.orderItemId } },
           create: {
             supplierInvoiceId: id,
             orderItemId: line.orderItemId,
             originalQuantity: orderItem.quantity,
-            originalUnitPrice: orderItem.unitPrice,
+            // Admin-Configurable Product Markup: the agreed SUPPLIER rate
+            // (see the resolvedLines computation above), never the buyer's
+            // marked-up OrderItem.unitPrice.
+            originalUnitPrice,
             orderUnitLabel: resolveOrderUnitLabel((orderItem as any).product),
             unitConfirmed: line.unitConfirmed ?? false,
             actualQuantity: line.actualQuantity,
@@ -290,6 +317,175 @@ export class SupplierInvoicesService {
     });
 
     return this.findOne(id);
+  }
+
+  // Minimal Supplier Payment Tracking — returns the confirmed invoice's
+  // total, aggregate paid amount, outstanding balance, computed status,
+  // and the full payment history. Available for ANY invoice (not just
+  // CONFIRMED ones) so the admin UI can show "not yet confirmed — no
+  // payments possible" rather than a 404/error, but confirmedTotal/status
+  // are only meaningful once CONFIRMED (see serializePaymentSummary).
+  async getPaymentSummary(id: string) {
+    const invoice = await this.prisma.supplierInvoice.findUnique({
+      where: { id },
+      include: { payments: { orderBy: { paymentDate: "desc" } } },
+    });
+    if (!invoice) {
+      throw new NotFoundException("Supplier invoice not found");
+    }
+    return this.serializePaymentSummary(invoice);
+  }
+
+  // Minimal Supplier Payment Tracking — records a single MANUALLY executed
+  // supplier payment (e.g. a bank transfer the company already made
+  // outside Buildohub) against a CONFIRMED SupplierInvoice. This method
+  // never initiates, approves, or reverses a payment itself — it only
+  // durably records what the admin reports was already paid, mirroring
+  // SupplierInvoicesService.confirm's authorization/locking pattern
+  // exactly (same `SELECT ... FOR UPDATE` row lock, same $transaction +
+  // auditLog.create shape).
+  async recordPayment(id: string, actorId: string, dto: RecordSupplierPaymentDto) {
+    const admin = await this.prisma.user.findUnique({ where: { id: actorId } });
+    if (!admin || (admin.role !== "ADMIN" && admin.role !== "SUPER_ADMIN")) {
+      throw new ForbiddenException("Only an Admin can record a supplier payment");
+    }
+
+    // Reject invalid amounts before the transaction even opens — the DTO's
+    // own @IsPositive() already rejects 0/negative/NaN/non-numeric input
+    // at the validation-pipe boundary; this is a defence-in-depth re-check
+    // for any caller that bypasses the pipe.
+    if (!Number.isFinite(dto.amount) || dto.amount <= 0) {
+      throw new BadRequestException("Payment amount must be a positive number");
+    }
+
+    const paymentDate = new Date(dto.paymentDate);
+    if (Number.isNaN(paymentDate.getTime())) {
+      throw new BadRequestException("Invalid payment date");
+    }
+
+    const payment = await this.prisma.$transaction(async (tx) => {
+      // SELECT ... FOR UPDATE on the SupplierInvoice row — mirrors
+      // confirm()'s identical lock exactly. This achieves genuine mutual
+      // exclusion between two concurrent "Record Payment" submissions (and
+      // between a concurrent payment + confirm/reject), so two requests
+      // racing to record a payment can never both read the same
+      // "remaining balance" and together overpay the invoice.
+      const lockedRows = await tx.$queryRaw<{ status: string; confirmedTotalAmount: string | null }[]>`
+        SELECT "status", "confirmedTotalAmount" FROM "SupplierInvoice" WHERE "id" = ${id} FOR UPDATE
+      `;
+      const locked = lockedRows[0];
+      if (!locked) {
+        throw new NotFoundException("Supplier invoice not found");
+      }
+      if (locked.status !== "CONFIRMED" || locked.confirmedTotalAmount === null) {
+        throw new BadRequestException("Only a confirmed supplier invoice is eligible for payment recording");
+      }
+
+      const confirmedTotal = toNumber(locked.confirmedTotalAmount);
+
+      // Re-read the current paid total INSIDE the same locked transaction
+      // — never from a stale read taken before the lock was acquired, so
+      // a payment committed by a concurrent request (now blocked behind
+      // this lock, or already committed before it) is always reflected
+      // here before this request decides whether to accept its own amount.
+      const existingPayments = await tx.supplierPayment.findMany({
+        where: { supplierInvoiceId: id },
+        select: { amount: true },
+      });
+      const alreadyPaid = roundCurrency(existingPayments.reduce((sum, p) => sum + toNumber(p.amount), 0));
+      const remaining = roundCurrency(confirmedTotal - alreadyPaid);
+
+      if (dto.amount > remaining + PAYMENT_TOLERANCE) {
+        throw new BadRequestException(
+          `Payment amount (₹${dto.amount.toLocaleString("en-IN")}) exceeds the remaining outstanding balance (₹${remaining.toLocaleString("en-IN")})`
+        );
+      }
+
+      const created = await tx.supplierPayment.create({
+        data: {
+          supplierInvoiceId: id,
+          amount: dto.amount,
+          paymentDate,
+          paymentMethod: dto.paymentMethod ?? null,
+          paymentReference: dto.paymentReference ?? null,
+          remarks: dto.remarks ?? null,
+          recordedBy: actorId,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId,
+          action: "SUPPLIER_PAYMENT_RECORDED",
+          entityType: "SupplierInvoice",
+          entityId: id,
+          metadata: {
+            supplierPaymentId: created.id,
+            amount: dto.amount,
+            paymentMethod: dto.paymentMethod ?? null,
+            paymentReference: dto.paymentReference ?? null,
+          },
+        },
+      });
+
+      return created;
+    });
+
+    this.logger.log(`Recorded supplier payment ${payment.id} of ₹${dto.amount} against invoice ${id}`);
+
+    return this.getPaymentSummary(id);
+  }
+
+  // Minimal Supplier Payment Tracking — single place amount-paid/
+  // outstanding-balance/status are derived. Never reads a stored
+  // "balance" column (none exists) and never allows a caller to supply
+  // these values directly — always SUM(payments) vs. confirmedTotalAmount.
+  private serializePaymentSummary(invoice: any) {
+    const confirmedTotalAmount =
+      invoice.confirmedTotalAmount !== null && invoice.confirmedTotalAmount !== undefined
+        ? toNumber(invoice.confirmedTotalAmount)
+        : null;
+
+    const payments = (invoice.payments ?? []).map((p: any) => ({
+      id: p.id,
+      amount: toNumber(p.amount),
+      paymentDate: p.paymentDate,
+      paymentMethod: p.paymentMethod,
+      paymentReference: p.paymentReference,
+      remarks: p.remarks,
+      recordedBy: p.recordedBy,
+      createdAt: p.createdAt,
+    }));
+
+    const amountPaid = roundCurrency(payments.reduce((sum: number, p: any) => sum + p.amount, 0));
+
+    // Status/outstanding balance are only meaningful once the invoice is
+    // CONFIRMED (confirmedTotalAmount is the only authoritative total this
+    // workflow ever produces). A PENDING_REVIEW/REJECTED invoice always
+    // reports a null outstanding balance/status rather than fabricating a
+    // total from unconfirmed data.
+    const outstandingBalance = confirmedTotalAmount !== null ? roundCurrency(confirmedTotalAmount - amountPaid) : null;
+
+    let paymentStatus: "UNPAID" | "PARTIALLY_PAID" | "PAID" | null = null;
+    if (confirmedTotalAmount !== null) {
+      if (amountPaid <= PAYMENT_TOLERANCE) {
+        paymentStatus = "UNPAID";
+      } else if (outstandingBalance !== null && outstandingBalance <= PAYMENT_TOLERANCE) {
+        paymentStatus = "PAID";
+      } else {
+        paymentStatus = "PARTIALLY_PAID";
+      }
+    }
+
+    return {
+      supplierInvoiceId: invoice.id,
+      invoiceStatus: invoice.status,
+      confirmedTotalAmount,
+      amountPaid,
+      outstandingBalance,
+      paymentStatus,
+      payments,
+    };
   }
 
   // Admin confirmation (Step D) — the explicit authorization to generate

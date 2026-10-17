@@ -6,6 +6,10 @@ import {
   generateOrderNumber,
   lockAdvanceAccountRow,
   releaseAdvanceReservation,
+  resolveMarkupForProduct,
+  resolveOrderConfirmationSnapshot,
+  assertFullOrderSnapshotIntegrity,
+  ConcurrentConfirmationLostError,
 } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
@@ -158,32 +162,185 @@ export class OrdersService {
       if (result) return result;
     }
 
-    const order = await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.order.findUnique({
-        where: { id },
-        select: { orderNumber: true },
-      });
+    // Product-Level GST / GST-Inclusive Buyer Payable — this path (unlike
+    // BestPriceSelectionService.selectAndFinalizeIfEligible and
+    // apps/supplier's updateSupplierOrderStatus) NEVER sets
+    // quoteSelectionCompletedAt/selectedSupplierId/bestPriceTotal on a
+    // genuine PLACED -> PROCESSING transition — a pre-existing gap in this
+    // path, out of scope to fix here (see Phase 3B investigation). The
+    // quoteSelectionCompletedAt idempotency guard used by the other two
+    // paths therefore DOES NOT FIT this one. The narrowest safe
+    // concurrency guard on THIS path's actual data model is a conditional
+    // updateMany keyed on `status` still being the caller-observed
+    // `current.status` — functionally identical in effect (only one
+    // concurrent request can flip a known-current status to a new one).
+    let confirmationSnapshot: Awaited<ReturnType<typeof resolveOrderConfirmationSnapshot>> | null = null;
+    const isGenuineConfirmation = status === OrderStatus.PROCESSING && current.status === OrderStatus.PLACED;
 
-      let orderNumber = existing?.orderNumber;
-      if (!orderNumber && status === OrderStatus.PROCESSING) {
-        orderNumber = await generateOrderNumber(tx as any);
+    if (isGenuineConfirmation) {
+      const orderWithItems = await this.prisma.order.findUnique({
+        where: { id },
+        include: { items: { include: { product: true } } },
+      });
+      if (!orderWithItems) {
+        throw new NotFoundException("Order not found");
       }
 
-      return tx.order.update({
+      confirmationSnapshot = await resolveOrderConfirmationSnapshot(
+        this.prisma as any,
+        orderWithItems.items.map((item) => ({
+          lineItemId: item.id,
+          productId: item.productId,
+          categoryId: item.product.categoryId,
+          supplierUnitPrice: item.supplierUnitPrice !== null ? Number(item.supplierUnitPrice) : Number(item.unitPrice),
+          markupPercent: item.markupPercent !== null ? Number(item.markupPercent) : 0,
+          quantity: item.quantity,
+        }))
+      );
+
+      if (!confirmationSnapshot.ok) {
+        throw new BadRequestException({
+          message: "Cannot confirm this enquiry: one or more products have no valid effective GST rate configured.",
+          errors: confirmationSnapshot.errors,
+        });
+      }
+    } else {
+      // Legacy/retry safety: validate ANY existing snapshot's FULL
+      // integrity (order-level nullness/arithmetic AND per-line
+      // nullability/reconciliation) on every other transition too — never
+      // silently repair a partial/corrupted snapshot (see Order.taxAmount's
+      // schema doc comment: "all four set together or not at all"). Items
+      // are fetched here (a small, additive query this branch didn't
+      // previously make) specifically to run the stronger, line-level
+      // checks this phase adds — never to recompute/overwrite anything.
+      const existingSnapshotRow = await this.prisma.order.findUnique({
         where: { id },
-        data: {
-          status,
-          ...(orderNumber ? { orderNumber } : {}),
-        },
-        include: {
-          items: {
-            include: {
-              supplier: true,
-            },
-          },
+        select: {
+          totalAmount: true,
+          taxAmount: true,
+          finalPayableAmount: true,
+          advancePercent: true,
+          requiredAdvanceAmount: true,
+          items: { select: { id: true, taxRatePercent: true, taxAmount: true } },
         },
       });
-    });
+      if (existingSnapshotRow) {
+        assertFullOrderSnapshotIntegrity(
+          id,
+          {
+            totalAmount: Number(existingSnapshotRow.totalAmount),
+            taxAmount: existingSnapshotRow.taxAmount !== null ? Number(existingSnapshotRow.taxAmount) : null,
+            finalPayableAmount:
+              existingSnapshotRow.finalPayableAmount !== null ? Number(existingSnapshotRow.finalPayableAmount) : null,
+            advancePercent: existingSnapshotRow.advancePercent !== null ? Number(existingSnapshotRow.advancePercent) : null,
+            requiredAdvanceAmount:
+              existingSnapshotRow.requiredAdvanceAmount !== null
+                ? Number(existingSnapshotRow.requiredAdvanceAmount)
+                : null,
+          },
+          existingSnapshotRow.items.map((item) => ({
+            id: item.id,
+            taxRatePercent: item.taxRatePercent !== null ? Number(item.taxRatePercent) : null,
+            taxAmount: item.taxAmount !== null ? Number(item.taxAmount) : null,
+          }))
+        );
+      }
+    }
+
+    let order;
+    try {
+      order = await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.order.findUnique({
+          where: { id },
+          select: { orderNumber: true },
+        });
+
+        let orderNumber = existing?.orderNumber;
+        if (!orderNumber && status === OrderStatus.PROCESSING) {
+          orderNumber = await generateOrderNumber(tx as any);
+        }
+
+        const snapshotFields =
+          confirmationSnapshot && confirmationSnapshot.ok
+            ? {
+                taxAmount: confirmationSnapshot.snapshot.taxAmount,
+                finalPayableAmount: confirmationSnapshot.snapshot.finalPayableAmount,
+                advancePercent: confirmationSnapshot.snapshot.advancePercent,
+                requiredAdvanceAmount: confirmationSnapshot.snapshot.requiredAdvanceAmount,
+              }
+            : {};
+
+        if (isGenuineConfirmation) {
+          // Concurrency guard — re-check eligibility immediately before the
+          // write, inside the transaction: a conditional updateMany keyed
+          // on the order still being in the exact current.status this
+          // request observed. A losing request throws before writing any
+          // OrderItem, so no line item is ever partially updated.
+          const claimed = await tx.order.updateMany({
+            where: { id, status: current.status },
+            data: { status, ...(orderNumber ? { orderNumber } : {}), ...snapshotFields },
+          });
+          if (claimed.count === 0) {
+            throw new ConcurrentConfirmationLostError(id);
+          }
+
+          if (confirmationSnapshot && confirmationSnapshot.ok) {
+            for (const lineSnapshot of confirmationSnapshot.snapshot.lines) {
+              await tx.orderItem.update({
+                where: { id: lineSnapshot.lineItemId },
+                data: { taxRatePercent: lineSnapshot.taxRatePercent, taxAmount: lineSnapshot.taxAmount },
+              });
+            }
+          }
+        } else {
+          await tx.order.update({
+            where: { id },
+            data: { status, ...(orderNumber ? { orderNumber } : {}) },
+          });
+        }
+
+        return tx.order.findUniqueOrThrow({
+          where: { id },
+          include: { items: { include: { supplier: true } } },
+        });
+      });
+    } catch (error) {
+      if (error instanceof ConcurrentConfirmationLostError) {
+        // Lost the race — a concurrent request already finalized this
+        // order. Re-read fresh and return the winner's result rather than
+        // surfacing an error, retrying the write, or sending a second
+        // round of notifications for a transition this request did not
+        // actually cause (mirrors BestPriceSelectionService /
+        // updateSupplierOrderStatus's identical handling).
+        const finalized = await this.prisma.order.findUnique({
+          where: { id },
+          include: { items: { select: { id: true, taxRatePercent: true, taxAmount: true } } },
+        });
+        if (!finalized) throw error;
+        // Validate the WINNER's full snapshot integrity (order-level +
+        // per-line) before trusting it enough to return it as this
+        // request's own result — a lost race must never blindly assume the
+        // winning transaction produced a consistent result.
+        assertFullOrderSnapshotIntegrity(
+          id,
+          {
+            totalAmount: Number(finalized.totalAmount),
+            taxAmount: finalized.taxAmount !== null ? Number(finalized.taxAmount) : null,
+            finalPayableAmount: finalized.finalPayableAmount !== null ? Number(finalized.finalPayableAmount) : null,
+            advancePercent: finalized.advancePercent !== null ? Number(finalized.advancePercent) : null,
+            requiredAdvanceAmount:
+              finalized.requiredAdvanceAmount !== null ? Number(finalized.requiredAdvanceAmount) : null,
+          },
+          finalized.items.map((item) => ({
+            id: item.id,
+            taxRatePercent: item.taxRatePercent !== null ? Number(item.taxRatePercent) : null,
+            taxAmount: item.taxAmount !== null ? Number(item.taxAmount) : null,
+          }))
+        );
+        return { id: finalized.id, status: finalized.status };
+      }
+      throw error;
+    }
 
     await this.prisma.orderTracking.create({
       data: {
@@ -267,11 +424,29 @@ export class OrdersService {
   ): Promise<{ id: string; status: OrderStatus } | null> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { items: { include: { candidates: { orderBy: { rank: "asc" } } } } },
+      // Admin-Configurable Product Markup: `product` (for categoryId) is
+      // needed to resolve the applicable markup for a promoted candidate's
+      // ORIGINAL (supplier-side) price — see the promotion branch below.
+      // Mirrors apps/supplier/lib/supplier-data.ts's declineOrderForSupplier
+      // fix exactly.
+      include: {
+        items: {
+          include: {
+            candidates: { orderBy: { rank: "asc" } },
+            product: { select: { categoryId: true } },
+          },
+        },
+      },
     });
     if (!order) return null;
 
     const now = new Date();
+    // Order-Total Synchronization: tracks whether any line's buyer-facing
+    // unitPrice actually changed during this decline/promotion pass, so
+    // Order.totalAmount can be resynced once, after the loop, from every
+    // line's current (possibly just-promoted) price — mirrors the identical
+    // pattern in declineOrderForSupplier / BestPriceSelectionService.
+    let pricingChanged = false;
 
     for (const item of order.items) {
       if (item.supplierId !== supplierId) continue;
@@ -289,14 +464,45 @@ export class OrdersService {
       );
 
       if (nextCandidate) {
+        // Admin-Configurable Product Markup: OrderItemSupplierCandidate.unitPrice
+        // is the ORIGINAL, never-marked-up supplier price captured for this
+        // candidate at checkout time (see apps/web/lib/order-checkout.ts's
+        // `candidates: { create: ... unitPrice: candidate.unitPrice }`,
+        // sourced from the cross-supplier price resolver, never from a
+        // marked-up figure). Promoting this candidate onto OrderItem.unitPrice
+        // (a BUYER-facing field) must therefore re-apply markup here — it
+        // must never copy the candidate's raw price straight across, exactly
+        // like every other authoritative buyer-price-setting call site
+        // (BestPriceSelectionService, declineOrderForSupplier).
+        const supplierUnitPrice = Number(nextCandidate.unitPrice);
+        const markup = await resolveMarkupForProduct(this.prisma as any, {
+          productId: item.productId,
+          categoryId: (item as any).product?.categoryId,
+          supplierUnitPrice,
+        }).catch(() => null);
+        // Fail-safe fallback (same contract as BestPriceSelectionService /
+        // declineOrderForSupplier): a missing/disabled markup configuration
+        // must never block candidate promotion — the buyer is charged the
+        // supplier's own price unmarked-up (0% markup) instead.
+        const resolved = markup ?? { supplierUnitPrice, buyerUnitPrice: supplierUnitPrice, markupPercent: 0, markupAmount: 0 };
+        if (!markup) {
+          this.logger.warn(
+            `No markup configuration found for product ${item.productId} — defaulting to 0% markup while promoting candidate for order ${orderId}.`
+          );
+        }
+
         await this.prisma.orderItem.update({
           where: { id: item.id },
           data: {
             supplierId: nextCandidate.supplierId,
-            unitPrice: nextCandidate.unitPrice,
+            unitPrice: resolved.buyerUnitPrice,
+            supplierUnitPrice: resolved.supplierUnitPrice,
+            markupPercent: resolved.markupPercent,
+            markupAmount: resolved.markupAmount,
             resolvedListingId: nextCandidate.listingId ?? undefined,
           },
         });
+        pricingChanged = true;
 
         void this.notificationService.notifySupplierOrderSubmitted(orderId).catch((error) => {
           this.logger.warn(
@@ -324,6 +530,28 @@ export class OrdersService {
           data: { allCandidatesDeclined: true },
         });
       }
+    }
+
+    // Order-Total Synchronization: if any line's buyer-facing price changed
+    // above (a promotion occurred), resync Order.totalAmount from the FULL,
+    // current set of order lines — never leave it at the stale figure
+    // computed before this decline/promotion. Mirrors the identical fix in
+    // declineOrderForSupplier / BestPriceSelectionService. Run before the
+    // fullyDeclined check below: a promotion and a full decline never
+    // coincide for the same line (the if/else above are mutually
+    // exclusive), so this always reflects a genuinely still-pending order
+    // when it runs, and is simply a no-op (never reached) when every line
+    // was fully declined instead.
+    if (pricingChanged) {
+      const refreshedItemsForTotal = await this.prisma.orderItem.findMany({
+        where: { orderId },
+        select: { unitPrice: true, quantity: true },
+      });
+      const totalAmount = refreshedItemsForTotal.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0);
+      await this.prisma.order.update({
+        where: { id: orderId },
+        data: { totalAmount },
+      });
     }
 
     const refreshed = await this.prisma.order.findUnique({

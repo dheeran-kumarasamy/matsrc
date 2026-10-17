@@ -20,7 +20,17 @@ export async function GET(request: Request) {
     const dateTo = url.searchParams.get("dateTo") ?? undefined;
     const status = url.searchParams.get("status") ?? undefined;
 
-    const vouchers = await buildVouchersForBuilder(user.id, { siteId, dateFrom, dateTo, status });
+    // Tally Purchase Voucher Supplier-Cost Fix — buildVouchersForBuilder now
+    // returns both the exportable vouchers AND any orders excluded outright
+    // (confirmed-but-unallocatable multi-supplier orders, or confirmed data
+    // that failed reconciliation) — both surfaced to the builder UI here so
+    // issues are visible before the real export download is attempted.
+    const { vouchers, blockers: exclusionBlockers } = await buildVouchersForBuilder(user.id, {
+      siteId,
+      dateFrom,
+      dateTo,
+      status,
+    });
 
     const mapping = await prisma.tallyLedgerMapping.findUnique({ where: { builderId: user.id } });
     const supplierLedgerMap = (mapping?.supplierLedgerMap as Record<string, string>) ?? {};
@@ -35,7 +45,10 @@ export async function GET(request: Request) {
       supplierLedgerMap,
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      blockers: [...result.blockers, ...exclusionBlockers],
+    });
   } catch (error) {
     console.error("Tally dry-run error:", error);
     return NextResponse.json({ error: "Failed to validate Tally export" }, { status: 500 });

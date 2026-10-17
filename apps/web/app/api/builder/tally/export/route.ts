@@ -22,9 +22,19 @@ export async function GET(request: Request) {
     const dateTo = url.searchParams.get("dateTo") ?? undefined;
     const status = url.searchParams.get("status") ?? undefined;
 
-    const vouchers = await buildVouchersForBuilder(user.id, { siteId, dateFrom, dateTo, status });
+    // Tally Purchase Voucher Supplier-Cost Fix — buildVouchersForBuilder now
+    // returns both the exportable vouchers AND any orders excluded outright
+    // (confirmed-but-unallocatable multi-supplier orders, or confirmed data
+    // that failed reconciliation); both must block the export the same way
+    // an unmapped supplier ledger already does.
+    const { vouchers, blockers: exclusionBlockers } = await buildVouchersForBuilder(user.id, {
+      siteId,
+      dateFrom,
+      dateTo,
+      status,
+    });
 
-    if (vouchers.length === 0) {
+    if (vouchers.length === 0 && exclusionBlockers.length === 0) {
       return NextResponse.json({ error: "No paid orders found for the selected filters" }, { status: 404 });
     }
 
@@ -42,9 +52,10 @@ export async function GET(request: Request) {
     };
 
     const validation = validateVouchers(vouchers, mappingConfig);
-    if (validation.blockers.length > 0) {
+    const allBlockers = [...validation.blockers, ...exclusionBlockers];
+    if (allBlockers.length > 0) {
       return NextResponse.json(
-        { error: "Some suppliers are not mapped to a Tally ledger", blockers: validation.blockers },
+        { error: "Some orders could not be included in this export", blockers: allBlockers },
         { status: 409 }
       );
     }

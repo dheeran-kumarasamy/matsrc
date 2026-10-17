@@ -109,6 +109,34 @@ export * from "./lib/gst-calculation";
 // packages/db/lib/supplier-invoice-reconciliation.ts for full documentation.
 export * from "./lib/supplier-invoice-reconciliation";
 
+// Admin-Configurable Product Markup — shared, framework-agnostic markup
+// resolution (PRODUCT -> CATEGORY -> GLOBAL precedence) and calculation
+// (buyerUnitPrice = supplierUnitPrice * (1 + markupPercent / 100)) used by
+// apps/api's admin markup module, the RFQ/best-price-selection pricing
+// paths, and apps/web's checkout pipeline. See
+// packages/db/lib/markup-calculation.ts for full documentation.
+export * from "./lib/markup-calculation";
+
+// Product-Level GST — shared, framework-agnostic GST (tax) rate resolution
+// (PRODUCT -> CATEGORY -> GLOBAL precedence, STRICT "never a silent
+// default" contract) used by apps/api's admin GST module (GstService). See
+// packages/db/lib/gst-rate-resolution.ts for full documentation.
+export * from "./lib/gst-rate-resolution";
+
+// Product-Level GST / GST-Inclusive Buyer Payable / Advance Configuration —
+// shared, framework-agnostic order/line payable calculation composing
+// markup-calculation.ts and gst-rate-resolution.ts. See
+// packages/db/lib/order-payable-calculation.ts for full documentation.
+export * from "./lib/order-payable-calculation";
+
+// Product-Level GST / GST-Inclusive Buyer Payable — shared, database-
+// reading orchestration layer used by BOTH supplier-confirmation paths
+// (apps/api's BestPriceSelectionService.selectAndFinalizeIfEligible and
+// apps/supplier's updateSupplierOrderStatus) to freeze the GST-inclusive
+// financial snapshot at the exact PLACED -> PROCESSING transition. See
+// packages/db/lib/order-confirmation-snapshot.ts for full documentation.
+export * from "./lib/order-confirmation-snapshot";
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

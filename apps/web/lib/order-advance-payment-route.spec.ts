@@ -170,6 +170,57 @@ describe("POST /api/builder/orders/[id]/advance-payment — partial reservation 
   });
 });
 
+describe("POST /api/builder/orders/[id]/advance-payment — Phase 4 GST-inclusive payable", () => {
+  it("reserves against the frozen finalPayableAmount (GST-inclusive), not the GST-exclusive totalAmount", async () => {
+    orderFindFirst.mockResolvedValue({
+      id: ORDER_ID,
+      paymentStatus: "PENDING",
+      status: "PROCESSING",
+      enquiryId: "EQ/2601/00001",
+      orderNumber: null,
+      totalAmount: 100000, // GST-exclusive subtotal
+      taxAmount: 18000,
+      finalPayableAmount: 118000, // GST-inclusive — this is the figure that must be reserved against
+      advancePercent: null,
+      requiredAdvanceAmount: null,
+    });
+    const prismaModule: any = await import("@/lib/builder-db");
+    prismaModule.prisma.$queryRaw.mockResolvedValue([makeAccountRow(150000, 0)]);
+
+    const { POST } = await import("../app/api/builder/orders/[id]/advance-payment/route");
+    const response = await POST(makeRequest(50000), { params: { id: ORDER_ID } });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    // 118000 (GST-inclusive) - 50000 reserved = 68000, NOT 100000 - 50000 = 50000.
+    expect(body.remainingOutstanding).toBe(68000);
+  });
+
+  it("falls back to totalAmount for a legacy order with a null finalPayableAmount", async () => {
+    orderFindFirst.mockResolvedValue({
+      id: ORDER_ID,
+      paymentStatus: "PENDING",
+      status: "PROCESSING",
+      enquiryId: "EQ/2601/00001",
+      orderNumber: null,
+      totalAmount: 100000,
+      taxAmount: null,
+      finalPayableAmount: null,
+      advancePercent: null,
+      requiredAdvanceAmount: null,
+    });
+    const prismaModule: any = await import("@/lib/builder-db");
+    prismaModule.prisma.$queryRaw.mockResolvedValue([makeAccountRow(150000, 0)]);
+
+    const { POST } = await import("../app/api/builder/orders/[id]/advance-payment/route");
+    const response = await POST(makeRequest(50000), { params: { id: ORDER_ID } });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.remainingOutstanding).toBe(50000);
+  });
+});
+
 describe("POST /api/builder/orders/[id]/advance-payment — full advance settlement", () => {
   it("consumes the reservation immediately and marks the order PAID when advance covers the full outstanding amount", async () => {
     orderFindFirst.mockResolvedValue({

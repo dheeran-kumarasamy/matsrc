@@ -2,20 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationEngineService } from "../notification-engine.service";
 import { SupplierDailyPriceCompletenessService } from "./supplier-daily-price-completeness.service";
-
-// Repository audit (Phase 0) found no standalone "/supplier/pricing" route —
-// the actual Buildohub supplier route where suppliers update product prices
-// is apps/supplier's existing "/listings" page (see
-// apps/supplier/app/(supplier)/listings and
-// apps/api/src/whatsapp/flows/price-update.flow.ts, which links suppliers to
-// the same route for the identical price-update action). The spec's example
-// deep link ("/supplier/pricing") is documented as an assumption deviation
-// in the deliverables report — this uses the real existing route instead of
-// fabricating a new one.
-function supplierPricingDeepLink(): string {
-  const baseUrl = process.env.SUPPLIER_PORTAL_URL || process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://matsrc-supplier.vercel.app";
-  return `${baseUrl.replace(/\/$/, "")}/listings`;
-}
+import { buildDailyPriceDedupeKey, supplierPricingDeepLink } from "./supplier-daily-price.util";
 
 /**
  * SupplierDailyPriceReminderService — Phase 11/12 orchestration.
@@ -66,7 +53,7 @@ export class SupplierDailyPriceReminderService {
   ) {}
 
   private dedupeKey(supplierId: string, businessDate: string): string {
-    return `SUPPLIER_DAILY_PRICE_UPDATE_REQUIRED:${supplierId}:${businessDate}`;
+    return buildDailyPriceDedupeKey(supplierId, businessDate);
   }
 
   async evaluateAndNotify(now: Date = new Date()): Promise<{ evaluated: number; notified: number; skippedComplete: number }> {

@@ -53,8 +53,20 @@ export async function GET(
         // Contractor/Client order page — only present once an Admin has
         // generated it (see apps/admin's Generate Invoice action /
         // apps/api's admin/orders/:orderId/invoice controller). Never
-        // generated from this route.
-        invoice: { select: { id: true, invoiceNumber: true } },
+        // generated from this route. `totalAmount` here is the FINAL,
+        // freight/other-charges/discount/rounding-inclusive figure frozen
+        // by InvoicesService.generate() at invoice-generation time (see
+        // apps/api/src/admin/invoices/invoices.service.ts) — deliberately
+        // read here so the order page's displayed "Total" reflects any
+        // freight/other charges an Admin confirmed on the Supplier Invoice
+        // AFTER the order's own pre-invoice finalPayableAmount/totalAmount
+        // snapshot was frozen. Order.finalPayableAmount/totalAmount
+        // themselves are intentionally NEVER mutated by invoice generation
+        // (see that service's own "Important implementation boundary" doc
+        // comment) — they remain the authoritative figures for
+        // payment/advance/outstanding calculations (order-outstanding.ts)
+        // and are used below ONLY as the pre-invoice fallback.
+        invoice: { select: { id: true, invoiceNumber: true, totalAmount: true } },
         items: {
           select: {
             id: true,
@@ -168,7 +180,17 @@ export async function GET(
             version: order.purchaseOrders[0].version,
           }
         : null,
-      invoice: order.invoice ? { id: order.invoice.id, invoiceNumber: order.invoice.invoiceNumber } : null,
+      invoice: order.invoice
+        ? {
+            id: order.invoice.id,
+            invoiceNumber: order.invoice.invoiceNumber,
+            // Final, freight/other-charges/discount/rounding-inclusive total
+            // frozen by InvoicesService.generate() — see this route's own
+            // `invoice` select comment above for why this is read instead
+            // of (never in place of) `total`/`finalPayableAmount` above.
+            totalAmount: Number(order.invoice.totalAmount),
+          }
+        : null,
       items: order.items.map((item) => ({
         id: item.id,
         productId: item.product.id,

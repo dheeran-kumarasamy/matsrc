@@ -35,7 +35,15 @@ type OrderDetail = {
   priceBeforeAggregation?: number | null;
   priceAfterAggregation?: number | null;
   purchaseOrder?: { id: string; poNumber: string; status: string; version: number } | null;
-  invoice?: { id: string; invoiceNumber: string } | null;
+  // `totalAmount` is the FINAL, freight/other-charges/discount/rounding-
+  // inclusive figure frozen by InvoicesService.generate() at invoice-
+  // generation time (see apps/api/src/admin/invoices/invoices.service.ts
+  // and this page's own "Total" block below) — only present once an Admin
+  // has confirmed the Supplier Invoice's freight/other charges AND
+  // generated the buyer invoice. `total` above (from
+  // Order.finalPayableAmount/totalAmount) remains the pre-invoice estimate
+  // and is never itself mutated by invoice generation.
+  invoice?: { id: string; invoiceNumber: string; totalAmount: number } | null;
   // The Order's own already-authoritative business number
   // ("OD/YYMM/SSSSS") — the same number the downloaded buyer-facing PO PDF
   // displays/names its file after. See
@@ -216,8 +224,17 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             className="flex items-center justify-between rounded-xl border px-4 py-3 text-sm"
             style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)" }}
           >
-            <span className="posh-label">Total</span>
-            <span className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>₹{order.total.toLocaleString("en-IN")}</span>
+            {/* Once an Admin has generated the buyer invoice, its own
+                totalAmount (which reflects any freight/other charges/
+                discount/rounding confirmed on the Supplier Invoice) is the
+                FINAL payable figure and is shown here instead of the
+                earlier, pre-invoice `order.total` estimate — see the
+                `invoice` field's doc comment above for why these two can
+                legitimately differ. */}
+            <span className="posh-label">{order.invoice ? "Total (Final Invoiced Amount)" : "Total"}</span>
+            <span className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>
+              ₹{(order.invoice ? order.invoice.totalAmount : order.total).toLocaleString("en-IN")}
+            </span>
           </div>
         </section>
 

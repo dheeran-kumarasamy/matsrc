@@ -43,6 +43,15 @@ export type OverlayOrderDetail = {
   priceBeforeAggregation?: number | null;
   priceAfterAggregation?: number | null;
   purchaseOrder?: { id: string; poNumber: string; status: string; version: number } | null;
+  // Final, freight/other-charges/discount/rounding-inclusive total frozen
+  // by InvoicesService.generate() — only present once an Admin has
+  // confirmed the Supplier Invoice's freight/other charges AND generated
+  // the buyer invoice. `total` above (from
+  // Order.finalPayableAmount/totalAmount) remains the pre-invoice estimate
+  // and is never itself mutated by invoice generation. See
+  // apps/web/app/(builder)/orders/[id]/page.tsx's identical field for the
+  // full rationale — this overlay mirrors that page's rendering.
+  invoice?: { id: string; invoiceNumber: string; totalAmount: number } | null;
   // The Order's own already-authoritative business number
   // ("OD/YYMM/SSSSS") — the same number the downloaded buyer-facing PO PDF
   // displays/names its file after. See
@@ -265,8 +274,13 @@ export default function OrderDetailOverlay({ order }: Props) {
                 ))}
               </div>
               <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm">
-                <span className="font-medium text-slate-600">Total</span>
-                <span className="font-bold text-slate-900">₹{order.total.toLocaleString("en-IN")}</span>
+                {/* See `invoice` field's doc comment above for why this
+                    prefers the generated invoice's final total once one
+                    exists. */}
+                <span className="font-medium text-slate-600">{order.invoice ? "Total (Final Invoiced Amount)" : "Total"}</span>
+                <span className="font-bold text-slate-900">
+                  ₹{(order.invoice ? order.invoice.totalAmount : order.total).toLocaleString("en-IN")}
+                </span>
               </div>
             </section>
 

@@ -81,6 +81,16 @@ vi.mock("@matsrc/db", async () => {
     },
     taxSetting: { findMany: vi.fn(async () => taxSettingRows) },
     advanceConfig: { findUnique: vi.fn(async () => (advanceConfigRow.value ? { ...advanceConfigRow.value, id: "global" } : null)) },
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — this file keeps the REAL checkOrderDispatchEligibility
+    // (via vi.importActual below), so these two delegates must exist for
+    // its calculateOrderSettledAmount query. Every DISPATCHED-transition
+    // fixture in this file sets `supplierInvoice: { status: "CONFIRMED",
+    // confirmedTotalAmount: <totalAmount> }` and no ledger/verification
+    // rows, which trivially satisfies the gate (0 outstanding) without
+    // interfering with the GST-snapshot concerns this file actually tests.
+    customerAdvanceTransaction: { findMany: vi.fn(async () => []) },
+    paymentVerification: { findUnique: vi.fn(async () => null) },
   };
   prisma.$transaction = vi.fn((callback: any) => callback(prisma));
 
@@ -188,6 +198,13 @@ describe("updateSupplierOrderStatus — GST snapshot freeze (single-supplier Con
       // totals above (assertFullOrderSnapshotIntegrity now requires this
       // for a confirmed order).
       items: [{ id: "order-gst-4-line-1", taxRatePercent: 18, taxAmount: 1980 }],
+      // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+      // Dispatch — satisfies checkOrderDispatchEligibility (a confirmed
+      // invoice with a 0 confirmedTotalAmount is trivially "fully settled"
+      // against the 0 settled amount this mock's empty ledger produces) so
+      // this test can reach the SEPARATE GST-snapshot concern it actually
+      // exercises.
+      supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 0 },
     });
 
     await expect(updateSupplierOrderStatus("order-gst-4", "DISPATCHED" as any)).resolves.toBeDefined();
@@ -208,6 +225,10 @@ describe("updateSupplierOrderStatus — GST snapshot freeze (single-supplier Con
       advancePercent: null,
       requiredAdvanceAmount: null,
       items: [],
+      // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+      // Dispatch — satisfies checkOrderDispatchEligibility so this test can
+      // reach the SEPARATE snapshot-integrity check it actually exercises.
+      supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 0 },
     });
 
     await expect(updateSupplierOrderStatus("order-gst-5", "DISPATCHED" as any)).rejects.toThrow(

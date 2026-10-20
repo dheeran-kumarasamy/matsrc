@@ -19,6 +19,15 @@ type OrderDetail = {
   // orders (see the API route's `enquiryId ?? id` fallback).
   enquiryId: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — the buyer-facing confirmation state, derived server-side
+  // from `status` + the order's SupplierInvoice review state (NEVER
+  // persisted — see packages/db/lib/order-buyer-confirmation.ts). Prefer
+  // this over the raw `status` above for any buyer-facing "is this order
+  // confirmed yet" display — `status` itself keeps its existing meaning
+  // (unaffected by this feature) for anything that isn't purely display.
+  confirmationState?: "NOT_YET_CONFIRMED" | "AWAITING_FINAL_CONFIRMATION" | "CONFIRMED" | "CANCELLED";
+  confirmationStateLabel?: string;
   paymentStatus: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
   paymentLinkAvailable: boolean;
   paymentLink: string;
@@ -124,7 +133,19 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <OrderStatusBadge status={order.status} />
+          {/* Admin-Confirmed Freight / Buyer Final Confirmation / Payment-
+              Gated Dispatch — the buyer-facing badge shows the derived
+              confirmationStateLabel (e.g. "Awaiting Final Confirmation")
+              once past PLACED, rather than the raw internal status, which
+              would otherwise read "Processing" even before an Admin has
+              confirmed freight/other charges. Falls back to the plain
+              status badge for any older client response that hasn't been
+              updated to include confirmationState yet. */}
+          {order.confirmationState && order.confirmationState !== "NOT_YET_CONFIRMED" && order.confirmationState !== "CANCELLED" ? (
+            <span className="posh-status">{order.confirmationStateLabel}</span>
+          ) : (
+            <OrderStatusBadge status={order.status} />
+          )}
           {order.isAggregated ? <span className="posh-status">Group Order</span> : null}
           {order.paymentLinkAvailable ? (
             <Link href={order.paymentLink} className="posh-btn">
@@ -134,12 +155,21 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         </div>
       </header>
 
-      {order.status === "PROCESSING" ? (
+      {order.confirmationState === "AWAITING_FINAL_CONFIRMATION" ? (
         <div
           className="rounded-2xl border px-4 py-3 text-sm font-medium"
           style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)", color: "var(--posh-fg-muted)" }}
         >
-          Supplier confirmed this enquiry. WhatsApp and in-app updates will continue as the order moves forward.
+          The supplier has accepted your enquiry. Our team is now reviewing the final freight/other charges — you'll be
+          able to pay once this is confirmed.
+        </div>
+      ) : order.confirmationState === "CONFIRMED" ? (
+        <div
+          className="rounded-2xl border px-4 py-3 text-sm font-medium"
+          style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)", color: "var(--posh-fg-muted)" }}
+        >
+          Your order is confirmed, including final freight/other charges. WhatsApp and in-app updates will continue as
+          the order moves forward.
         </div>
       ) : null}
 

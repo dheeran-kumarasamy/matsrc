@@ -10,6 +10,7 @@ import {
   resolveOrderConfirmationSnapshot,
   assertFullOrderSnapshotIntegrity,
   ConcurrentConfirmationLostError,
+  checkOrderDispatchEligibility,
 } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
@@ -150,6 +151,27 @@ export class OrdersService {
       throw new BadRequestException(
         "This order cannot be marked as delivered until payment has been confirmed."
       );
+    }
+
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — server-side enforcement: an order must never be marked
+    // DISPATCHED until an Admin has reviewed and CONFIRMED the
+    // SupplierInvoice's freight/other charges AND the resulting
+    // freight-inclusive final payable amount has been fully, verifiably
+    // settled (never merely Order.paymentStatus === PAID, which may still
+    // reflect an earlier, pre-confirmation estimate — see
+    // checkOrderDispatchEligibility's own doc comment for the full
+    // rationale). This is one of TWO call sites that may transition
+    // Order.status to DISPATCHED (this NestJS service and apps/supplier's
+    // updateSupplierOrderStatus) — both call the SAME shared,
+    // framework-agnostic checkOrderDispatchEligibility
+    // (packages/db/lib/order-dispatch-eligibility.ts) so there is exactly
+    // one place this decision is computed.
+    if (status === OrderStatus.DISPATCHED) {
+      const eligibility = await checkOrderDispatchEligibility(this.prisma as any, id);
+      if (!eligibility.eligible) {
+        throw new BadRequestException(eligibility.reason);
+      }
     }
 
     // Multi-supplier fan-out: a decline must not immediately cancel the whole

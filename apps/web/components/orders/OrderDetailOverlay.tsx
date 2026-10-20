@@ -27,6 +27,11 @@ export type OverlayOrderDetail = {
   // orders (see the API route's `enquiryId ?? id` fallback).
   enquiryId: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — see apps/web/app/(builder)/orders/[id]/page.tsx's identical
+  // field for the full rationale.
+  confirmationState?: "NOT_YET_CONFIRMED" | "AWAITING_FINAL_CONFIRMATION" | "CONFIRMED" | "CANCELLED";
+  confirmationStateLabel?: string;
   paymentStatus: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
   paymentLinkAvailable: boolean;
   paymentLink: string;
@@ -175,7 +180,16 @@ export default function OrderDetailOverlay({ order }: Props) {
 
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <OrderStatusBadge status={order.status} />
+              {/* Admin-Confirmed Freight / Buyer Final Confirmation /
+                  Payment-Gated Dispatch — see the full-page order detail's
+                  identical badge logic for the full rationale. */}
+              {order.confirmationState && order.confirmationState !== "NOT_YET_CONFIRMED" && order.confirmationState !== "CANCELLED" ? (
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                  {order.confirmationStateLabel}
+                </span>
+              ) : (
+                <OrderStatusBadge status={order.status} />
+              )}
 
               {order.isAggregated ? (
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -195,9 +209,15 @@ export default function OrderDetailOverlay({ order }: Props) {
         </DialogHeader>
 
         <div className="max-h-[70vh] space-y-5 overflow-y-auto p-5">
-          {order.status === "PROCESSING" ? (
+          {order.confirmationState === "AWAITING_FINAL_CONFIRMATION" ? (
             <div className="rounded-2xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] px-4 py-3 text-sm text-[color:var(--posh-fg)]">
-              Supplier confirmed this enquiry. WhatsApp and in-app updates will continue as the order moves forward.
+              The supplier has accepted your enquiry. Our team is now reviewing the final freight/other charges —
+              you'll be able to pay once this is confirmed.
+            </div>
+          ) : order.confirmationState === "CONFIRMED" ? (
+            <div className="rounded-2xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] px-4 py-3 text-sm text-[color:var(--posh-fg)]">
+              Your order is confirmed, including final freight/other charges. WhatsApp and in-app updates will continue
+              as the order moves forward.
             </div>
           ) : null}
 

@@ -115,6 +115,10 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
         // getSupplierOrderDetail's hasMultipleEligibleCandidates doc comment
         // in lib/supplier-data.ts.
         requiresQuotation={order.requiresQuotation}
+        // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+        // Dispatch — see getSupplierOrderDetail's dispatchBlockedReason doc
+        // comment in lib/supplier-data.ts.
+        dispatchBlockedReason={order.dispatchBlockedReason}
         // `label` already mirrors OrderTracking.note verbatim whenever a note
         // was recorded (see getSupplierOrderDetail's `label: entry.note ??
         // humanizeToken(entry.status)`), so it doubles as the `note` input

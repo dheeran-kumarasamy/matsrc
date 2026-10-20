@@ -15,6 +15,7 @@ const {
   notifyPaymentRequired,
   waitUntilMock,
   generateOrderNumberMock,
+  checkOrderDispatchEligibilityMock,
 } = vi.hoisted(() => {
   const orderRows = new Map<string, { id: string; status: string; items: any[]; paymentStatus: string; orderNumber?: string | null }>();
   const findUniqueCalls: any[] = [];
@@ -32,6 +33,17 @@ const {
   // and that its result is persisted onto the order.
   let seq = 0;
   const generateOrderNumberMock = vi.fn(async () => `OD/TEST/${String(++seq).padStart(5, "0")}`);
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — mocked here (its own real behaviour is covered separately
+  // by packages/db/lib/order-dispatch-eligibility.spec.ts); defaults to
+  // eligible so every PRE-EXISTING "allows Mark Dispatched"-style test in
+  // this file (which predates this feature) keeps passing unchanged.
+  const checkOrderDispatchEligibilityMock = vi.fn(
+    async (): Promise<
+      | { eligible: true; finalPayableAmount: number; settledAmount: number }
+      | { eligible: false; reason: string; finalPayableAmount: number | null; settledAmount: number }
+    > => ({ eligible: true, finalPayableAmount: 0, settledAmount: 0 })
+  );
   return {
     orderRows,
     findUniqueCalls,
@@ -40,6 +52,7 @@ const {
     notifyPaymentRequired,
     waitUntilMock,
     generateOrderNumberMock,
+    checkOrderDispatchEligibilityMock,
   };
 });
 
@@ -111,6 +124,9 @@ vi.mock("@matsrc/db", () => {
     // (covered by business-number.ts's own tests); these tests only assert
     // that updateSupplierOrderStatus calls it exactly when it should.
     generateOrderNumber: generateOrderNumberMock,
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — see checkOrderDispatchEligibilityMock's own doc comment.
+    checkOrderDispatchEligibility: checkOrderDispatchEligibilityMock,
   };
 });
 
@@ -128,6 +144,8 @@ beforeEach(() => {
   notifyPaymentRequired.mockClear();
   waitUntilMock.mockClear();
   generateOrderNumberMock.mockClear();
+  checkOrderDispatchEligibilityMock.mockClear();
+  checkOrderDispatchEligibilityMock.mockResolvedValue({ eligible: true, finalPayableAmount: 0, settledAmount: 0 });
 });
 
 // paymentStatus defaults to "PAID" so every existing transition-guard test
@@ -470,5 +488,65 @@ describe("updateSupplierOrderStatus — C34 payment-before-delivery guard", () =
     );
     expect(waitUntilMock).not.toHaveBeenCalled();
     expect(notifyCustomerOrderStatusChanged).not.toHaveBeenCalled();
+  });
+});
+
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — server-side enforcement that PROCESSING -> DISPATCHED is
+// blocked until checkOrderDispatchEligibility (the shared,
+// packages/db-level gate) reports eligible. The gate's own full behaviour
+// (missing/pending/rejected invoice, partial settlement, etc.) is unit-
+// tested exhaustively in packages/db/lib/order-dispatch-eligibility.spec.ts
+// — these tests only verify updateSupplierOrderStatus correctly calls it
+// and correctly propagates/surfaces its verdict (reason as the thrown
+// Error message), including that notifications are never scheduled for a
+// rejected dispatch attempt.
+describe("updateSupplierOrderStatus — Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated Dispatch", () => {
+  it("rejects Mark Dispatched when checkOrderDispatchEligibility reports ineligible, surfacing its exact reason", async () => {
+    seedOrder("order-50", "PROCESSING");
+    checkOrderDispatchEligibilityMock.mockResolvedValue({
+      eligible: false,
+      reason: "The supplier invoice is still awaiting Admin review — it cannot be dispatched until the freight/other charges are confirmed.",
+      finalPayableAmount: null,
+      settledAmount: 0,
+    });
+
+    await expect(updateSupplierOrderStatus("order-50", "DISPATCHED" as any)).rejects.toThrow(
+      /awaiting Admin review/
+    );
+  });
+
+  it("never schedules any notification when Mark Dispatched is rejected by the dispatch-eligibility gate", async () => {
+    seedOrder("order-51", "PROCESSING");
+    checkOrderDispatchEligibilityMock.mockResolvedValue({
+      eligible: false,
+      reason: "₹5,000 is still outstanding.",
+      finalPayableAmount: 10000,
+      settledAmount: 5000,
+    });
+
+    await expect(updateSupplierOrderStatus("order-51", "DISPATCHED" as any)).rejects.toThrow();
+    expect(waitUntilMock).not.toHaveBeenCalled();
+    expect(notifyCustomerOrderStatusChanged).not.toHaveBeenCalled();
+  });
+
+  it("allows Mark Dispatched once checkOrderDispatchEligibility reports eligible", async () => {
+    seedOrder("order-52", "PROCESSING");
+    checkOrderDispatchEligibilityMock.mockResolvedValue({ eligible: true, finalPayableAmount: 10000, settledAmount: 10000 });
+
+    const result = await updateSupplierOrderStatus("order-52", "DISPATCHED" as any);
+    expect(result.status).toBe("DISPATCHED");
+  });
+
+  it("never calls checkOrderDispatchEligibility for a non-DISPATCHED transition", async () => {
+    seedOrder("order-53", "PLACED");
+    await updateSupplierOrderStatus("order-53", "PROCESSING" as any);
+    expect(checkOrderDispatchEligibilityMock).not.toHaveBeenCalled();
+  });
+
+  it("passes the correct orderId to checkOrderDispatchEligibility", async () => {
+    seedOrder("order-54", "PROCESSING");
+    await updateSupplierOrderStatus("order-54", "DISPATCHED" as any);
+    expect(checkOrderDispatchEligibilityMock).toHaveBeenCalledWith(expect.anything(), "order-54");
   });
 });

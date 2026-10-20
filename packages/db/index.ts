@@ -137,6 +137,19 @@ export * from "./lib/order-payable-calculation";
 // packages/db/lib/order-confirmation-snapshot.ts for full documentation.
 export * from "./lib/order-confirmation-snapshot";
 
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — shared, pure derivation of the buyer-facing confirmation
+// state (NEVER persisted) and the authoritative final payable amount.
+// See packages/db/lib/order-buyer-confirmation.ts for full documentation.
+export * from "./lib/order-buyer-confirmation";
+
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — the single, shared, database-reading PROCESSING -> DISPATCHED
+// eligibility check used by BOTH apps/supplier's updateSupplierOrderStatus
+// and apps/api's OrdersService.updateStatus. See
+// packages/db/lib/order-dispatch-eligibility.ts for full documentation.
+export * from "./lib/order-dispatch-eligibility";
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

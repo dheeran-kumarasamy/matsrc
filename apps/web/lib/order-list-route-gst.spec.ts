@@ -90,3 +90,40 @@ describe("GET /api/builder/orders — GST-inclusive payable surfacing", () => {
     expect(body.find((o: any) => o.id === "order-legacy").gstInclusive).toBe(false);
   });
 });
+
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — each order's confirmationState/paymentLinkAvailable must be
+// derived consistently with the order-detail route's identical logic.
+describe("GET /api/builder/orders — Admin-Confirmed Freight / Buyer Final Confirmation", () => {
+  it("hides the payment link until the SupplierInvoice is CONFIRMED, even while status is already PROCESSING and paymentStatus PENDING", async () => {
+    orderFindMany.mockResolvedValue([makeOrderRow({ status: "PROCESSING", paymentStatus: "PENDING", supplierInvoice: null })]);
+
+    const { GET } = await import("../app/api/builder/orders/route");
+    const response = await GET(makeRequest());
+    const body = await response.json();
+
+    expect(body[0].confirmationState).toBe("AWAITING_FINAL_CONFIRMATION");
+    expect(body[0].paymentLinkAvailable).toBe(false);
+  });
+
+  it("shows the payment link once the SupplierInvoice is CONFIRMED, and uses its confirmed total", async () => {
+    orderFindMany.mockResolvedValue([
+      makeOrderRow({
+        status: "PROCESSING",
+        paymentStatus: "PENDING",
+        totalAmount: 10000,
+        taxAmount: 1800,
+        finalPayableAmount: 11800,
+        supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 13500 },
+      }),
+    ]);
+
+    const { GET } = await import("../app/api/builder/orders/route");
+    const response = await GET(makeRequest());
+    const body = await response.json();
+
+    expect(body[0].confirmationState).toBe("CONFIRMED");
+    expect(body[0].paymentLinkAvailable).toBe(true);
+    expect(body[0].total).toBe(13500);
+  });
+});

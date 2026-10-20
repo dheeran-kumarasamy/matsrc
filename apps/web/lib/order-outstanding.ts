@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/builder-db";
-import { assertConsistentOrderSnapshot, assertConsistentOrderSnapshotArithmetic, calculateRemainingBalance } from "@matsrc/db";
+import {
+  assertConsistentOrderSnapshot,
+  assertConsistentOrderSnapshotArithmetic,
+  calculateRemainingBalance,
+  resolveOrderFinalPayableAmount,
+} from "@matsrc/db";
 
 // Server-side authoritative computation of an order's outstanding
 // (still-payable-via-external-method) amount, accounting for any Buildohub
@@ -49,6 +54,13 @@ export async function computeOrderOutstandingAmount(orderId: string): Promise<{
       finalPayableAmount: true,
       advancePercent: true,
       requiredAdvanceAmount: true,
+      // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+      // Dispatch — once an Admin has confirmed the SupplierInvoice, its
+      // confirmedTotalAmount (freight/other-charges/discount/rounding-
+      // inclusive) is the authoritative payable figure, superseding the
+      // pre-confirmation finalPayableAmount/totalAmount estimate below —
+      // see resolveOrderFinalPayableAmount's own doc comment.
+      supplierInvoice: { select: { status: true, confirmedTotalAmount: true } },
     },
   });
   if (!order) {
@@ -112,7 +124,18 @@ export async function computeOrderOutstandingAmount(orderId: string): Promise<{
   // confirmed through a snapshot-writing path; fall back to the pre-existing
   // GST-exclusive totalAmount for a legacy/not-yet-confirmed order. Never
   // recomputed from current GST/markup configuration.
-  const payableAmount = payableSet ? Number(order.finalPayableAmount) : Number(order.totalAmount ?? 0);
+  const preConfirmationEstimate = payableSet ? Number(order.finalPayableAmount) : Number(order.totalAmount ?? 0);
+
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — once an Admin has confirmed the SupplierInvoice, its
+  // confirmedTotalAmount supersedes the pre-confirmation estimate above as
+  // the authoritative payable figure (see resolveOrderFinalPayableAmount's
+  // own doc comment for the full rationale).
+  const { amount: payableAmount } = resolveOrderFinalPayableAmount(preConfirmationEstimate, {
+    status: order.supplierInvoice?.status ?? "PENDING_REVIEW",
+    confirmedTotalAmount:
+      order.supplierInvoice?.confirmedTotalAmount != null ? Number(order.supplierInvoice.confirmedTotalAmount) : null,
+  });
   const outstanding = calculateRemainingBalance(payableAmount, advanceApplied);
 
   return { totalAmount: payableAmount, advanceApplied, outstanding, activeReservationAmount };

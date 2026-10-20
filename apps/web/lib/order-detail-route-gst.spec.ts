@@ -112,3 +112,89 @@ describe("GET /api/builder/orders/[id] — GST-inclusive payable surfacing", () 
     expect(response.status).toBe(500);
   });
 });
+
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — the buyer-facing confirmationState/confirmationStateLabel and
+// the final payable `total` must correctly reflect the order's
+// SupplierInvoice state, never the raw Order.status alone.
+describe("GET /api/builder/orders/[id] — Admin-Confirmed Freight / Buyer Final Confirmation", () => {
+  it("is NOT_YET_CONFIRMED while the order is still PLACED", async () => {
+    orderFindFirst.mockResolvedValue(baseOrder({ status: "PLACED", supplierInvoice: null }));
+
+    const { GET } = await import("../app/api/builder/orders/[id]/route");
+    const response = await GET(makeRequest(), { params: { id: "order-1" } });
+    const body = await response.json();
+
+    expect(body.confirmationState).toBe("NOT_YET_CONFIRMED");
+    expect(body.paymentLinkAvailable).toBe(false);
+  });
+
+  it("is AWAITING_FINAL_CONFIRMATION once the supplier accepts but no SupplierInvoice exists yet", async () => {
+    orderFindFirst.mockResolvedValue(baseOrder({ status: "PROCESSING", supplierInvoice: null }));
+
+    const { GET } = await import("../app/api/builder/orders/[id]/route");
+    const response = await GET(makeRequest(), { params: { id: "order-1" } });
+    const body = await response.json();
+
+    expect(body.confirmationState).toBe("AWAITING_FINAL_CONFIRMATION");
+    // Payment must never be offered before final confirmation, even though
+    // the raw Order.status is already PROCESSING and paymentStatus PENDING.
+    expect(body.paymentLinkAvailable).toBe(false);
+  });
+
+  it("is AWAITING_FINAL_CONFIRMATION while the SupplierInvoice is PENDING_REVIEW", async () => {
+    orderFindFirst.mockResolvedValue(
+      baseOrder({ status: "PROCESSING", supplierInvoice: { status: "PENDING_REVIEW", confirmedTotalAmount: null } })
+    );
+
+    const { GET } = await import("../app/api/builder/orders/[id]/route");
+    const response = await GET(makeRequest(), { params: { id: "order-1" } });
+    const body = await response.json();
+
+    expect(body.confirmationState).toBe("AWAITING_FINAL_CONFIRMATION");
+    expect(body.paymentLinkAvailable).toBe(false);
+  });
+
+  it("is CONFIRMED once the supplier has accepted AND the SupplierInvoice is CONFIRMED, exposing the admin-confirmed total", async () => {
+    orderFindFirst.mockResolvedValue(
+      baseOrder({
+        status: "PROCESSING",
+        totalAmount: 10000,
+        taxAmount: 1800,
+        finalPayableAmount: 11800,
+        supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 13500 },
+      })
+    );
+
+    const { GET } = await import("../app/api/builder/orders/[id]/route");
+    const response = await GET(makeRequest(), { params: { id: "order-1" } });
+    const body = await response.json();
+
+    expect(body.confirmationState).toBe("CONFIRMED");
+    expect(body.total).toBe(13500); // admin-confirmed, NOT the pre-confirmation 11800
+    expect(body.paymentLinkAvailable).toBe(true);
+  });
+
+  it("legacy/in-flight order compatibility: treats an already-DISPATCHED order with no SupplierInvoice as CONFIRMED (never permanently stranded)", async () => {
+    orderFindFirst.mockResolvedValue(baseOrder({ status: "DISPATCHED", supplierInvoice: null }));
+
+    const { GET } = await import("../app/api/builder/orders/[id]/route");
+    const response = await GET(makeRequest(), { params: { id: "order-1" } });
+    const body = await response.json();
+
+    expect(body.confirmationState).toBe("CONFIRMED");
+  });
+
+  it("CANCELLED always wins, even if the SupplierInvoice was confirmed", async () => {
+    orderFindFirst.mockResolvedValue(
+      baseOrder({ status: "CANCELLED", supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 13500 } })
+    );
+
+    const { GET } = await import("../app/api/builder/orders/[id]/route");
+    const response = await GET(makeRequest(), { params: { id: "order-1" } });
+    const body = await response.json();
+
+    expect(body.confirmationState).toBe("CANCELLED");
+    expect(body.paymentLinkAvailable).toBe(false);
+  });
+});

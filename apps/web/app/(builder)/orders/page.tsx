@@ -12,6 +12,11 @@ type OrderItem = {
   // orders (see the API route's `enquiryId ?? id` fallback).
   enquiryId: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — see apps/web/app/(builder)/orders/[id]/page.tsx's identical
+  // field for the full rationale.
+  confirmationState?: "NOT_YET_CONFIRMED" | "AWAITING_FINAL_CONFIRMATION" | "CONFIRMED" | "CANCELLED";
+  confirmationStateLabel?: string;
   paymentStatus?: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
   itemCount: number;
   total: number;
@@ -193,7 +198,14 @@ export default async function OrdersPage({
                 </p>
               </div>
               <div className="flex items-center gap-4">
-                <OrderStatusBadge status={order.status} />
+                {/* Admin-Confirmed Freight / Buyer Final Confirmation /
+                    Payment-Gated Dispatch — see the order-detail page's
+                    identical badge logic for the full rationale. */}
+                {order.confirmationState && order.confirmationState !== "NOT_YET_CONFIRMED" && order.confirmationState !== "CANCELLED" ? (
+                  <span className="posh-status">{order.confirmationStateLabel}</span>
+                ) : (
+                  <OrderStatusBadge status={order.status} />
+                )}
 
                 {order.paymentLinkAvailable && order.paymentLink ? (
                   <Link href={order.paymentLink} className="posh-status-strong">

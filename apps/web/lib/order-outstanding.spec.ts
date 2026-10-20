@@ -253,3 +253,93 @@ describe("computeOrderOutstandingAmount — not found", () => {
     await expect(computeOrderOutstandingAmount("missing")).rejects.toThrow(/not found/i);
   });
 });
+
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — once an Admin has confirmed the SupplierInvoice, its
+// confirmedTotalAmount must supersede the pre-confirmation
+// finalPayableAmount/totalAmount estimate as the authoritative payable
+// base this function computes `outstanding` against.
+describe("computeOrderOutstandingAmount — Admin-confirmed SupplierInvoice total supersedes the pre-confirmation estimate", () => {
+  it("uses the higher, admin-confirmed total (e.g. freight added) instead of the lower pre-confirmation estimate", async () => {
+    orderFindUnique.mockResolvedValue({
+      totalAmount: 10000,
+      taxAmount: 1800,
+      finalPayableAmount: 11800,
+      advancePercent: null,
+      requiredAdvanceAmount: null,
+      supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 13500 },
+    });
+
+    const { computeOrderOutstandingAmount } = await import("./order-outstanding");
+    const result = await computeOrderOutstandingAmount("order-freight-added");
+
+    expect(result.totalAmount).toBe(13500);
+    expect(result.outstanding).toBe(13500);
+  });
+
+  it("uses the lower, admin-confirmed total (e.g. a discount) instead of the higher pre-confirmation estimate", async () => {
+    orderFindUnique.mockResolvedValue({
+      totalAmount: 10000,
+      taxAmount: 1800,
+      finalPayableAmount: 11800,
+      advancePercent: null,
+      requiredAdvanceAmount: null,
+      supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 9500 },
+    });
+
+    const { computeOrderOutstandingAmount } = await import("./order-outstanding");
+    const result = await computeOrderOutstandingAmount("order-discounted");
+
+    expect(result.totalAmount).toBe(9500);
+  });
+
+  it("a payment covering only the OLD pre-freight estimate leaves a real outstanding balance against the NEW confirmed total", async () => {
+    orderFindUnique.mockResolvedValue({
+      totalAmount: 10000,
+      taxAmount: 1800,
+      finalPayableAmount: 11800,
+      advancePercent: null,
+      requiredAdvanceAmount: null,
+      supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 13500 },
+    });
+    // Buyer already settled the OLD 11800 pre-confirmation estimate.
+    customerAdvanceTransactionFindMany.mockResolvedValue([{ type: "ORDER_PAYMENT", amount: 11800 }]);
+
+    const { computeOrderOutstandingAmount } = await import("./order-outstanding");
+    const result = await computeOrderOutstandingAmount("order-stale-payment");
+
+    expect(result.outstanding).toBe(1700);
+  });
+
+  it("still uses the pre-confirmation estimate while the SupplierInvoice is PENDING_REVIEW", async () => {
+    orderFindUnique.mockResolvedValue({
+      totalAmount: 10000,
+      taxAmount: 1800,
+      finalPayableAmount: 11800,
+      advancePercent: null,
+      requiredAdvanceAmount: null,
+      supplierInvoice: { status: "PENDING_REVIEW", confirmedTotalAmount: null },
+    });
+
+    const { computeOrderOutstandingAmount } = await import("./order-outstanding");
+    const result = await computeOrderOutstandingAmount("order-pending-review");
+
+    expect(result.totalAmount).toBe(11800);
+  });
+
+  it("still uses the pre-confirmation estimate when there is no SupplierInvoice at all", async () => {
+    orderFindUnique.mockResolvedValue({
+      totalAmount: 10000,
+      taxAmount: 1800,
+      finalPayableAmount: 11800,
+      advancePercent: null,
+      requiredAdvanceAmount: null,
+      supplierInvoice: null,
+    });
+
+    const { computeOrderOutstandingAmount } = await import("./order-outstanding");
+    const result = await computeOrderOutstandingAmount("order-no-invoice");
+
+    expect(result.totalAmount).toBe(11800);
+  });
+});

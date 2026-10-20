@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
-import { OrderStatus, PaymentStatus, PaymentMethod, assertConsistentOrderSnapshot } from "@matsrc/db";
+import {
+  OrderStatus,
+  PaymentStatus,
+  PaymentMethod,
+  assertConsistentOrderSnapshot,
+  resolveBuyerConfirmationState,
+  resolveOrderFinalPayableAmount,
+  BUYER_CONFIRMATION_STATE_LABELS,
+} from "@matsrc/db";
 import {
   prisma,
   formatCurrency,
@@ -67,6 +75,11 @@ export async function GET(
         // payment/advance/outstanding calculations (order-outstanding.ts)
         // and are used below ONLY as the pre-invoice fallback.
         invoice: { select: { id: true, invoiceNumber: true, totalAmount: true } },
+        // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+        // Dispatch — drives this route's `confirmationState`/`total` fields
+        // below. See packages/db/lib/order-buyer-confirmation.ts for the
+        // full rationale.
+        supplierInvoice: { select: { status: true, confirmedTotalAmount: true } },
         items: {
           select: {
             id: true,
@@ -123,17 +136,51 @@ export async function GET(
       requiredAdvanceAmount: order.requiredAdvanceAmount == null ? null : Number(order.requiredAdvanceAmount),
     });
     const hasGstSnapshot = order.finalPayableAmount != null;
-    const resolvedTotal = hasGstSnapshot ? Number(order.finalPayableAmount) : Number(order.totalAmount ?? 0);
+    const preConfirmationEstimate = hasGstSnapshot ? Number(order.finalPayableAmount) : Number(order.totalAmount ?? 0);
+
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — the buyer-facing confirmation state (NEVER persisted —
+    // recomputed on every read) and the authoritative final payable
+    // amount, both derived from the SAME supplierInvoice snapshot read
+    // above. See packages/db/lib/order-buyer-confirmation.ts for the full
+    // rationale on why these can legitimately differ from the raw
+    // Order.status / Order.finalPayableAmount this route also exposes
+    // below for backward compatibility.
+    const supplierInvoiceSnapshot = order.supplierInvoice
+      ? {
+          status: order.supplierInvoice.status,
+          confirmedTotalAmount:
+            order.supplierInvoice.confirmedTotalAmount != null ? Number(order.supplierInvoice.confirmedTotalAmount) : null,
+        }
+      : null;
+    const confirmationState = resolveBuyerConfirmationState(order.status, supplierInvoiceSnapshot);
+    const { amount: resolvedTotal, isFinalConfirmed } = resolveOrderFinalPayableAmount(
+      preConfirmationEstimate,
+      supplierInvoiceSnapshot
+    );
 
     return NextResponse.json({
       id: order.id,
       enquiryId: order.enquiryId ?? order.id,
       orderNumber: order.orderNumber ?? null,
       status: order.status,
+      // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+      // Dispatch — the buyer-facing surface should always prefer these two
+      // fields over the raw `status` above for display purposes; `status`
+      // itself is left unchanged (still the real OrderStatus enum value)
+      // for any existing caller that depends on its current semantics
+      // (e.g. purchase-order generation gating, cancellation eligibility).
+      confirmationState,
+      confirmationStateLabel: BUYER_CONFIRMATION_STATE_LABELS[confirmationState],
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus,
+      // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+      // Dispatch — a buyer must not be able to initiate a NEW payment until
+      // confirmationState === "CONFIRMED" (mirrors the server-side guard in
+      // the payment-proof/advance-payment routes — this flag is UI-level
+      // only, the authoritative enforcement lives in those routes).
       paymentLinkAvailable:
-        order.status === OrderStatus.PROCESSING &&
+        confirmationState === "CONFIRMED" &&
         (order.paymentStatus === PaymentStatus.PENDING ||
           order.paymentStatus === PaymentStatus.PENDING_VERIFICATION),
       // Order reference number is always the LAST path segment — route moved

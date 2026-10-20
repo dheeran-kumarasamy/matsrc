@@ -15,6 +15,10 @@ type OrderPayment = {
   // orders (see the API route's `enquiryId ?? id` fallback).
   enquiryId: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — see apps/web/app/(builder)/orders/[id]/page.tsx's identical
+  // field for the full rationale.
+  confirmationState?: "NOT_YET_CONFIRMED" | "AWAITING_FINAL_CONFIRMATION" | "CONFIRMED" | "CANCELLED";
   paymentStatus: "PENDING" | "PENDING_VERIFICATION" | "PAID" | "FAILED" | "REFUNDED";
   paymentMethod: "UPI" | "CARD" | "NET_BANKING" | "COD" | "CREDIT" | "BANK_TRANSFER";
   paymentLinkAvailable: boolean;
@@ -68,7 +72,9 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
             : order.status === "PLACED"
             ? "Payment is not yet enabled for this enquiry."
             : order.paymentLinkAvailable
-            ? "Payment link is enabled because the supplier confirmed this enquiry."
+            ? "Payment link is enabled because our team has confirmed the final freight/other charges for this order."
+            : order.confirmationState === "AWAITING_FINAL_CONFIRMATION"
+            ? "The supplier has accepted your enquiry. Our team is reviewing the final freight/other charges — payment will be enabled once this is confirmed."
             : "Supplier has confirmed this enquiry."}
         </div>
         <div className="grid gap-3 text-sm sm:grid-cols-2">

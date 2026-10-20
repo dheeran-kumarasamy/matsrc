@@ -7,6 +7,7 @@ import {
   AdvanceReservationError,
   assertConsistentOrderSnapshot,
   calculateRemainingBalance,
+  resolveOrderFinalPayableAmount,
 } from "@matsrc/db";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
 import { computeOrderOutstandingAmount } from "@/lib/order-outstanding";
@@ -116,6 +117,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
         finalPayableAmount: true,
         advancePercent: true,
         requiredAdvanceAmount: true,
+        // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+        // Dispatch — see the guard immediately below.
+        supplierInvoice: { select: { status: true, confirmedTotalAmount: true } },
       },
     });
     if (!order) {
@@ -126,6 +130,22 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
     if (order.paymentStatus === PaymentStatus.PAID) {
       return NextResponse.json({ error: "This order has already been paid" }, { status: 400 });
+    }
+
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — a buyer must not be able to reserve/consume advance
+    // balance toward a NEW payment until an Admin has reviewed and
+    // confirmed the SupplierInvoice's freight/other charges — mirrors the
+    // identical guard on the bank-transfer payment-proof route so neither
+    // payment path can be used to bypass the other.
+    if (!order.supplierInvoice || order.supplierInvoice.status !== "CONFIRMED") {
+      return NextResponse.json(
+        {
+          error:
+            "This order is awaiting final confirmation from our team (freight/other charges review) before payment can be submitted. Please check back shortly.",
+        },
+        { status: 400 }
+      );
     }
 
     // Product-Level GST / GST-Inclusive Buyer Payable (Phase 4): reserve
@@ -140,7 +160,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
       advancePercent: order.advancePercent == null ? null : Number(order.advancePercent),
       requiredAdvanceAmount: order.requiredAdvanceAmount == null ? null : Number(order.requiredAdvanceAmount),
     });
-    const resolvedPayable = order.finalPayableAmount != null ? Number(order.finalPayableAmount) : Number(order.totalAmount ?? 0);
+    const preConfirmationEstimate =
+      order.finalPayableAmount != null ? Number(order.finalPayableAmount) : Number(order.totalAmount ?? 0);
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — once confirmed (enforced above), the SupplierInvoice's
+    // confirmedTotalAmount is the authoritative payable figure, not the
+    // pre-confirmation estimate — see resolveOrderFinalPayableAmount's own
+    // doc comment and apps/web/lib/order-outstanding.ts's identical usage.
+    const { amount: resolvedPayable } = resolveOrderFinalPayableAmount(preConfirmationEstimate, {
+      status: order.supplierInvoice.status as "PENDING_REVIEW" | "REJECTED" | "CONFIRMED",
+      confirmedTotalAmount:
+        order.supplierInvoice.confirmedTotalAmount != null ? Number(order.supplierInvoice.confirmedTotalAmount) : null,
+    });
 
     const account = await prisma.customerAdvanceAccount.findUnique({
       where: { buyerId: user.id },

@@ -95,6 +95,13 @@ vi.mock("@matsrc/db", () => {
     notifyCustomerOrderStatusChanged: vi.fn(() => Promise.resolve()),
     notifyPaymentRequired: vi.fn(() => Promise.resolve()),
     generateOrderNumber: vi.fn(async () => "OD/TEST/00001"),
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — getSupplierOrderDetail calls this (UI-level
+    // dispatchBlockedReason convenience only) whenever an order is
+    // PROCESSING; this file doesn't exercise that concern, so a trivially
+    // eligible stub is enough. Its own real behaviour is covered separately
+    // by packages/db/lib/order-dispatch-eligibility.spec.ts.
+    checkOrderDispatchEligibility: vi.fn(async () => ({ eligible: true, finalPayableAmount: 0, settledAmount: 0 })),
   };
 });
 

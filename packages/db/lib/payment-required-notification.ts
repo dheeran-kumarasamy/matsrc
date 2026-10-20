@@ -145,6 +145,31 @@ export type NotifyPaymentRequiredParams = {
  * `NotificationEnginePrismaClient` in customer-order-status-notification.ts
  * (see that file's doc comment for why this is safe here).
  */
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — this notification must now ALSO never fire before an Admin
+// has confirmed the order's SupplierInvoice (freight/other charges). Two
+// trigger points exist (both guarded by the SAME dedupe key
+// `PAYMENT_REQUIRED:{orderId}`, so whichever fires first "wins" and the
+// other is a safe, silent no-op — never a duplicate):
+//   1. notifyPaymentRequired (existing, called on the PLACED -> PROCESSING
+//      transition) — now ALSO requires the SupplierInvoice to already be
+//      CONFIRMED at that exact moment (an edge case: an Admin could in
+//      principle confirm a SupplierInvoice before the supplier formally
+//      "Confirm Enquiry"s via this transition, though in practice the
+//      existing SupplierInvoiceUpload UI only ever shows itself once
+//      order.status !== "PLACED" — see
+//      apps/supplier/app/(supplier)/orders/[id]/page.tsx). In the common
+//      case (supplier accepts BEFORE any invoice is confirmed), this call
+//      site now correctly no-ops.
+//   2. notifyPaymentRequiredOnSupplierInvoiceConfirmed (NEW) — called by
+//      SupplierInvoicesService.confirm() (apps/api) immediately after a
+//      SupplierInvoice is confirmed, for the common real-world sequence:
+//      supplier accepts first (order already PROCESSING, paymentStatus
+//      still PENDING), THEN an Admin later confirms freight/other
+//      charges. This is the point payment first genuinely becomes
+//      actionable for the buyer — paymentLinkAvailable (apps/web's order
+//      routes) only flips true once confirmationState === "CONFIRMED",
+//      which requires exactly this.
 export type PaymentRequiredPrismaClient = {
   order: { findUnique: (args: any) => Promise<any> };
   notificationEventPolicy: { findUnique: (args: any) => Promise<any> };
@@ -454,8 +479,39 @@ export async function notifyPaymentRequired(
     return;
   }
 
+  await sendPaymentRequiredIfEligible(prisma, orderId, onLog);
+}
+
+/**
+ * Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+ * Dispatch — the SECOND trigger point for this notification (see this
+ * file's top "Admin-Confirmed Freight" doc comment): called by
+ * SupplierInvoicesService.confirm() immediately after a SupplierInvoice
+ * is confirmed, covering the common real-world sequence where the
+ * supplier already accepted the enquiry (order already PROCESSING) BEFORE
+ * an Admin later confirms the freight/other charges. Shares the exact
+ * same eligibility checks and dedupe key as notifyPaymentRequired, so
+ * whichever of the two trigger points fires first for a given order is
+ * the only one that actually sends — the other is a safe, silent no-op.
+ */
+export async function notifyPaymentRequiredOnSupplierInvoiceConfirmed(
+  prisma: PaymentRequiredPrismaClient,
+  orderId: string,
+  onLog: (message: string) => void = () => undefined
+): Promise<void> {
+  await sendPaymentRequiredIfEligible(prisma, orderId, onLog);
+}
+
+async function sendPaymentRequiredIfEligible(
+  prisma: PaymentRequiredPrismaClient,
+  orderId: string,
+  onLog: (message: string) => void
+): Promise<void> {
   try {
-    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { user: true } });
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { user: true, supplierInvoice: { select: { status: true } } },
+    });
     if (!order) {
       onLog(`PAYMENT_REQUIRED: order ${orderId} not found — skipping notification`);
       return;
@@ -468,6 +524,24 @@ export async function notifyPaymentRequired(
       // represents — nothing to notify about.
       onLog(
         `PAYMENT_REQUIRED: order ${orderId} paymentStatus is ${order.paymentStatus} (not PENDING) — skipping notification`
+      );
+      return;
+    }
+
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — payment is never "required" (in the sense this
+    // notification represents) until an Admin has confirmed the
+    // SupplierInvoice's freight/other charges; the buyer-facing payment
+    // page itself stays disabled until then (see
+    // apps/web/app/api/builder/orders/[id]/route.ts's
+    // confirmationState/paymentLinkAvailable derivation). A missing or
+    // not-yet-CONFIRMED SupplierInvoice means this is not yet the right
+    // moment to notify — the OTHER trigger point
+    // (notifyPaymentRequiredOnSupplierInvoiceConfirmed) will fire once it
+    // genuinely is.
+    if (!order.supplierInvoice || order.supplierInvoice.status !== "CONFIRMED") {
+      onLog(
+        `PAYMENT_REQUIRED: order ${orderId} SupplierInvoice is not yet CONFIRMED — skipping notification until final confirmation`
       );
       return;
     }

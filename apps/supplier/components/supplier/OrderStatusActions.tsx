@@ -31,6 +31,7 @@ export function OrderStatusActions({
   tracking = [],
   paymentStatus,
   requiresQuotation = false,
+  dispatchBlockedReason = null,
 }: {
   orderId: string;
   status: OrderStatus;
@@ -59,6 +60,18 @@ export function OrderStatusActions({
   // in updateSupplierOrderStatus (lib/supplier-data.ts), which rejects a
   // direct CONFIRM call even if this prop is stale or bypassed.
   requiresQuotation?: boolean;
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch (UI-level prevention only — see getSupplierOrderDetail's
+  // dispatchBlockedReason doc comment in lib/supplier-data.ts): when
+  // non-null, the "Mark Dispatched" action is disabled and this specific
+  // reason is shown instead of being submitted and rejected by the
+  // server. The actual, mandatory enforcement lives server-side in
+  // checkOrderDispatchEligibility (packages/db/lib/order-dispatch-eligibility.ts),
+  // called by both updateSupplierOrderStatus (lib/supplier-data.ts) and
+  // OrdersService.updateStatus (apps/api) — this prop only avoids a
+  // round-trip for the common case of attempting dispatch through this UI
+  // before the gate is satisfied.
+  dispatchBlockedReason?: string | null;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
@@ -105,6 +118,13 @@ export function OrderStatusActions({
   // this component.
   const paymentBlocksDelivery = paymentStatus !== undefined && paymentStatus !== "PAID";
 
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch (UI-level prevention only — mirrors paymentBlocksDelivery's
+  // existing pattern). `dispatchBlockedReason === null` never disables
+  // anything, so this stays backward-compatible with any other caller of
+  // this component that hasn't been updated to pass it.
+  const dispatchBlocked = dispatchBlockedReason !== null;
+
   return (
     <aside className="panel p-5">
       <h4 className="text-lg font-bold text-slate-900">Update Status</h4>
@@ -123,14 +143,23 @@ export function OrderStatusActions({
         <div className="mt-3 space-y-2">
           {actions.map((action) => {
             // C34: only the DELIVER action is gated on payment — Confirm/
-            // Decline/Dispatch are unaffected.
+            // Decline are unaffected. DISPATCH is separately gated on
+            // dispatchBlockedReason (Admin-Confirmed Freight / Buyer Final
+            // Confirmation / Payment-Gated Dispatch).
             const disabledForPayment = action.key === "DELIVER" && paymentBlocksDelivery;
+            const disabledForDispatch = action.key === "DISPATCH" && dispatchBlocked;
+            const disabled = pending !== null || disabledForPayment || disabledForDispatch;
+            const title = disabledForPayment
+              ? "Payment must be confirmed before this order can be marked delivered."
+              : disabledForDispatch
+              ? dispatchBlockedReason ?? undefined
+              : undefined;
             return (
               <button
                 key={action.key}
-                disabled={pending !== null || disabledForPayment}
+                disabled={disabled}
                 onClick={() => updateStatus(action.nextStatus)}
-                title={disabledForPayment ? "Payment must be confirmed before this order can be marked delivered." : undefined}
+                title={title}
                 className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-60 ${
                   ACTION_STYLES[action.nextStatus] ?? DEFAULT_ACTION_STYLE
                 }`}
@@ -143,6 +172,9 @@ export function OrderStatusActions({
             <p className="text-xs font-semibold text-amber-600">
               Payment must be confirmed before this order can be marked delivered.
             </p>
+          ) : null}
+          {dispatchBlocked && actions.some((action) => action.key === "DISPATCH") ? (
+            <p className="text-xs font-semibold text-amber-600">{dispatchBlockedReason}</p>
           ) : null}
         </div>
       ) : (

@@ -383,6 +383,45 @@ describe("SupplierInvoicesService.confirm", () => {
     await service.confirm("si-1", "admin-1");
     expect(prisma.auditLog.create).not.toHaveBeenCalled();
   });
+
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — confirm() must trigger the payment_required notification's
+  // SECOND trigger point (see packages/db/lib/payment-required-notification.ts's
+  // top doc comment) immediately after a genuine (non-idempotent)
+  // confirmation. The notification module's OWN internals (eligibility,
+  // dedupe, Meta send) are exhaustively covered by
+  // packages/db/lib/payment-required-notification.spec.ts — this test only
+  // verifies confirm() actually invokes it, never for an idempotent no-op.
+  it("attempts to notify the buyer that payment is now required after a genuine confirmation", async () => {
+    const { service, prisma } = buildService({
+      lineItems: [{ id: "li-1", orderItemId: "item-1", unitConfirmed: true }],
+      confirmedTaxableValue: 45000,
+      confirmedTaxAmount: 8100,
+      confirmedTotalAmount: 53100,
+    });
+    // The real notifyPaymentRequiredOnSupplierInvoiceConfirmed reads
+    // prisma.order.findUnique — add a minimal stub so the attempt can be
+    // observed without this test needing to know every internal detail of
+    // that separately-tested module.
+    prisma.order = { findUnique: vi.fn().mockResolvedValue(null) };
+
+    await service.confirm("si-1", "admin-1");
+
+    // Scheduled via waitUntil (fire-and-forget) — awaiting a macrotask tick
+    // lets the scheduled promise actually run before asserting.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(prisma.order.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "order-1" } }));
+  });
+
+  it("never attempts to notify a second time for an idempotent re-confirm of an already-CONFIRMED invoice", async () => {
+    const { service, prisma } = buildService({ status: "CONFIRMED" });
+    prisma.order = { findUnique: vi.fn().mockResolvedValue(null) };
+
+    await service.confirm("si-1", "admin-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(prisma.order.findUnique).not.toHaveBeenCalled();
+  });
 });
 
 // Minimal Supplier Payment Tracking.

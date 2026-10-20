@@ -1,5 +1,11 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { resolveSupplierInvoiceLine, aggregateSupplierInvoiceTotals, roundCurrency } from "@matsrc/db";
+import { waitUntil } from "@vercel/functions";
+import {
+  resolveSupplierInvoiceLine,
+  aggregateSupplierInvoiceTotals,
+  roundCurrency,
+  notifyPaymentRequiredOnSupplierInvoiceConfirmed,
+} from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { ReviewSupplierInvoiceLineItemsDto } from "./dto/review-line-items.dto";
 import { RecordSupplierPaymentDto } from "./dto/record-supplier-payment.dto";
@@ -582,6 +588,28 @@ export class SupplierInvoicesService {
         },
       });
     });
+
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — the SECOND trigger point for the `payment_required`
+    // notification (see packages/db/lib/payment-required-notification.ts's
+    // top doc comment): fires AFTER the transaction above has committed,
+    // covering the common real-world sequence where the supplier already
+    // accepted the enquiry (order already PROCESSING) BEFORE this Admin
+    // confirmation. Shares the exact same dedupe key as the existing
+    // PLACED -> PROCESSING trigger, so a retried/duplicate confirm() call
+    // (the early `invoice.status === "CONFIRMED"` return above) never
+    // reaches this line a second time, and even if it did, the shared
+    // dedupe key makes a second send impossible. Scheduled via Vercel's
+    // waitUntil() for the same reliability reason as every other
+    // notification send in this codebase (apps/api runs as a Vercel
+    // serverless function — see orders.service.ts's identical pattern).
+    waitUntil(
+      notifyPaymentRequiredOnSupplierInvoiceConfirmed(this.prisma as any, invoice.orderId).catch((error) => {
+        this.logger.warn(
+          `Failed to send payment_required notification for order ${invoice.orderId}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+    );
 
     return this.findOne(id);
   }

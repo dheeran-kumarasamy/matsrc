@@ -20,7 +20,21 @@ vi.mock("@vercel/functions", () => ({
 // exists (e.g. a direct PATCH to /supplier/orders/:id/status, or a WhatsApp
 // flow calling this service directly). Mirrors the equivalent guard/tests
 // for apps/supplier/lib/supplier-data.ts's updateSupplierOrderStatus.
-function buildService(orderRow: { status: OrderStatus; items?: any[]; paymentStatus?: PaymentStatus }) {
+function buildService(orderRow: {
+  status: OrderStatus;
+  items?: any[];
+  paymentStatus?: PaymentStatus;
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — overrides the SupplierInvoice snapshot checkOrderDispatchEligibility
+  // reads. Defaults to a CONFIRMED invoice with the full totalAmount
+  // already settled, so every PRE-EXISTING "allows Mark Dispatched"-style
+  // test in this file (which predates this feature and never cares about
+  // the new gate) keeps passing unchanged. Pass `null` or a different
+  // status to exercise the new gate itself (see the dedicated describe
+  // block below).
+  supplierInvoice?: { status: "PENDING_REVIEW" | "REJECTED" | "CONFIRMED"; confirmedTotalAmount: number | null } | null;
+  settledAmount?: number;
+}) {
   const currentOrder = {
     id: "order-1",
     userId: "user-1",
@@ -44,6 +58,14 @@ function buildService(orderRow: { status: OrderStatus; items?: any[]; paymentSta
         },
       ],
   };
+
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — see buildService's own param doc comment above.
+  const dispatchSupplierInvoice =
+    orderRow.supplierInvoice !== undefined
+      ? orderRow.supplierInvoice
+      : { status: "CONFIRMED" as const, confirmedTotalAmount: currentOrder.totalAmount };
+  const dispatchSettledAmount = orderRow.settledAmount ?? currentOrder.totalAmount;
 
   // Tracks the most recently written status/snapshot-fields across
   // update/updateMany calls so findUniqueOrThrow's post-write re-read
@@ -75,6 +97,19 @@ function buildService(orderRow: { status: OrderStatus; items?: any[]; paymentSta
         if (args?.select?.orderNumber !== undefined && Object.keys(args.select).length === 1) {
           return { orderNumber: currentOrder.orderNumber };
         }
+        // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+        // Dispatch — checkOrderDispatchEligibility's own query shape
+        // (packages/db/lib/order-dispatch-eligibility.ts), distinguished by
+        // its unique `select.supplierInvoice` field.
+        if (args?.select?.supplierInvoice !== undefined) {
+          return {
+            id: currentOrder.id,
+            paymentStatus: orderRow.paymentStatus ?? PaymentStatus.PAID,
+            totalAmount: currentOrder.totalAmount,
+            finalPayableAmount: currentOrder.finalPayableAmount,
+            supplierInvoice: dispatchSupplierInvoice,
+          };
+        }
         if (args?.include?.items?.include?.product) {
           return currentOrder;
         }
@@ -105,6 +140,18 @@ function buildService(orderRow: { status: OrderStatus; items?: any[]; paymentSta
         status: writtenStatus,
         items: [{ supplier: { companyName: "Acme" } }],
       })),
+    },
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — checkOrderDispatchEligibility's settled-amount query
+    // (packages/db/lib/order-dispatch-eligibility.ts's
+    // calculateOrderSettledAmount). A single ORDER_PAYMENT ledger entry of
+    // `dispatchSettledAmount` is the simplest fixture that produces the
+    // desired settled total.
+    customerAdvanceTransaction: {
+      findMany: vi.fn(async () => (dispatchSettledAmount > 0 ? [{ type: "ORDER_PAYMENT", amount: dispatchSettledAmount }] : [])),
+    },
+    paymentVerification: {
+      findUnique: vi.fn(async () => null),
     },
     orderItem: {
       findFirst: vi.fn(async () => ({ orderId: "order-1", supplierId: "sup-1" })),
@@ -530,6 +577,19 @@ describe("OrdersService.updateStatus — retry and concurrency safety", () => {
       if (args?.select?.orderNumber !== undefined && Object.keys(args.select).length === 1) {
         return { orderNumber: "OD/2601/00001" };
       }
+      // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+      // Dispatch — checkOrderDispatchEligibility's own query shape; this
+      // test is about the SEPARATE GST-snapshot-reapplication concern, so
+      // it satisfies the dispatch gate with a trivially-eligible fixture.
+      if (args?.select?.supplierInvoice !== undefined) {
+        return {
+          id: "order-1",
+          paymentStatus: PaymentStatus.PAID,
+          totalAmount: 11000,
+          finalPayableAmount: 12980,
+          supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 11000 },
+        };
+      }
       if (args?.select?.taxAmount !== undefined) {
         return {
           totalAmount: 11000,
@@ -553,6 +613,18 @@ describe("OrdersService.updateStatus — retry and concurrency safety", () => {
     prisma.order.findUnique.mockImplementation(async (args: any) => {
       if (args?.select?.orderNumber !== undefined && Object.keys(args.select).length === 1) {
         return { orderNumber: "OD/2601/00001" };
+      }
+      // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+      // Dispatch — satisfy the dispatch gate so this test can reach (and
+      // actually exercise) the separate snapshot-integrity check below.
+      if (args?.select?.supplierInvoice !== undefined) {
+        return {
+          id: "order-1",
+          paymentStatus: PaymentStatus.PAID,
+          totalAmount: 11000,
+          finalPayableAmount: null,
+          supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 11000 },
+        };
       }
       if (args?.select?.taxAmount !== undefined) {
         return {
@@ -620,5 +692,64 @@ describe("OrdersService.updateStatus — retry and concurrency safety", () => {
       /DB connection lost/
     );
     expect(prisma.orderItem.update).not.toHaveBeenCalled();
+  });
+});
+
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — server-side enforcement that PROCESSING -> DISPATCHED is
+// blocked until checkOrderDispatchEligibility (the shared,
+// packages/db-level gate) reports eligible. The gate's own full behaviour
+// is unit-tested exhaustively in
+// packages/db/lib/order-dispatch-eligibility.spec.ts — these tests only
+// verify OrdersService.updateStatus correctly calls it and correctly
+// propagates its verdict as a BadRequestException, mirroring
+// apps/supplier/lib/order-status-update.spec.ts's identical coverage for
+// the Next.js supplier-portal's own equivalent call site.
+describe("OrdersService.updateStatus — Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated Dispatch", () => {
+  it("rejects Mark Dispatched when checkOrderDispatchEligibility reports ineligible, as a BadRequestException with its exact reason", async () => {
+    const { service, prisma } = buildService({ status: OrderStatus.PROCESSING, supplierInvoice: null });
+
+    await expect(service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" })).rejects.toMatchObject({
+      response: { message: expect.stringMatching(/has not yet uploaded an invoice/) },
+    });
+    // Belt-and-braces: still a genuine BadRequestException instance.
+    await expect(service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" })).rejects.toBeInstanceOf(
+      BadRequestException
+    );
+    expect(prisma.order.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: { status: OrderStatus.DISPATCHED } }));
+  });
+
+  it("rejects Mark Dispatched while the SupplierInvoice is still PENDING_REVIEW", async () => {
+    const { service } = buildService({
+      status: OrderStatus.PROCESSING,
+      supplierInvoice: { status: "PENDING_REVIEW", confirmedTotalAmount: null },
+    });
+
+    await expect(service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" })).rejects.toMatchObject({
+      response: { message: expect.stringMatching(/awaiting Admin review/) },
+    });
+  });
+
+  it("rejects Mark Dispatched when the confirmed total is only partially settled", async () => {
+    const { service } = buildService({
+      status: OrderStatus.PROCESSING,
+      supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 11000 },
+      settledAmount: 5000,
+    });
+
+    await expect(service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" })).rejects.toMatchObject({
+      response: { message: expect.stringMatching(/not been fully paid/) },
+    });
+  });
+
+  it("allows Mark Dispatched once the SupplierInvoice is CONFIRMED and fully settled", async () => {
+    const { service } = buildService({
+      status: OrderStatus.PROCESSING,
+      supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 11000 },
+      settledAmount: 11000,
+    });
+
+    const result = await service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" });
+    expect(result.status).toBe(OrderStatus.DISPATCHED);
   });
 });

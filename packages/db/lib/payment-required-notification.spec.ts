@@ -32,6 +32,13 @@ function makeOrder(overrides: Partial<any> = {}) {
     totalAmount: 50000,
     paymentStatus: PaymentStatus.PENDING,
     user: { id: "user-1", name: "Rahul Sharma", phone: "919876543210", whatsappNumber: null },
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — this notification now ALSO requires the SupplierInvoice
+    // to already be CONFIRMED; every pre-existing test in this file
+    // exercises the "payment genuinely required" scenario, so it must
+    // default to the "already confirmed" state. See the dedicated describe
+    // block below for tests of the new gate itself.
+    supplierInvoice: { status: "CONFIRMED" },
     ...overrides,
   };
 }
@@ -313,5 +320,84 @@ describe("notifyPaymentRequired — live mode (Meta Cloud API)", () => {
     expect(prisma.whatsAppMessageLog.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
     );
+  });
+});
+
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — this notification must never fire before an Admin has
+// confirmed the order's SupplierInvoice.
+describe("notifyPaymentRequired — gated on Admin-confirmed SupplierInvoice", () => {
+  it("never notifies on the PLACED -> PROCESSING transition when there is no SupplierInvoice yet", async () => {
+    const { prisma } = buildHarness({ order: makeOrder({ supplierInvoice: null }) });
+    await notifyPaymentRequired(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+    expect(prisma.notificationEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("never notifies while the SupplierInvoice is PENDING_REVIEW", async () => {
+    const { prisma } = buildHarness({ order: makeOrder({ supplierInvoice: { status: "PENDING_REVIEW" } }) });
+    await notifyPaymentRequired(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+    expect(prisma.notificationEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("never notifies while the SupplierInvoice was REJECTED", async () => {
+    const { prisma } = buildHarness({ order: makeOrder({ supplierInvoice: { status: "REJECTED" } }) });
+    await notifyPaymentRequired(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+    expect(prisma.notificationEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("notifies once the SupplierInvoice is CONFIRMED (the common case: invoice already confirmed by the time the supplier accepts)", async () => {
+    const { prisma } = buildHarness({ order: makeOrder({ supplierInvoice: { status: "CONFIRMED" } }) });
+    await notifyPaymentRequired(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+    expect(prisma.notificationEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "created" }) })
+    );
+  });
+});
+
+describe("notifyPaymentRequiredOnSupplierInvoiceConfirmed", () => {
+  it("sends the notification once an Admin confirms the SupplierInvoice for an order already PROCESSING with PENDING payment", async () => {
+    const { prisma } = buildHarness({
+      order: makeOrder({ paymentStatus: PaymentStatus.PENDING, supplierInvoice: { status: "CONFIRMED" } }),
+    });
+
+    const { notifyPaymentRequiredOnSupplierInvoiceConfirmed } = await import("./payment-required-notification");
+    await notifyPaymentRequiredOnSupplierInvoiceConfirmed(prisma, "order-1");
+
+    expect(prisma.notificationEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "created" }) })
+    );
+  });
+
+  it("is a no-op when paymentStatus is already PAID", async () => {
+    const { prisma } = buildHarness({
+      order: makeOrder({ paymentStatus: PaymentStatus.PAID, supplierInvoice: { status: "CONFIRMED" } }),
+    });
+
+    const { notifyPaymentRequiredOnSupplierInvoiceConfirmed } = await import("./payment-required-notification");
+    await notifyPaymentRequiredOnSupplierInvoiceConfirmed(prisma, "order-1");
+
+    expect(prisma.notificationEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("shares the same dedupe key as notifyPaymentRequired, so whichever trigger fires first is the only one that sends", async () => {
+    const { prisma } = buildHarness({ order: makeOrder({ supplierInvoice: { status: "CONFIRMED" } }) });
+
+    // Trigger 1: supplier accepts (invoice already confirmed by then).
+    await notifyPaymentRequired(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+
+    // Trigger 2: a later, retried/duplicate admin-confirmation call for the
+    // SAME order must be a safe no-op — never a second send.
+    const { notifyPaymentRequiredOnSupplierInvoiceConfirmed } = await import("./payment-required-notification");
+    await notifyPaymentRequiredOnSupplierInvoiceConfirmed(prisma, "order-1");
+
+    expect(prisma.whatsAppMessageLog.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("never throws even if the order cannot be found", async () => {
+    const { prisma } = buildHarness();
+    prisma.order.findUnique.mockResolvedValueOnce(null);
+
+    const { notifyPaymentRequiredOnSupplierInvoiceConfirmed } = await import("./payment-required-notification");
+    await expect(notifyPaymentRequiredOnSupplierInvoiceConfirmed(prisma, "missing")).resolves.toBeUndefined();
   });
 });

@@ -110,6 +110,13 @@ beforeEach(() => {
     enquiryId: "EQ/2601/00001",
     orderNumber: null,
     totalAmount: 120000,
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — a CONFIRMED SupplierInvoice is now a prerequisite for
+    // initiating a new payment; every pre-existing test in this file
+    // exercises the payment-creation flow itself, so it must default to
+    // the "already confirmed" state. See the dedicated describe block
+    // below for tests of the new gate itself.
+    supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: null },
   });
   customerAdvanceAccountFindUnique.mockResolvedValue({ id: "acct-1", status: "ACTIVE" });
   customerAdvanceTransactionCreate.mockImplementation(async ({ data }: any) => ({ id: "tx-1", ...data }));
@@ -183,6 +190,7 @@ describe("POST /api/builder/orders/[id]/advance-payment — Phase 4 GST-inclusiv
       finalPayableAmount: 118000, // GST-inclusive — this is the figure that must be reserved against
       advancePercent: null,
       requiredAdvanceAmount: null,
+      supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: null },
     });
     const prismaModule: any = await import("@/lib/builder-db");
     prismaModule.prisma.$queryRaw.mockResolvedValue([makeAccountRow(150000, 0)]);
@@ -208,6 +216,7 @@ describe("POST /api/builder/orders/[id]/advance-payment — Phase 4 GST-inclusiv
       finalPayableAmount: null,
       advancePercent: null,
       requiredAdvanceAmount: null,
+      supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: null },
     });
     const prismaModule: any = await import("@/lib/builder-db");
     prismaModule.prisma.$queryRaw.mockResolvedValue([makeAccountRow(150000, 0)]);
@@ -230,6 +239,7 @@ describe("POST /api/builder/orders/[id]/advance-payment — full advance settlem
       enquiryId: "EQ/2601/00001",
       orderNumber: null,
       totalAmount: 50000,
+      supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: null },
     });
     const prismaModule: any = await import("@/lib/builder-db");
     prismaModule.prisma.$queryRaw.mockResolvedValue([makeAccountRow(75000, 0)]);
@@ -281,5 +291,87 @@ describe("POST /api/builder/orders/[id]/advance-payment — authorization/valida
     const { POST } = await import("../app/api/builder/orders/[id]/advance-payment/route");
     const response = await POST(makeRequest(10000), { params: { id: ORDER_ID } });
     expect(response.status).toBe(400);
+  });
+});
+
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — a buyer must not be able to initiate a NEW payment (via
+// advance-balance reservation/consumption) until an Admin has reviewed and
+// confirmed the SupplierInvoice's freight/other charges.
+describe("POST /api/builder/orders/[id]/advance-payment — gated on Admin-confirmed SupplierInvoice", () => {
+  it("rejects when there is no SupplierInvoice at all", async () => {
+    orderFindFirst.mockResolvedValue({
+      id: ORDER_ID,
+      paymentStatus: "PENDING",
+      status: "PROCESSING",
+      enquiryId: "EQ/2601/00001",
+      orderNumber: null,
+      totalAmount: 50000,
+      supplierInvoice: null,
+    });
+    const { POST } = await import("../app/api/builder/orders/[id]/advance-payment/route");
+    const response = await POST(makeRequest(10000), { params: { id: ORDER_ID } });
+    expect(response.status).toBe(400);
+    expect(customerAdvanceTransactionCreate).not.toHaveBeenCalled();
+  });
+
+  it("rejects while the SupplierInvoice is still PENDING_REVIEW", async () => {
+    orderFindFirst.mockResolvedValue({
+      id: ORDER_ID,
+      paymentStatus: "PENDING",
+      status: "PROCESSING",
+      enquiryId: "EQ/2601/00001",
+      orderNumber: null,
+      totalAmount: 50000,
+      supplierInvoice: { status: "PENDING_REVIEW", confirmedTotalAmount: null },
+    });
+    const { POST } = await import("../app/api/builder/orders/[id]/advance-payment/route");
+    const response = await POST(makeRequest(10000), { params: { id: ORDER_ID } });
+    expect(response.status).toBe(400);
+    expect(customerAdvanceTransactionCreate).not.toHaveBeenCalled();
+  });
+
+  it("rejects while the SupplierInvoice was REJECTED", async () => {
+    orderFindFirst.mockResolvedValue({
+      id: ORDER_ID,
+      paymentStatus: "PENDING",
+      status: "PROCESSING",
+      enquiryId: "EQ/2601/00001",
+      orderNumber: null,
+      totalAmount: 50000,
+      supplierInvoice: { status: "REJECTED", confirmedTotalAmount: null },
+    });
+    const { POST } = await import("../app/api/builder/orders/[id]/advance-payment/route");
+    const response = await POST(makeRequest(10000), { params: { id: ORDER_ID } });
+    expect(response.status).toBe(400);
+    expect(customerAdvanceTransactionCreate).not.toHaveBeenCalled();
+  });
+
+  it("reserves against the Admin-confirmed total (not the pre-confirmation estimate) once CONFIRMED", async () => {
+    orderFindFirst.mockResolvedValue({
+      id: ORDER_ID,
+      paymentStatus: "PENDING",
+      status: "PROCESSING",
+      enquiryId: "EQ/2601/00001",
+      orderNumber: null,
+      totalAmount: 100000,
+      taxAmount: 18000,
+      finalPayableAmount: 118000,
+      advancePercent: null,
+      requiredAdvanceAmount: null,
+      // Admin confirmed a HIGHER total (freight added) than the
+      // pre-confirmation GST-inclusive estimate above.
+      supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 130000 },
+    });
+    const prismaModule: any = await import("@/lib/builder-db");
+    prismaModule.prisma.$queryRaw.mockResolvedValue([makeAccountRow(150000, 0)]);
+
+    const { POST } = await import("../app/api/builder/orders/[id]/advance-payment/route");
+    const response = await POST(makeRequest(50000), { params: { id: ORDER_ID } });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    // 130000 (admin-confirmed) - 50000 reserved = 80000, NOT 118000 - 50000.
+    expect(body.remainingOutstanding).toBe(80000);
   });
 });

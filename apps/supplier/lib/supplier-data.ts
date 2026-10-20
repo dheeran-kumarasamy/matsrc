@@ -14,6 +14,7 @@ import {
   resolveOrderConfirmationSnapshot,
   assertFullOrderSnapshotIntegrity,
   ConcurrentConfirmationLostError,
+  checkOrderDispatchEligibility,
 } from "@matsrc/db";
 import { waitUntil } from "@vercel/functions";
 import { parsePhoneNumber } from "libphonenumber-js";
@@ -1485,6 +1486,14 @@ export type SupplierOrderDetail = {
   // false once the order is no longer PLACED (no further supplier choice to
   // make either way).
   requiresQuotation: boolean;
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — UI-level convenience only (see updateSupplierOrderStatus's
+  // own authoritative checkOrderDispatchEligibility call). Null means
+  // "Mark Dispatched" is not currently blocked by this gate (either the
+  // order isn't PROCESSING yet, or every dispatch requirement is already
+  // satisfied) — a non-null string is the specific, human-readable reason
+  // the server would currently reject a dispatch attempt.
+  dispatchBlockedReason: string | null;
 };
 
 // Supplier RFQ Price Revision & GST-Inclusive Order Value — a single
@@ -1605,6 +1614,15 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
   const requiresQuotation =
     item.order.status === "PLACED" ? await hasMultipleEligibleCandidates(orderId, supplierProfile.id) : false;
 
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — UI-level convenience only (the authoritative enforcement is
+  // updateSupplierOrderStatus's own call to checkOrderDispatchEligibility
+  // above): only computed while the order is PROCESSING, the one state
+  // "Mark Dispatched" is ever offered from (see
+  // lib/order-status-transitions.ts), so this never does unnecessary work
+  // for an order already past that stage.
+  const dispatchEligibility = item.order.status === "PROCESSING" ? await checkOrderDispatchEligibility(prisma as any, orderId) : null;
+
   return {
     id: item.orderId,
     // S15: canonical supplier-facing Order reference (orderNumber ??
@@ -1623,6 +1641,13 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     // FK-first, free-text-fallback, null-when-absent rule.
     brand: (item.product as any).brandRef?.name ?? item.product.brand ?? null,
     requiresQuotation,
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — null while the order isn't PROCESSING (dispatch isn't a
+    // relevant action yet), otherwise the specific reason "Mark Dispatched"
+    // would currently be rejected by the server (e.g. "invoice not yet
+    // confirmed", "₹X still outstanding"), or null once every requirement
+    // is satisfied. UI-level only — see OrderStatusActions.tsx.
+    dispatchBlockedReason: dispatchEligibility && !dispatchEligibility.eligible ? dispatchEligibility.reason : null,
     tracking: item.order.tracking.map((entry: any) => ({
       id: entry.id,
       label: entry.note ?? humanizeToken(entry.status),
@@ -2064,6 +2089,30 @@ export async function updateSupplierOrderStatus(
   // REFUNDED is deliberately not treated as paid.
   if (status === "DELIVERED" && current.paymentStatus !== "PAID") {
     throw new Error("This order cannot be marked as delivered until payment has been confirmed.");
+  }
+
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — server-side enforcement: an order must never be marked
+  // DISPATCHED until an Admin has reviewed and CONFIRMED the
+  // SupplierInvoice's freight/other charges AND the resulting
+  // freight-inclusive final payable amount has been fully, verifiably
+  // settled (never merely Order.paymentStatus === "PAID", which may still
+  // reflect an earlier, pre-confirmation estimate — see
+  // checkOrderDispatchEligibility's own doc comment for the full
+  // rationale). This is the single authoritative place the supplier portal
+  // transitions Order.status to DISPATCHED through (the "Mark Dispatched"
+  // button -> PATCH /api/supplier/orders/:id -> this function), so gating
+  // here blocks the transition even if a request bypasses the UI and calls
+  // the API route directly. Mirrors the equivalent guard in apps/api's
+  // OrdersService (src/supplier/orders/orders.service.ts) — both apps call
+  // the SAME shared, framework-agnostic checkOrderDispatchEligibility
+  // (packages/db/lib/order-dispatch-eligibility.ts) so there is exactly
+  // one place this decision is computed.
+  if (status === "DISPATCHED") {
+    const eligibility = await checkOrderDispatchEligibility(prisma as any, orderId);
+    if (!eligibility.eligible) {
+      throw new Error(eligibility.reason);
+    }
   }
 
   // Decline path: run the multi-supplier fan-out promote-or-cascade logic

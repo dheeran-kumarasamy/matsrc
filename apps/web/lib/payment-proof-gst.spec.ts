@@ -81,6 +81,7 @@ describe("POST /api/builder/orders/[id]/payment-proof — Phase 4 GST-inclusive 
       paymentStatus: "PENDING",
       totalAmount: 10000,
       status: "PROCESSING",
+      supplierInvoice: { status: "CONFIRMED" },
     });
     orderFindUnique.mockResolvedValue({
       totalAmount: 10000,
@@ -88,6 +89,7 @@ describe("POST /api/builder/orders/[id]/payment-proof — Phase 4 GST-inclusive 
       finalPayableAmount: 11800,
       advancePercent: null,
       requiredAdvanceAmount: null,
+      supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: null },
     });
 
     const { POST } = await import("../app/api/builder/orders/[id]/payment-proof/route");
@@ -106,6 +108,7 @@ describe("POST /api/builder/orders/[id]/payment-proof — Phase 4 GST-inclusive 
       paymentStatus: "PENDING",
       totalAmount: 5000,
       status: "PROCESSING",
+      supplierInvoice: { status: "CONFIRMED" },
     });
     orderFindUnique.mockResolvedValue({
       totalAmount: 5000,
@@ -113,6 +116,7 @@ describe("POST /api/builder/orders/[id]/payment-proof — Phase 4 GST-inclusive 
       finalPayableAmount: null,
       advancePercent: null,
       requiredAdvanceAmount: null,
+      supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: null },
     });
 
     const { POST } = await import("../app/api/builder/orders/[id]/payment-proof/route");
@@ -122,5 +126,62 @@ describe("POST /api/builder/orders/[id]/payment-proof — Phase 4 GST-inclusive 
     expect(paymentVerificationCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ amount: 5000 }) })
     );
+  });
+});
+
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — a buyer must not be able to submit a NEW bank-transfer
+// payment proof until an Admin has reviewed and confirmed the
+// SupplierInvoice's freight/other charges.
+describe("POST /api/builder/orders/[id]/payment-proof — gated on Admin-confirmed SupplierInvoice", () => {
+  it("rejects when there is no SupplierInvoice at all", async () => {
+    orderFindFirst.mockResolvedValue({
+      id: "order-1",
+      paymentMethod: "BANK_TRANSFER",
+      paymentStatus: "PENDING",
+      totalAmount: 10000,
+      status: "PROCESSING",
+      supplierInvoice: null,
+    });
+
+    const { POST } = await import("../app/api/builder/orders/[id]/payment-proof/route");
+    const response = await POST(makeRequest(), { params: { id: "order-1" } });
+
+    expect(response.status).toBe(400);
+    expect(paymentVerificationCreate).not.toHaveBeenCalled();
+  });
+
+  it("rejects while the SupplierInvoice is still PENDING_REVIEW", async () => {
+    orderFindFirst.mockResolvedValue({
+      id: "order-1",
+      paymentMethod: "BANK_TRANSFER",
+      paymentStatus: "PENDING",
+      totalAmount: 10000,
+      status: "PROCESSING",
+      supplierInvoice: { status: "PENDING_REVIEW" },
+    });
+
+    const { POST } = await import("../app/api/builder/orders/[id]/payment-proof/route");
+    const response = await POST(makeRequest(), { params: { id: "order-1" } });
+
+    expect(response.status).toBe(400);
+    expect(paymentVerificationCreate).not.toHaveBeenCalled();
+  });
+
+  it("rejects while the SupplierInvoice was REJECTED", async () => {
+    orderFindFirst.mockResolvedValue({
+      id: "order-1",
+      paymentMethod: "BANK_TRANSFER",
+      paymentStatus: "PENDING",
+      totalAmount: 10000,
+      status: "PROCESSING",
+      supplierInvoice: { status: "REJECTED" },
+    });
+
+    const { POST } = await import("../app/api/builder/orders/[id]/payment-proof/route");
+    const response = await POST(makeRequest(), { params: { id: "order-1" } });
+
+    expect(response.status).toBe(400);
+    expect(paymentVerificationCreate).not.toHaveBeenCalled();
   });
 });

@@ -75,10 +75,38 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // Ownership check: the order must belong to the authenticated customer.
     const order = await prisma.order.findFirst({
       where: { id: params.id, userId: user.id },
-      select: { id: true, paymentMethod: true, paymentStatus: true, totalAmount: true, status: true },
+      select: {
+        id: true,
+        paymentMethod: true,
+        paymentStatus: true,
+        totalAmount: true,
+        status: true,
+        // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+        // Dispatch — see the guard immediately below.
+        supplierInvoice: { select: { status: true } },
+      },
     });
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — a buyer must not be able to initiate a NEW bank-transfer
+    // payment submission until an Admin has reviewed and confirmed the
+    // SupplierInvoice's freight/other charges, so the amount they're asked
+    // to pay is always the final, freight-inclusive figure rather than a
+    // pre-confirmation estimate that may still change. A REJECTED/missing
+    // invoice never satisfies this — only an explicit CONFIRMED status
+    // does (mirrors SupplierInvoicesService.confirm()'s own immutability
+    // guarantee: a CONFIRMED invoice is never silently un-confirmed).
+    if (!order.supplierInvoice || order.supplierInvoice.status !== "CONFIRMED") {
+      return NextResponse.json(
+        {
+          error:
+            "This order is awaiting final confirmation from our team (freight/other charges review) before payment can be submitted. Please check back shortly.",
+        },
+        { status: 400 }
+      );
     }
 
     if (order.paymentMethod !== PaymentMethod.BANK_TRANSFER) {

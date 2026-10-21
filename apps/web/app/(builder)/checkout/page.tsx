@@ -8,7 +8,7 @@ import { recordInterestEvent } from "@/lib/interest-events";
 import SiteSelector from "@/components/orders/SiteSelector";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { buildConfirmedOrdersUrl } from "@/lib/order-confirmation";
-import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel } from "@/lib/gst-display";
+import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel, formatFreightExclusivityNote } from "@/lib/gst-display";
 
 
 async function builderAggregationPost<T>(path: string, body: unknown): Promise<T> {
@@ -369,6 +369,7 @@ export default function CheckoutPage() {
           <span>Estimated enquiry value</span>
           <span>₹{total.toLocaleString("en-IN")}</span>
         </div>
+        <p className="text-[11px] leading-snug text-slate-400">{formatFreightExclusivityNote()}</p>
         <button
           onClick={handleSubmitEnquiry}
           disabled={loading || !siteId || cart.items.filter((item) => !poolingItemIds.has(item.id)).length === 0}

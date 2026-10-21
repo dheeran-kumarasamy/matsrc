@@ -9,7 +9,7 @@ import { builderApiDelete, builderApiGet, builderApiPost } from "@/lib/api";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import SiteSelector from "@/components/orders/SiteSelector";
 import { buildConfirmedOrdersUrl } from "@/lib/order-confirmation";
-import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel } from "@/lib/gst-display";
+import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel, formatFreightExclusivityNote } from "@/lib/gst-display";
 
 // BUG-06 fix: this input keeps its own local editable string state, synced
 // from the `quantity` prop via useEffect (so +/- button clicks and cart
@@ -305,6 +305,9 @@ export default function CartPage() {
                 <span>Total</span><span>₹{total.toLocaleString("en-IN")}</span>
               </div>
             </div>
+            <p className="text-[11px] leading-snug" style={{ color: "var(--posh-fg-muted)" }}>
+              {formatFreightExclusivityNote()}
+            </p>
             <SiteSelector value={siteId} onChange={setSiteId} required autoOpenAddSiteWhenEmpty />
             <button
               onClick={() => void handleSubmitEnquiry()}

@@ -97,3 +97,20 @@ export function formatGstExclusiveNote(): string {
 export function formatGstLineLabel(): string {
   return `GST (${DEFAULT_TAX_RATE_PERCENT}%)`;
 }
+
+/**
+ * Freight/Other-Charges Exclusivity Disclosure — the cart/checkout
+ * subtotal, GST and "estimated total" shown to a buyer are computed purely
+ * from catalogue/tier unit prices (see this file's top doc comment); they
+ * never include freight or other additional charges (loading/unloading,
+ * etc.), which are only ever determined later by an Admin reviewing the
+ * supplier's own invoice (see packages/db/lib/supplier-invoice-reconciliation.ts's
+ * freightChargeAmount/otherChargesAmount — invoice-level adjustments that
+ * do not exist yet at cart/checkout time). This is a single shared string
+ * so every cart/checkout surface (CartDrawer, the standalone /cart page,
+ * and /checkout) discloses the exact same wording rather than drifting
+ * independently worded copies.
+ */
+export function formatFreightExclusivityNote(): string {
+  return "Prices shown are exclusive of freight and other additional charges (loading/unloading), if any. These will be confirmed separately before payment.";
+}

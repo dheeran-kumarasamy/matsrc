@@ -5,6 +5,7 @@ import {
   estimateGstInclusiveTotal,
   formatGstExclusiveNote,
   formatGstLineLabel,
+  formatFreightExclusivityNote,
 } from "./gst-display";
 
 // C29 — GST visibility only at checkout. See gst-display.ts's doc comment
@@ -70,6 +71,23 @@ describe("formatGstExclusiveNote / formatGstLineLabel — Test 1/3: pre-checkout
 
   it("labels the Cart/Checkout GST line using the same shared rate constant", () => {
     expect(formatGstLineLabel()).toBe(`GST (${DEFAULT_TAX_RATE_PERCENT}%)`);
+  });
+});
+
+// Freight/Other-Charges Exclusivity Disclosure — a single shared message so
+// every cart/checkout surface tells the buyer the same thing: catalogue
+// prices never include freight/other charges, which are only confirmed
+// later by an Admin.
+describe("formatFreightExclusivityNote", () => {
+  it("discloses that prices exclude freight and other additional charges", () => {
+    const note = formatFreightExclusivityNote();
+    expect(note).toMatch(/exclusive of freight/i);
+    expect(note).toMatch(/loading\/unloading/i);
+  });
+
+  it("is a stable, non-empty string (not fabricated per-call)", () => {
+    expect(formatFreightExclusivityNote()).toBe(formatFreightExclusivityNote());
+    expect(formatFreightExclusivityNote().length).toBeGreaterThan(0);
   });
 });
 

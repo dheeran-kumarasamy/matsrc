@@ -35,7 +35,7 @@ import SiteSelector from "@/components/orders/SiteSelector";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import OrderConfirmationBanner from "@/components/orders/OrderConfirmationBanner";
 import { buildConfirmedOrderSummaries } from "@/lib/order-confirmation";
-import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel } from "@/lib/gst-display";
+import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel, formatFreightExclusivityNote } from "@/lib/gst-display";
 
 
 
@@ -394,6 +394,9 @@ export default function CartDrawer() {
                   <div className="mt-1 flex justify-between font-bold" style={{ color: "var(--posh-fg)" }}>
                     <span>Estimated total</span><span>₹{total.toLocaleString("en-IN")}</span>
                   </div>
+                  <p className="mt-2 text-[11px] leading-snug" style={{ color: "var(--posh-fg-muted)" }}>
+                    {formatFreightExclusivityNote()}
+                  </p>
                 </div>
               ) : null}
             </div>
@@ -431,6 +434,9 @@ export default function CartDrawer() {
                     <span className="posh-heading text-lg" style={{ color: "var(--posh-primary)" }}>₹{total.toLocaleString("en-IN")}</span>
                   </div>
                 </div>
+                <p className="mt-3 text-[11px] leading-snug" style={{ color: "var(--posh-fg-muted)" }}>
+                  {formatFreightExclusivityNote()}
+                </p>
               </div>
               {siteId ? (
                 <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>

@@ -1,0 +1,94 @@
+import { NextResponse } from "next/server";
+import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { renderRfqPdf, type RfqPdfData } from "@/lib/rfq-pdf";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+// GET /api/builder/orders/[id]/rfq-pdf
+//
+// Download RFQ as PDF — Builder Portal. Generated on demand from the
+// authoritative, live Order/OrderItem/Product records (never a stored
+// snapshot) — see the feature's Phase 1 investigation report. Ownership is
+// enforced by the SAME `where: { id, userId: user.id }` scoping every other
+// builder order route in this file uses (see
+// app/api/builder/orders/[id]/route.ts) — a builder can never download
+// another builder's RFQ by changing the URL's order id, since a mismatched
+// id simply yields no row and a 404, never another builder's data.
+export async function GET(request: Request, { params }: { params: { id: string } }) {
+  try {
+    const ctx = getUserCtx(request);
+    const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
+
+    const order = await prisma.order.findFirst({
+      where: { id: params.id, userId: user.id },
+      select: {
+        id: true,
+        enquiryId: true,
+        status: true,
+        createdAt: true,
+        deliveryAddress: true,
+        deliveryDate: true,
+        tentativeDeliveryDate: true,
+        user: { select: { name: true, email: true, phone: true } },
+        site: {
+          select: { name: true, addressLine: true, city: true, state: true, pincode: true },
+        },
+        items: {
+          select: {
+            quantity: true,
+            product: { select: { name: true, description: true, unit: true } },
+            supplier: { select: { companyName: true, user: { select: { email: true, phone: true } } } },
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      return NextResponse.json({ error: "RFQ not found" }, { status: 404 });
+    }
+
+    // Supplier identity is only ever shown once a supplier is actually
+    // assigned on at least one line item — never fabricated.
+    const supplierItem = order.items.find((item) => item.supplier);
+
+    const data: RfqPdfData = {
+      rfqNumber: order.enquiryId ?? order.id,
+      createdAt: order.createdAt,
+      status: order.status,
+      builder: order.user ? { name: order.user.name, email: order.user.email, phone: order.user.phone } : null,
+      site: order.site,
+      supplier: supplierItem?.supplier
+        ? {
+            companyName: supplierItem.supplier.companyName,
+            email: supplierItem.supplier.user?.email ?? null,
+            phone: supplierItem.supplier.user?.phone ?? null,
+          }
+        : null,
+      deliveryAddress: order.deliveryAddress,
+      deliveryDate: order.deliveryDate ?? order.tentativeDeliveryDate,
+      // No RFQ-level notes field exists on Order itself — never
+      // substituted with a SupplierQuote's own quotation remarks.
+      notes: null,
+      lineItems: order.items.map((item) => ({
+        productName: item.product.name,
+        description: item.product.description,
+        quantity: item.quantity,
+        unit: item.product.unit,
+      })),
+    };
+
+    const buffer = await renderRfqPdf(data);
+    const filename = `RFQ-${data.rfqNumber}`.replace(/[\\/]/g, "-") + ".pdf";
+
+    return new NextResponse(buffer as unknown as BodyInit, {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      },
+    });
+  } catch (error) {
+    console.error("Builder RFQ PDF error:", error);
+    return NextResponse.json({ error: "Failed to generate RFQ PDF" }, { status: 500 });
+  }
+}

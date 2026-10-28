@@ -29,6 +29,7 @@ import { GstModule } from "./admin/gst/gst.module";
 import { PaymentsModule } from "./admin/payments/payments.module";
 import { AdvancePaymentsModule } from "./admin/advance-payments/advance-payments.module";
 import { InvoicesModule } from "./admin/invoices/invoices.module";
+import { AdminRfqPdfModule } from "./admin/orders/rfq-pdf.module";
 import { SupplierInvoicesModule } from "./admin/supplier-invoices/supplier-invoices.module";
 import { AdminRatingsModule } from "./admin/ratings/ratings.module";
 
@@ -86,6 +87,7 @@ import { AdminNotificationEngineModule } from "./notification-engine/admin/admin
     PaymentsModule,
     AdvancePaymentsModule,
     InvoicesModule,
+    AdminRfqPdfModule,
     SupplierInvoicesModule,
     AdminRatingsModule,
 

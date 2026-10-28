@@ -308,6 +308,19 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             ) : null}
           </div>
 
+          <div className="posh-card space-y-3 p-6">
+            <h2 className="posh-card-title">RFQ</h2>
+            <p className="posh-subtitle">Download this enquiry as a Request for Quotation PDF.</p>
+            <a
+              href={`/api/builder/orders/${order.id}/rfq-pdf`}
+              target="_blank"
+              rel="noreferrer"
+              className="posh-btn block text-center"
+            >
+              Download RFQ PDF
+            </a>
+          </div>
+
           {order.invoice ? (
             <div className="posh-card space-y-3 p-6">
               <h2 className="posh-card-title">Invoice</h2>

@@ -252,9 +252,28 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
         </section>
       ) : null}
 
-      <Link href="/payments" className="inline-block text-sm font-semibold text-slate-700 underline">
-        Back to Payments
-      </Link>
+      {/* RFQ PDF download discoverability fix: an invoice-generated order
+          has already moved past PaymentVerificationQueue/
+          InvoiceGenerationQueue (the two queues that otherwise carry the
+          RFQ download link), so this is the last remaining Admin screen in
+          the order's lifecycle an admin would land on — without this link
+          the RFQ download would become unreachable from the UI once an
+          invoice exists. Reuses the exact same authenticated proxy route
+          already used by PaymentVerificationQueue/InvoiceGenerationQueue
+          and the Admin RFQ detail page — no new endpoint. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <a
+          href={`/api/admin/orders/${params.orderId}/rfq-pdf`}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700"
+        >
+          Download RFQ PDF
+        </a>
+        <Link href="/payments" className="inline-block text-sm font-semibold text-slate-700 underline">
+          Back to Payments
+        </Link>
+      </div>
     </div>
   );
 }

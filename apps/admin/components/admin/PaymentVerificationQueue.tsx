@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminApiPatch } from "@/lib/api-client";
@@ -104,7 +105,7 @@ export function PaymentVerificationQueue({ items }: { items: PendingPayment[] })
                 </p>
               ) : null}
 
-              <div className="mt-3">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 <a
                   href={item.screenshotUrl}
                   target="_blank"
@@ -112,6 +113,24 @@ export function PaymentVerificationQueue({ items }: { items: PendingPayment[] })
                   className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
                 >
                   View Payment Screenshot
+                </a>
+                {/* Navigates to the Admin RFQ detail page
+                    (app/(admin)/orders/[orderId]/page.tsx) using the real
+                    Order.id (item.orderId), never the displayed enquiryId
+                    label — the route param is the database identifier. */}
+                <Link
+                  href={`/orders/${item.orderId}`}
+                  className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
+                >
+                  View RFQ
+                </Link>
+                <a
+                  href={`/api/admin/orders/${item.orderId}/rfq-pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
+                >
+                  Download RFQ PDF
                 </a>
               </div>
 

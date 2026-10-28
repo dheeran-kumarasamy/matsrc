@@ -52,6 +52,17 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
         <p className="mt-1 text-sm text-slate-600">Site: {order.siteName ?? "Unassigned"}</p>
         <p className="mt-1 text-sm font-semibold text-slate-800">Ask Price: {order.askPrice}</p>
 
+        <div className="mt-3">
+          <a
+            href={`/api/supplier/orders/${order.id}/rfq-pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700"
+          >
+            Download RFQ PDF
+          </a>
+        </div>
+
         {/* Supplier RFQ Price Revision & GST-Inclusive Order Value: while
             this enquiry is still awaiting the supplier's decision (PLACED),
             let the supplier revise the quoted unit price per line item and

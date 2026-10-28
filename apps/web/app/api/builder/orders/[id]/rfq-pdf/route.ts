@@ -39,7 +39,6 @@ export async function GET(request: Request, { params }: { params: { id: string }
         deliveryAddress: true,
         deliveryDate: true,
         tentativeDeliveryDate: true,
-        user: { select: { name: true, email: true, phone: true } },
         site: {
           select: { name: true, addressLine: true, city: true, state: true, pincode: true },
         },
@@ -47,7 +46,6 @@ export async function GET(request: Request, { params }: { params: { id: string }
           select: {
             quantity: true,
             product: { select: { name: true, description: true, unit: true } },
-            supplier: { select: { companyName: true, user: { select: { email: true, phone: true } } } },
           },
         },
       },
@@ -57,23 +55,17 @@ export async function GET(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: "RFQ not found" }, { status: 404 });
     }
 
-    // Supplier identity is only ever shown once a supplier is actually
-    // assigned on at least one line item — never fabricated.
-    const supplierItem = order.items.find((item) => item.supplier);
-
+    // Identity privacy: neither the builder's own identity nor any
+    // supplier's identity is ever included — the requester is represented
+    // only by its Site name, and the counterparty is always rendered as
+    // "BuildOhub" inside renderRfqPdf itself (see rfq-pdf.ts's RfqPdfData
+    // doc comment). There is deliberately no `builder`/`supplier` field on
+    // RfqPdfData to populate here.
     const data: RfqPdfData = {
       rfqNumber: order.enquiryId ?? order.id,
       createdAt: order.createdAt,
       status: order.status,
-      builder: order.user ? { name: order.user.name, email: order.user.email, phone: order.user.phone } : null,
       site: order.site,
-      supplier: supplierItem?.supplier
-        ? {
-            companyName: supplierItem.supplier.companyName,
-            email: supplierItem.supplier.user?.email ?? null,
-            phone: supplierItem.supplier.user?.phone ?? null,
-          }
-        : null,
       deliveryAddress: order.deliveryAddress,
       deliveryDate: order.deliveryDate ?? order.tentativeDeliveryDate,
       // No RFQ-level notes field exists on Order itself — never

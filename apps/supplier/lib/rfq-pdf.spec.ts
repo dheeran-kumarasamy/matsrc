@@ -12,14 +12,7 @@ function fakeRfq(overrides: Partial<RfqPdfData> = {}): RfqPdfData {
     rfqNumber: "EQ/2601/00001",
     createdAt: new Date("2026-01-15"),
     status: "PLACED",
-    builder: { name: "Rahul Sharma", email: "rahul@example.com", phone: "9123456789" },
     site: { name: "Site Office", addressLine: "45 Site Road", city: "Chennai", state: "Tamil Nadu", pincode: "600001" },
-    // The supplier portal's own route always passes supplier: null (the
-    // document is addressed TO this supplier) — exercised explicitly
-    // below, but the renderer itself must also tolerate a populated value
-    // without throwing, since the exact same renderer is shared in shape
-    // with apps/web/apps/api.
-    supplier: null,
     deliveryAddress: null,
     deliveryDate: new Date("2026-01-25"),
     notes: null,
@@ -68,6 +61,22 @@ describe("renderRfqPdf", () => {
       renderRfqPdfContent(doc, fakeRfq());
       doc.end();
     });
+    expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+  });
+
+  // Identity privacy: neither party's real name/contact details are ever
+  // part of RfqPdfData — the requester is represented only by its Site
+  // name, and the counterparty is always rendered as "BuildOhub" (even to
+  // the requesting supplier itself — this document never echoes back the
+  // supplier's own identity either).
+  it("RfqPdfData has no builder/supplier identity field at all", () => {
+    const rfq = fakeRfq();
+    expect(rfq).not.toHaveProperty("builder");
+    expect(rfq).not.toHaveProperty("supplier");
+  });
+
+  it("renders without throwing when no Site is tagged on the order (falls back to 'Site not specified')", async () => {
+    const buffer = await renderRfqPdf(fakeRfq({ site: null }));
     expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
   });
 });

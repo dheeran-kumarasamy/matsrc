@@ -29,7 +29,16 @@ export type RfqPdfData = {
   rfqNumber: string;
   createdAt: string | Date;
   status: string;
-  builder: { name: string | null; email: string | null; phone: string | null } | null;
+  // Identity privacy: neither party's real name/contact details are ever
+  // part of this document — a builder must never learn which supplier(s)
+  // were asked to quote, and a supplier must never learn the builder's
+  // real identity. The requesting party is represented ONLY by its
+  // construction Site name (never the builder's own name/email/phone),
+  // and the counterparty is always rendered as "BuildOhub" (see
+  // BUILDOHUB_COMPANY below) regardless of which real supplier/builder is
+  // actually involved. There is deliberately no `builder`/`supplier`
+  // identity field on this type at all, so no caller can accidentally
+  // wire real contact details into the rendered document.
   site: {
     name: string;
     addressLine: string | null;
@@ -37,10 +46,6 @@ export type RfqPdfData = {
     state: string | null;
     pincode: string | null;
   } | null;
-  // Only populated once a supplier has actually been assigned/selected for
-  // this RFQ (see OrderItem.supplier) — never fabricated, and never a
-  // competing supplier's identity.
-  supplier: { companyName: string; email: string | null; phone: string | null } | null;
   deliveryAddress: string | null;
   deliveryDate: string | Date | null;
   // RFQ-level notes/terms, where the authoritative record actually has
@@ -106,7 +111,12 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
 
   let y = doc.y + 14;
 
-  // ---- Builder / Supplier party blocks ---------------------------------
+  // ---- Requested By (Site only) / Supplier (always BuildOhub) blocks ----
+  // Identity privacy: the requester is identified ONLY by its construction
+  // Site name (never the builder's own name/email/phone), and the
+  // counterparty is always shown as "BuildOhub" — neither the builder nor
+  // the supplier ever sees the other's real identity through this
+  // document. See RfqPdfData's own doc comment for the full rationale.
   const colWidth = contentWidth / 2 - 10;
   const colRightX = marginLeft + colWidth + 20;
 
@@ -115,21 +125,11 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
   y = doc.y + 4;
 
   doc.fontSize(10).fillColor(TEXT);
-  const builderBlock = [
-    data.builder?.name ?? "Builder",
-    [data.builder?.email, data.builder?.phone].filter(Boolean).join(" \u00b7 ") || null,
-  ].filter(Boolean) as string[];
-  doc.text(builderBlock.join("\n"), marginLeft, y, { width: colWidth });
+  doc.text(data.site?.name ?? "Site not specified", marginLeft, y, { width: colWidth });
   const leftBottom = doc.y;
 
   doc.fontSize(10).fillColor(TEXT);
-  const supplierBlock = data.supplier
-    ? ([
-        data.supplier.companyName,
-        [data.supplier.email, data.supplier.phone].filter(Boolean).join(" \u00b7 ") || null,
-      ].filter(Boolean) as string[])
-    : ["Not yet assigned"];
-  doc.text(supplierBlock.join("\n"), colRightX, y, { width: colWidth });
+  doc.text(BUILDOHUB_COMPANY.name, colRightX, y, { width: colWidth });
   const rightBottom = doc.y;
 
   y = Math.max(leftBottom, rightBottom) + 16;

@@ -42,7 +42,6 @@ export async function GET(request: Request, { params }: { params: { id: string }
         deliveryAddress: true,
         deliveryDate: true,
         tentativeDeliveryDate: true,
-        user: { select: { name: true, email: true, phone: true } },
         site: {
           select: { name: true, addressLine: true, city: true, state: true, pincode: true },
         },
@@ -63,17 +62,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: "RFQ not found" }, { status: 404 });
     }
 
+    // Identity privacy: neither the builder's own identity nor the
+    // supplier's own identity (or any competing supplier's) is ever
+    // included — the requester is represented only by its Site name, and
+    // the counterparty is always rendered as "BuildOhub" inside
+    // renderRfqPdf itself (see rfq-pdf.ts's RfqPdfData doc comment). There
+    // is deliberately no `builder`/`supplier` field on RfqPdfData to
+    // populate here.
     const data: RfqPdfData = {
       rfqNumber: order.enquiryId ?? order.id,
       createdAt: order.createdAt,
       status: order.status,
-      builder: order.user ? { name: order.user.name, email: order.user.email, phone: order.user.phone } : null,
       site: order.site,
-      // This document is ADDRESSED TO the requesting supplier — showing
-      // their own identity back to themselves would be redundant, and
-      // showing ANY other supplier's identity would leak competing-bid
-      // information never authorized for disclosure. Always null here.
-      supplier: null,
       deliveryAddress: order.deliveryAddress,
       deliveryDate: order.deliveryDate ?? order.tentativeDeliveryDate,
       notes: null,

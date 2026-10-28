@@ -14,9 +14,7 @@ function fakeRfq(overrides: Partial<RfqPdfData> = {}): RfqPdfData {
     rfqNumber: "EQ/2601/00001",
     createdAt: new Date("2026-01-15"),
     status: "PLACED",
-    builder: { name: "Rahul Sharma", email: "rahul@example.com", phone: "9123456789" },
     site: { name: "Site Office", addressLine: "45 Site Road", city: "Chennai", state: "Tamil Nadu", pincode: "600001" },
-    supplier: { companyName: "Acme Building Materials", email: "supplier@acme.example", phone: "9000000000" },
     deliveryAddress: null,
     deliveryDate: new Date("2026-01-25"),
     notes: null,
@@ -35,9 +33,9 @@ describe("renderRfqPdf", () => {
     expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
   });
 
-  it("renders a valid PDF when optional fields are all missing (no supplier assigned yet, no site)", async () => {
+  it("renders a valid PDF when optional fields are all missing (no site)", async () => {
     const buffer = await renderRfqPdf(
-      fakeRfq({ site: null, supplier: null, notes: null, deliveryDate: null, deliveryAddress: "Fallback address" })
+      fakeRfq({ site: null, notes: null, deliveryDate: null, deliveryAddress: "Fallback address" })
     );
     expect(buffer.length).toBeGreaterThan(0);
     expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
@@ -75,5 +73,19 @@ describe("renderRfqPdf", () => {
     expect(rfq).not.toHaveProperty("unitPrice");
     expect(rfq).not.toHaveProperty("quotedPrice");
     expect(rfq).not.toHaveProperty("paymentStatus");
+  });
+
+  // Identity privacy: neither party's real name/contact details are ever
+  // part of RfqPdfData — the requester is represented only by its Site
+  // name, and the counterparty is always rendered as "BuildOhub".
+  it("RfqPdfData has no builder/supplier identity field at all", () => {
+    const rfq = fakeRfq();
+    expect(rfq).not.toHaveProperty("builder");
+    expect(rfq).not.toHaveProperty("supplier");
+  });
+
+  it("renders without throwing when no Site is tagged on the order (falls back to 'Site not specified')", async () => {
+    const buffer = await renderRfqPdf(fakeRfq({ site: null }));
+    expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
   });
 });

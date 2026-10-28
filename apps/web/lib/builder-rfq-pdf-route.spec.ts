@@ -57,13 +57,11 @@ function fakeOrder(overrides: Partial<Record<string, unknown>> = {}) {
     deliveryAddress: "45 Site Road",
     deliveryDate: new Date("2026-01-25"),
     tentativeDeliveryDate: null,
-    user: { name: "Rahul Sharma", email: "rahul@example.com", phone: "9123456789" },
     site: null,
     items: [
       {
         quantity: 100,
         product: { name: "Cement", description: "OPC 53 Grade", unit: "BAG" },
-        supplier: { companyName: "Acme", user: { email: "s@acme.example", phone: "9000000000" } },
       },
     ],
     ...overrides,
@@ -140,10 +138,8 @@ describe("GET /api/builder/orders/[id]/rfq-pdf", () => {
     expect(res.headers.get("Content-Disposition")).toContain('filename="RFQ-order-1.pdf"');
   });
 
-  it("renders a valid PDF even when no supplier has been assigned yet", async () => {
-    orderFindFirst.mockResolvedValue(
-      fakeOrder({ items: [{ quantity: 50, product: { name: "Bricks", description: null, unit: "PCS" }, supplier: null }] })
-    );
+  it("renders a valid PDF even when the order has no line items", async () => {
+    orderFindFirst.mockResolvedValue(fakeOrder({ items: [] }));
 
     const { GET } = await import("@/app/api/builder/orders/[id]/rfq-pdf/route");
     const res = await GET(makeRequest("https://example.com/api/builder/orders/order-1/rfq-pdf"), {
@@ -153,5 +149,21 @@ describe("GET /api/builder/orders/[id]/rfq-pdf", () => {
     expect(res.status).toBe(200);
     const buf = Buffer.from(await res.arrayBuffer());
     expect(buf.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+  });
+
+  // Identity privacy: the Prisma query itself never selects Order.user or
+  // OrderItem.supplier — verified directly against the query shape so a
+  // future edit can't silently reintroduce either field into this route.
+  it("never selects the builder's (Order.user) or supplier's identity from Prisma", async () => {
+    orderFindFirst.mockResolvedValue(fakeOrder());
+
+    const { GET } = await import("@/app/api/builder/orders/[id]/rfq-pdf/route");
+    await GET(makeRequest("https://example.com/api/builder/orders/order-1/rfq-pdf"), {
+      params: { id: "order-1" },
+    });
+
+    const callArgs = orderFindFirst.mock.calls[0][0];
+    expect(callArgs.select).not.toHaveProperty("user");
+    expect(callArgs.select.items.select).not.toHaveProperty("supplier");
   });
 });

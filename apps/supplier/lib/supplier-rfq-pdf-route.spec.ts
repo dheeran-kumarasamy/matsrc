@@ -49,7 +49,6 @@ function fakeOrder(overrides: Partial<Record<string, unknown>> = {}) {
     deliveryAddress: "45 Site Road",
     deliveryDate: new Date("2026-01-25"),
     tentativeDeliveryDate: null,
-    user: { name: "Rahul Sharma", email: "rahul@example.com", phone: "9123456789" },
     site: null,
     items: [{ quantity: 100, product: { name: "Cement", description: "OPC 53 Grade", unit: "BAG" } }],
     ...overrides,
@@ -140,5 +139,22 @@ describe("GET /api/supplier/orders/[id]/rfq-pdf", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Disposition")).toContain('filename="RFQ-order-1.pdf"');
+  });
+
+  // Identity privacy: the Prisma query itself never selects the builder's
+  // (Order.user) identity — verified directly against the query shape so a
+  // future edit can't silently reintroduce it into this route. The
+  // rendered document never discloses the builder's real name/contact
+  // details to the requesting supplier — only the Site name.
+  it("never selects the builder's identity (Order.user) from Prisma", async () => {
+    orderFindFirst.mockResolvedValue(fakeOrder());
+
+    const { GET } = await import("@/app/api/supplier/orders/[id]/rfq-pdf/route");
+    await GET(makeRequest("https://supplier.example.com/api/supplier/orders/order-1/rfq-pdf"), {
+      params: { id: "order-1" },
+    });
+
+    const callArgs = orderFindFirst.mock.calls[0][0];
+    expect(callArgs.select).not.toHaveProperty("user");
   });
 });

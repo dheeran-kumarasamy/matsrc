@@ -1,12 +1,22 @@
 // Route-level tests for GET /api/builder/orders/[id]/rfq-pdf. Prisma and
-// the auth context (getUserCtx/getOrCreateBuilder) are mocked; no real
+// the auth context (resolveUserCtx/getOrCreateBuilder) are mocked; no real
 // database/network calls. Placed under lib/ to match vitest.config.ts's
 // include pattern ("lib/**/*.spec.ts"). Mirrors
 // purchase-order-export-route.spec.ts's exact structure.
+//
+// Regression coverage: this route is hit via a plain <a href> browser
+// download link (app/(builder)/orders/[id]/page.tsx's "Download RFQ PDF"
+// button), which never attaches the custom X-User-Id/X-User-Email headers
+// — only the NextAuth session cookie. The route previously used the
+// header-only getUserCtx(), which throws "UNAUTHENTICATED" for every such
+// click, surfacing as a generic 500 ("Failed to generate RFQ PDF") instead
+// of a working download. Fixed to use resolveUserCtx() (falls back to the
+// session cookie), mirroring the purchase-order export route's identical
+// fix for the same bug class.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const getUserCtx = vi.fn((..._args: unknown[]) => ({
+const resolveUserCtx = vi.fn(async (..._args: unknown[]) => ({
   userId: "user-1",
   email: "builder@example.com",
   name: "Builder",
@@ -25,11 +35,17 @@ vi.mock("@/lib/builder-db", () => ({
     },
   },
   getOrCreateBuilder: (...args: unknown[]) => getOrCreateBuilder(...args),
-  getUserCtx: (...args: unknown[]) => getUserCtx(...args),
+  resolveUserCtx: (...args: unknown[]) => resolveUserCtx(...args),
 }));
 
+// No custom X-User-* headers — mirrors a real <a href> browser navigation,
+// which never attaches them (only cookies). resolveUserCtx() itself is
+// mocked above to resolve regardless, since its own cookie-fallback logic
+// is already covered by lib/builder-db.ts's own tests; this spec only
+// verifies the route calls it (not the header-only getUserCtx()) and
+// handles its rejection correctly.
 function makeRequest(url: string): Request {
-  return new Request(url, { headers: { "X-User-Id": "user-1", "X-User-Email": "builder@example.com" } });
+  return new Request(url);
 }
 
 function fakeOrder(overrides: Partial<Record<string, unknown>> = {}) {
@@ -56,11 +72,28 @@ function fakeOrder(overrides: Partial<Record<string, unknown>> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getUserCtx.mockReturnValue({ userId: "user-1", email: "builder@example.com", name: "Builder" });
+  resolveUserCtx.mockResolvedValue({ userId: "user-1", email: "builder@example.com", name: "Builder" });
   getOrCreateBuilder.mockResolvedValue({ id: "user-1", email: "builder@example.com", name: "Builder" });
 });
 
 describe("GET /api/builder/orders/[id]/rfq-pdf", () => {
+  // Regression test for the actual bug fixed here: a plain <a href> click
+  // with no valid session cookie must surface as a clean 401, never the
+  // generic "Failed to generate RFQ PDF" 500 the header-only getUserCtx()
+  // previously produced for every single click (since a browser navigation
+  // never sends the custom X-User-* headers getUserCtx() required).
+  it("returns 401 (not a generic 500) when the session cannot be resolved", async () => {
+    resolveUserCtx.mockRejectedValue(new Error("UNAUTHENTICATED"));
+
+    const { GET } = await import("@/app/api/builder/orders/[id]/rfq-pdf/route");
+    const res = await GET(makeRequest("https://example.com/api/builder/orders/order-1/rfq-pdf"), {
+      params: { id: "order-1" },
+    });
+
+    expect(res.status).toBe(401);
+    expect(orderFindFirst).not.toHaveBeenCalled();
+  });
+
   it("returns 404 (not another builder's data) when the order does not belong to the authenticated builder", async () => {
     orderFindFirst.mockResolvedValue(null);
 

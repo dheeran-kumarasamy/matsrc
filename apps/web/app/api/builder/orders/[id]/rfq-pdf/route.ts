@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { prisma, getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
 import { renderRfqPdf, type RfqPdfData } from "@/lib/rfq-pdf";
 
 export const dynamic = "force-dynamic";
@@ -15,9 +15,18 @@ export const runtime = "nodejs";
 // app/api/builder/orders/[id]/route.ts) — a builder can never download
 // another builder's RFQ by changing the URL's order id, since a mismatched
 // id simply yields no row and a 404, never another builder's data.
+//
+// Uses resolveUserCtx() (not the plain getUserCtx()) because this route is
+// hit via a plain <a href> browser download link (see
+// app/(builder)/orders/[id]/page.tsx's "Download RFQ PDF" button) rather
+// than the fetch-based builderApi* helpers — a direct browser navigation
+// never attaches the custom X-User-Id/X-User-Email headers getUserCtx()
+// requires, only the NextAuth session cookie. resolveUserCtx() falls back
+// to that cookie when the custom headers are absent, mirroring the
+// purchase-order export route's identical fix for the same class of bug.
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    const ctx = getUserCtx(request);
+    const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
     const order = await prisma.order.findFirst({
@@ -87,7 +96,16 @@ export async function GET(request: Request, { params }: { params: { id: string }
         "Content-Disposition": `attachment; filename="${filename}"`,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    // resolveUserCtx() throws "UNAUTHENTICATED" if there's no valid session
+    // cookie (e.g. an expired/missing login) — map that to a clean 401
+    // rather than falling through to the generic 500 below, mirroring every
+    // other resolveUserCtx()/getUserCtx() consumer in this app (see
+    // app/api/builder/purchase-orders/[id]/export/route.ts's identical
+    // handling).
+    if (error?.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
     console.error("Builder RFQ PDF error:", error);
     return NextResponse.json({ error: "Failed to generate RFQ PDF" }, { status: 500 });
   }

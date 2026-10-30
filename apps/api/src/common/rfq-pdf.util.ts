@@ -57,9 +57,9 @@ export type RfqPdfData = {
   lineItems: RfqPdfLineItem[];
 };
 
-const ACCENT = "#A8AE8A";
+const ACCENT = "#4A4A4A";
 const TEXT = "#0f172a";
-const MUTED = "#64748b";
+const MUTED = "#6B6B6B";
 const BASE_FONT = "PDFBaseFont";
 
 function formatDate(value: string | Date | null | undefined): string {
@@ -180,7 +180,7 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
     doc
       .moveTo(marginLeft, y)
       .lineTo(marginLeft + contentWidth, y)
-      .strokeColor("#e2e8f0")
+      .strokeColor("#D0D0D0")
       .stroke();
     y += 6;
   };
@@ -219,7 +219,7 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
   doc
     .moveTo(marginLeft, y)
     .lineTo(marginLeft + contentWidth, y)
-    .strokeColor("#e2e8f0")
+    .strokeColor("#D0D0D0")
     .stroke();
   y += 14;
 

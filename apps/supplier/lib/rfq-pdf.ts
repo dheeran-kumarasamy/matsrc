@@ -51,9 +51,9 @@ export type RfqPdfData = {
   lineItems: RfqPdfLineItem[];
 };
 
-const ACCENT = "#A8AE8A";
+const ACCENT = "#4A4A4A";
 const TEXT = "#0f172a";
-const MUTED = "#64748b";
+const MUTED = "#6B6B6B";
 
 function formatDate(value: string | Date | null | undefined): string {
   if (!value) return "\u2014";
@@ -106,6 +106,10 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
   // document (including the requesting supplier's own identity, which is
   // never echoed back either). See RfqPdfData's own doc comment for the
   // full rationale.
+  //
+  // Site location privacy: only the delivery postcode is disclosed to the
+  // supplier — the site name, street address, city, and state are masked
+  // so the supplier cannot identify the exact site or builder.
   const colWidth = contentWidth / 2 - 10;
   const colRightX = marginLeft + colWidth + 20;
 
@@ -113,8 +117,10 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
   doc.text("Supplier", colRightX, y, { width: colWidth });
   y = doc.y + 4;
 
+  // Show only the postcode — never the site name or full address.
+  const sitePostcode = data.site?.pincode ?? null;
   doc.font(PDF_BASE_FONT).fontSize(10).fillColor(TEXT);
-  doc.text(data.site?.name ?? "Site not specified", marginLeft, y, { width: colWidth });
+  doc.text(sitePostcode ? `Postcode: ${sitePostcode}` : "Postcode not specified", marginLeft, y, { width: colWidth });
   const leftBottom = doc.y;
 
   doc.font(PDF_BASE_FONT).fontSize(10).fillColor(TEXT);
@@ -133,15 +139,15 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
   y = doc.y + 4;
   doc.font(PDF_BASE_FONT).fontSize(10).fillColor(TEXT);
 
+  // Only the postcode is shown to the supplier — site name, street,
+  // city, and state are all masked. If no site postcode is available and
+  // there is a free-text deliveryAddress, that is also withheld; only the
+  // postcode field from the structured site record is ever disclosed.
   const deliveryLines: string[] = [];
-  if (data.site) {
-    deliveryLines.push(data.site.name);
-    const siteAddress = addressLines(data.site);
-    if (siteAddress) deliveryLines.push(siteAddress);
-  } else if (data.deliveryAddress) {
-    deliveryLines.push(data.deliveryAddress);
+  if (data.site?.pincode) {
+    deliveryLines.push(`Postcode: ${data.site.pincode}`);
   } else {
-    deliveryLines.push("Not specified");
+    deliveryLines.push("Postcode not specified");
   }
   deliveryLines.push(`Requested delivery date: ${formatDate(data.deliveryDate)}`);
 
@@ -169,7 +175,7 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
     doc
       .moveTo(marginLeft, y)
       .lineTo(marginLeft + contentWidth, y)
-      .strokeColor("#e2e8f0")
+      .strokeColor("#D0D0D0")
       .stroke();
     y += 6;
   };
@@ -208,7 +214,7 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
   doc
     .moveTo(marginLeft, y)
     .lineTo(marginLeft + contentWidth, y)
-    .strokeColor("#e2e8f0")
+    .strokeColor("#D0D0D0")
     .stroke();
   y += 14;
 

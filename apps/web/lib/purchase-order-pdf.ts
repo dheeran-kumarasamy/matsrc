@@ -157,7 +157,7 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
   // same resolvePoDocumentView() used by the unit tests, so there is no
   // second, divergent definition of "the document number" to drift.
   const { documentNumber } = resolvePoDocumentView(po, mode);
-  const ACCENT = "#C8532A";
+  const ACCENT = "#4A4A4A";
   const TEXT = "#1A1A1A";
   const MUTED = "#5A5A5A";
   const BAND_LIGHT = "#F9F9F9";

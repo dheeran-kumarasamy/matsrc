@@ -68,7 +68,7 @@ function money(value: number, currency: string): string {
 // BuildOhub's brand olive accent (--posh-olive, #A8AE8A — see
 // apps/web/app/globals.css) used for this document's section headings, so
 // the buyer invoice visually matches the rest of the BuildOhub brand.
-const OLIVE_ACCENT = "#A8AE8A";
+const OLIVE_ACCENT = "#4A4A4A";
 
 export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -86,7 +86,7 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
     doc.fontSize(14).text(BUILDOHUB_COMPANY.name);
     doc
       .fontSize(9)
-      .fillColor("#64748b")
+      .fillColor("#6B6B6B")
       .text(BUILDOHUB_COMPANY.legalName)
       .text([BUILDOHUB_COMPANY.addressLine, BUILDOHUB_COMPANY.city, BUILDOHUB_COMPANY.state, BUILDOHUB_COMPANY.pincode].filter(Boolean).join(", "))
       .text(`GSTIN: ${BUILDOHUB_COMPANY.gstin}`)
@@ -96,7 +96,7 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
     doc.fontSize(18).fillColor(OLIVE_ACCENT).text(`Invoice ${invoice.invoiceNumber}`, { align: "left" }).fillColor("#0f172a");
     doc
       .fontSize(10)
-      .fillColor("#64748b")
+      .fillColor("#6B6B6B")
       .text(`Invoice date: ${new Date(invoice.invoiceDate).toLocaleDateString("en-IN")}`)
       .text(`Order/Enquiry ref: ${invoice.enquiryId}`)
       .text(`Status: ${invoice.status} · Payment status: ${invoice.paymentStatus}`)
@@ -154,7 +154,7 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
 
     const startX = doc.x;
     let y = doc.y;
-    doc.fontSize(9).fillColor("#64748b");
+    doc.fontSize(9).fillColor("#6B6B6B");
     doc.text("Item", startX, y, { width: 130, continued: false });
     doc.text("Qty", startX + 130, y, { width: 40 });
     doc.text("Unit Price", startX + 170, y, { width: 70 });
@@ -163,7 +163,7 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
     doc.text("Total", startX + 350, y, { width: 80 });
     doc.fillColor("#0f172a");
     y += 16;
-    doc.moveTo(startX, y).lineTo(startX + 430, y).strokeColor("#e2e8f0").stroke();
+    doc.moveTo(startX, y).lineTo(startX + 430, y).strokeColor("#D0D0D0").stroke();
     y += 6;
 
     for (const li of invoice.lineItems) {

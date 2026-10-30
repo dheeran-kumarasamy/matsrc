@@ -45,18 +45,18 @@ export function renderAdvanceReceiptPdf(receipt: AdvanceReceiptPdfData): Promise
     doc.fontSize(18).text(BUILDOHUB_COMPANY.name);
     doc
       .fontSize(9)
-      .fillColor("#64748b")
+      .fillColor("#6B6B6B")
       .text(BUILDOHUB_COMPANY.legalName)
       .text([BUILDOHUB_COMPANY.addressLine, BUILDOHUB_COMPANY.city, BUILDOHUB_COMPANY.state, BUILDOHUB_COMPANY.pincode].filter(Boolean).join(", "))
       .text(`GSTIN: ${BUILDOHUB_COMPANY.gstin}`)
       .fillColor("#0f172a");
-    doc.fontSize(12).fillColor("#64748b").text("Advance Payment Receipt").fillColor("#0f172a");
+    doc.fontSize(12).fillColor("#6B6B6B").text("Advance Payment Receipt").fillColor("#0f172a");
 
     doc.moveDown();
     doc.fontSize(14).text(`Receipt No: ${receipt.receiptNumber}`);
     doc
       .fontSize(10)
-      .fillColor("#64748b")
+      .fillColor("#6B6B6B")
       .text(`Issued: ${new Date(receipt.issuedAt).toLocaleString("en-IN")}`)
       .fillColor("#0f172a");
 
@@ -84,14 +84,14 @@ export function renderAdvanceReceiptPdf(receipt: AdvanceReceiptPdfData): Promise
     doc.fontSize(12).text(`Amount Received: ${money(receipt.amount, receipt.currency)}`, { align: "right" });
     doc
       .fontSize(10)
-      .fillColor("#64748b")
+      .fillColor("#6B6B6B")
       .text(`Available Advance Balance after this receipt: ${money(receipt.balanceAfter, receipt.currency)}`, { align: "right" });
     doc.fillColor("#0f172a");
 
     doc.moveDown(2);
     doc
       .fontSize(8)
-      .fillColor("#94a3b8")
+      .fillColor("#9E9E9E")
       .text(
         "This is a system-generated receipt confirming settlement of a Buildohub Advance Balance deposit. It does not constitute a GST tax invoice.",
         { align: "left" }

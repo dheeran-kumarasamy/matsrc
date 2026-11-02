@@ -79,4 +79,14 @@ describe("renderRfqPdf", () => {
     const buffer = await renderRfqPdf(fakeRfq({ site: null }));
     expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
   });
+
+  // Supplier-side RFQ PDF: "Requested By" is always BuildOhub (with its
+  // registered address) — a single RFQ can go out to more than one
+  // candidate supplier, so there is no single "Supplier" identity to show,
+  // and the separate Supplier column/section has been removed entirely.
+  it("renders without throwing and never draws a separate Supplier section", async () => {
+    const buffer = await renderRfqPdf(fakeRfq());
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+  });
 });

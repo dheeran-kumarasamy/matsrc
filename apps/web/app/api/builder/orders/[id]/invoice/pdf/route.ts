@@ -12,9 +12,12 @@ function money(value: number, currency: string): string {
   return `${currency === "INR" ? "\u20B9" : currency + " "}${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
-// BuildOhub's brand olive accent (--posh-olive, #A8AE8A — see
-// apps/web/app/globals.css) used for this document's section headings.
-const OLIVE_ACCENT = "#A8AE8A";
+// Print-friendly grayscale accent (see the Grayscale PDF Printing task —
+// every generated PDF in this codebase must render identically on a
+// black-and-white printer as on a colour one, so no brand colour/orange is
+// ever used here). Mirrors apps/api/src/admin/invoices/invoice-pdf.util.ts's
+// identical OLIVE_ACCENT constant/value for this same document.
+const OLIVE_ACCENT = "#4A4A4A";
 
 function renderInvoicePdf(invoice: any): Promise<Buffer> {
   return new Promise((resolve, reject) => {

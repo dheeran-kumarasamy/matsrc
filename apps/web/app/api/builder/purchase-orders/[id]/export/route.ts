@@ -111,8 +111,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
 //   - A line-item table: SR.NO / Item description / Qty / Rate / Amount
 //     (reference's row 19 header, same column order), alternating row
 //     shading (reference's #D9D9D9/#FFFFFF banding).
-//   - An orange Total band (reference's #F66E3D row 33) and a Notes
-//     footer (reference's row 39 "Notes" heading).
+//   - A grayscale Total band (reference's #F66E3D row 33, rendered here in
+//     the same print-friendly #4A4A4A gray used throughout — see the
+//     Grayscale PDF Printing task) and a Notes footer (reference's row 39
+//     "Notes" heading).
 //
 // Deliberate, documented departures from the reference:
 //   - No logo — required by the task, and the reference itself has none.
@@ -121,9 +123,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
 //     DejaVu Sans is already embedded everywhere in this app so the ₹
 //     glyph renders (see lib/pdf-fonts.ts) and is a metrically similar
 //     sans-serif.
-//   - Accent color #C8532A (slightly deeper than the reference's #F66E3D)
-//     and near-black body text instead of the reference's pale #8A8A8A,
-//     for print/screen readability (task's explicit readability
+//   - Accent color #4A4A4A (a neutral gray, not the reference's #F66E3D
+//     orange — see the Grayscale PDF Printing task: every PDF in this
+//     codebase must render identically on black-and-white and colour
+//     printers) and near-black body text instead of the reference's pale
+//     #8A8A8A, for print/screen readability (task's explicit readability
 //     requirement).
 //   - Pagination: the reference is a fixed single-page spreadsheet with a
 //     hard-coded 5-row item area; this renderer paginates and repeats the

@@ -396,7 +396,9 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
   doc.text(money(po.taxAmount ?? 0), summaryValueX, y, { width: colAmountW, align: "right" });
   y += 20;
 
-  // ---- Total band (orange, reference's row-33 styling) --------------
+  // ---- Total band (grayscale accent, reference's row-33 styling — kept
+  // print-friendly gray instead of the reference's orange so a
+  // black-and-white printer renders this identically to a colour one) ----
   if (y + 28 > pageBottom) {
     doc.addPage();
     y = marginLeft;

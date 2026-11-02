@@ -98,36 +98,28 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
 
   let y = doc.y + 14;
 
-  // ---- Requested By (Site only) / Supplier (always BuildOhub) blocks ----
-  // Identity privacy: the requester is identified ONLY by its construction
-  // Site name (never the builder's own name/email/phone), and the
-  // counterparty is always shown as "BuildOhub" — neither the builder nor
-  // the supplier ever sees the other's real identity through this
-  // document (including the requesting supplier's own identity, which is
-  // never echoed back either). See RfqPdfData's own doc comment for the
-  // full rationale.
-  //
-  // Site location privacy: only the delivery postcode is disclosed to the
-  // supplier — the site name, street address, city, and state are masked
-  // so the supplier cannot identify the exact site or builder.
-  const colWidth = contentWidth / 2 - 10;
-  const colRightX = marginLeft + colWidth + 20;
+  // ---- Requested By (always BuildOhub, with its registered address) -----
+  // A single RFQ can be sent out to more than one candidate supplier at
+  // once, so there is no single "Supplier" to name on this document — the
+  // separate Supplier column/section that used to sit beside this block
+  // has been removed entirely. "Requested By" always identifies BuildOhub
+  // itself (the platform issuing the RFQ on the builder's behalf), shown
+  // with its full registered address — never the requesting builder's own
+  // identity (see RfqPdfData's own doc comment for the full identity-
+  // privacy rationale this document follows).
+  const buildohubRequestedByBlock = [
+    BUILDOHUB_COMPANY.name,
+    BUILDOHUB_COMPANY.addressLine ? addressLines(BUILDOHUB_COMPANY) : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  doc.font(PDF_BASE_FONT_BOLD).fontSize(11).fillColor(ACCENT).text("Requested By", marginLeft, y, { width: colWidth });
-  doc.text("Supplier", colRightX, y, { width: colWidth });
+  doc.font(PDF_BASE_FONT_BOLD).fontSize(11).fillColor(ACCENT).text("Requested By", marginLeft, y, { width: contentWidth });
   y = doc.y + 4;
 
-  // Show only the postcode — never the site name or full address.
-  const sitePostcode = data.site?.pincode ?? null;
   doc.font(PDF_BASE_FONT).fontSize(10).fillColor(TEXT);
-  doc.text(sitePostcode ? `Postcode: ${sitePostcode}` : "Postcode not specified", marginLeft, y, { width: colWidth });
-  const leftBottom = doc.y;
-
-  doc.font(PDF_BASE_FONT).fontSize(10).fillColor(TEXT);
-  doc.text(BUILDOHUB_COMPANY.name, colRightX, y, { width: colWidth });
-  const rightBottom = doc.y;
-
-  y = Math.max(leftBottom, rightBottom) + 16;
+  doc.text(buildohubRequestedByBlock, marginLeft, y, { width: contentWidth });
+  y = doc.y + 16;
 
   // ---- Site / Delivery --------------------------------------------------
   if (y + 60 > pageBottom) {

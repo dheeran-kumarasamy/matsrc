@@ -25,30 +25,31 @@ import { formatIciciTxnDate, formatIciciTxnDateCompact } from "./txn-date";
 // --- UNCONFIRMED PROTOCOL DETAILS (see docs/payments/icici-uat.md §9 and
 // hash.ts's spec-assumption caveat) ---------------------------------------
 // This repo was never supplied ICICI's actual signed PG v2 API spec
-// document. Two fields below were implemented from a single empirical UAT
-// rejection rather than the real spec, and ICICI PG v2 (PayPhi-based)
-// integrations commonly use DIFFERENT conventions for both:
+// document. The two fields below now default to the common ICICI PG v2
+// (PayPhi-based) convention rather than this repo's original empirically-
+// tested-but-likely-wrong defaults:
 //   - currencyCode: ISO 4217 **numeric** code "356" (not the alphabetic
-//     "INR") is the common PayPhi/PG v2 convention.
+//     "INR") — the standard PayPhi/PG v2 convention.
 //   - txnDate: a 14-digit "yyyyMMddHHmmss" compact string (not the spaced
-//     "yyyy-MM-dd HH:mm:ss" format this repo's txn-date.ts currently
-//     produces) is the common PG v2 convention.
-// Both are made configurable here (default preserves this repo's existing,
-// previously-tested behaviour) so either convention can be tried against
-// the live UAT sandbox without further code changes, while the real spec
-// remains unconfirmed. Once ICICI's spec is confirmed, remove this
-// toggle and hard-code the correct value.
+//     "yyyy-MM-dd HH:mm:ss" format this repo's txn-date.ts also still
+//     provides) — the standard PG v2 convention.
+// Both remain configurable via env var (now to opt BACK INTO the old
+// alphabetic/spaced convention, in case "356"/compact is ever rejected by
+// ICICI UAT) so either convention can be tried against the live sandbox
+// without a further code change, while the real spec remains unconfirmed.
+// Once ICICI's spec is confirmed, remove this toggle and hard-code the
+// correct value.
 function resolveCurrencyCode(): string {
-  // Set ICICI_PG_CURRENCY_CODE="356" to try the ISO-numeric convention.
-  return process.env.ICICI_PG_CURRENCY_CODE || "INR";
+  // Set ICICI_PG_CURRENCY_CODE="INR" to fall back to the alphabetic code.
+  return process.env.ICICI_PG_CURRENCY_CODE || "356";
 }
 
 function resolveTxnDate(date: Date): string {
-  // Set ICICI_PG_TXN_DATE_FORMAT="compact" to try the 14-digit
-  // "yyyyMMddHHmmss" convention instead of the spaced default.
-  return (process.env.ICICI_PG_TXN_DATE_FORMAT || "").toLowerCase() === "compact"
-    ? formatIciciTxnDateCompact(date)
-    : formatIciciTxnDate(date);
+  // Set ICICI_PG_TXN_DATE_FORMAT="spaced" to fall back to the
+  // "yyyy-MM-dd HH:mm:ss" convention instead of the compact default.
+  return (process.env.ICICI_PG_TXN_DATE_FORMAT || "").toLowerCase() === "spaced"
+    ? formatIciciTxnDate(date)
+    : formatIciciTxnDateCompact(date);
 }
 
 export type IciciInitiateSaleParams = {
@@ -130,7 +131,7 @@ export async function initiateSale(
     merchantTxnNo: params.merchantTxnNo,
     currencyCode,
     txnDate,
-    txnDateFormat: (process.env.ICICI_PG_TXN_DATE_FORMAT || "spaced (default)").toLowerCase(),
+    txnDateFormat: (process.env.ICICI_PG_TXN_DATE_FORMAT || "compact (default)").toLowerCase(),
   });
 
   try {

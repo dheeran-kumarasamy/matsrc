@@ -1,6 +1,8 @@
 import { AdminNav } from "@/components/admin/AdminNav";
 import { GlobalSearch } from "@/components/admin/GlobalSearch";
+import { PendingActionsButton, type PendingActionItem } from "@/components/admin/PendingActionsButton";
 import { MENU_CONFIG, requireAdminAccess } from "@/lib/rbac";
+import { adminApiGet } from "@/lib/api";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const access = await requireAdminAccess();
@@ -8,6 +10,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     href: menu.href,
     label: menu.label,
   }));
+
+  // Real "N items need action" count — replaces the previous hardcoded "7"
+  // (see PendingActionsButton.tsx's doc comment). Reuses the exact same
+  // AdminDashboardService.getSummary() endpoint the Dashboard page already
+  // calls; failure falls back to an empty/zero state rather than ever
+  // showing a stale or fabricated count.
+  const summary = await adminApiGet<{ pendingActionsCount: number; pendingActions: PendingActionItem[] }>(
+    "/admin/dashboard"
+  ).catch(() => ({ pendingActionsCount: 0, pendingActions: [] as PendingActionItem[] }));
 
   return (
     <div className="mx-auto grid min-h-screen max-w-7xl grid-cols-1 gap-4 p-4 lg:grid-cols-[280px_1fr]">
@@ -24,7 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
           <div className="flex items-center gap-3">
             <GlobalSearch />
-            <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">7 items need action</span>
+            <PendingActionsButton totalCount={summary.pendingActionsCount} items={summary.pendingActions} />
           </div>
         </header>
         {children}

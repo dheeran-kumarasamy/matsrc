@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { NotificationBell } from "./NotificationBell";
 
 
 type SupplierHeaderProps = {
@@ -91,9 +92,15 @@ export function SupplierHeader({ kycStatus, displayName }: SupplierHeaderProps) 
           <p className="text-xl leading-none text-slate-800 sm:text-2xl">Supplier Portal</p>
         </Link>
 
+        <div className="flex items-center gap-3">
+          {/* Alerts: overlay dropdown from the bell icon, mirroring the
+              builder portal's NotificationBell (apps/web) — every
+              supplier-facing event already writes a Notification row (new
+              RFQ, Purchase Order generated, candidate-promotion
+              reassignment), this just surfaces them here. */}
+          <NotificationBell />
 
-
-        <div className="relative" ref={menuRef}>
+          <div className="relative" ref={menuRef}>
           <button
             type="button"
             onClick={() => setOpen((value) => !value)}
@@ -148,6 +155,7 @@ export function SupplierHeader({ kycStatus, displayName }: SupplierHeaderProps) 
               </button>
             </div>
           ) : null}
+        </div>
         </div>
       </div>
     </header>

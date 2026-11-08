@@ -13,10 +13,10 @@ import { getSiteUrl } from "@/lib/site-url";
 
 import { getCategoryEmoji } from "@/lib/category-images";
 
-import { getSupplierListings, getSupplierProduct, parseNumericLabel, type SupplierListing } from "@/lib/listings";
+import { getSupplierProduct, getSupplierProductGroup, parseNumericLabel, type SupplierListing } from "@/lib/listings";
 import { formatGstExclusiveNote } from "@/lib/gst-display";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 // P2-D — unique per-product metadata using only real name/brand/category
 // (no generic duplicated title across products). Canonical points at this
@@ -45,38 +45,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
-// Given the requested listing (by slug/id), resolve the full cross-supplier
-// canonical group it belongs to so the PDP can show the group's lowest
-// (headline) price rather than just this one supplier's own price — fixes
-// the Display bug from the cross-supplier price resolution spec. Falls back
-// to the single listing itself when it has no canonicalProductId /
-// groupedListingIds (legacy / ungrouped data).
-function resolveProductGroup(allListings: SupplierListing[], slug: string) {
-  const requested = allListings.find((listing) => listing.id === slug);
-  if (!requested) return null;
-
-  const groupedIds = requested.groupedListingIds && requested.groupedListingIds.length > 0
-    ? requested.groupedListingIds
-    : [requested.id];
-
-  const siblings = allListings.filter((listing) => groupedIds.includes(listing.id));
-
-  const headline = requested.headlineSupplierId
-    ? siblings.find((listing) => listing.supplierId === requested.headlineSupplierId) ?? requested
-    : requested;
-
-  return {
-    displayListing: {
-      ...headline,
-      price: requested.headlinePrice || headline.price,
-    },
-    siblings,
-  };
-}
-
 export default async function ProductDetailPage({ params }: { params: { slug: string } }) {
-  const allListings = await getSupplierListings();
-  const group = resolveProductGroup(allListings, params.slug);
+  const group = await getSupplierProductGroup(params.slug);
   if (!group) notFound();
 
   const { displayListing: product, siblings } = group;

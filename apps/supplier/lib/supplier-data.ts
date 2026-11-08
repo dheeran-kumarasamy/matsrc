@@ -531,7 +531,17 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
   try {
     listings = await prisma.product.findMany({
       where: { supplierId: supplierProfile.id },
-      include: { category: true },
+      select: {
+        id: true,
+        name: true,
+        category: { select: { name: true } },
+        grade: true,
+        unit: true,
+        basePrice: true,
+        stock: true,
+        maxServiceableQty: true,
+        isActive: true,
+      },
       orderBy: { updatedAt: "desc" },
     });
   } catch (error) {
@@ -562,14 +572,10 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
     stock: `${product.stock} ${product.unit}`,
     maxServiceableQty: `${product.maxServiceableQty ?? product.stock} ${product.unit}`,
     active: product.isActive,
-    images:
-      Array.isArray(product.images) && product.images.length > 0
-        ? product.images
-        : [getProductImage({ category: product.category?.name, brand: product.brand, name: product.name })],
   }));
 }
 
-export async function getPublicSupplierListings() {
+export async function getPublicSupplierListings(options?: { fullImages?: boolean }) {
   let listings: any[] = [];
 
   try {
@@ -820,11 +826,15 @@ export async function getPublicSupplierListings() {
     //     photo was uploaded/updated most recently (Product.updatedAt).
     //   - No supplier in the group has uploaded a photo -> generic category
     //     fallback image (unchanged prior behavior).
-    const images = resolveGroupImages(group, {
-      category: listing.category,
-      brand: listing.brand,
-      name: listing.name,
-    });
+    const images = resolveGroupImages(
+      group,
+      {
+        category: listing.category,
+        brand: listing.brand,
+        name: listing.name,
+      },
+      options
+    );
 
     return {
       ...publicFields,
@@ -873,16 +883,13 @@ export async function getPublicSupplierListings() {
 // uploaded photo.
 function resolveGroupImages(
   group: any[],
-  fallback: { category?: string | null; brand?: string | null; name?: string | null }
+  fallback: { category?: string | null; brand?: string | null; name?: string | null },
+  options?: { fullImages?: boolean }
 ): string[] {
   const withImages = group.filter((item) => Array.isArray(item.images) && item.images.length > 0);
 
   if (withImages.length === 0) {
     return [getProductImage(fallback)];
-  }
-
-  if (withImages.length === 1) {
-    return withImages[0].images;
   }
 
   const mostRecentlyUploaded = withImages.reduce((latest, candidate) => {
@@ -891,7 +898,122 @@ function resolveGroupImages(
     return candidateTime >= latestTime ? candidate : latest;
   });
 
-  return mostRecentlyUploaded.images;
+  if (options?.fullImages) {
+    return mostRecentlyUploaded.images;
+  }
+
+  // Lightweight representation for catalogue browsing:
+  // Preserves external URLs; replaces raw base64 data URIs with the brand/category fallback
+  // to avoid sending multi-megabyte image payloads in the public listings feed.
+  const lightweightImages = mostRecentlyUploaded.images.map((img: string) => {
+    if (typeof img === "string" && (img.startsWith("http://") || img.startsWith("https://"))) {
+      return img;
+    }
+    return getProductImage(fallback);
+  });
+
+  return lightweightImages.length > 0 ? lightweightImages : [getProductImage(fallback)];
+}
+
+export async function getPublicSupplierProductById(id: string): Promise<{
+  displayListing: any;
+  siblings: any[];
+} | null> {
+  const listings = await getPublicSupplierListings({ fullImages: true });
+  const requested = listings.find((item: any) => item.id === id);
+  if (!requested) return null;
+
+  const groupedIds = requested.groupedListingIds && requested.groupedListingIds.length > 0
+    ? requested.groupedListingIds
+    : [requested.id];
+
+  const siblings = listings.filter((item: any) => groupedIds.includes(item.id));
+  const headline = requested.headlineSupplierId
+    ? siblings.find((item: any) => item.supplierId === requested.headlineSupplierId) ?? requested
+    : requested;
+
+  const displayListing = {
+    ...headline,
+    price: requested.headlinePrice || headline.price,
+    images: requested.images && requested.images.length > 0 ? requested.images : headline.images,
+  };
+
+  return { displayListing, siblings };
+}
+
+export type RevalidationTarget = {
+  tags?: string[];
+  paths?: string[];
+};
+
+/**
+ * Notifies the Buyer Web App to invalidate its Next.js Data Cache tags and
+ * App Router Route paths when a supplier creates, updates, or reprices a product listing.
+ *
+ * Requirements (Phase 1 Pre-Deployment Defect Fixes):
+ * 1. Dedicated secret: Requires INTERNAL_REVALIDATION_SECRET (never falls back to NEXTAUTH_SECRET).
+ * 2. Diagnostics: Inspects response.ok and logs clear warnings on non-2xx or network errors (never logs secrets).
+ * 3. Non-blocking: Errors are caught and logged so supplier mutations are never aborted.
+ * 4. Dual invalidation: Invalidate both Next.js Data Cache tags AND App Router page paths (e.g. /products).
+ */
+export async function notifyBuyerCatalogueUpdated(
+  target?: string[] | RevalidationTarget
+) {
+  const secret = process.env.INTERNAL_REVALIDATION_SECRET;
+  if (!secret) {
+    console.warn(
+      "[revalidate-webhook] Notice: INTERNAL_REVALIDATION_SECRET is not configured; skipping buyer cache invalidation webhook. Cache will expire via 300s TTL."
+    );
+    return;
+  }
+
+  const webUrl =
+    process.env.BUILDER_APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_WEB_URL ||
+    "https://buildohub.in";
+
+  let tags: string[] = ["catalog-listings"];
+  let paths: string[] = ["/products"];
+
+  if (Array.isArray(target)) {
+    tags = target;
+  } else if (target && typeof target === "object") {
+    if (Array.isArray(target.tags) && target.tags.length > 0) {
+      tags = target.tags;
+    }
+    if (Array.isArray(target.paths) && target.paths.length > 0) {
+      paths = target.paths;
+    }
+  }
+
+  try {
+    const response = await fetch(`${webUrl}/api/revalidate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-revalidate-secret": secret,
+      },
+      body: JSON.stringify({ tags, paths }),
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      console.warn(
+        `[revalidate-webhook] Buyer revalidation returned HTTP ${response.status}: ${errorBody.slice(0, 200)}`
+      );
+    }
+  } catch (error: any) {
+    if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+      console.warn("[revalidate-webhook] Buyer revalidation request timed out after 3000ms");
+    } else {
+      console.warn(
+        "[revalidate-webhook] Buyer revalidation request failed:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
 }
 
 
@@ -1271,6 +1393,10 @@ export async function createSupplierListing(input: ListingInput, email: string) 
     console.error(`Failed to record price snapshot for new listing ${product.id}:`, error);
   });
 
+  void notifyBuyerCatalogueUpdated({
+    tags: ["catalog-listings", `product-${product.id}`],
+    paths: ["/products", `/products/${product.id}`],
+  });
   return product;
 }
 
@@ -1368,6 +1494,10 @@ export async function updateSupplierListing(id: string, input: ListingInput, ema
     });
   }
 
+  void notifyBuyerCatalogueUpdated({
+    tags: ["catalog-listings", `product-${product.id}`],
+    paths: ["/products", `/products/${product.id}`],
+  });
   return product;
 }
 
@@ -2908,6 +3038,11 @@ export async function updateListingAggregationSettings(
       aggregationPriceTiers: input.aggregationEnabled ? (priceTiers as any) : undefined,
       aggregationWindowDays: defaultWindowDays,
     },
+  });
+
+  void notifyBuyerCatalogueUpdated({
+    tags: ["catalog-listings", `product-${product.id}`],
+    paths: ["/products", `/products/${product.id}`],
   });
 
   return {

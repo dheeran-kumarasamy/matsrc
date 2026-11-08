@@ -2,14 +2,13 @@ import { NextResponse } from "next/server";
 import { getPublicSupplierListings } from "@/lib/supplier-data";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 export async function GET() {
   try {
     const listings = await getPublicSupplierListings();
     return NextResponse.json(listings, {
       headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",
       },
     });
   } catch (error: any) {

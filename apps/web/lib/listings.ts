@@ -1,3 +1,10 @@
+import * as React from "react";
+
+// In Next.js Server Components, React.cache memoizes requests across the render tree.
+// In test/client environments where React.cache is not defined, falls back to direct execution.
+const requestCache: <T extends (...args: any[]) => any>(fn: T) => T =
+  typeof (React as any).cache === "function" ? (React as any).cache : (fn: any) => fn;
+
 // Shared fetch/parsing helpers for supplier listings, used by:
 // - the full PLP page (app/(builder)/products/page.tsx)
 // - the full standalone PDP page (app/(builder)/products/[slug]/page.tsx)
@@ -63,13 +70,15 @@ export type SupplierListing = {
   startingPrice?: number | null;
 };
 
+export type ProductGroupResult = {
+  displayListing: SupplierListing;
+  siblings: SupplierListing[];
+};
 
-
-export async function getSupplierListings(): Promise<SupplierListing[]> {
+export const getSupplierListings = requestCache(async (): Promise<SupplierListing[]> => {
   try {
-    // CRITICAL CACHING RULE: no-store so newly active SKUs show immediately.
     const response = await fetch(`${SUPPLIER_APP_URL}/api/public/listings`, {
-      cache: "no-store",
+      next: { revalidate: 300, tags: ["catalog-listings"] },
       redirect: "manual",
     });
 
@@ -82,12 +91,70 @@ export async function getSupplierListings(): Promise<SupplierListing[]> {
   } catch {
     return [];
   }
-}
+});
 
-export async function getSupplierProduct(slug: string): Promise<SupplierListing | null> {
-  const listings = await getSupplierListings();
-  return listings.find((listing) => listing.id === slug) ?? null;
-}
+export const getSupplierProductGroup = requestCache(async (slug: string): Promise<ProductGroupResult | null> => {
+  let shouldFallback = false;
+  try {
+    const response = await fetch(`${SUPPLIER_APP_URL}/api/public/listings/${encodeURIComponent(slug)}`, {
+      next: { revalidate: 300, tags: ["catalog-listings", `product-${slug}`] },
+      redirect: "manual",
+    });
+
+    // Genuine 404: product does not exist. Return null immediately without expensive full-catalogue fallback.
+    if (response.status === 404) {
+      return null;
+    }
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.displayListing) {
+        return data as ProductGroupResult;
+      }
+      return null;
+    }
+
+    // Only 5xx server errors warrant fallback to cached full catalogue
+    if (response.status >= 500) {
+      shouldFallback = true;
+    } else {
+      return null;
+    }
+  } catch {
+    // Network failures or offline errors may attempt fallback to cached full catalogue
+    shouldFallback = true;
+  }
+
+  if (!shouldFallback) {
+    return null;
+  }
+
+  const allListings = await getSupplierListings();
+  const requested = allListings.find((listing) => listing.id === slug);
+  if (!requested) return null;
+
+  const groupedIds = requested.groupedListingIds && requested.groupedListingIds.length > 0
+    ? requested.groupedListingIds
+    : [requested.id];
+
+  const siblings = allListings.filter((listing) => groupedIds.includes(listing.id));
+  const headline = requested.headlineSupplierId
+    ? siblings.find((listing) => listing.supplierId === requested.headlineSupplierId) ?? requested
+    : requested;
+
+  return {
+    displayListing: {
+      ...headline,
+      price: requested.headlinePrice || headline.price,
+    },
+    siblings,
+  };
+});
+
+export const getSupplierProduct = requestCache(async (slug: string): Promise<SupplierListing | null> => {
+  const group = await getSupplierProductGroup(slug);
+  return group?.displayListing ?? null;
+});
 
 export function parseNumericLabel(value: string) {
   const numeric = Number(value.replace(/[^\d.]/g, ""));

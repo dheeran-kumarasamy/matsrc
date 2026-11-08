@@ -6,9 +6,9 @@ import { catalogueBreadcrumbs, categoryBreadcrumbs } from "@/lib/breadcrumbs";
 import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
 import { getSiteUrl } from "@/lib/site-url";
 import { getSupplierListings, dedupeByCanonicalGroup, parseListingPrice } from "@/lib/listings";
+import { getProductImage } from "@/lib/category-images";
 
-
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 interface SearchParams {
   category?: string | string[];
@@ -165,21 +165,27 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
   // suppliers actually quoting this canonical product (from
   // `groupedListingIds`, populated by dedupeByCanonicalGroup()/the
   // cross-supplier resolution in apps/supplier/lib/supplier-data.ts).
-  const cardProducts = filtered.map((listing) => ({
-    slug: listing.id,
-    name: listing.name,
-    price: parseListingPrice(listing.price),
-    minPrice: listing.minPrice ?? undefined,
-    maxPrice: listing.maxPrice ?? undefined,
-    // "Starting from ₹Xxx" PLP display price — see lib/listings.ts doc
-    // comment / apps/supplier/lib/resolution.ts resolveMinimumDisplayPrice().
-    startingPrice: listing.startingPrice ?? undefined,
-    unit: listing.unit,
-    supplier: "Verified Supplier",
-    supplierCount: listing.groupedListingIds?.length || 1,
-    image: listing.images && listing.images.length > 0 ? listing.images[0] : undefined,
-    category: listing.category,
-  }));
+  const cardProducts = filtered.map((listing) => {
+    let cardImage = listing.images && listing.images.length > 0 ? listing.images[0] : undefined;
+    if (cardImage && typeof cardImage === "string" && (cardImage.startsWith("data:") || cardImage.length > 1024)) {
+      cardImage = getProductImage({ category: listing.category, brand: listing.brand, name: listing.name });
+    }
+    return {
+      slug: listing.id,
+      name: listing.name,
+      price: parseListingPrice(listing.price),
+      minPrice: listing.minPrice ?? undefined,
+      maxPrice: listing.maxPrice ?? undefined,
+      // "Starting from ₹Xxx" PLP display price — see lib/listings.ts doc
+      // comment / apps/supplier/lib/resolution.ts resolveMinimumDisplayPrice().
+      startingPrice: listing.startingPrice ?? undefined,
+      unit: listing.unit,
+      supplier: "Verified Supplier",
+      supplierCount: listing.groupedListingIds?.length || 1,
+      image: cardImage,
+      category: listing.category,
+    };
+  });
 
 
   // P2-C — the category name in the crumb must be the real, admin-configured

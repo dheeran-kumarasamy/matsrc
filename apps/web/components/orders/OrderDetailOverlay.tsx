@@ -231,22 +231,6 @@ export default function OrderDetailOverlay({ order }: Props) {
             </div>
           ) : null}
 
-          {order.isAggregated ? (
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-              <p className="font-semibold">This is a Group &amp; Save order</p>
-              <p className="mt-1 text-emerald-700">
-                {order.poolLocked
-                  ? `Pool locked${order.priceAfterAggregation ? ` at ₹${order.priceAfterAggregation.toLocaleString("en-IN")}/unit` : ""}. This order will now proceed through the standard fulfilment stages below.`
-                  : "This order is still pooling with other builders to unlock a better price. It will convert once the pool locks."}
-              </p>
-              {order.priceBeforeAggregation && order.priceAfterAggregation && order.priceBeforeAggregation > order.priceAfterAggregation ? (
-                <p className="mt-1 text-xs font-semibold text-emerald-800">
-                  You saved ₹{(order.priceBeforeAggregation - order.priceAfterAggregation).toLocaleString("en-IN")}/unit
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
           {order.quoteAccepted ? (
             <div className="panel space-y-3 p-5">
               <h2 className="text-lg font-semibold text-slate-800">Purchase Order</h2>

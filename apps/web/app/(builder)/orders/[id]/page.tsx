@@ -190,25 +190,6 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         </div>
       ) : null}
 
-      {order.isAggregated ? (
-        <div
-          className="rounded-2xl border px-4 py-3 text-sm"
-          style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)", color: "var(--posh-fg)" }}
-        >
-          <p className="posh-card-title text-base">This is a Group &amp; Save order</p>
-          <p className="mt-1 font-medium" style={{ color: "var(--posh-fg-muted)" }}>
-            {order.poolLocked
-              ? `Pool locked${order.priceAfterAggregation ? ` at ₹${order.priceAfterAggregation.toLocaleString("en-IN")}/unit` : ""}. This order will now proceed through the standard fulfilment stages below.`
-              : "This order is still pooling with other builders to unlock a better price. It will convert once the pool locks."}
-          </p>
-          {order.priceBeforeAggregation && order.priceAfterAggregation && order.priceBeforeAggregation > order.priceAfterAggregation ? (
-            <p className="mt-2 text-xs font-bold" style={{ color: "var(--posh-primary)" }}>
-              You saved ₹{(order.priceBeforeAggregation - order.priceAfterAggregation).toLocaleString("en-IN")}/unit
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
       {/* Digital Purchase Order — additive layer on top of existing enquiry/order tracking */}
 
       {order.quoteAccepted ? (

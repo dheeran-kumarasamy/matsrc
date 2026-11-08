@@ -156,7 +156,7 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
                 Added a one-line explanation under each so a builder can
                 actually use the distinction when deciding how much to
                 enquire for — no new data introduced. */}
-            <div className="grid gap-4 border-t border-[color:var(--posh-border)] p-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="border-t border-[color:var(--posh-border)] p-6">
               <div>
                 <p className="posh-label">Base price</p>
                 <p className="posh-card-title mt-1">
@@ -172,16 +172,6 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
                   </span>
                 </p>
                 <p className="posh-muted mt-1 text-xs">Per {product.unit}, before quantity-tier discounts. GST is charged in addition to the price shown.</p>
-              </div>
-              <div>
-                <p className="posh-label">Stock</p>
-                <p className="posh-card-title mt-1">{product.stock}</p>
-                <p className="posh-muted mt-1 text-xs">Units the supplier currently holds on hand.</p>
-              </div>
-              <div>
-                <p className="posh-label">Maximum serviceable</p>
-                <p className="posh-card-title mt-1">{product.maxServiceableQty}</p>
-                <p className="posh-muted mt-1 text-xs">Largest single order this supplier says they can fulfil.</p>
               </div>
             </div>
           </div>

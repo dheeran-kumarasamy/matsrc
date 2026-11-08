@@ -60,8 +60,7 @@ export default function ProductCard({ skeleton, product }: Props) {
   const unitSuffix = product.unit ? ` / ${product.unit}` : "";
 
   return (
-    // next/link so that Next.js intercepting-route convention
-    // (@modal/(.)products/[slug]) renders the quick-view overlay — spec 5A.
+    // Navigates directly to the product details page without overlay.
     <Link
       href={`/products/${product.slug}`}
       className="panel relative block overflow-hidden p-5 transition-shadow duration-200 hover:shadow-lg group"

@@ -78,18 +78,10 @@ export default function ProductQuickView({ product }: Props) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
                 <div>
                   <p className="text-xs text-slate-400">Base price</p>
                   <p className="mt-1 font-semibold text-slate-900">{product.price}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">Stock</p>
-                  <p className="mt-1 font-semibold text-slate-900">{product.stock}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">Max qty</p>
-                  <p className="mt-1 font-semibold text-slate-900">{product.maxServiceableQty}</p>
                 </div>
               </div>
 

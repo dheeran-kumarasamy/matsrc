@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import { auth } from "@/auth";
-import { prisma } from "@matsrc/db";
+import { prisma, checkOrderDispatchEligibility } from "@matsrc/db";
 import { ensureSupplierContext } from "@/lib/supplier-data";
 import { resolveSupplierOrderReference } from "@/lib/order-display";
 import { useRupeeCapableFont } from "@/lib/pdf-fonts";
@@ -44,6 +44,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
         lineItems: { include: { product: true } },
         order: {
           select: {
+            id: true,
+            status: true,
             enquiryId: true,
             orderNumber: true,
             deliveryAddress: true,
@@ -59,7 +61,21 @@ export async function GET(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
     }
 
-    const payload = serializeForExport(po);
+    let isReadyForDispatch = false;
+    if (po.order) {
+      if (
+        po.order.status === "DISPATCHED" ||
+        po.order.status === "OUT_FOR_DELIVERY" ||
+        po.order.status === "DELIVERED"
+      ) {
+        isReadyForDispatch = true;
+      } else if (po.order.status === "PROCESSING") {
+        const eligibility = await checkOrderDispatchEligibility(prisma as any, po.order.id);
+        isReadyForDispatch = eligibility.eligible;
+      }
+    }
+
+    const payload = serializeForExport(po, isReadyForDispatch);
 
     const url = new URL(request.url);
     const format = url.searchParams.get("format");
@@ -92,7 +108,7 @@ function toNumber(value: unknown): number {
 // Mirrors apps/web/lib/purchase-order-utils.ts's serializePurchaseOrder shape
 // closely enough for renderPoPdf below, using the S15 canonical
 // supplier-facing order reference instead of the builder's enquiryId.
-function serializeForExport(po: any) {
+function serializeForExport(po: any, isReadyForDispatch = false) {
   const lineItems = po.lineItems.map((li: any) => ({
     id: li.id,
     productName: li.product.name,
@@ -111,30 +127,44 @@ function serializeForExport(po: any) {
     lineTotal: toNumber(li.unitPrice) * li.quantity + toNumber(li.tax),
   }));
 
-  // The order's delivery/"ship to" destination — see apps/web's
-  // purchase-order-utils.ts's serializePurchaseOrder for the identical
-  // derivation (tagged Site, falling back to the order's free-text
-  // deliveryAddress). Always kept separate from BUYER DETAILS
-  // (BuildOhub) — the delivery recipient is the builder's construction
-  // site, never the purchasing party.
-  const deliverTo = po.order?.site
-    ? {
-        name: po.order.site.name,
-        addressLine: po.order.site.addressLine ?? null,
-        city: po.order.site.city ?? null,
-        state: po.order.site.state ?? null,
-        pincode: po.order.site.pincode ?? null,
-        gstin: po.order.site.gstin ?? null,
-      }
-    : po.order?.deliveryAddress
-      ? { name: null, addressLine: po.order.deliveryAddress, city: null, state: null, pincode: null, gstin: null }
-      : null;
+  const sitePincode =
+    po.order?.site?.pincode ??
+    (po.order?.deliveryAddress ? po.order.deliveryAddress.match(/\b\d{6}\b/)?.[0] ?? null : null);
+
+  // The order's delivery/"ship to" destination.
+  // Identity privacy: until RFQ is confirmed and order is ready for dispatch,
+  // site name and street address are masked and withheld from the supplier,
+  // showing only the destination pincode.
+  const deliverTo = isReadyForDispatch
+    ? po.order?.site
+      ? {
+          name: po.order.site.name,
+          addressLine: po.order.site.addressLine ?? null,
+          city: po.order.site.city ?? null,
+          state: po.order.site.state ?? null,
+          pincode: po.order.site.pincode ?? null,
+          gstin: po.order.site.gstin ?? null,
+          masked: false,
+        }
+      : po.order?.deliveryAddress
+        ? { name: null, addressLine: po.order.deliveryAddress, city: null, state: null, pincode: sitePincode, gstin: null, masked: false }
+        : null
+    : {
+        name: null,
+        addressLine: null,
+        city: null,
+        state: null,
+        pincode: sitePincode,
+        gstin: null,
+        masked: true,
+      };
 
   return {
     documentType: "PURCHASE_ORDER",
     generatedAt: new Date().toISOString(),
     id: po.id,
     poNumber: po.poNumber,
+    isReadyForDispatch,
     status: po.status,
     version: po.version,
     notes: po.notes,

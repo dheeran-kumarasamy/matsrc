@@ -1471,10 +1471,15 @@ export type SupplierOrderDetail = {
   // time — the only price figure surfaced to the supplier. Falls back to
   // unitPrice for legacy orders created before this field existed.
   askPrice: string;
-  // The builder's construction Site this order is for, reused from the
-  // existing Site model (Order.siteId) — null for legacy/untagged orders,
-  // which must render as "Unassigned" rather than break.
+  // Whether the order is ready for dispatch (or already dispatched/delivered).
+  // Until RFQ is confirmed and order is ready for dispatch, site name and
+  // address are withheld from the supplier and only sitePincode is surfaced.
+  isReadyForDispatch: boolean;
+  sitePincode: string | null;
+  // The builder's construction Site this order is for — only surfaced to
+  // the supplier once the order is confirmed and ready for dispatch.
   siteName: string | null;
+  deliveryAddress: string | null;
   // S06: null when the product has no brand on record — never "undefined"/"".
   brand: string | null;
   // Duplicate supplier-action fix: true only when this enquiry has a
@@ -1592,7 +1597,7 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
         include: {
           user: true,
           tracking: { orderBy: { recordedAt: "asc" } },
-          site: { select: { name: true } },
+          site: { select: { name: true, addressLine: true, city: true, state: true, pincode: true } },
         },
       },
       product: { include: { brandRef: true } },
@@ -1623,6 +1628,16 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
   // for an order already past that stage.
   const dispatchEligibility = item.order.status === "PROCESSING" ? await checkOrderDispatchEligibility(prisma as any, orderId) : null;
 
+  const isReadyForDispatch =
+    item.order.status === "DISPATCHED" ||
+    item.order.status === "OUT_FOR_DELIVERY" ||
+    item.order.status === "DELIVERED" ||
+    (item.order.status === "PROCESSING" && dispatchEligibility?.eligible === true);
+
+  const sitePincode =
+    item.order.site?.pincode ??
+    (item.order.deliveryAddress ? item.order.deliveryAddress.match(/\b\d{6}\b/)?.[0] ?? null : null);
+
   return {
     id: item.orderId,
     // S15: canonical supplier-facing Order reference (orderNumber ??
@@ -1636,7 +1651,12 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     status: item.order.status,
     paymentStatus: item.order.paymentStatus,
     askPrice: `${formatCurrency((item as any).askPrice ?? item.unitPrice)} / ${item.product.unit}`,
-    siteName: item.order.site?.name ?? null,
+    isReadyForDispatch,
+    sitePincode,
+    // Identity privacy: until RFQ is confirmed and order is ready for dispatch,
+    // site name and address are withheld from the supplier (only sitePincode is shown).
+    siteName: isReadyForDispatch ? item.order.site?.name ?? null : null,
+    deliveryAddress: isReadyForDispatch ? (item.order.site?.addressLine ?? item.order.deliveryAddress ?? null) : null,
     // S06: see getSupplierOrders's brand resolution comment above — same
     // FK-first, free-text-fallback, null-when-absent rule.
     brand: (item.product as any).brandRef?.name ?? item.product.brand ?? null,

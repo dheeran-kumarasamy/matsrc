@@ -189,6 +189,30 @@ describe("Case 7 — getSupplierOrderDetail uses the same business identifier as
     expect(detail?.id).toBe("order-10");
     expect(detail?.displayOrderNumber).not.toBe(detail?.id);
   });
+
+  it("withholds site name and address until order is ready for dispatch, exposing only sitePincode", async () => {
+    seedDetail({
+      status: "PLACED",
+      site: { name: "Project Highrise", addressLine: "10 Main Road", pincode: "600028" },
+    });
+    const detail = await getSupplierOrderDetail("order-10", "supplier@example.com");
+    expect(detail?.isReadyForDispatch).toBe(false);
+    expect(detail?.siteName).toBeNull();
+    expect(detail?.deliveryAddress).toBeNull();
+    expect(detail?.sitePincode).toBe("600028");
+  });
+
+  it("surfaces site name and address once order is dispatched", async () => {
+    seedDetail({
+      status: "DISPATCHED",
+      site: { name: "Project Highrise", addressLine: "10 Main Road", pincode: "600028" },
+    });
+    const detail = await getSupplierOrderDetail("order-10", "supplier@example.com");
+    expect(detail?.isReadyForDispatch).toBe(true);
+    expect(detail?.siteName).toBe("Project Highrise");
+    expect(detail?.deliveryAddress).toBe("10 Main Road");
+    expect(detail?.sitePincode).toBe("600028");
+  });
 });
 
 describe("Case 10 — PO-related supplier surfaces keep poNumber and add the Order's business reference", () => {

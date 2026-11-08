@@ -21,6 +21,7 @@ const authMock = vi.fn(async (): Promise<{ user: { email: string } } | null> => 
   user: { email: "supplier@example.com" },
 }));
 const purchaseOrderFindFirst = vi.fn();
+const checkOrderDispatchEligibilityMock = vi.fn(async (_tx?: any, _orderId?: string) => ({ eligible: false, reason: "Invoice not confirmed" }));
 
 vi.mock("@/auth", () => ({
   auth: () => authMock(),
@@ -30,6 +31,7 @@ vi.mock("@matsrc/db", async () => {
   const actual = await vi.importActual<typeof import("@matsrc/db")>("@matsrc/db");
   return {
     ...actual,
+    checkOrderDispatchEligibility: (tx: any, orderId: string) => checkOrderDispatchEligibilityMock(tx, orderId),
     prisma: {
       purchaseOrder: {
         findFirst: (args: unknown) => purchaseOrderFindFirst(args),
@@ -158,5 +160,76 @@ describe("GET /api/supplier/purchase-orders/[id]/export", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Disposition")).toContain('filename="PO-2026-00001.pdf"');
     expect(res.headers.get("Content-Disposition")).not.toContain("OD/2601/00042");
+  });
+
+  it("withholds site name and street address and only returns site pincode when order is not ready for dispatch", async () => {
+    checkOrderDispatchEligibilityMock.mockResolvedValueOnce({ eligible: false, reason: "Payment pending" });
+    purchaseOrderFindFirst.mockResolvedValue(
+      fakePo({
+        order: {
+          id: "order-1",
+          status: "PROCESSING",
+          enquiryId: "EQ-1",
+          site: {
+            name: "Secret Project Alpha",
+            addressLine: "123 Construction Ave",
+            city: "Mumbai",
+            state: "Maharashtra",
+            pincode: "400001",
+            gstin: "27AAAAA0000A1Z5",
+          },
+        },
+      })
+    );
+
+    const { GET } = await import("@/app/api/supplier/purchase-orders/[id]/export/route");
+    const res = await GET(makeRequest("https://supplier.example.com/api/supplier/purchase-orders/po-1/export"), {
+      params: { id: "po-1" },
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.isReadyForDispatch).toBe(false);
+    expect(data.deliverTo.name).toBeNull();
+    expect(data.deliverTo.addressLine).toBeNull();
+    expect(data.deliverTo.city).toBeNull();
+    expect(data.deliverTo.state).toBeNull();
+    expect(data.deliverTo.pincode).toBe("400001");
+    expect(data.deliverTo.masked).toBe(true);
+  });
+
+  it("discloses full site name and address once order is ready for dispatch", async () => {
+    purchaseOrderFindFirst.mockResolvedValue(
+      fakePo({
+        order: {
+          id: "order-1",
+          status: "DISPATCHED",
+          enquiryId: "EQ-1",
+          site: {
+            name: "Secret Project Alpha",
+            addressLine: "123 Construction Ave",
+            city: "Mumbai",
+            state: "Maharashtra",
+            pincode: "400001",
+            gstin: "27AAAAA0000A1Z5",
+          },
+        },
+      })
+    );
+
+    const { GET } = await import("@/app/api/supplier/purchase-orders/[id]/export/route");
+    const res = await GET(makeRequest("https://supplier.example.com/api/supplier/purchase-orders/po-1/export"), {
+      params: { id: "po-1" },
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.isReadyForDispatch).toBe(true);
+    expect(data.deliverTo.name).toBe("Secret Project Alpha");
+    expect(data.deliverTo.addressLine).toBe("123 Construction Ave");
+    expect(data.deliverTo.city).toBe("Mumbai");
+    expect(data.deliverTo.state).toBe("Maharashtra");
+    expect(data.deliverTo.pincode).toBe("400001");
+    expect(data.deliverTo.masked).toBe(false);
   });
 });

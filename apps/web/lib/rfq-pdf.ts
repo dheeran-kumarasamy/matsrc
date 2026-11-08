@@ -103,12 +103,11 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
 
   let y = doc.y + 14;
 
-  // ---- Requested By (Site only) / Supplier (always BuildOhub) blocks ----
-  // Identity privacy: the requester is identified ONLY by its construction
-  // Site name (never the builder's own name/email/phone), and the
-  // counterparty is always shown as "BuildOhub" — neither the builder nor
-  // the supplier ever sees the other's real identity through this
-  // document. See RfqPdfData's own doc comment for the full rationale.
+  // ---- Requested By (always BuildOhub) ---------------------------------
+  // Identity privacy: neither party's real name/contact details are ever
+  // part of this document. "Requested By" always identifies BuildOhub
+  // itself (the platform issuing the RFQ on the builder's behalf), never
+  // the requesting builder's or site's own identity.
   const colWidth = contentWidth / 2 - 10;
   const colRightX = marginLeft + colWidth + 20;
 
@@ -117,7 +116,7 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
   y = doc.y + 4;
 
   doc.font(PDF_BASE_FONT).fontSize(10).fillColor(TEXT);
-  doc.text(data.site?.name ?? "Site not specified", marginLeft, y, { width: colWidth });
+  doc.text(BUILDOHUB_COMPANY.name, marginLeft, y, { width: colWidth });
   const leftBottom = doc.y;
 
   doc.font(PDF_BASE_FONT).fontSize(10).fillColor(TEXT);
@@ -136,15 +135,16 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
   y = doc.y + 4;
   doc.font(PDF_BASE_FONT).fontSize(10).fillColor(TEXT);
 
+  // Only the site pincode is shown to the supplier — site name, street,
+  // city, and state are all masked.
   const deliveryLines: string[] = [];
-  if (data.site) {
-    deliveryLines.push(data.site.name);
-    const siteAddress = addressLines(data.site);
-    if (siteAddress) deliveryLines.push(siteAddress);
-  } else if (data.deliveryAddress) {
-    deliveryLines.push(data.deliveryAddress);
+  const pincode =
+    data.site?.pincode ??
+    (data.deliveryAddress ? data.deliveryAddress.match(/\b\d{6}\b/)?.[0] ?? null : null);
+  if (pincode) {
+    deliveryLines.push(`Site Pincode: ${pincode}`);
   } else {
-    deliveryLines.push("Not specified");
+    deliveryLines.push("Site Pincode: Not specified");
   }
   deliveryLines.push(`Requested delivery date: ${formatDate(data.deliveryDate)}`);
 

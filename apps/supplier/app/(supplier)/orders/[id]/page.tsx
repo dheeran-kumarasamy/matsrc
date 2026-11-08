@@ -49,7 +49,19 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
           Buyer: {order.buyer} | Material: {order.brand ? `${order.brand} ` : ""}
           {order.material} | Delivery: {order.deliveryDate}
         </p>
-        <p className="mt-1 text-sm text-slate-600">Site: {order.siteName ?? "Unassigned"}</p>
+        {order.isReadyForDispatch ? (
+          <>
+            <p className="mt-1 text-sm text-slate-600">
+              Site: {order.siteName ?? "Unassigned"}
+              {order.sitePincode ? ` (Pincode: ${order.sitePincode})` : ""}
+            </p>
+            {order.deliveryAddress ? (
+              <p className="mt-1 text-sm text-slate-600">Address: {order.deliveryAddress}</p>
+            ) : null}
+          </>
+        ) : (
+          <p className="mt-1 text-sm text-slate-600">Site Pincode: {order.sitePincode ?? "Not specified"}</p>
+        )}
         <p className="mt-1 text-sm font-semibold text-slate-800">Ask Price: {order.askPrice}</p>
 
         <div className="mt-3">

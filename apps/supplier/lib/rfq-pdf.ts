@@ -131,15 +131,16 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
   y = doc.y + 4;
   doc.font(PDF_BASE_FONT).fontSize(10).fillColor(TEXT);
 
-  // Only the postcode is shown to the supplier — site name, street,
-  // city, and state are all masked. If no site postcode is available and
-  // there is a free-text deliveryAddress, that is also withheld; only the
-  // postcode field from the structured site record is ever disclosed.
+  // Only the site pincode is shown to the supplier — site name, street,
+  // city, and state are all masked.
   const deliveryLines: string[] = [];
-  if (data.site?.pincode) {
-    deliveryLines.push(`Postcode: ${data.site.pincode}`);
+  const pincode =
+    data.site?.pincode ??
+    (data.deliveryAddress ? data.deliveryAddress.match(/\b\d{6}\b/)?.[0] ?? null : null);
+  if (pincode) {
+    deliveryLines.push(`Site Pincode: ${pincode}`);
   } else {
-    deliveryLines.push("Postcode not specified");
+    deliveryLines.push("Site Pincode: Not specified");
   }
   deliveryLines.push(`Requested delivery date: ${formatDate(data.deliveryDate)}`);
 

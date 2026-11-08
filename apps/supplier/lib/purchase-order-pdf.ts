@@ -216,11 +216,16 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
     .text("DELIVER TO", colLeftX + bandPadding, y + bandPadding, { width: colWidth });
   doc.font("PDFBaseFont").fontSize(9).fillColor(TEXT);
   const deliverTo = po.deliverTo;
-  const deliverToBlock = deliverTo
-    ? ([deliverTo.name, addressLines(deliverTo), deliverTo.gstin ? `GSTIN: ${deliverTo.gstin}` : null].filter(
-        Boolean
-      ) as string[])
-    : ["Delivery address not recorded for this order"];
+  let deliverToBlock: string[];
+  if (!deliverTo) {
+    deliverToBlock = ["Delivery address not recorded for this order"];
+  } else if (!isBuyerFacing && (deliverTo.masked || (!po.isReadyForDispatch && po.isReadyForDispatch !== undefined))) {
+    deliverToBlock = [deliverTo.pincode ? `Site Pincode: ${deliverTo.pincode}` : "Site Pincode: Not specified"];
+  } else {
+    deliverToBlock = [deliverTo.name, addressLines(deliverTo), deliverTo.gstin ? `GSTIN: ${deliverTo.gstin}` : null].filter(
+      Boolean
+    ) as string[];
+  }
   doc.text(deliverToBlock.join("\n"), colLeftX + bandPadding, doc.y + 2, { width: colWidth - bandPadding });
 
   const orderDate = po.createdAt ? new Date(po.createdAt) : null;

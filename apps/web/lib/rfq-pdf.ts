@@ -232,18 +232,24 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
   const pageRange = doc.bufferedPageRange();
   for (let i = pageRange.start; i < pageRange.start + pageRange.count; i++) {
     doc.switchToPage(i);
+    const pageBottom = doc.page.height - doc.page.margins.bottom;
+    const savedBottomMargin = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
     doc
       .font(PDF_BASE_FONT)
       .fontSize(8)
       .fillColor(MUTED)
-      .text(`Page ${i + 1} of ${pageRange.count}`, marginLeft, doc.page.height - doc.page.margins.bottom + 10, {
+      .text(`Page ${i + 1} of ${pageRange.count}`, marginLeft, pageBottom + 10, {
         width: contentWidth,
         align: "center",
+        lineBreak: false,
       });
-    doc.text(`Generated via ${BUILDOHUB_COMPANY.name}`, marginLeft, doc.page.height - doc.page.margins.bottom + 22, {
+    doc.text(`Generated via ${BUILDOHUB_COMPANY.name}`, marginLeft, pageBottom + 22, {
       width: contentWidth,
       align: "center",
+      lineBreak: false,
     });
+    doc.page.margins.bottom = savedBottomMargin;
   }
   doc.fillColor(TEXT);
 }

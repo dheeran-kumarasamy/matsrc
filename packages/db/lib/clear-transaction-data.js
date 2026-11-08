@@ -52,6 +52,18 @@ const { parseConnectionString, isProductionDatabase, detectEnvironment } = requi
 //                                     never reset to zero)
 //   - user, supplierProfile, product, canonicalProduct, and every
 //     user-linked config / pricing-history table
+//
+// IMPORTANT: a live FK audit against pg_constraint (run after an atomic
+// cleanup attempt was correctly rolled back rather than partially
+// executed) found three transaction-data models that were missing from
+// this list entirely:
+// SupplierPayment, SupplierInvoiceLineItem, SupplierInvoice. All three are
+// pure transaction/activity data (supplier-invoice upload, admin review,
+// and manual supplier-payment tracking for a specific Order) and must be
+// deleted — their absence here previously caused
+// `SupplierInvoiceLineItem_orderItemId_fkey` to block the whole
+// transaction. Verified via pg_constraint that no other table references
+// SupplierPayment or SupplierInvoiceLineItem (both are leaf nodes).
 const DELETE_ORDER = Object.freeze([
   "notificationDeliveryLog",
   "notificationPolicyAudit",
@@ -76,8 +88,19 @@ const DELETE_ORDER = Object.freeze([
   "orderTracking",
   "dispute",
   "supplierRating",
-  "purchaseOrder",
+  // supplierPayment (child of supplierInvoice) and supplierInvoiceLineItem
+  // (child of both supplierInvoice AND orderItem) must both be deleted
+  // before supplierInvoice. Neither is referenced by any other table
+  // (verified leaf nodes).
+  "supplierPayment",
+  "supplierInvoiceLineItem",
+  // invoice must be deleted before supplierInvoice, since
+  // Invoice.supplierInvoiceId -> SupplierInvoice has no onDelete cascade.
   "invoice",
+  // supplierInvoice itself references Order (required) and PurchaseOrder
+  // (optional) — must be deleted before both.
+  "supplierInvoice",
+  "purchaseOrder",
   "orderItem",
   "aggregationParticipant",
   "notification",

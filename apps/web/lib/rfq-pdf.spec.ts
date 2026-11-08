@@ -54,7 +54,8 @@ describe("renderRfqPdf", () => {
     expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
   });
 
-  it("renderRfqPdfContent draws onto a real pdfkit document without throwing", async () => {
+  it("renderRfqPdfContent draws onto a real pdfkit document without throwing or creating extra pages", async () => {
+    let pageCount = 0;
     const buffer = await new Promise<Buffer>((resolve, reject) => {
       const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
       const chunks: Buffer[] = [];
@@ -63,9 +64,11 @@ describe("renderRfqPdf", () => {
       doc.on("error", reject);
       useRupeeCapableFont(doc);
       renderRfqPdfContent(doc, fakeRfq());
+      pageCount = doc.bufferedPageRange().count;
       doc.end();
     });
     expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+    expect(pageCount).toBe(1);
   });
 
   it("RfqPdfData structurally has no supplier-quotation price/payment field", () => {

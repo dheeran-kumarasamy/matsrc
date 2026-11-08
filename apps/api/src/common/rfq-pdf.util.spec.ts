@@ -68,6 +68,7 @@ describe("renderRfqPdf", () => {
     // purchase-order-pdf.spec.ts's identical split between
     // renderToBuffer(...) calling the *Content function and the
     // higher-level wrapper's own tests above.
+    let pageCount = 0;
     const buffer = await new Promise<Buffer>((resolve, reject) => {
       const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
       const chunks: Buffer[] = [];
@@ -76,11 +77,13 @@ describe("renderRfqPdf", () => {
       doc.on("error", reject);
       useRupeeCapableFont(doc);
       renderRfqPdfContent(doc, fakeRfq());
+      pageCount = doc.bufferedPageRange().count;
       doc.end();
     });
 
     expect(buffer.length).toBeGreaterThan(0);
     expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+    expect(pageCount).toBe(1);
   });
 
   it("never receives (and therefore can never render) a supplier-quotation-shaped field", () => {

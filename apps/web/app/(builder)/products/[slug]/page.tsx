@@ -23,7 +23,7 @@ export const revalidate = 300;
 // product's own slug URL.
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const product = await getSupplierProduct(params.slug);
-  if (!product) return {};
+  if (!product) notFound();
 
   // P2-D fix: Product.name in this catalogue already includes the brand
   // (e.g. "UltraTech Cement OPC 53 Grade Cement"), so prepending

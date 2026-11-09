@@ -13,7 +13,30 @@ vi.mock("@matsrc/db", async () => {
     ...actual,
     prisma: {
       product: {
-        findMany: vi.fn(() => Promise.resolve(productRows)),
+        findFirst: vi.fn((args?: any) => {
+          if (!args?.where) return Promise.resolve(productRows[0] ?? null);
+          const found = productRows.find((p: any) => {
+            if (p.isActive === false && args.where.isActive !== false) return false;
+            if (args.where.OR) {
+              return args.where.OR.some(
+                (cond: any) => cond.id === p.id || (cond.slug && cond.slug === p.id) || (cond.slug && cond.slug === p.slug)
+              );
+            }
+            if (args.where.id) return p.id === args.where.id;
+            return true;
+          });
+          return Promise.resolve(found ?? null);
+        }),
+        findMany: vi.fn((args?: any) => {
+          if (args?.where?.canonicalProductId) {
+            return Promise.resolve(
+              productRows.filter(
+                (p: any) => p.canonicalProductId === args.where.canonicalProductId && p.isActive !== false
+              )
+            );
+          }
+          return Promise.resolve(productRows);
+        }),
       },
       markupSetting: {
         findMany: vi.fn(() => Promise.resolve([])),

@@ -593,6 +593,17 @@ export async function getPublicSupplierListings(options?: { fullImages?: boolean
     });
   }
 
+  return transformRawListingsToPublic(listings, options);
+}
+
+// Admin-Configurable Product Markup and Cross-Supplier Resolution for a batch of raw product listings.
+// Extracted so both the full catalogue endpoint (getPublicSupplierListings) and the scoped single-product
+// endpoint (getPublicSupplierProductById) share the exact same pricing, tier, markup, grouping, and image logic.
+async function transformRawListingsToPublic(
+  listings: any[],
+  options?: { fullImages?: boolean }
+): Promise<any[]> {
+  if (!listings || listings.length === 0) return [];
 
   // Admin-Configurable Product Markup — buyer-facing PLP/PDP display price
   // fix: `/products` and the product detail page previously showed the
@@ -663,7 +674,7 @@ export async function getPublicSupplierListings(options?: { fullImages?: boolean
       supplierId: product.supplierId,
       canonicalProductId: product.canonicalProductId ?? null,
       name: product.name,
-      category: product.category.name,
+      category: product.category?.name ?? "",
       // BUG-01 fix: expose a real brand value on public listings (previously
       // absent, forcing the builder-side brand filter to hack-match against
       // name+grade substrings). Prefers the FK-linked Brand master-data
@@ -919,15 +930,83 @@ export async function getPublicSupplierProductById(id: string): Promise<{
   displayListing: any;
   siblings: any[];
 } | null> {
-  const listings = await getPublicSupplierListings({ fullImages: true });
-  const requested = listings.find((item: any) => item.id === id);
+  if (!id || typeof id !== "string") {
+    return null;
+  }
+
+  // Step A — Fetch the requested listing directly from the database
+  let requestedProduct: any = null;
+  try {
+    requestedProduct = await prisma.product.findFirst({
+      where: {
+        OR: [{ id }, { slug: id }],
+        isActive: true,
+      },
+      include: { category: true, brandRef: true, pricingTiers: { orderBy: { minQty: "asc" } } },
+    });
+  } catch (error) {
+    if (!isMissingPricingSchemaError(error)) throw error;
+    requestedProduct = await prisma.product.findFirst({
+      where: {
+        OR: [{ id }, { slug: id }],
+        isActive: true,
+      },
+      include: { category: true, brandRef: true },
+    });
+  }
+
+  // If the product does not exist or is inactive, return null immediately without loading the catalogue
+  if (!requestedProduct) {
+    return null;
+  }
+
+  // Step B — Fetch only the required grouped listings belonging to the same canonical product
+  let groupProducts: any[] = [];
+  if (
+    requestedProduct.canonicalProductId &&
+    typeof requestedProduct.canonicalProductId === "string" &&
+    requestedProduct.canonicalProductId.trim() !== ""
+  ) {
+    try {
+      groupProducts = await prisma.product.findMany({
+        where: {
+          canonicalProductId: requestedProduct.canonicalProductId,
+          isActive: true,
+        },
+        include: { category: true, brandRef: true, pricingTiers: { orderBy: { minQty: "asc" } } },
+        orderBy: { updatedAt: "desc" },
+      });
+    } catch (error) {
+      if (!isMissingPricingSchemaError(error)) throw error;
+      groupProducts = await prisma.product.findMany({
+        where: {
+          canonicalProductId: requestedProduct.canonicalProductId,
+          isActive: true,
+        },
+        include: { category: true, brandRef: true },
+        orderBy: { updatedAt: "desc" },
+      });
+    }
+
+    if (!groupProducts.some((p: any) => p.id === requestedProduct.id)) {
+      groupProducts.unshift(requestedProduct);
+    }
+  } else {
+    groupProducts = [requestedProduct];
+  }
+
+  // Step C — Transform ONLY this product group with full images preserved for PDP rendering
+  const transformedListings = await transformRawListingsToPublic(groupProducts, { fullImages: true });
+
+  const requested = transformedListings.find((item: any) => item.id === requestedProduct.id);
   if (!requested) return null;
 
-  const groupedIds = requested.groupedListingIds && requested.groupedListingIds.length > 0
-    ? requested.groupedListingIds
-    : [requested.id];
+  const groupedIds =
+    requested.groupedListingIds && requested.groupedListingIds.length > 0
+      ? requested.groupedListingIds
+      : [requested.id];
 
-  const siblings = listings.filter((item: any) => groupedIds.includes(item.id));
+  const siblings = transformedListings.filter((item: any) => groupedIds.includes(item.id));
   const headline = requested.headlineSupplierId
     ? siblings.find((item: any) => item.supplierId === requested.headlineSupplierId) ?? requested
     : requested;

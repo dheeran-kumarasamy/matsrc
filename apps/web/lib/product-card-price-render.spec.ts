@@ -33,4 +33,10 @@ describe("ProductCard price display (source regression guard)", () => {
   it("shows an explicit unavailable state rather than a fabricated ₹0", () => {
     expect(productCardSource).toMatch(/Price unavailable/);
   });
+
+  it("renders 'Request Quote' permanently irrespective of hovering", () => {
+    expect(productCardSource).toMatch(/Request Quote/);
+    expect(productCardSource).not.toMatch(/sm:opacity-0/);
+    expect(productCardSource).not.toMatch(/sm:group-hover:opacity-100/);
+  });
 });

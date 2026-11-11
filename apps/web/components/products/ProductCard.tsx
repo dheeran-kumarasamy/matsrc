@@ -39,8 +39,8 @@ interface Props {
 }
 
 // Product card — industrial redesign: off-white surface, soft depth
-// shadow, prominent charcoal price, orange "Request Quote" action that
-// reveals on hover (desktop) / stays visible (touch). All existing
+// shadow, prominent charcoal price, solid "Request Quote" action that
+// appears irrespective of hovering across screen sizes. All existing
 // functionality (intercepting routes, price range, slug) unchanged.
 export default function ProductCard({ skeleton, product }: Props) {
   if (skeleton) {
@@ -152,11 +152,10 @@ export default function ProductCard({ skeleton, product }: Props) {
         {DELIVERY_TIMING_BROWSING_NOTE}
       </p>
 
-      {/* Quick "Request Quote" action — subtle, reveals on hover on
-          pointer devices; stays visible on touch (no hover state) so it's
-          always reachable on mobile. */}
+      {/* Quick "Request Quote" action — displayed permanently across all
+          screen sizes irrespective of hovering. */}
       <span
-        className="posh-btn-solid mt-4 flex min-h-[40px] w-full items-center justify-center rounded-lg text-xs font-bold uppercase tracking-wide opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100"
+        className="posh-btn-solid mt-4 flex min-h-[40px] w-full items-center justify-center rounded-lg text-xs font-bold uppercase tracking-wide"
       >
         Request Quote
       </span>

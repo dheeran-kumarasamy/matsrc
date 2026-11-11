@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn } from "@/lib/auth-client";
 import GoogleIcon from "@/components/shared/GoogleIcon";
 
 // UF-01 Steps 1–5

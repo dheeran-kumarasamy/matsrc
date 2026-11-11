@@ -13,13 +13,15 @@
 // derivation is centralized in lib/user-display.ts so this component stays
 // purely presentational.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { signOut } from "@/lib/auth-client";
 import { LogIn, LogOut, User } from "lucide-react";
 import { getFirstName, getInitials } from "@/lib/user-display";
 import { builderApiGet } from "@/lib/api";
+import { usePolling } from "@/lib/use-polling";
 
 // Net account balance indicator — reuses the EXACT SAME authoritative
 // source as the Advance Balance page (app/(builder)/advance/page.tsx):
@@ -51,30 +53,29 @@ function useNetBalance(enabled: boolean) {
   const [balance, setBalance] = useState<number | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
+  const isMountedRef = useRef(true);
   useEffect(() => {
-    if (!enabled) return;
-    let active = true;
-
-    function load() {
-      builderApiGet<AdvanceBalanceSummary>("/advance")
-        .then((data) => {
-          if (!active) return;
-          setBalance(Number(data.availableBalance));
-          setStatus("ready");
-        })
-        .catch(() => {
-          if (!active) return;
-          setStatus("error");
-        });
-    }
-
-    load();
-    const interval = setInterval(load, BALANCE_POLL_INTERVAL_MS);
+    isMountedRef.current = true;
     return () => {
-      active = false;
-      clearInterval(interval);
+      isMountedRef.current = false;
     };
-  }, [enabled]);
+  }, []);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await builderApiGet<AdvanceBalanceSummary>("/advance");
+      if (!isMountedRef.current) return;
+      setBalance(Number(data.availableBalance));
+      setStatus("ready");
+    } catch (err) {
+      if (isMountedRef.current) {
+        setStatus("error");
+      }
+      throw err;
+    }
+  }, []);
+
+  usePolling(load, { intervalMs: BALANCE_POLL_INTERVAL_MS, enabled });
 
   return { balance, status };
 }

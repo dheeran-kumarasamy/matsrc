@@ -6,7 +6,8 @@
 // context instead of each keeping their own local boolean).
 //
 // It is a thin cache in front of the EXISTING watchlist backend
-// (/api/builder/watchlist, /api/builder/watchlist/[productId] — see
+// (/api/builder/watchlist/ids for lightweight ID resolution,
+// /api/builder/watchlist/[productId] — see
 // app/api/builder/watchlist/*) and the existing NextAuth session
 // (next-auth/react's useSession(), already hydrated app-wide by
 // AuthProvider in app/layout.tsx). No new backend, no new auth mechanism,
@@ -73,9 +74,9 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     setStatus("loading");
     (async () => {
       try {
-        const items = await builderApiGet<Array<{ productId: string }>>("/watchlist");
+        const productIds = await builderApiGet<string[]>("/watchlist/ids");
         if (!active) return;
-        setWatchedIds(new Set(items.map((item) => item.productId)));
+        setWatchedIds(new Set(productIds));
         setStatus("ready");
       } catch {
         if (!active) return;

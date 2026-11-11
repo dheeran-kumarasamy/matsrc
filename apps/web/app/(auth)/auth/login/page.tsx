@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import GoogleIcon from "@/components/shared/GoogleIcon";
 

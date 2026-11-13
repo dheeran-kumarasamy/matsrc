@@ -57,9 +57,23 @@ export default function SiteHeader() {
               style={{ background: "var(--posh-border)" }}
             />
           ) : isAuthenticated ? (
-            <Link href="/newdashboard" className="posh-btn-pill font-medium">
-              Go to Dashboard
-            </Link>
+            // Buyer Dashboard (existing /newdashboard destination/behaviour,
+            // relabelled) + Supplier Portal — a plain external hyperlink to
+            // the separate supplier app, styled as a charcoal/white twin of
+            // the existing pill CTA (same height/radius/padding/typography
+            // via the shared `posh-btn-pill` class, only the colour differs).
+            <div className="flex flex-wrap items-center gap-3">
+              <Link href="/newdashboard" className="posh-btn-pill font-medium">
+                Buyer Dashboard
+              </Link>
+              <a
+                href="https://supplier.buildohub.in"
+                className="posh-btn-pill font-medium"
+                style={{ background: "var(--posh-fg)", borderColor: "var(--posh-fg)", color: "#ffffff" }}
+              >
+                Supplier Portal
+              </a>
+            </div>
           ) : (
             <Link href="/auth/login" className="posh-btn-pill font-medium">
               Sign in
@@ -137,15 +151,26 @@ export default function SiteHeader() {
               {isLoading ? (
                 <div className="h-12 animate-pulse rounded-full" style={{ background: "var(--posh-border)" }} />
               ) : isAuthenticated ? (
-                <SheetClose asChild>
-                  <Link
-                    href="/newdashboard"
-                    className="flex min-h-[48px] items-center justify-center rounded-full text-base font-medium transition"
-                    style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}
-                  >
-                    Go to Dashboard
-                  </Link>
-                </SheetClose>
+                <div className="space-y-2">
+                  <SheetClose asChild>
+                    <Link
+                      href="/newdashboard"
+                      className="flex min-h-[48px] items-center justify-center rounded-full text-base font-medium transition"
+                      style={{ background: "var(--posh-primary)", color: "var(--posh-primary-fg)" }}
+                    >
+                      Buyer Dashboard
+                    </Link>
+                  </SheetClose>
+                  <SheetClose asChild>
+                    <a
+                      href="https://supplier.buildohub.in"
+                      className="flex min-h-[48px] items-center justify-center rounded-full text-base font-medium transition"
+                      style={{ background: "var(--posh-fg)", color: "#ffffff" }}
+                    >
+                      Supplier Portal
+                    </a>
+                  </SheetClose>
+                </div>
               ) : (
                 <SheetClose asChild>
                   <Link

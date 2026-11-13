@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
-import { OrderStatus, PaymentStatus, PaymentMethod } from "@matsrc/db";
+import {
+  OrderStatus,
+  PaymentStatus,
+  PaymentMethod,
+  assertConsistentOrderSnapshot,
+  resolveBuyerConfirmationState,
+  resolveOrderFinalPayableAmount,
+  BUYER_CONFIRMATION_STATE_LABELS,
+} from "@matsrc/db";
 import {
   prisma,
   formatCurrency,
@@ -30,6 +38,10 @@ export async function GET(
         paymentMethod: true,
         paymentStatus: true,
         totalAmount: true,
+        taxAmount: true,
+        finalPayableAmount: true,
+        advancePercent: true,
+        requiredAdvanceAmount: true,
         deliveryDate: true,
         quoteSelectionCompletedAt: true,
         isAggregated: true,
@@ -49,8 +61,25 @@ export async function GET(
         // Contractor/Client order page — only present once an Admin has
         // generated it (see apps/admin's Generate Invoice action /
         // apps/api's admin/orders/:orderId/invoice controller). Never
-        // generated from this route.
-        invoice: { select: { id: true, invoiceNumber: true } },
+        // generated from this route. `totalAmount` here is the FINAL,
+        // freight/other-charges/discount/rounding-inclusive figure frozen
+        // by InvoicesService.generate() at invoice-generation time (see
+        // apps/api/src/admin/invoices/invoices.service.ts) — deliberately
+        // read here so the order page's displayed "Total" reflects any
+        // freight/other charges an Admin confirmed on the Supplier Invoice
+        // AFTER the order's own pre-invoice finalPayableAmount/totalAmount
+        // snapshot was frozen. Order.finalPayableAmount/totalAmount
+        // themselves are intentionally NEVER mutated by invoice generation
+        // (see that service's own "Important implementation boundary" doc
+        // comment) — they remain the authoritative figures for
+        // payment/advance/outstanding calculations (order-outstanding.ts)
+        // and are used below ONLY as the pre-invoice fallback.
+        invoice: { select: { id: true, invoiceNumber: true, totalAmount: true } },
+        // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+        // Dispatch — drives this route's `confirmationState`/`total` fields
+        // below. See packages/db/lib/order-buyer-confirmation.ts for the
+        // full rationale.
+        supplierInvoice: { select: { status: true, confirmedTotalAmount: true } },
         items: {
           select: {
             id: true,
@@ -92,24 +121,85 @@ export async function GET(
       Boolean(creditProfile?.bankGuaranteeEnabled) &&
       (creditProfile?.bankGuaranteeStatus === "APPROVED" || creditProfile?.bankGuaranteeStatus === "ACTIVE");
 
+    // Product-Level GST / GST-Inclusive Buyer Payable (Phase 4): surface the
+    // frozen, GST-inclusive finalPayableAmount (and its tax breakdown) once
+    // this order has been confirmed through a snapshot-writing path; fall
+    // back to the pre-existing GST-exclusive totalAmount for a
+    // legacy/not-yet-confirmed order — never recomputed from current
+    // GST/markup configuration. Same resolution rule as
+    // apps/web/lib/order-outstanding.ts, so the payment page and this order
+    // detail page always agree on "the order total".
+    assertConsistentOrderSnapshot(order.id, {
+      taxAmount: order.taxAmount == null ? null : Number(order.taxAmount),
+      finalPayableAmount: order.finalPayableAmount == null ? null : Number(order.finalPayableAmount),
+      advancePercent: order.advancePercent == null ? null : Number(order.advancePercent),
+      requiredAdvanceAmount: order.requiredAdvanceAmount == null ? null : Number(order.requiredAdvanceAmount),
+    });
+    const hasGstSnapshot = order.finalPayableAmount != null;
+    const preConfirmationEstimate = hasGstSnapshot ? Number(order.finalPayableAmount) : Number(order.totalAmount ?? 0);
+
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — the buyer-facing confirmation state (NEVER persisted —
+    // recomputed on every read) and the authoritative final payable
+    // amount, both derived from the SAME supplierInvoice snapshot read
+    // above. See packages/db/lib/order-buyer-confirmation.ts for the full
+    // rationale on why these can legitimately differ from the raw
+    // Order.status / Order.finalPayableAmount this route also exposes
+    // below for backward compatibility.
+    const supplierInvoiceSnapshot = order.supplierInvoice
+      ? {
+          status: order.supplierInvoice.status,
+          confirmedTotalAmount:
+            order.supplierInvoice.confirmedTotalAmount != null ? Number(order.supplierInvoice.confirmedTotalAmount) : null,
+        }
+      : null;
+    const confirmationState = resolveBuyerConfirmationState(order.status, supplierInvoiceSnapshot);
+    const { amount: resolvedTotal, isFinalConfirmed } = resolveOrderFinalPayableAmount(
+      preConfirmationEstimate,
+      supplierInvoiceSnapshot
+    );
+
     return NextResponse.json({
       id: order.id,
       enquiryId: order.enquiryId ?? order.id,
       orderNumber: order.orderNumber ?? null,
       status: order.status,
+      // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+      // Dispatch — the buyer-facing surface should always prefer these two
+      // fields over the raw `status` above for display purposes; `status`
+      // itself is left unchanged (still the real OrderStatus enum value)
+      // for any existing caller that depends on its current semantics
+      // (e.g. purchase-order generation gating, cancellation eligibility).
+      confirmationState,
+      confirmationStateLabel: BUYER_CONFIRMATION_STATE_LABELS[confirmationState],
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus,
+      // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+      // Dispatch — a buyer must not be able to initiate a NEW payment until
+      // confirmationState === "CONFIRMED" (mirrors the server-side guard in
+      // the payment-proof/advance-payment routes — this flag is UI-level
+      // only, the authoritative enforcement lives in those routes).
       paymentLinkAvailable:
-        order.status === OrderStatus.PROCESSING &&
+        confirmationState === "CONFIRMED" &&
         (order.paymentStatus === PaymentStatus.PENDING ||
           order.paymentStatus === PaymentStatus.PENDING_VERIFICATION),
-      paymentLink: `/orders/${order.id}/payment`,
+      // Order reference number is always the LAST path segment — route moved
+      // from /orders/[id]/payment -> /orders/payment/[id].
+      paymentLink: `/orders/payment/${order.id}`,
       bankGuaranteeAvailable,
 
       supplierId: order.items[0]?.product.supplier.id ?? null,
       primaryListingId: order.items[0]?.product.id ?? null,
-      total: Number(order.totalAmount),
-      totalLabel: formatCurrency(order.totalAmount),
+      total: resolvedTotal,
+      totalLabel: formatCurrency(resolvedTotal),
+      // GST breakdown — only ever populated once this order carries a
+      // frozen snapshot; null for a legacy/not-yet-confirmed order (never
+      // inferred as "zero tax").
+      gstInclusive: hasGstSnapshot,
+      subtotalBeforeTax: hasGstSnapshot ? Number(order.totalAmount) : null,
+      taxAmount: hasGstSnapshot ? Number(order.taxAmount) : null,
+      advancePercent: order.advancePercent == null ? null : Number(order.advancePercent),
+      requiredAdvanceAmount: order.requiredAdvanceAmount == null ? null : Number(order.requiredAdvanceAmount),
       deliveryDate: formatDate(order.deliveryDate),
       supplierName: getSupplierDisplayName(
         order.items[0]?.product.supplier.companyName,
@@ -137,7 +227,17 @@ export async function GET(
             version: order.purchaseOrders[0].version,
           }
         : null,
-      invoice: order.invoice ? { id: order.invoice.id, invoiceNumber: order.invoice.invoiceNumber } : null,
+      invoice: order.invoice
+        ? {
+            id: order.invoice.id,
+            invoiceNumber: order.invoice.invoiceNumber,
+            // Final, freight/other-charges/discount/rounding-inclusive total
+            // frozen by InvoicesService.generate() — see this route's own
+            // `invoice` select comment above for why this is read instead
+            // of (never in place of) `total`/`finalPayableAmount` above.
+            totalAmount: Number(order.invoice.totalAmount),
+          }
+        : null,
       items: order.items.map((item) => ({
         id: item.id,
         productId: item.product.id,

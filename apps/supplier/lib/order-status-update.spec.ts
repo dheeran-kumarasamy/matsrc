@@ -7,8 +7,17 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged, notifyPaymentRequired, waitUntilMock } = vi.hoisted(() => {
-  const orderRows = new Map<string, { id: string; status: string; items: any[] }>();
+const {
+  orderRows,
+  findUniqueCalls,
+  updateCalls,
+  notifyCustomerOrderStatusChanged,
+  notifyPaymentRequired,
+  waitUntilMock,
+  generateOrderNumberMock,
+  checkOrderDispatchEligibilityMock,
+} = vi.hoisted(() => {
+  const orderRows = new Map<string, { id: string; status: string; items: any[]; paymentStatus: string; orderNumber?: string | null }>();
   const findUniqueCalls: any[] = [];
   const updateCalls: any[] = [];
   const notifyCustomerOrderStatusChanged = vi.fn(() => Promise.resolve());
@@ -18,7 +27,33 @@ const { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChange
   // the HTTP response) rather than fired off as a detached `void` promise
   // that Vercel's serverless runtime may kill before it settles.
   const waitUntilMock = vi.fn();
-  return { orderRows, findUniqueCalls, updateCalls, notifyCustomerOrderStatusChanged, notifyPaymentRequired, waitUntilMock };
+  // Business Numbering: a fresh, incrementing fake "OD/..." number per call
+  // — real uniqueness/atomicity is covered by business-number.ts's own
+  // tests; these tests only need to assert WHEN this is (and isn't) called
+  // and that its result is persisted onto the order.
+  let seq = 0;
+  const generateOrderNumberMock = vi.fn(async () => `OD/TEST/${String(++seq).padStart(5, "0")}`);
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — mocked here (its own real behaviour is covered separately
+  // by packages/db/lib/order-dispatch-eligibility.spec.ts); defaults to
+  // eligible so every PRE-EXISTING "allows Mark Dispatched"-style test in
+  // this file (which predates this feature) keeps passing unchanged.
+  const checkOrderDispatchEligibilityMock = vi.fn(
+    async (): Promise<
+      | { eligible: true; finalPayableAmount: number; settledAmount: number }
+      | { eligible: false; reason: string; finalPayableAmount: number | null; settledAmount: number }
+    > => ({ eligible: true, finalPayableAmount: 0, settledAmount: 0 })
+  );
+  return {
+    orderRows,
+    findUniqueCalls,
+    updateCalls,
+    notifyCustomerOrderStatusChanged,
+    notifyPaymentRequired,
+    waitUntilMock,
+    generateOrderNumberMock,
+    checkOrderDispatchEligibilityMock,
+  };
 });
 
 vi.mock("@vercel/functions", () => ({
@@ -26,38 +61,51 @@ vi.mock("@vercel/functions", () => ({
 }));
 
 vi.mock("@matsrc/db", () => {
-  return {
-    prisma: {
-      order: {
-        findUnique: vi.fn((args: any) => {
-          findUniqueCalls.push(args);
-          const row = orderRows.get(args.where.id);
-          if (!row) return Promise.resolve(null);
-          if (args.select) {
-            const picked: any = {};
-            for (const key of Object.keys(args.select)) picked[key] = (row as any)[key];
-            return Promise.resolve(picked);
-          }
-          return Promise.resolve(row);
-        }),
-        update: vi.fn((args: any) => {
-          updateCalls.push(args);
-          const row = orderRows.get(args.where.id);
-          const updated = { ...row, ...args.data };
-          orderRows.set(args.where.id, updated as any);
-          return Promise.resolve(updated);
-        }),
-      },
-      orderTracking: {
-        create: vi.fn(() => Promise.resolve({})),
-      },
-      orderItemSupplierCandidate: {
-        update: vi.fn(() => Promise.resolve({})),
-      },
-      orderItem: {
-        update: vi.fn(() => Promise.resolve({})),
-      },
+  const orderFindUnique = vi.fn((args: any) => {
+    findUniqueCalls.push(args);
+    const row = orderRows.get(args.where.id);
+    if (!row) return Promise.resolve(null);
+    if (args.select) {
+      const picked: any = {};
+      for (const key of Object.keys(args.select)) picked[key] = (row as any)[key];
+      return Promise.resolve(picked);
+    }
+    return Promise.resolve(row);
+  });
+  const orderUpdate = vi.fn((args: any) => {
+    updateCalls.push(args);
+    const row = orderRows.get(args.where.id);
+    const updated = { ...row, ...args.data };
+    orderRows.set(args.where.id, updated as any);
+    return Promise.resolve(updated);
+  });
+
+  const prisma: any = {
+    order: {
+      findUnique: orderFindUnique,
+      update: orderUpdate,
     },
+    orderTracking: {
+      create: vi.fn(() => Promise.resolve({})),
+    },
+    orderItemSupplierCandidate: {
+      update: vi.fn(() => Promise.resolve({})),
+    },
+    orderItem: {
+      update: vi.fn(() => Promise.resolve({})),
+    },
+  };
+  // updateSupplierOrderStatus wraps its status update + Business Numbering
+  // (orderNumber) assignment in a single prisma.$transaction((tx) => ...)
+  // call (mirrors apps/api's PaymentsService.approve /
+  // OrdersService.updateStatus) — reuse the same mocked order
+  // findUnique/update implementations as the "tx" client so both the
+  // top-level prisma and the transaction client observe/mutate the same
+  // in-memory orderRows map.
+  prisma.$transaction = vi.fn((callback: any) => callback(prisma));
+
+  return {
+    prisma,
     // customer_order_status Meta WhatsApp notification (Notification Engine
     // pipeline — see packages/db/lib/customer-order-status-notification.ts).
     // Spied directly (not re-implemented) so these tests assert exactly
@@ -71,6 +119,14 @@ vi.mock("@matsrc/db", () => {
     // internals (PLACED -> PROCESSING + paymentStatus PENDING guard) are
     // covered separately in packages/db/lib/payment-required-notification.spec.ts.
     notifyPaymentRequired,
+    // Business Numbering (packages/db/lib/business-number.ts) — mocked here
+    // rather than exercising the real BusinessSequence/row-lock logic
+    // (covered by business-number.ts's own tests); these tests only assert
+    // that updateSupplierOrderStatus calls it exactly when it should.
+    generateOrderNumber: generateOrderNumberMock,
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — see checkOrderDispatchEligibilityMock's own doc comment.
+    checkOrderDispatchEligibility: checkOrderDispatchEligibilityMock,
   };
 });
 
@@ -87,10 +143,19 @@ beforeEach(() => {
   notifyCustomerOrderStatusChanged.mockClear();
   notifyPaymentRequired.mockClear();
   waitUntilMock.mockClear();
+  generateOrderNumberMock.mockClear();
+  checkOrderDispatchEligibilityMock.mockClear();
+  checkOrderDispatchEligibilityMock.mockResolvedValue({ eligible: true, finalPayableAmount: 0, settledAmount: 0 });
 });
 
-function seedOrder(id: string, status: string) {
-  orderRows.set(id, { id, status, items: [] });
+// paymentStatus defaults to "PAID" so every existing transition-guard test
+// below (none of which is exercising the C34 payment-before-delivery rule)
+// keeps passing unchanged — pass an explicit paymentStatus to test that
+// rule specifically (see the dedicated describe block further down).
+// orderNumber defaults to null (not yet assigned), matching a real
+// newly-created order.
+function seedOrder(id: string, status: string, paymentStatus: string = "PAID", orderNumber: string | null = null) {
+  orderRows.set(id, { id, status, items: [], paymentStatus, orderNumber });
 }
 
 describe("updateSupplierOrderStatus — backend transition guard", () => {
@@ -154,6 +219,58 @@ describe("updateSupplierOrderStatus — backend transition guard", () => {
     await expect(updateSupplierOrderStatus("missing-order", "PROCESSING" as any)).rejects.toThrow(
       /Order not found/
     );
+  });
+});
+
+// Buyer-Facing/Supplier-Facing PO Identity fix: this is the supplier
+// portal's single-supplier "Confirm Enquiry" path for the PLACED ->
+// PROCESSING transition (no competing RFQ quotes) — the same transition
+// apps/api's PaymentsService.approve / OrdersService.updateStatus already
+// generate Order.orderNumber at. Verifies this path no longer leaves
+// orderNumber permanently null, and that it is a genuinely independent,
+// generated-once value (never copied from or equal to any PurchaseOrder
+// poNumber, and never regenerated on an already-numbered order).
+describe("updateSupplierOrderStatus — Business Numbering (orderNumber)", () => {
+  it("generates and persists a brand-new orderNumber on PLACED -> PROCESSING when the order has none yet", async () => {
+    seedOrder("order-40", "PLACED", "PAID", null);
+
+    const result = await updateSupplierOrderStatus("order-40", "PROCESSING" as any);
+
+    expect(generateOrderNumberMock).toHaveBeenCalledTimes(1);
+    expect(result.orderNumber).toBeTruthy();
+    expect(result.orderNumber).toMatch(/^OD\//);
+  });
+
+  it("never regenerates or overwrites an orderNumber the order already has", async () => {
+    seedOrder("order-41", "PLACED", "PAID", "OD/2601/00099");
+
+    const result = await updateSupplierOrderStatus("order-41", "PROCESSING" as any);
+
+    expect(generateOrderNumberMock).not.toHaveBeenCalled();
+    expect(result.orderNumber).toBe("OD/2601/00099");
+  });
+
+  it("never generates an orderNumber for transitions other than PLACED -> PROCESSING", async () => {
+    seedOrder("order-42", "PROCESSING", "PAID", null);
+
+    await updateSupplierOrderStatus("order-42", "DISPATCHED" as any);
+
+    expect(generateOrderNumberMock).not.toHaveBeenCalled();
+  });
+
+  it("does not assign a second, different orderNumber if the status update is retried", async () => {
+    seedOrder("order-43", "PLACED", "PAID", null);
+
+    const first = await updateSupplierOrderStatus("order-43", "PROCESSING" as any);
+    // A real retry would be rejected by the transition guard (PROCESSING ->
+    // PROCESSING is invalid) before ever reaching the numbering logic again
+    // — this asserts that guard, and that the original number is untouched.
+    await expect(updateSupplierOrderStatus("order-43", "PROCESSING" as any)).rejects.toThrow(
+      /Invalid order status transition/
+    );
+
+    expect(generateOrderNumberMock).toHaveBeenCalledTimes(1);
+    expect(orderRows.get("order-43")?.orderNumber).toBe(first.orderNumber);
   });
 });
 
@@ -314,5 +431,122 @@ describe("updateSupplierOrderStatus — Vercel-safe notification scheduling (wai
       expect.anything(),
       expect.objectContaining({ orderId: "order-23", previousStatus: "PLACED", newStatus: "PROCESSING" })
     );
+  });
+});
+
+// C34 — an order must never be marked DELIVERED while payment is not
+// settled. This is the supplier portal's own copy of the rule (mirrors the
+// equivalent guard/tests in apps/api's OrdersService) — the "Mark
+// Delivered" button here (components/supplier/OrderStatusActions.tsx) calls
+// PATCH /api/supplier/orders/:id, which calls this function directly, so
+// this is the single place that must reject the transition even if the
+// request bypasses the UI entirely.
+describe("updateSupplierOrderStatus — C34 payment-before-delivery guard", () => {
+  it("rejects Mark Delivered when payment is still PENDING", async () => {
+    seedOrder("order-30", "DISPATCHED", "PENDING");
+    await expect(updateSupplierOrderStatus("order-30", "DELIVERED" as any)).rejects.toThrow(
+      /cannot be marked as delivered until payment has been confirmed/
+    );
+  });
+
+  it("rejects Mark Delivered when payment proof is still PENDING_VERIFICATION", async () => {
+    seedOrder("order-31", "DISPATCHED", "PENDING_VERIFICATION");
+    await expect(updateSupplierOrderStatus("order-31", "DELIVERED" as any)).rejects.toThrow(
+      /cannot be marked as delivered until payment has been confirmed/
+    );
+  });
+
+  it("rejects Mark Delivered for a REFUNDED order", async () => {
+    seedOrder("order-32", "DISPATCHED", "REFUNDED");
+    await expect(updateSupplierOrderStatus("order-32", "DELIVERED" as any)).rejects.toThrow(
+      /cannot be marked as delivered until payment has been confirmed/
+    );
+  });
+
+  it("allows Mark Delivered once payment is PAID", async () => {
+    seedOrder("order-33", "DISPATCHED", "PAID");
+    const result = await updateSupplierOrderStatus("order-33", "DELIVERED" as any);
+    expect(result.status).toBe("DELIVERED");
+  });
+
+  it("allows Mark Delivered from OUT_FOR_DELIVERY once payment is PAID", async () => {
+    seedOrder("order-34", "OUT_FOR_DELIVERY", "PAID");
+    const result = await updateSupplierOrderStatus("order-34", "DELIVERED" as any);
+    expect(result.status).toBe("DELIVERED");
+  });
+
+  it("never blocks non-delivery transitions regardless of payment status", async () => {
+    seedOrder("order-35", "PROCESSING", "PENDING");
+    const result = await updateSupplierOrderStatus("order-35", "DISPATCHED" as any);
+    expect(result.status).toBe("DISPATCHED");
+  });
+
+  it("does not schedule any notification when Mark Delivered is rejected for unpaid orders", async () => {
+    seedOrder("order-36", "DISPATCHED", "PENDING");
+    await expect(updateSupplierOrderStatus("order-36", "DELIVERED" as any)).rejects.toThrow(
+      /cannot be marked as delivered until payment has been confirmed/
+    );
+    expect(waitUntilMock).not.toHaveBeenCalled();
+    expect(notifyCustomerOrderStatusChanged).not.toHaveBeenCalled();
+  });
+});
+
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — server-side enforcement that PROCESSING -> DISPATCHED is
+// blocked until checkOrderDispatchEligibility (the shared,
+// packages/db-level gate) reports eligible. The gate's own full behaviour
+// (missing/pending/rejected invoice, partial settlement, etc.) is unit-
+// tested exhaustively in packages/db/lib/order-dispatch-eligibility.spec.ts
+// — these tests only verify updateSupplierOrderStatus correctly calls it
+// and correctly propagates/surfaces its verdict (reason as the thrown
+// Error message), including that notifications are never scheduled for a
+// rejected dispatch attempt.
+describe("updateSupplierOrderStatus — Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated Dispatch", () => {
+  it("rejects Mark Dispatched when checkOrderDispatchEligibility reports ineligible, surfacing its exact reason", async () => {
+    seedOrder("order-50", "PROCESSING");
+    checkOrderDispatchEligibilityMock.mockResolvedValue({
+      eligible: false,
+      reason: "The supplier invoice is still awaiting Admin review — it cannot be dispatched until the freight/other charges are confirmed.",
+      finalPayableAmount: null,
+      settledAmount: 0,
+    });
+
+    await expect(updateSupplierOrderStatus("order-50", "DISPATCHED" as any)).rejects.toThrow(
+      /awaiting Admin review/
+    );
+  });
+
+  it("never schedules any notification when Mark Dispatched is rejected by the dispatch-eligibility gate", async () => {
+    seedOrder("order-51", "PROCESSING");
+    checkOrderDispatchEligibilityMock.mockResolvedValue({
+      eligible: false,
+      reason: "₹5,000 is still outstanding.",
+      finalPayableAmount: 10000,
+      settledAmount: 5000,
+    });
+
+    await expect(updateSupplierOrderStatus("order-51", "DISPATCHED" as any)).rejects.toThrow();
+    expect(waitUntilMock).not.toHaveBeenCalled();
+    expect(notifyCustomerOrderStatusChanged).not.toHaveBeenCalled();
+  });
+
+  it("allows Mark Dispatched once checkOrderDispatchEligibility reports eligible", async () => {
+    seedOrder("order-52", "PROCESSING");
+    checkOrderDispatchEligibilityMock.mockResolvedValue({ eligible: true, finalPayableAmount: 10000, settledAmount: 10000 });
+
+    const result = await updateSupplierOrderStatus("order-52", "DISPATCHED" as any);
+    expect(result.status).toBe("DISPATCHED");
+  });
+
+  it("never calls checkOrderDispatchEligibility for a non-DISPATCHED transition", async () => {
+    seedOrder("order-53", "PLACED");
+    await updateSupplierOrderStatus("order-53", "PROCESSING" as any);
+    expect(checkOrderDispatchEligibilityMock).not.toHaveBeenCalled();
+  });
+
+  it("passes the correct orderId to checkOrderDispatchEligibility", async () => {
+    seedOrder("order-54", "PROCESSING");
+    await updateSupplierOrderStatus("order-54", "DISPATCHED" as any);
+    expect(checkOrderDispatchEligibilityMock).toHaveBeenCalledWith(expect.anything(), "order-54");
   });
 });

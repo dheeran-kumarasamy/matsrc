@@ -34,6 +34,8 @@ import { builderApiPost } from "@/lib/api";
 import SiteSelector from "@/components/orders/SiteSelector";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import OrderConfirmationBanner from "@/components/orders/OrderConfirmationBanner";
+import { buildConfirmedOrderSummaries } from "@/lib/order-confirmation";
+import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel, formatFreightExclusivityNote } from "@/lib/gst-display";
 
 
 
@@ -142,7 +144,9 @@ export default function CartDrawer() {
   const isCartOpen = useOverlayStore((state) => state.isCartOpen);
 
   const checkoutStep = useOverlayStore((state) => state.checkoutStep);
-  const lastOrderReference = useOverlayStore((state) => state.lastOrderReference);
+  // S12 Phase 1: every enquiry/order created by the checkout that just
+  // completed (one per supplier) — never just the first one.
+  const lastCompletedOrders = useOverlayStore((state) => state.lastCompletedOrders);
   const closeCart = useOverlayStore((state) => state.closeCart);
   const setCheckoutStep = useOverlayStore((state) => state.setCheckoutStep);
   const goToNextStep = useOverlayStore((state) => state.goToNextStep);
@@ -174,8 +178,11 @@ export default function CartDrawer() {
     }
   }, [isCartOpen, hasLoaded, fetchCart]);
 
-  const gst = useMemo(() => Math.round(summary.subtotal * 0.18), [summary.subtotal]);
-  const total = useMemo(() => summary.subtotal + gst, [summary.subtotal, gst]);
+  // C29: reuses the single shared gst-display estimator (same 18% default
+  // Cart/Checkout already apply) instead of a separately hard-coded
+  // `* 0.18` literal — no behaviour change, same figures as before.
+  const gst = useMemo(() => estimateGstAmount(summary.subtotal), [summary.subtotal]);
+  const total = useMemo(() => estimateGstInclusiveTotal(summary.subtotal), [summary.subtotal]);
 
   const supplierGroups = useMemo(() => {
     const groups = new Map<string, { supplierName: string; count: number }>();
@@ -218,17 +225,18 @@ export default function CartDrawer() {
     setSubmitError(null);
     try {
 
-      const response = await builderApiPost<{ orders: Array<{ id: string; enquiryId?: string }> }>(
-        "/orders/checkout",
-        { siteId }
-      );
+      const response = await builderApiPost<{
+        orders: Array<{ id: string; enquiryId?: string; supplierName?: string }>;
+      }>("/orders/checkout", { siteId });
 
-      // Prefer the human-readable enquiry ID (e.g. "ABC-SITE01-000123") so
-      // the confirmation banner shows a meaningful reference — see
-      // packages/db/lib/enquiry-id.ts and components/orders/
-      // OrderConfirmationBanner.tsx.
-      const reference = response.orders?.[0]?.enquiryId ?? response.orders?.[0]?.id ?? "submitted";
-      completeCheckout(reference);
+      // S12 Phase 1: preserve EVERY created enquiry/order reference (one
+      // per supplier — see apps/web/lib/order-checkout.ts), never just the
+      // first, using the same human-readable enquiry ID fallback rule as
+      // every other confirmation surface — see
+      // lib/order-confirmation.ts's buildConfirmedOrderSummaries() and
+      // components/orders/OrderConfirmationBanner.tsx.
+      const summaries = buildConfirmedOrderSummaries(response);
+      completeCheckout(summaries.length > 0 ? summaries : [{ reference: "submitted" }]);
       void fetchCart();
     } catch {
       setSubmitError("Unable to submit enquiry right now. Please try again.");
@@ -284,9 +292,45 @@ export default function CartDrawer() {
               ) : (
                 items.map((item) => (
                   <div key={item.id} className="flex gap-3 rounded-2xl border p-3" style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.03)" }}>
-                    <div className="h-14 w-14 shrink-0 rounded-xl" style={{ background: "rgba(var(--posh-wash-rgb),0.08)" }} />
+                    {/* C18 fix: product image/name were plain, unlinked
+                        markup — there was no way to reach the canonical
+                        Product Detail page from the Cart. Wrapped both in a
+                        Link to the existing canonical route
+                        (/products/[id] — the same route ProductCard and
+                        ProductQuickView already link to via the product's
+                        real id, see apps/supplier/lib/supplier-data.ts's
+                        `id: product.id`), using item.productId already
+                        present on every cart item (lib/store/cart-store.ts).
+                        No new route/duplicate PDP introduced. Closes the
+                        cart drawer on click (same convention as the empty
+                        "Browse materials" link above) so the PDP underneath
+                        is visible immediately instead of staying hidden
+                        behind the open Sheet. */}
+                    <Link
+                      href={`/products/${item.productId}`}
+                      onClick={() => closeCart()}
+                      aria-label={`View ${item.name} product details`}
+                      className="h-14 w-14 shrink-0 overflow-hidden rounded-xl transition-opacity hover:opacity-80"
+                      style={{ background: "rgba(var(--posh-wash-rgb),0.08)" }}
+                    >
+                      {item.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : null}
+                    </Link>
                     <div className="flex-1">
-                      <p className="text-sm font-medium" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
+                      <Link
+                        href={`/products/${item.productId}`}
+                        onClick={() => closeCart()}
+                        className="text-sm font-medium transition-opacity hover:opacity-70 hover:underline underline-offset-2"
+                        style={{ color: "var(--posh-fg)" }}
+                      >
+                        {item.name}
+                      </Link>
                       <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
                         {getSupplierDisplayName(item.supplierName, item.supplierId)}
                       </p>
@@ -333,6 +377,28 @@ export default function CartDrawer() {
                   Items span {supplierGroups.length} suppliers — these will be submitted as separate enquiries.
                 </p>
               ) : null}
+
+              {/* C29 — GST visibility at the review step, not just at the
+                  final "confirm" step below. Reuses the same gst/total
+                  figures computed above (useMemo from summary.subtotal via
+                  the shared gst-display estimator) so this can never
+                  disagree with the confirm-step/checkout totals. */}
+              {items.length > 0 ? (
+                <div className="rounded-xl border p-3 text-xs" style={{ borderColor: "var(--posh-border)" }}>
+                  <div className="flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
+                    <span>Subtotal</span><span>₹{summary.subtotal.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
+                    <span>{formatGstLineLabel()}</span><span>₹{gst.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between font-bold" style={{ color: "var(--posh-fg)" }}>
+                    <span>Estimated total</span><span>₹{total.toLocaleString("en-IN")}</span>
+                  </div>
+                  <p className="mt-2 text-[11px] leading-snug" style={{ color: "var(--posh-fg-muted)" }}>
+                    {formatFreightExclusivityNote()}
+                  </p>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -361,13 +427,16 @@ export default function CartDrawer() {
                     <span>Subtotal</span><span>₹{summary.subtotal.toLocaleString("en-IN")}</span>
                   </div>
                   <div className="flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
-                    <span>GST (18%)</span><span>₹{gst.toLocaleString("en-IN")}</span>
+                    <span>{formatGstLineLabel()}</span><span>₹{gst.toLocaleString("en-IN")}</span>
                   </div>
                   <div className="flex justify-between border-t pt-2" style={{ borderColor: "var(--posh-border)" }}>
                     <span className="font-bold" style={{ color: "var(--posh-fg)" }}>Estimated total</span>
                     <span className="posh-heading text-lg" style={{ color: "var(--posh-primary)" }}>₹{total.toLocaleString("en-IN")}</span>
                   </div>
                 </div>
+                <p className="mt-3 text-[11px] leading-snug" style={{ color: "var(--posh-fg-muted)" }}>
+                  {formatFreightExclusivityNote()}
+                </p>
               </div>
               {siteId ? (
                 <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
@@ -385,7 +454,7 @@ export default function CartDrawer() {
 
           {checkoutStep === "success" ? (
             <div className="py-6">
-              <OrderConfirmationBanner enquiryId={lastOrderReference} />
+              <OrderConfirmationBanner orders={lastCompletedOrders} />
             </div>
           ) : null}
         </div>

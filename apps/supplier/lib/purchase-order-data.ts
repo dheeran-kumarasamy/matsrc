@@ -1,5 +1,7 @@
 import { prisma } from "@matsrc/db";
-import { ensureSupplierContext } from "@/lib/supplier-data";
+import { ensureSupplierContext } from "./supplier-data";
+import { resolveSupplierOrderReference } from "./order-display";
+import { getBuyerDisplayName } from "./buyer-display";
 
 export type SupplierPurchaseOrderRow = {
   id: string;
@@ -8,6 +10,12 @@ export type SupplierPurchaseOrderRow = {
   version: number;
   buyerName: string;
   orderId: string;
+  // S15: canonical supplier-facing Order reference for the Order this PO
+  // was issued against (orderNumber ?? enquiryId, never the raw `orderId`
+  // above) — see apps/supplier/lib/order-display.ts. The PO's own
+  // `poNumber` is a completely separate identifier series and is
+  // unaffected.
+  orderReference: string;
   total: number;
   itemCount: number;
   approvedAt: string | null;
@@ -24,10 +32,22 @@ export type SupplierPurchaseOrderDetail = SupplierPurchaseOrderRow & {
     quantity: number;
     unitPrice: number;
     tax: number;
+    // The GST rate (percentage) used to compute `tax` above — null only
+    // for pre-migration line items created before this column existed
+    // (see PurchaseOrderLineItem's doc comment in schema.prisma); the UI
+    // must show a generic "Tax" label for those rather than fabricating
+    // a rate.
+    taxRatePercent: number | null;
     deliveryDate: string | null;
     fulfilledQuantity: number;
     lineTotal: number;
   }>;
+  // Explicit subtotal/GST breakdown — mirrors the Invoice's own
+  // subtotal/taxAmount so the PO detail page can show the same
+  // "Subtotal + GST = Total" structure instead of folding tax silently
+  // into a single Total figure.
+  subtotal: number;
+  taxAmount: number;
   exportUrl: string;
 };
 
@@ -45,17 +65,19 @@ export async function getSupplierPurchaseOrders(email: string): Promise<Supplier
     include: {
       builder: true,
       lineItems: true,
+      order: { select: { enquiryId: true, orderNumber: true } },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  return purchaseOrders.map((po) => ({
+  return purchaseOrders.map((po, idx) => ({
     id: po.id,
     poNumber: po.poNumber,
     status: po.status,
     version: po.version,
-    buyerName: po.builder.name ?? po.builder.email ?? "Builder",
+    buyerName: getBuyerDisplayName(po.builder.name ?? po.builder.email, po.builder.id, idx),
     orderId: po.orderId,
+    orderReference: resolveSupplierOrderReference(po.order),
     total: po.lineItems.reduce((acc, li) => acc + toNumber(li.unitPrice) * li.quantity + toNumber(li.tax), 0),
     itemCount: po.lineItems.length,
     approvedAt: po.approvedAt ? po.approvedAt.toISOString() : null,
@@ -74,6 +96,7 @@ export async function getSupplierPurchaseOrderDetail(
     include: {
       builder: true,
       lineItems: { include: { product: true } },
+      order: { select: { enquiryId: true, orderNumber: true } },
     },
   });
 
@@ -86,6 +109,7 @@ export async function getSupplierPurchaseOrderDetail(
     quantity: li.quantity,
     unitPrice: toNumber(li.unitPrice),
     tax: toNumber(li.tax),
+    taxRatePercent: li.taxRatePercent !== null && li.taxRatePercent !== undefined ? toNumber(li.taxRatePercent) : null,
     deliveryDate: li.deliveryDate ? li.deliveryDate.toISOString() : null,
     fulfilledQuantity: li.fulfilledQuantity,
     lineTotal: toNumber(li.unitPrice) * li.quantity + toNumber(li.tax),
@@ -96,16 +120,24 @@ export async function getSupplierPurchaseOrderDetail(
     poNumber: po.poNumber,
     status: po.status,
     version: po.version,
-    buyerName: po.builder.name ?? po.builder.email ?? "Builder",
+    buyerName: getBuyerDisplayName(po.builder.name ?? po.builder.email, po.builder.id),
     orderId: po.orderId,
+    orderReference: resolveSupplierOrderReference(po.order),
     total: lineItems.reduce((acc, li) => acc + li.lineTotal, 0),
+    subtotal: lineItems.reduce((acc, li) => acc + li.unitPrice * li.quantity, 0),
+    taxAmount: lineItems.reduce((acc, li) => acc + li.tax, 0),
     itemCount: lineItems.length,
     approvedAt: po.approvedAt ? po.approvedAt.toISOString() : null,
     approvedBy: po.approvedBy,
     notes: po.notes,
     createdAt: po.createdAt.toISOString(),
     lineItems,
-    exportUrl: `/api/builder/purchase-orders/${po.id}/export`,
+    // Same-origin supplier-portal route (NOT apps/web's builder route) — a
+    // supplier session can never satisfy the builder app's builderId
+    // ownership check, and the two apps are separate domains, so pointing
+    // here at a relative /api/builder/... path 404'd. See
+    // app/api/supplier/purchase-orders/[id]/export/route.ts's doc comment.
+    exportUrl: `/api/supplier/purchase-orders/${po.id}/export`,
   };
 }
 

@@ -17,6 +17,7 @@ import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import OrderRatingForm from "@/components/orders/OrderRatingForm";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
+import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
 
 
 export type OverlayOrderDetail = {
@@ -26,6 +27,11 @@ export type OverlayOrderDetail = {
   // orders (see the API route's `enquiryId ?? id` fallback).
   enquiryId: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — see apps/web/app/(builder)/orders/[id]/page.tsx's identical
+  // field for the full rationale.
+  confirmationState?: "NOT_YET_CONFIRMED" | "AWAITING_FINAL_CONFIRMATION" | "CONFIRMED" | "CANCELLED";
+  confirmationStateLabel?: string;
   paymentStatus: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
   paymentLinkAvailable: boolean;
   paymentLink: string;
@@ -42,6 +48,20 @@ export type OverlayOrderDetail = {
   priceBeforeAggregation?: number | null;
   priceAfterAggregation?: number | null;
   purchaseOrder?: { id: string; poNumber: string; status: string; version: number } | null;
+  // Final, freight/other-charges/discount/rounding-inclusive total frozen
+  // by InvoicesService.generate() — only present once an Admin has
+  // confirmed the Supplier Invoice's freight/other charges AND generated
+  // the buyer invoice. `total` above (from
+  // Order.finalPayableAmount/totalAmount) remains the pre-invoice estimate
+  // and is never itself mutated by invoice generation. See
+  // apps/web/app/(builder)/orders/[id]/page.tsx's identical field for the
+  // full rationale — this overlay mirrors that page's rendering.
+  invoice?: { id: string; invoiceNumber: string; totalAmount: number } | null;
+  // The Order's own already-authoritative business number
+  // ("OD/YYMM/SSSSS") — the same number the downloaded buyer-facing PO PDF
+  // displays/names its file after. See
+  // lib/purchase-order-utils.ts's resolveBuyerPoDocumentNumber.
+  orderNumber?: string | null;
   siteId?: string | null;
   siteName?: string;
   items: Array<{
@@ -131,7 +151,22 @@ export default function OrderDetailOverlay({ order }: Props) {
   return (
     <Dialog defaultOpen onOpenChange={handleOpenChange}>
       <DialogContent className="p-0 sm:max-w-4xl">
-        <DialogHeader>
+        {/* C19 fix: DialogContent's Close button (components/ui/dialog.tsx)
+            is `absolute right-4 top-4`, floating on top of whatever this
+            header renders — it was never given its own reserved layout
+            area. On an order with a status badge, a "Group Order" pill,
+            and/or an "Open payment link" button (i.e. most real orders),
+            that right-aligned button row filled the same top-right corner
+            the X sits in, so the X visually overlapped the order status /
+            payment-link text and, on narrow viewports, could sit on top of
+            it entirely. Reserving `pr-12` (wider than the close button's
+            own ~32px box + its `right-4`/`top-4` offset) on this header
+            keeps every header element — title, dates, status badge,
+            payment-link button — inside a lane that structurally never
+            reaches the close button's corner, at every breakpoint; it does
+            not touch the scrollable content area below, which was already
+            a separate, independently-scrolling block. */}
+        <DialogHeader className="pr-12">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-slate-400">My Orders</p>
@@ -144,8 +179,17 @@ export default function OrderDetailOverlay({ order }: Props) {
               </div>
 
             </div>
-            <div className="flex items-center gap-3">
-              <OrderStatusBadge status={order.status} />
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Admin-Confirmed Freight / Buyer Final Confirmation /
+                  Payment-Gated Dispatch — see the full-page order detail's
+                  identical badge logic for the full rationale. */}
+              {order.confirmationState && order.confirmationState !== "NOT_YET_CONFIRMED" && order.confirmationState !== "CANCELLED" ? (
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                  {order.confirmationStateLabel}
+                </span>
+              ) : (
+                <OrderStatusBadge status={order.status} />
+              )}
 
               {order.isAggregated ? (
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -165,9 +209,15 @@ export default function OrderDetailOverlay({ order }: Props) {
         </DialogHeader>
 
         <div className="max-h-[70vh] space-y-5 overflow-y-auto p-5">
-          {order.status === "PROCESSING" ? (
+          {order.confirmationState === "AWAITING_FINAL_CONFIRMATION" ? (
             <div className="rounded-2xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] px-4 py-3 text-sm text-[color:var(--posh-fg)]">
-              Supplier confirmed this enquiry. WhatsApp and in-app updates will continue as the order moves forward.
+              The supplier has accepted your enquiry. Our team is now reviewing the final freight/other charges —
+              you'll be able to pay once this is confirmed.
+            </div>
+          ) : order.confirmationState === "CONFIRMED" ? (
+            <div className="rounded-2xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] px-4 py-3 text-sm text-[color:var(--posh-fg)]">
+              Your order is confirmed, including final freight/other charges. WhatsApp and in-app updates will continue
+              as the order moves forward.
             </div>
           ) : null}
 
@@ -181,29 +231,13 @@ export default function OrderDetailOverlay({ order }: Props) {
             </div>
           ) : null}
 
-          {order.isAggregated ? (
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-              <p className="font-semibold">This is a Group &amp; Save order</p>
-              <p className="mt-1 text-emerald-700">
-                {order.poolLocked
-                  ? `Pool locked${order.priceAfterAggregation ? ` at ₹${order.priceAfterAggregation.toLocaleString("en-IN")}/unit` : ""}. This order will now proceed through the standard fulfilment stages below.`
-                  : "This order is still pooling with other builders to unlock a better price. It will convert once the pool locks."}
-              </p>
-              {order.priceBeforeAggregation && order.priceAfterAggregation && order.priceBeforeAggregation > order.priceAfterAggregation ? (
-                <p className="mt-1 text-xs font-semibold text-emerald-800">
-                  You saved ₹{(order.priceBeforeAggregation - order.priceAfterAggregation).toLocaleString("en-IN")}/unit
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
           {order.quoteAccepted ? (
             <div className="panel space-y-3 p-5">
               <h2 className="text-lg font-semibold text-slate-800">Purchase Order</h2>
               {order.purchaseOrder ? (
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-slate-600">
-                    {order.purchaseOrder.poNumber}
+                    {resolveBuyerPoDocumentNumber({ orderNumber: order.orderNumber, poNumber: order.purchaseOrder.poNumber })}
                     {order.purchaseOrder.version > 1 ? ` (v${order.purchaseOrder.version})` : ""} ·{" "}
                     <span className="font-semibold">{order.purchaseOrder.status}</span>
                   </p>
@@ -244,8 +278,13 @@ export default function OrderDetailOverlay({ order }: Props) {
                 ))}
               </div>
               <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm">
-                <span className="font-medium text-slate-600">Total</span>
-                <span className="font-bold text-slate-900">₹{order.total.toLocaleString("en-IN")}</span>
+                {/* See `invoice` field's doc comment above for why this
+                    prefers the generated invoice's final total once one
+                    exists. */}
+                <span className="font-medium text-slate-600">{order.invoice ? "Total (Final Invoiced Amount)" : "Total"}</span>
+                <span className="font-bold text-slate-900">
+                  ₹{(order.invoice ? order.invoice.totalAmount : order.total).toLocaleString("en-IN")}
+                </span>
               </div>
             </section>
 
@@ -253,7 +292,15 @@ export default function OrderDetailOverlay({ order }: Props) {
               <div className="panel p-5">
                 <h2 className="text-lg font-semibold text-slate-800">Status timeline</h2>
                 <div className="mt-4">
-                  <OrderTimeline status={order.status} isAggregated={order.isAggregated} poolLocked={order.poolLocked} />
+                  {/* S12 Phase 1: renders this Order's own real OrderTracking
+                      events (never sibling Orders' — order.tracking is
+                      scoped server-side to this order's id only). */}
+                  <OrderTimeline
+                    status={order.status}
+                    tracking={order.tracking}
+                    isAggregated={order.isAggregated}
+                    poolLocked={order.poolLocked}
+                  />
                 </div>
               </div>
 

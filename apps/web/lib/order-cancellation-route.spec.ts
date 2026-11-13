@@ -24,9 +24,14 @@ const orderTrackingCreate = vi.fn();
 // PO-immutability (§10 of the route's own PO integrity guarantee).
 const purchaseOrderUpdate = vi.fn();
 const purchaseOrderLineItemUpdate = vi.fn();
+// Advance Balance reservation release check (route now wraps the
+// cancellation in a transaction and looks up the buyer's advance account —
+// see Advance Balance Payment Lifecycle fix). No advance account by
+// default, so the release logic is a no-op for every test in this file.
+const customerAdvanceAccountFindFirst = vi.fn().mockResolvedValue(null);
 
-vi.mock("@/lib/builder-db", () => ({
-  prisma: {
+vi.mock("@/lib/builder-db", () => {
+  const prisma: any = {
     order: {
       findFirst: (...args: unknown[]) => orderFindFirst(...args),
       update: (...args: unknown[]) => orderUpdate(...args),
@@ -36,18 +41,29 @@ vi.mock("@/lib/builder-db", () => ({
     },
     purchaseOrder: { update: (...args: unknown[]) => purchaseOrderUpdate(...args) },
     purchaseOrderLineItem: { update: (...args: unknown[]) => purchaseOrderLineItemUpdate(...args) },
-  },
-  getOrCreateBuilder: async (userId: string) => ({ id: userId }),
-  getUserCtx: (request: Request) => {
-    const headers = request.headers;
-    const userId = headers.get("X-User-Id");
-    const email = headers.get("X-User-Email");
-    if (!userId || !email) {
-      throw new Error("UNAUTHENTICATED");
-    }
-    return { userId, email, name: headers.get("X-User-Name") || "Builder" };
-  },
-}));
+    customerAdvanceAccount: {
+      findFirst: (...args: unknown[]) => customerAdvanceAccountFindFirst(...args),
+    },
+  };
+  // The route wraps its mutations in `prisma.$transaction(async (tx) => ...)`
+  // — reuse the same mocked delegates as `tx` so existing assertions against
+  // orderUpdate/orderTrackingCreate etc. keep working unchanged.
+  prisma.$transaction = (callback: (tx: unknown) => unknown) => callback(prisma);
+
+  return {
+    prisma,
+    getOrCreateBuilder: async (userId: string) => ({ id: userId }),
+    getUserCtx: (request: Request) => {
+      const headers = request.headers;
+      const userId = headers.get("X-User-Id");
+      const email = headers.get("X-User-Email");
+      if (!userId || !email) {
+        throw new Error("UNAUTHENTICATED");
+      }
+      return { userId, email, name: headers.get("X-User-Name") || "Builder" };
+    },
+  };
+});
 
 const OWNER = "builder-owner";
 const ATTACKER = "builder-attacker";
@@ -71,6 +87,8 @@ beforeEach(() => {
   orderTrackingCreate.mockReset();
   purchaseOrderUpdate.mockReset();
   purchaseOrderLineItemUpdate.mockReset();
+  customerAdvanceAccountFindFirst.mockReset();
+  customerAdvanceAccountFindFirst.mockResolvedValue(null);
 });
 
 describe("POST /api/builder/orders/[id]/cancel — successful cancellation", () => {

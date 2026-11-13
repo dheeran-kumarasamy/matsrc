@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { resolveMarkupForProduct } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { formatCurrency } from "src/supplier/utils";
 import { BuilderContextService } from "src/builder/builder-context.service";
@@ -33,10 +34,27 @@ export class CartService {
       orderBy: { updatedAt: "desc" },
     });
 
-    const subtotal = items.reduce((acc, item) => acc + resolveUnitPrice(item.product, item.quantity) * item.quantity, 0);
+    // Admin-Configurable Product Markup: the cart is a buyer-facing preview
+    // of checkout, so it must show the MARKED-UP price — see the identical
+    // fix in apps/web/app/api/builder/cart/route.ts (the actual production
+    // cart read path; this NestJS service is this app's own builder cart
+    // module). Missing/disabled configuration fails safe to 0% markup.
+    const itemsWithBuyerPrice = await Promise.all(
+      items.map(async (item) => {
+        const supplierUnitPrice = resolveUnitPrice(item.product, item.quantity);
+        const markup = await resolveMarkupForProduct(this.prisma as any, {
+          productId: item.productId,
+          categoryId: item.product.categoryId,
+          supplierUnitPrice,
+        }).catch(() => null);
+        return { item, unitPrice: markup ? markup.buyerUnitPrice : supplierUnitPrice };
+      })
+    );
+
+    const subtotal = itemsWithBuyerPrice.reduce((acc, { unitPrice, item }) => acc + unitPrice * item.quantity, 0);
 
     return {
-      items: items.map((item) => ({
+      items: itemsWithBuyerPrice.map(({ item, unitPrice }) => ({
         id: item.id,
         productId: item.productId,
         name: item.product.name,
@@ -44,8 +62,8 @@ export class CartService {
         supplierId: item.product.supplierId,
         supplierName: item.product.supplier.companyName,
         quantity: item.quantity,
-        unitPrice: resolveUnitPrice(item.product, item.quantity),
-        lineTotal: resolveUnitPrice(item.product, item.quantity) * item.quantity,
+        unitPrice,
+        lineTotal: unitPrice * item.quantity,
       })),
       summary: {
         itemCount: items.length,

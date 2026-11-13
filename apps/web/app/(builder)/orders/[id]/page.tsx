@@ -9,6 +9,7 @@ import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import OrderRatingForm from "@/components/orders/OrderRatingForm";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
+import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
 
 
 type OrderDetail = {
@@ -18,6 +19,15 @@ type OrderDetail = {
   // orders (see the API route's `enquiryId ?? id` fallback).
   enquiryId: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — the buyer-facing confirmation state, derived server-side
+  // from `status` + the order's SupplierInvoice review state (NEVER
+  // persisted — see packages/db/lib/order-buyer-confirmation.ts). Prefer
+  // this over the raw `status` above for any buyer-facing "is this order
+  // confirmed yet" display — `status` itself keeps its existing meaning
+  // (unaffected by this feature) for anything that isn't purely display.
+  confirmationState?: "NOT_YET_CONFIRMED" | "AWAITING_FINAL_CONFIRMATION" | "CONFIRMED" | "CANCELLED";
+  confirmationStateLabel?: string;
   paymentStatus: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
   paymentLinkAvailable: boolean;
   paymentLink: string;
@@ -34,7 +44,20 @@ type OrderDetail = {
   priceBeforeAggregation?: number | null;
   priceAfterAggregation?: number | null;
   purchaseOrder?: { id: string; poNumber: string; status: string; version: number } | null;
-  invoice?: { id: string; invoiceNumber: string } | null;
+  // `totalAmount` is the FINAL, freight/other-charges/discount/rounding-
+  // inclusive figure frozen by InvoicesService.generate() at invoice-
+  // generation time (see apps/api/src/admin/invoices/invoices.service.ts
+  // and this page's own "Total" block below) — only present once an Admin
+  // has confirmed the Supplier Invoice's freight/other charges AND
+  // generated the buyer invoice. `total` above (from
+  // Order.finalPayableAmount/totalAmount) remains the pre-invoice estimate
+  // and is never itself mutated by invoice generation.
+  invoice?: { id: string; invoiceNumber: string; totalAmount: number } | null;
+  // The Order's own already-authoritative business number
+  // ("OD/YYMM/SSSSS") — the same number the downloaded buyer-facing PO PDF
+  // displays/names its file after. See
+  // lib/purchase-order-utils.ts's resolveBuyerPoDocumentNumber.
+  orderNumber?: string | null;
   siteId?: string | null;
   siteName?: string;
 
@@ -110,7 +133,19 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <OrderStatusBadge status={order.status} />
+          {/* Admin-Confirmed Freight / Buyer Final Confirmation / Payment-
+              Gated Dispatch — the buyer-facing badge shows the derived
+              confirmationStateLabel (e.g. "Awaiting Final Confirmation")
+              once past PLACED, rather than the raw internal status, which
+              would otherwise read "Processing" even before an Admin has
+              confirmed freight/other charges. Falls back to the plain
+              status badge for any older client response that hasn't been
+              updated to include confirmationState yet. */}
+          {order.confirmationState && order.confirmationState !== "NOT_YET_CONFIRMED" && order.confirmationState !== "CANCELLED" ? (
+            <span className="posh-status">{order.confirmationStateLabel}</span>
+          ) : (
+            <OrderStatusBadge status={order.status} />
+          )}
           {order.isAggregated ? <span className="posh-status">Group Order</span> : null}
           {order.paymentLinkAvailable ? (
             <Link href={order.paymentLink} className="posh-btn">
@@ -120,12 +155,21 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         </div>
       </header>
 
-      {order.status === "PROCESSING" ? (
+      {order.confirmationState === "AWAITING_FINAL_CONFIRMATION" ? (
         <div
           className="rounded-2xl border px-4 py-3 text-sm font-medium"
           style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)", color: "var(--posh-fg-muted)" }}
         >
-          Supplier confirmed this enquiry. WhatsApp and in-app updates will continue as the order moves forward.
+          The supplier has accepted your enquiry. Our team is now reviewing the final freight/other charges — you'll be
+          able to pay once this is confirmed.
+        </div>
+      ) : order.confirmationState === "CONFIRMED" ? (
+        <div
+          className="rounded-2xl border px-4 py-3 text-sm font-medium"
+          style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)", color: "var(--posh-fg-muted)" }}
+        >
+          Your order is confirmed, including final freight/other charges. WhatsApp and in-app updates will continue as
+          the order moves forward.
         </div>
       ) : null}
 
@@ -146,25 +190,6 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         </div>
       ) : null}
 
-      {order.isAggregated ? (
-        <div
-          className="rounded-2xl border px-4 py-3 text-sm"
-          style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)", color: "var(--posh-fg)" }}
-        >
-          <p className="posh-card-title text-base">This is a Group &amp; Save order</p>
-          <p className="mt-1 font-medium" style={{ color: "var(--posh-fg-muted)" }}>
-            {order.poolLocked
-              ? `Pool locked${order.priceAfterAggregation ? ` at ₹${order.priceAfterAggregation.toLocaleString("en-IN")}/unit` : ""}. This order will now proceed through the standard fulfilment stages below.`
-              : "This order is still pooling with other builders to unlock a better price. It will convert once the pool locks."}
-          </p>
-          {order.priceBeforeAggregation && order.priceAfterAggregation && order.priceBeforeAggregation > order.priceAfterAggregation ? (
-            <p className="mt-2 text-xs font-bold" style={{ color: "var(--posh-primary)" }}>
-              You saved ₹{(order.priceBeforeAggregation - order.priceAfterAggregation).toLocaleString("en-IN")}/unit
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
       {/* Digital Purchase Order — additive layer on top of existing enquiry/order tracking */}
 
       {order.quoteAccepted ? (
@@ -173,7 +198,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           {order.purchaseOrder ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
-                {order.purchaseOrder.poNumber}
+                {resolveBuyerPoDocumentNumber({ orderNumber: order.orderNumber, poNumber: order.purchaseOrder.poNumber })}
                 {order.purchaseOrder.version > 1 ? ` (v${order.purchaseOrder.version})` : ""} ·{" "}
                 <span className="font-bold" style={{ color: "var(--posh-fg)" }}>{order.purchaseOrder.status}</span>
               </p>
@@ -210,8 +235,17 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             className="flex items-center justify-between rounded-xl border px-4 py-3 text-sm"
             style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)" }}
           >
-            <span className="posh-label">Total</span>
-            <span className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>₹{order.total.toLocaleString("en-IN")}</span>
+            {/* Once an Admin has generated the buyer invoice, its own
+                totalAmount (which reflects any freight/other charges/
+                discount/rounding confirmed on the Supplier Invoice) is the
+                FINAL payable figure and is shown here instead of the
+                earlier, pre-invoice `order.total` estimate — see the
+                `invoice` field's doc comment above for why these two can
+                legitimately differ. */}
+            <span className="posh-label">{order.invoice ? "Total (Final Invoiced Amount)" : "Total"}</span>
+            <span className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>
+              ₹{(order.invoice ? order.invoice.totalAmount : order.total).toLocaleString("en-IN")}
+            </span>
           </div>
         </section>
 
@@ -219,8 +253,15 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           <div className="posh-card p-6">
             <h2 className="posh-card-title">Status timeline</h2>
             <div className="mt-4">
-              <OrderTimeline status={order.status} isAggregated={order.isAggregated} poolLocked={order.poolLocked} />
-
+              {/* S12 Phase 1: renders this Order's own real OrderTracking
+                  events (never sibling Orders' — order.tracking is scoped
+                  server-side to this order's id only). */}
+              <OrderTimeline
+                status={order.status}
+                tracking={order.tracking}
+                isAggregated={order.isAggregated}
+                poolLocked={order.poolLocked}
+              />
             </div>
           </div>
 
@@ -246,6 +287,19 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                 Open payment link
               </Link>
             ) : null}
+          </div>
+
+          <div className="posh-card space-y-3 p-6">
+            <h2 className="posh-card-title">RFQ</h2>
+            <p className="posh-subtitle">Download this enquiry as a Request for Quotation PDF.</p>
+            <a
+              href={`/api/builder/orders/${order.id}/rfq-pdf`}
+              target="_blank"
+              rel="noreferrer"
+              className="posh-btn block text-center"
+            >
+              Download RFQ PDF
+            </a>
           </div>
 
           {order.invoice ? (

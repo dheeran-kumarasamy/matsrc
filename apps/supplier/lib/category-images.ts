@@ -73,7 +73,7 @@ const BRAND_IMAGES: BrandImageEntry[] = [
   {
     // Supreme / Astral / Finolex — PVC pipes.
     keywords: ["supreme", "astral", "finolex"],
-    image: "https://images.unsplash.com/photo-1621905252472-e8de3d47fea8?auto=format&fit=crop&w=600&q=60",
+    image: "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=600&q=60",
   },
   {
     // Havells / Polycab / Anchor — electrical wires and switches.
@@ -109,15 +109,15 @@ const CATEGORY_IMAGES: CategoryImageEntry[] = [
   },
   {
     keywords: ["aggregate", "sand", "gravel", "crushed"],
-    image: "https://images.unsplash.com/photo-1610500795312-4a5b6b2b6e2f?auto=format&fit=crop&w=600&q=60",
+    image: "https://images.unsplash.com/photo-1578885136359-16c8bd4d3a8e?auto=format&fit=crop&w=600&q=60",
   },
   {
     keywords: ["pipe", "fitting", "pvc", "cpvc"],
-    image: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=60",
+    image: "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?auto=format&fit=crop&w=600&q=60",
   },
   {
     keywords: ["brick", "block", "aac"],
-    image: "https://images.unsplash.com/photo-1567605532317-c8a3b1c25f5a?auto=format&fit=crop&w=600&q=60",
+    image: "https://images.unsplash.com/photo-1552666792-fff5d9eee6ac?auto=format&fit=crop&w=600&q=60",
   },
   {
     keywords: ["paint", "chemical", "waterproof"],

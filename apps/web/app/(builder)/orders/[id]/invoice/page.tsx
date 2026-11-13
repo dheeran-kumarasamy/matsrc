@@ -10,7 +10,11 @@ type InvoiceDetail = {
   orderId: string;
   enquiryId: string;
   site: { name: string; addressLine: string | null; city: string | null; state: string | null; pincode: string | null } | null;
-  supplier: { companyName: string; gstin: string | null } | null;
+  // NOTE: deliberately no `supplier` field here — the buyer-facing invoice
+  // API never discloses the supplier's identity (name/GSTIN/contact); see
+  // apps/web/lib/invoice-utils.ts's serializeInvoice(). A `supplier` field
+  // was previously declared here but never actually emitted by the API or
+  // rendered below — removed as stale/dead (audit finding #5).
   lineItems: Array<{
     id: string;
     productName: string;
@@ -21,6 +25,15 @@ type InvoiceDetail = {
     total: number;
   }>;
   subtotal: number;
+  // Invoice-level adjustments + reconciling taxable value (audit fix — see
+  // Invoice.taxableValue's schema doc comment). Always present on the API
+  // response (serializeInvoice defaults taxableValue to subtotal and the
+  // adjustment amounts to 0 for historical invoices).
+  freightChargeAmount: number;
+  otherChargesAmount: number;
+  discountAmount: number;
+  roundingAdjustment: number;
+  taxableValue: number;
   taxAmount: number;
   totalAmount: number;
   paymentStatus: string;
@@ -71,6 +84,11 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
                 <p className="font-bold" style={{ color: "var(--posh-fg)" }}>{li.productName}</p>
                 <p className="posh-label mt-1">
                   {li.quantity} × ₹{li.unitPrice.toLocaleString("en-IN")}
+                  {/* typeof check (not a truthy check) so a genuine 0% GST
+                      line still shows its explicit rate/amount rather than
+                      silently disappearing — only a null taxRate
+                      (pre-migration row) omits this entirely. */}
+                  {typeof li.taxRate === "number" ? ` · GST ${li.taxRate}% (₹${li.taxAmount.toLocaleString("en-IN")})` : ""}
                 </p>
               </div>
               <p className="font-bold" style={{ color: "var(--posh-fg)" }}>₹{li.total.toLocaleString("en-IN")}</p>
@@ -79,7 +97,36 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
         </div>
         <div className="text-right text-sm">
           <p className="posh-subtitle">Subtotal: ₹{invoice.subtotal.toLocaleString("en-IN")}</p>
-          <p className="posh-subtitle">Tax: ₹{invoice.taxAmount.toLocaleString("en-IN")}</p>
+          {/* Invoice-level adjustments (audit fix): shown ONLY when
+              non-zero, so an invoice with no freight/other charges/
+              discount/rounding renders exactly as before this fix. */}
+          {invoice.freightChargeAmount !== 0 ? (
+            <p className="posh-subtitle">Freight: ₹{invoice.freightChargeAmount.toLocaleString("en-IN")}</p>
+          ) : null}
+          {invoice.otherChargesAmount !== 0 ? (
+            <p className="posh-subtitle">Other Charges: ₹{invoice.otherChargesAmount.toLocaleString("en-IN")}</p>
+          ) : null}
+          {invoice.discountAmount !== 0 ? (
+            <p className="posh-subtitle">Discount: -₹{invoice.discountAmount.toLocaleString("en-IN")}</p>
+          ) : null}
+          {invoice.freightChargeAmount !== 0 || invoice.otherChargesAmount !== 0 || invoice.discountAmount !== 0 ? (
+            <p className="posh-subtitle">Taxable Value: ₹{invoice.taxableValue.toLocaleString("en-IN")}</p>
+          ) : null}
+          <p className="posh-subtitle">
+            {(() => {
+              const rates = Array.from(
+                new Set(invoice.lineItems.map((li) => li.taxRate).filter((r): r is number => typeof r === "number"))
+              );
+              const label = rates.length === 1 ? `GST @ ${rates[0]}%` : "Tax";
+              return `${label}: ₹${invoice.taxAmount.toLocaleString("en-IN")}`;
+            })()}
+          </p>
+          {invoice.roundingAdjustment !== 0 ? (
+            <p className="posh-subtitle">
+              Rounding: {invoice.roundingAdjustment > 0 ? "+" : "-"}₹
+              {Math.abs(invoice.roundingAdjustment).toLocaleString("en-IN")}
+            </p>
+          ) : null}
           <p className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>
             Total: ₹{invoice.totalAmount.toLocaleString("en-IN")}
           </p>

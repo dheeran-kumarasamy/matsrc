@@ -140,4 +140,67 @@ describe("SupplierRfqReceivedNotificationService.notify", () => {
     prisma.orderItem.findUnique.mockRejectedValueOnce(new Error("DB down"));
     await expect(service.notify("item-1")).resolves.toBeUndefined();
   });
+
+  it("live mode: sends a dynamic URL button with the parent Order id (never the OrderItem id), body unchanged", async () => {
+    const { service, prisma } = buildHarness({ mode: "live" });
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ messages: [{ id: "wamid.RFQ-1" }] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await service.notify("item-1");
+
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    expect(sentBody.template.name).toBe("supplier_quote_alert");
+
+    const bodyComponent = sentBody.template.components.find((c: any) => c.type === "body");
+    expect(bodyComponent.parameters).toEqual([
+      { type: "text", text: "TMT Bar 12mm" },
+      { type: "text", text: "50 BAG" },
+      { type: "text", text: "123 Site Road, Chennai" },
+      { type: "text", text: "02 Jan" },
+    ]);
+
+    // Dynamic URL button — Meta's approved fixed prefix is
+    // https://supplier.buildohub.in/orders/{{1}}, so only the bare parent
+    // Order id (orderItem.orderId, NEVER item-1's own OrderItem id) is sent,
+    // and NO query-string/`respond` suffix is ever included.
+    const buttonComponent = sentBody.template.components.find((c: any) => c.type === "button");
+    expect(buttonComponent).toEqual({
+      type: "button",
+      sub_type: "url",
+      index: 0,
+      parameters: [{ type: "text", text: "order-1" }],
+    });
+    expect(buttonComponent.parameters[0].text).not.toBe("item-1");
+    expect(buttonComponent.parameters[0].text).not.toContain("?");
+    expect(buttonComponent.parameters[0].text).not.toContain("respond");
+    expect(sentBody.template.components.some((c: any) => c.type === "header")).toBe(false);
+  });
+
+  it("resolves to the correct supplier order page for a representative order id, with no duplicated path segment or query string", async () => {
+    const { service } = buildHarness({
+      mode: "live",
+      orderItem: makeOrderItem({ orderId: "order-abc123" }),
+    });
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ messages: [{ id: "wamid.RFQ-2" }] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await service.notify("item-1");
+
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    const buttonText = sentBody.template.components.find((c: any) => c.type === "button").parameters[0].text;
+    const resolvedUrl = `https://supplier.buildohub.in/orders/${buttonText}`;
+    expect(resolvedUrl).toBe("https://supplier.buildohub.in/orders/order-abc123");
+    expect(resolvedUrl).not.toContain("orders/orders");
+    expect(resolvedUrl).not.toContain("?");
+  });
 });

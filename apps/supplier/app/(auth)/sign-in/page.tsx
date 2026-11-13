@@ -2,7 +2,14 @@
 
 import { signIn } from "next-auth/react";
 import { useState } from "react";
+import { SupplierOtpLogin } from "@/components/supplier/SupplierOtpLogin";
 
+// Google login below is UNCHANGED — same signIn("google", ...) call, same
+// callbackUrl, same button markup as before this change. The NEW
+// WhatsApp-primary/email-fallback OTP login (SupplierOtpLogin) is additive,
+// placed below the existing Google button per the required login
+// hierarchy. See apps/supplier/lib/otp-service.ts and
+// apps/supplier/auth.ts's new Credentials provider for the implementation.
 export default function SupplierSignInPage() {
   const [loading, setLoading] = useState(false);
 
@@ -38,6 +45,17 @@ export default function SupplierSignInPage() {
             </svg>
             <span>{loading ? "Redirecting…" : "Continue with Google"}</span>
           </button>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-xs px-2 bg-white text-gray-400">
+              OR
+            </div>
+          </div>
+
+          <SupplierOtpLogin />
 
           <p className="text-center text-xs text-gray-400 mt-6">
             By signing in you agree to Buildohub.in&apos;s Supplier Terms of Service.

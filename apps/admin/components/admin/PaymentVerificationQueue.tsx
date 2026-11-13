@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminApiPatch } from "@/lib/api-client";
@@ -20,6 +21,10 @@ type PendingPayment = {
   screenshotFileName: string;
   submittedAt: string;
   screenshotUrl: string;
+  // Admin visibility into Buildohub Advance Balance usage (spec §33) — 0/null
+  // when this order never used the advance balance.
+  advanceReserved?: number;
+  advanceReservationStatus?: "ACTIVE" | "CONSUMED" | "RELEASED" | null;
 };
 
 export function PaymentVerificationQueue({ items }: { items: PendingPayment[] }) {
@@ -93,7 +98,14 @@ export function PaymentVerificationQueue({ items }: { items: PendingPayment[] })
                 Submitted {new Date(item.submittedAt).toLocaleString("en-IN")}
               </p>
 
-              <div className="mt-3">
+              {item.advanceReservationStatus === "ACTIVE" && item.advanceReserved ? (
+                <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
+                  Advance Reserved: ₹{item.advanceReserved.toLocaleString("en-IN")} (ACTIVE — will be consumed on approval,
+                  released on rejection)
+                </p>
+              ) : null}
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 <a
                   href={item.screenshotUrl}
                   target="_blank"
@@ -101,6 +113,24 @@ export function PaymentVerificationQueue({ items }: { items: PendingPayment[] })
                   className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
                 >
                   View Payment Screenshot
+                </a>
+                {/* Navigates to the Admin RFQ detail page
+                    (app/(admin)/orders/[orderId]/page.tsx) using the real
+                    Order.id (item.orderId), never the displayed enquiryId
+                    label — the route param is the database identifier. */}
+                <Link
+                  href={`/orders/${item.orderId}`}
+                  className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
+                >
+                  View RFQ
+                </Link>
+                <a
+                  href={`/api/admin/orders/${item.orderId}/rfq-pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
+                >
+                  Download RFQ PDF
                 </a>
               </div>
 

@@ -1,16 +1,36 @@
-import { prisma, notifyCustomerOrderStatusChanged, notifyPaymentRequired } from "@matsrc/db";
+import {
+  prisma,
+  notifyCustomerOrderStatusChanged,
+  notifyPaymentRequired,
+  calculateLineGst,
+  parseQuotedPrice,
+  lockAdvanceAccountRow,
+  releaseAdvanceReservation,
+  generateOrderNumber,
+  resolveMarkupForProduct,
+  resolveEffectiveMarkupPercent,
+  calculateMarkup,
+  isValidSupplierPrice,
+  resolveOrderConfirmationSnapshot,
+  assertFullOrderSnapshotIntegrity,
+  ConcurrentConfirmationLostError,
+  checkOrderDispatchEligibility,
+} from "@matsrc/db";
 import { waitUntil } from "@vercel/functions";
 import { parsePhoneNumber } from "libphonenumber-js";
 import { getProductImage } from "./category-images";
 import {
   groupByCanonicalProduct,
   resolveHeadlinePrice,
+  resolveLowestPriceForQuantity,
   resolvePriceRange,
   resolveMinimumDisplayPrice,
   type ResolutionCandidate,
 } from "./resolution";
 import { sendWhatsAppMessage } from "./twilio-whatsapp";
 import { isValidOrderStatusTransition } from "./order-status-transitions";
+import { resolveSupplierOrderReference } from "./order-display";
+import { getBuyerDisplayName } from "./buyer-display";
 
 
 
@@ -51,6 +71,11 @@ type ListingInput = {
   title: string;
   category: string;
   grade: string;
+  // Physical size/diameter spec (e.g. "8mm", "16mm") — optional. Feeds the
+  // cross-supplier CanonicalProduct grouping key (see
+  // resolveCanonicalAssignment() below) so listings that only differ by
+  // size are never collapsed into a single buyer-facing PLP card.
+  sizeLabel?: string;
   unit: string;
   maxServiceableQty: string;
   price: string;
@@ -436,7 +461,7 @@ export async function getSupplierDashboardData(email: string) {
           },
         },
       },
-      include: { product: true, order: true },
+      include: { product: { include: { brandRef: true } }, order: true },
       orderBy: { order: { createdAt: "desc" } },
       take: 5,
     }),
@@ -447,7 +472,7 @@ export async function getSupplierDashboardData(email: string) {
           status: "PLACED",
         },
       },
-      include: { product: true, order: true },
+      include: { product: { include: { brandRef: true } }, order: true },
       orderBy: { order: { createdAt: "desc" } },
       take: 5,
     }),
@@ -477,14 +502,22 @@ export async function getSupplierDashboardData(email: string) {
     ],
     orders: confirmedIncomingOrders.map((item: any) => ({
       id: item.orderId,
+      // S15: canonical supplier-facing Order reference — see
+      // apps/supplier/lib/order-display.ts. Never the raw `id` above.
+      displayOrderNumber: resolveSupplierOrderReference(item.order),
       material: item.product.name,
+      // S06: see getSupplierOrders's brand resolution comment — FK-first,
+      // free-text-fallback, null when the product genuinely has no brand.
+      brand: item.product.brandRef?.name ?? item.product.brand ?? null,
       quantity: `${item.quantity} ${item.product.unit}`,
       eta: formatDate(item.deliveryDate ?? item.order.deliveryDate),
       status: mapOrderStatus(item.order.status),
     })),
     pendingEnquiries: pendingEnquiries.map((item: any) => ({
       id: item.orderId,
+      displayOrderNumber: resolveSupplierOrderReference(item.order),
       material: item.product.name,
+      brand: item.product.brandRef?.name ?? item.product.brand ?? null,
       quantity: `${item.quantity} ${item.product.unit}`,
       eta: formatDate(item.deliveryDate ?? item.order.deliveryDate),
     })),
@@ -498,7 +531,17 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
   try {
     listings = await prisma.product.findMany({
       where: { supplierId: supplierProfile.id },
-      include: { category: true },
+      select: {
+        id: true,
+        name: true,
+        category: { select: { name: true } },
+        grade: true,
+        unit: true,
+        basePrice: true,
+        stock: true,
+        maxServiceableQty: true,
+        isActive: true,
+      },
       orderBy: { updatedAt: "desc" },
     });
   } catch (error) {
@@ -529,14 +572,10 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
     stock: `${product.stock} ${product.unit}`,
     maxServiceableQty: `${product.maxServiceableQty ?? product.stock} ${product.unit}`,
     active: product.isActive,
-    images:
-      Array.isArray(product.images) && product.images.length > 0
-        ? product.images
-        : [getProductImage({ category: product.category?.name, brand: product.brand, name: product.name })],
   }));
 }
 
-export async function getPublicSupplierListings() {
+export async function getPublicSupplierListings(options?: { fullImages?: boolean }) {
   let listings: any[] = [];
 
   try {
@@ -554,6 +593,54 @@ export async function getPublicSupplierListings() {
     });
   }
 
+  return transformRawListingsToPublic(listings, options);
+}
+
+// Admin-Configurable Product Markup and Cross-Supplier Resolution for a batch of raw product listings.
+// Extracted so both the full catalogue endpoint (getPublicSupplierListings) and the scoped single-product
+// endpoint (getPublicSupplierProductById) share the exact same pricing, tier, markup, grouping, and image logic.
+async function transformRawListingsToPublic(
+  listings: any[],
+  options?: { fullImages?: boolean }
+): Promise<any[]> {
+  if (!listings || listings.length === 0) return [];
+
+  // Admin-Configurable Product Markup — buyer-facing PLP/PDP display price
+  // fix: `/products` and the product detail page previously showed the
+  // supplier's own raw price, while only the cart (GET /api/builder/cart)
+  // and checkout/order actually applied markup — a visible mismatch once a
+  // non-zero markup is configured. Resolve the effective markup percentage
+  // for every distinct product/category in THIS listing batch in ONE query
+  // (never N+1/N*tiers per-product queries), then look each one up
+  // in-memory below via the SAME resolveEffectiveMarkupPercent()
+  // PRODUCT -> CATEGORY -> GLOBAL precedence every other buyer-price-
+  // setting call site already uses.
+  const distinctProductIds = Array.from(new Set(listings.map((p: any) => p.id)));
+  const distinctCategoryIds = Array.from(new Set(listings.map((p: any) => p.categoryId)));
+  const markupRows = await prisma.markupSetting.findMany({
+    where: {
+      OR: [
+        { scope: "PRODUCT", scopeId: { in: distinctProductIds } },
+        { scope: "CATEGORY", scopeId: { in: distinctCategoryIds } },
+        { scope: "GLOBAL", scopeId: null },
+      ],
+    },
+  });
+  const toMarkupTier = (scope: string, scopeId: string | null) => {
+    const row = markupRows.find((r: any) => r.scope === scope && r.scopeId === scopeId);
+    return row ? { percentage: Number(row.percentage), isEnabled: row.isEnabled } : null;
+  };
+  const globalMarkupTier = toMarkupTier("GLOBAL", null);
+
+  function resolveBuyerPrice(productId: string, categoryId: string, supplierPrice: number): number {
+    const percent = resolveEffectiveMarkupPercent({
+      product: toMarkupTier("PRODUCT", productId),
+      category: toMarkupTier("CATEGORY", categoryId),
+      global: globalMarkupTier,
+    });
+    if (percent === null || !isValidSupplierPrice(supplierPrice)) return supplierPrice;
+    return calculateMarkup({ supplierUnitPrice: supplierPrice, markupPercent: percent }).buyerUnitPrice;
+  }
 
   const mapped = listings.map((product: any) => {
     const fallbackMaxQty = product.maxServiceableQty ?? product.stock;
@@ -567,12 +654,27 @@ export async function getPublicSupplierListings() {
           },
         ];
 
+    // IMPORTANT: markedUpTiers/the display fields derived from it below are
+    // ONLY used for PLP/PDP rendering — the separate `pricingTiersRaw`/
+    // `basePriceRaw` fields (the single source of truth for cart-add/
+    // checkout price RESOLUTION, see apps/web/app/api/builder/cart/items/
+    // route.ts's toResolutionCandidate and apps/web/lib/order-checkout.ts)
+    // remain the untouched, raw supplier price — those call sites already
+    // apply markup themselves at their own authoritative moment. Marking
+    // those up here too would double-apply markup.
+    const markedUpTiers = pricingTiers.map((tier: any) => ({
+      minQty: tier.minQty,
+      maxQty: tier.maxQty,
+      tierPrice: resolveBuyerPrice(product.id, product.categoryId, Number(tier.tierPrice)),
+    }));
+    const buyerBasePrice = resolveBuyerPrice(product.id, product.categoryId, Number(product.basePrice));
+
     return {
       id: product.id,
       supplierId: product.supplierId,
       canonicalProductId: product.canonicalProductId ?? null,
       name: product.name,
-      category: product.category.name,
+      category: product.category?.name ?? "",
       // BUG-01 fix: expose a real brand value on public listings (previously
       // absent, forcing the builder-side brand filter to hack-match against
       // name+grade substrings). Prefers the FK-linked Brand master-data
@@ -580,8 +682,16 @@ export async function getPublicSupplierListings() {
       // any legacy rows created before brandRef existed.
       brand: product.brandRef?.name ?? product.brand ?? "",
       grade: product.grade ?? "NA",
+      // Physical size/diameter spec (e.g. "8mm") — null when the product
+      // has no distinct size. Exposed so the buyer-facing PLP/PDP can
+      // display it alongside grade (see the CanonicalProduct grouping fix
+      // this field was added for in resolveCanonicalAssignment()).
+      sizeLabel: product.sizeLabel ?? null,
       unit: product.unit,
-      price: `${formatCurrency(product.basePrice.toString())} / ${product.unit}`,
+      // Buyer-facing display price — marked up (see resolveBuyerPrice
+      // above). `_basePriceRaw` below (feeding cart-add/checkout
+      // resolution) deliberately stays the untouched supplier price.
+      price: `${formatCurrency(buyerBasePrice.toString())} / ${product.unit}`,
       stock: `${product.stock} ${product.unit}`,
       maxServiceableQty: `${fallbackMaxQty} ${product.unit}`,
       active: product.isActive,
@@ -595,7 +705,11 @@ export async function getPublicSupplierListings() {
       // so it can borrow a sibling listing's real photo before ever falling
       // back to a generic category image (see resolveGroupImages()).
       images: Array.isArray(product.images) ? product.images : [],
-      pricingTiers: pricingTiers.map((tier: any) => ({
+      // Buyer-facing tier prices (marked up) — shown on the PDP's "Pricing
+      // tiers" list and used by EnquiryPanel's pre-cart estimate. See
+      // `_pricingTiersRaw` below for the untouched supplier tiers cart-add/
+      // checkout resolution actually uses.
+      pricingTiers: markedUpTiers.map((tier: any) => ({
         minQty: String(tier.minQty),
         maxQty: String(tier.maxQty),
         price: String(tier.tierPrice),
@@ -604,11 +718,26 @@ export async function getPublicSupplierListings() {
       // Raw numeric fields kept alongside the formatted display fields above
       // (which existing consumers rely on) so the cross-supplier resolution
       // engine below can compute headline/grouped pricing without re-parsing
-      // formatted strings.
+      // formatted strings. These remain the UNTOUCHED supplier price —
+      // apps/web's cart-add/checkout re-resolution (toResolutionCandidate /
+      // order-checkout.ts) reads these exact field names and applies markup
+      // itself at that authoritative moment; marking these up here would
+      // double-apply markup there.
       _basePriceRaw: Number(product.basePrice),
       _stockRaw: Number(product.stock),
       _maxServiceableQtyRaw: Number(fallbackMaxQty),
       _pricingTiersRaw: pricingTiers.map((tier: any) => ({
+        minQty: Number(tier.minQty),
+        maxQty: Number(tier.maxQty),
+        tierPrice: Number(tier.tierPrice),
+      })),
+      // Buyer-facing (marked-up) parallel copies of the two fields above —
+      // used ONLY to build the display-only `candidates` array below
+      // (headline/range/startingPrice computation). Never exposed in the
+      // public API response itself (stripped alongside the other
+      // underscore-prefixed fields).
+      _markedUpBasePrice: buyerBasePrice,
+      _markedUpPricingTiersRaw: markedUpTiers.map((tier: any) => ({
         minQty: Number(tier.minQty),
         maxQty: Number(tier.maxQty),
         tierPrice: Number(tier.tierPrice),
@@ -629,13 +758,19 @@ export async function getPublicSupplierListings() {
     const groupKey = listing.canonicalProductId ?? listing.id;
     const group = groups.get(groupKey) ?? [listing];
 
+    // Display-only candidates — uses the marked-up (buyer-facing) price
+    // copies, NOT item._basePriceRaw/_pricingTiersRaw (those remain the
+    // untouched supplier price, reserved for cart-add/checkout resolution
+    // below). headline/range/startingPrice are purely PLP/PDP display
+    // computations, so they must reflect what the buyer will actually see
+    // and be charged, consistent with the cart/checkout price.
     const candidates: ResolutionCandidate[] = group.map((item: any) => ({
       listingId: item.id,
       supplierId: item.supplierId,
-      basePrice: item._basePriceRaw,
+      basePrice: item._markedUpBasePrice,
       stock: item._stockRaw,
       maxServiceableQty: item._maxServiceableQtyRaw,
-      pricingTiers: item._pricingTiersRaw,
+      pricingTiers: item._markedUpPricingTiersRaw,
       isActive: item.active,
     }));
 
@@ -654,8 +789,42 @@ export async function getPublicSupplierListings() {
       _stockRaw,
       _maxServiceableQtyRaw,
       _pricingTiersRaw,
+      _markedUpBasePrice,
+      _markedUpPricingTiersRaw,
       ...publicFields
     } = listing;
+
+    // S04/S09 FIX — root cause of the base-price/tier-pricing inconsistency
+    // between the Product page, Cart, and Order: this function's internal
+    // raw numeric fields are named with an underscore prefix
+    // (_basePriceRaw/_stockRaw/_maxServiceableQtyRaw/_pricingTiersRaw,
+    // destructured and stripped out above), but apps/web's cart-add
+    // (app/api/builder/cart/items/route.ts) and checkout re-resolution
+    // (lib/order-checkout.ts) — the ONLY code that determines the
+    // authoritative unit price written into CartItem.resolvedUnitPrice and
+    // OrderItem.unitPrice — reads these same values under the NON-prefixed
+    // names basePriceRaw/stockRaw/maxServiceableQtyRaw/pricingTiersRaw.
+    // Since this public API response never emitted those exact field
+    // names, they were always `undefined` on the apps/web side, so
+    // toResolutionCandidate() there silently fell back to treating every
+    // listing as having NO pricing tiers at all (an implicit single
+    // "1..maxServiceableQty" tier at basePrice) — meaning every
+    // Add-to-Cart and checkout/order price resolution completely bypassed
+    // whatever tier pricing the supplier actually configured, while the
+    // PLP "Starting from ₹X" price (startingPrice below) stayed correct
+    // because it is computed server-side, here, BEFORE this stripping step.
+    //
+    // Fix: republish the exact same already-computed raw values under the
+    // field names apps/web already expects, instead of only using them
+    // internally and discarding them. This does NOT change tier-pricing
+    // selection/calculation in any way (resolveLowestPriceForQuantity /
+    // effectiveTierForQuantity are untouched) — it only ensures the data
+    // those existing functions need to run correctly is actually present
+    // once this response crosses the network boundary into apps/web.
+    const basePriceRaw = _basePriceRaw;
+    const stockRaw = _stockRaw;
+    const maxServiceableQtyRaw = _maxServiceableQtyRaw;
+    const pricingTiersRaw = _pricingTiersRaw;
 
     // Cross-supplier photo resolution: when multiple suppliers share this
     // canonical group, prefer a genuinely supplier-uploaded photo over the
@@ -668,11 +837,15 @@ export async function getPublicSupplierListings() {
     //     photo was uploaded/updated most recently (Product.updatedAt).
     //   - No supplier in the group has uploaded a photo -> generic category
     //     fallback image (unchanged prior behavior).
-    const images = resolveGroupImages(group, {
-      category: listing.category,
-      brand: listing.brand,
-      name: listing.name,
-    });
+    const images = resolveGroupImages(
+      group,
+      {
+        category: listing.category,
+        brand: listing.brand,
+        name: listing.name,
+      },
+      options
+    );
 
     return {
       ...publicFields,
@@ -693,6 +866,21 @@ export async function getPublicSupplierListings() {
       // tier price), mirroring headline/range's fallback behavior — the PLP
       // must show the existing "price unavailable" state rather than ₹0.
       startingPrice,
+      // S04/S09 FIX: raw numeric pricing fields (THIS listing's own
+      // supplier/product values — unrelated to the cross-supplier
+      // headline/range/startingPrice above), exposed under the exact field
+      // names apps/supplier's own ResolutionCandidate construction uses
+      // internally (see `candidates` above) and apps/web's
+      // toResolutionCandidate() in app/api/builder/cart/items/route.ts and
+      // lib/order-checkout.ts already expect. This is the single
+      // authoritative Product.basePrice/PricingTier data for cart-add and
+      // checkout/order unit-price resolution to consume — no new price
+      // field, no duplicated calculation, just making the existing
+      // server-computed values actually reach the consumer that needs them.
+      basePriceRaw,
+      stockRaw,
+      maxServiceableQtyRaw,
+      pricingTiersRaw,
     };
   });
 }
@@ -706,16 +894,13 @@ export async function getPublicSupplierListings() {
 // uploaded photo.
 function resolveGroupImages(
   group: any[],
-  fallback: { category?: string | null; brand?: string | null; name?: string | null }
+  fallback: { category?: string | null; brand?: string | null; name?: string | null },
+  options?: { fullImages?: boolean }
 ): string[] {
   const withImages = group.filter((item) => Array.isArray(item.images) && item.images.length > 0);
 
   if (withImages.length === 0) {
     return [getProductImage(fallback)];
-  }
-
-  if (withImages.length === 1) {
-    return withImages[0].images;
   }
 
   const mostRecentlyUploaded = withImages.reduce((latest, candidate) => {
@@ -724,7 +909,190 @@ function resolveGroupImages(
     return candidateTime >= latestTime ? candidate : latest;
   });
 
-  return mostRecentlyUploaded.images;
+  if (options?.fullImages) {
+    return mostRecentlyUploaded.images;
+  }
+
+  // Lightweight representation for catalogue browsing:
+  // Preserves external URLs; replaces raw base64 data URIs with the brand/category fallback
+  // to avoid sending multi-megabyte image payloads in the public listings feed.
+  const lightweightImages = mostRecentlyUploaded.images.map((img: string) => {
+    if (typeof img === "string" && (img.startsWith("http://") || img.startsWith("https://"))) {
+      return img;
+    }
+    return getProductImage(fallback);
+  });
+
+  return lightweightImages.length > 0 ? lightweightImages : [getProductImage(fallback)];
+}
+
+export async function getPublicSupplierProductById(id: string): Promise<{
+  displayListing: any;
+  siblings: any[];
+} | null> {
+  if (!id || typeof id !== "string") {
+    return null;
+  }
+
+  // Step A — Fetch the requested listing directly from the database
+  let requestedProduct: any = null;
+  try {
+    requestedProduct = await prisma.product.findFirst({
+      where: {
+        OR: [{ id }, { slug: id }],
+        isActive: true,
+      },
+      include: { category: true, brandRef: true, pricingTiers: { orderBy: { minQty: "asc" } } },
+    });
+  } catch (error) {
+    if (!isMissingPricingSchemaError(error)) throw error;
+    requestedProduct = await prisma.product.findFirst({
+      where: {
+        OR: [{ id }, { slug: id }],
+        isActive: true,
+      },
+      include: { category: true, brandRef: true },
+    });
+  }
+
+  // If the product does not exist or is inactive, return null immediately without loading the catalogue
+  if (!requestedProduct) {
+    return null;
+  }
+
+  // Step B — Fetch only the required grouped listings belonging to the same canonical product
+  let groupProducts: any[] = [];
+  if (
+    requestedProduct.canonicalProductId &&
+    typeof requestedProduct.canonicalProductId === "string" &&
+    requestedProduct.canonicalProductId.trim() !== ""
+  ) {
+    try {
+      groupProducts = await prisma.product.findMany({
+        where: {
+          canonicalProductId: requestedProduct.canonicalProductId,
+          isActive: true,
+        },
+        include: { category: true, brandRef: true, pricingTiers: { orderBy: { minQty: "asc" } } },
+        orderBy: { updatedAt: "desc" },
+      });
+    } catch (error) {
+      if (!isMissingPricingSchemaError(error)) throw error;
+      groupProducts = await prisma.product.findMany({
+        where: {
+          canonicalProductId: requestedProduct.canonicalProductId,
+          isActive: true,
+        },
+        include: { category: true, brandRef: true },
+        orderBy: { updatedAt: "desc" },
+      });
+    }
+
+    if (!groupProducts.some((p: any) => p.id === requestedProduct.id)) {
+      groupProducts.unshift(requestedProduct);
+    }
+  } else {
+    groupProducts = [requestedProduct];
+  }
+
+  // Step C — Transform ONLY this product group with full images preserved for PDP rendering
+  const transformedListings = await transformRawListingsToPublic(groupProducts, { fullImages: true });
+
+  const requested = transformedListings.find((item: any) => item.id === requestedProduct.id);
+  if (!requested) return null;
+
+  const groupedIds =
+    requested.groupedListingIds && requested.groupedListingIds.length > 0
+      ? requested.groupedListingIds
+      : [requested.id];
+
+  const siblings = transformedListings.filter((item: any) => groupedIds.includes(item.id));
+  const headline = requested.headlineSupplierId
+    ? siblings.find((item: any) => item.supplierId === requested.headlineSupplierId) ?? requested
+    : requested;
+
+  const displayListing = {
+    ...headline,
+    price: requested.headlinePrice || headline.price,
+    images: requested.images && requested.images.length > 0 ? requested.images : headline.images,
+  };
+
+  return { displayListing, siblings };
+}
+
+export type RevalidationTarget = {
+  tags?: string[];
+  paths?: string[];
+};
+
+/**
+ * Notifies the Buyer Web App to invalidate its Next.js Data Cache tags and
+ * App Router Route paths when a supplier creates, updates, or reprices a product listing.
+ *
+ * Requirements (Phase 1 Pre-Deployment Defect Fixes):
+ * 1. Dedicated secret: Requires INTERNAL_REVALIDATION_SECRET (never falls back to NEXTAUTH_SECRET).
+ * 2. Diagnostics: Inspects response.ok and logs clear warnings on non-2xx or network errors (never logs secrets).
+ * 3. Non-blocking: Errors are caught and logged so supplier mutations are never aborted.
+ * 4. Dual invalidation: Invalidate both Next.js Data Cache tags AND App Router page paths (e.g. /products).
+ */
+export async function notifyBuyerCatalogueUpdated(
+  target?: string[] | RevalidationTarget
+) {
+  const secret = process.env.INTERNAL_REVALIDATION_SECRET;
+  if (!secret) {
+    console.warn(
+      "[revalidate-webhook] Notice: INTERNAL_REVALIDATION_SECRET is not configured; skipping buyer cache invalidation webhook. Cache will expire via 300s TTL."
+    );
+    return;
+  }
+
+  const webUrl =
+    process.env.BUILDER_APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_WEB_URL ||
+    "https://buildohub.in";
+
+  let tags: string[] = ["catalog-listings"];
+  let paths: string[] = ["/products"];
+
+  if (Array.isArray(target)) {
+    tags = target;
+  } else if (target && typeof target === "object") {
+    if (Array.isArray(target.tags) && target.tags.length > 0) {
+      tags = target.tags;
+    }
+    if (Array.isArray(target.paths) && target.paths.length > 0) {
+      paths = target.paths;
+    }
+  }
+
+  try {
+    const response = await fetch(`${webUrl}/api/revalidate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-revalidate-secret": secret,
+      },
+      body: JSON.stringify({ tags, paths }),
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      console.warn(
+        `[revalidate-webhook] Buyer revalidation returned HTTP ${response.status}: ${errorBody.slice(0, 200)}`
+      );
+    }
+  } catch (error: any) {
+    if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+      console.warn("[revalidate-webhook] Buyer revalidation request timed out after 3000ms");
+    } else {
+      console.warn(
+        "[revalidate-webhook] Buyer revalidation request failed:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
 }
 
 
@@ -779,6 +1147,7 @@ export async function getSupplierListingById(id: string, email: string) {
     title: product.name,
     category: product.category.name,
     grade: product.grade ?? "",
+    sizeLabel: product.sizeLabel ?? "",
     unit: product.unit,
     maxServiceableQty: String(product.maxServiceableQty ?? product.stock),
     price: product.basePrice.toString(),
@@ -922,11 +1291,16 @@ async function resolveCanonicalAssignment(
     categoryName: string;
     brandName?: string | null;
     gradeName?: string | null;
+    // Normalized free-text size/diameter (e.g. "8mm"). Included in the
+    // canonicalKey below so two listings that only differ by size (same
+    // category/brand/grade/unit) are never merged into the same
+    // CanonicalProduct — see that model's doc comment in schema.prisma.
+    sizeLabel?: string | null;
     unitValue: string;
     title: string;
   }
 ) {
-  const { categoryId, categoryName, brandName, gradeName, unitValue, title } = params;
+  const { categoryId, categoryName, brandName, gradeName, sizeLabel, unitValue, title } = params;
 
   let brandId: string | null = null;
   if (brandName && brandName.trim()) {
@@ -977,11 +1351,25 @@ async function resolveCanonicalAssignment(
     }
   }
 
-  const canonicalKey = [categoryId, brandId ?? "none", gradeId ?? "none", unitId ?? "none"].join(":");
+  // Normalized the same way regardless of whether this exact string has
+  // been seen before — unlike brand/grade/unit, size is NOT its own FK
+  // master-data table (free-text is sufficient: there is no autocomplete/
+  // reuse benefit to a separate Size entity), so it participates in the
+  // key as a plain normalized string rather than an id.
+  const normalizedSizeLabel = sizeLabel && sizeLabel.trim() ? sizeLabel.trim() : null;
+
+  const canonicalKey = [
+    categoryId,
+    brandId ?? "none",
+    gradeId ?? "none",
+    unitId ?? "none",
+    normalizedSizeLabel ?? "none",
+  ].join(":");
 
   let canonical = await transaction.canonicalProduct.findUnique({ where: { canonicalKey } });
   if (!canonical) {
-    const canonicalTitle = [categoryName, brandName, gradeName].filter(Boolean).join(" ") || title;
+    const canonicalTitle =
+      [categoryName, brandName, gradeName, normalizedSizeLabel].filter(Boolean).join(" ") || title;
     canonical = await transaction.canonicalProduct.create({
       data: {
         canonicalKey,
@@ -989,6 +1377,7 @@ async function resolveCanonicalAssignment(
         brandId: brandId ?? undefined,
         gradeId: gradeId ?? undefined,
         unitId: unitId ?? undefined,
+        sizeLabel: normalizedSizeLabel ?? undefined,
         title: canonicalTitle,
       },
     });
@@ -1019,6 +1408,7 @@ export async function createSupplierListing(input: ListingInput, email: string) 
         categoryName: category.name,
         brandName: input.brand,
         gradeName: input.grade,
+        sizeLabel: input.sizeLabel,
         unitValue: input.unit,
         title: input.title,
       });
@@ -1031,6 +1421,7 @@ export async function createSupplierListing(input: ListingInput, email: string) 
           slug: `${slugBase}-${suffix}`,
           brand: input.brand?.trim() || null,
           grade: input.grade.trim() || null,
+          sizeLabel: input.sizeLabel?.trim() || null,
           brandId: assignment.brandId ?? undefined,
           gradeId: assignment.gradeId ?? undefined,
           unitId: assignment.unitId ?? undefined,
@@ -1081,6 +1472,10 @@ export async function createSupplierListing(input: ListingInput, email: string) 
     console.error(`Failed to record price snapshot for new listing ${product.id}:`, error);
   });
 
+  void notifyBuyerCatalogueUpdated({
+    tags: ["catalog-listings", `product-${product.id}`],
+    paths: ["/products", `/products/${product.id}`],
+  });
   return product;
 }
 
@@ -1107,6 +1502,7 @@ export async function updateSupplierListing(id: string, input: ListingInput, ema
         categoryName: category.name,
         brandName: input.brand,
         gradeName: input.grade,
+        sizeLabel: input.sizeLabel,
         unitValue: input.unit,
         title: input.title,
       });
@@ -1118,6 +1514,7 @@ export async function updateSupplierListing(id: string, input: ListingInput, ema
           name: input.title.trim(),
           brand: input.brand?.trim() || null,
           grade: input.grade.trim() || null,
+          sizeLabel: input.sizeLabel?.trim() || null,
           brandId: assignment.brandId ?? undefined,
           gradeId: assignment.gradeId ?? undefined,
           unitId: assignment.unitId ?? undefined,
@@ -1176,6 +1573,10 @@ export async function updateSupplierListing(id: string, input: ListingInput, ema
     });
   }
 
+  void notifyBuyerCatalogueUpdated({
+    tags: ["catalog-listings", `product-${product.id}`],
+    paths: ["/products", `/products/${product.id}`],
+  });
   return product;
 }
 
@@ -1191,14 +1592,24 @@ export async function getSupplierOrders(email: string): Promise<SupplierOrderRow
         },
       },
     },
-    include: { order: { include: { user: true } }, product: true },
+    include: { order: { include: { user: true } }, product: { include: { brandRef: true } } },
     orderBy: { order: { createdAt: "desc" } },
   });
 
-  return items.map((item: any) => ({
+  return items.map((item: any, idx: number) => ({
     id: item.orderId,
-    buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
+    // S15: canonical supplier-facing Order reference (orderNumber ??
+    // enquiryId, never the raw `id` above) — see
+    // apps/supplier/lib/order-display.ts.
+    displayOrderNumber: resolveSupplierOrderReference(item.order),
+    buyer: getBuyerDisplayName(item.order.user.name ?? item.order.user.phone, item.order.user.id, idx),
     material: item.product.name,
+    // S06: Brand resolution prefers the FK-linked Brand master-data record
+    // (product.brandRef), falling back to the deprecated free-text
+    // `product.brand` column for legacy rows created before brandRef
+    // existed. `null` (never `undefined`/empty string) when the product
+    // genuinely has no brand, so the UI can omit the row entirely.
+    brand: item.product.brandRef?.name ?? item.product.brand ?? null,
     qty: `${item.quantity} ${item.product.unit}`,
     status: item.order.status,
     isAggregated: Boolean(item.order.isAggregated),
@@ -1208,8 +1619,15 @@ export async function getSupplierOrders(email: string): Promise<SupplierOrderRow
 
 export type SupplierOrderRow = {
   id: string;
+  // S15: canonical supplier-facing Order reference — see
+  // apps/supplier/lib/order-display.ts. Resolved server-side so every
+  // consumer renders the exact same label without re-implementing the
+  // orderNumber ?? enquiryId fallback.
+  displayOrderNumber: string;
   buyer: string;
   material: string;
+  // S06: null when the product has no brand on record — never "undefined"/"".
+  brand: string | null;
   qty: string;
   status: OrderStatus;
   isAggregated?: boolean;
@@ -1221,6 +1639,12 @@ export type SupplierTrackingStep = {
   id: string;
   label: string;
   status: OrderStatus;
+  // S11: the authoritative event timestamp for this tracking entry — reuses
+  // the existing OrderTracking.recordedAt column (the row's own event time,
+  // never Order.updatedAt) rather than inventing a new timestamp source.
+  // ISO 8601 UTC string; the UI converts to the project's existing en-IN
+  // display convention at render time.
+  recordedAt: string;
 };
 
 export type SupplierOrderPurchaseOrderSummary = {
@@ -1234,21 +1658,93 @@ export type SupplierOrderPurchaseOrderSummary = {
 
 export type SupplierOrderDetail = {
   id: string;
+  // S15: canonical supplier-facing Order reference — see
+  // apps/supplier/lib/order-display.ts. Resolved server-side so the
+  // detail page/modal render the exact same label as the order list and
+  // dashboard queue for the same Order.
+  displayOrderNumber: string;
   buyer: string;
   deliveryDate: string;
   quantity: string;
   material: string;
   status: OrderStatus;
+  // C34: surfaced so the order detail page can disable/hide "Mark
+  // Delivered" client-side when payment isn't settled yet — a UI-level
+  // convenience only; the authoritative enforcement is the server-side
+  // guard in updateSupplierOrderStatus below, which rejects the transition
+  // regardless of what the UI shows.
+  paymentStatus: "PENDING" | "PENDING_VERIFICATION" | "PAID" | "FAILED" | "REFUNDED";
   tracking: SupplierTrackingStep[];
   purchaseOrder: SupplierOrderPurchaseOrderSummary | null;
   // REQ-06: the minimum price of the builder-facing price range at enquiry
   // time — the only price figure surfaced to the supplier. Falls back to
   // unitPrice for legacy orders created before this field existed.
   askPrice: string;
-  // The builder's construction Site this order is for, reused from the
-  // existing Site model (Order.siteId) — null for legacy/untagged orders,
-  // which must render as "Unassigned" rather than break.
+  // Whether the order is ready for dispatch (or already dispatched/delivered).
+  // Until RFQ is confirmed and order is ready for dispatch, site name and
+  // address are withheld from the supplier and only sitePincode is surfaced.
+  isReadyForDispatch: boolean;
+  sitePincode: string | null;
+  // The builder's construction Site this order is for — only surfaced to
+  // the supplier once the order is confirmed and ready for dispatch.
   siteName: string | null;
+  deliveryAddress: string | null;
+  // S06: null when the product has no brand on record — never "undefined"/"".
+  brand: string | null;
+  // Duplicate supplier-action fix: true only when this enquiry has a
+  // genuine competing-supplier RFQ (more than one eligible candidate for at
+  // least one of this supplier's line items) — see
+  // hasMultipleEligibleCandidates's doc comment above. Drives mutually
+  // exclusive rendering of "Review & Submit Quotation" (true) vs.
+  // "Confirm/Decline Enquiry" (false) on the order detail page; always
+  // false once the order is no longer PLACED (no further supplier choice to
+  // make either way).
+  requiresQuotation: boolean;
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — UI-level convenience only (see updateSupplierOrderStatus's
+  // own authoritative checkOrderDispatchEligibility call). Null means
+  // "Mark Dispatched" is not currently blocked by this gate (either the
+  // order isn't PROCESSING yet, or every dispatch requirement is already
+  // satisfied) — a non-null string is the specific, human-readable reason
+  // the server would currently reject a dispatch attempt.
+  dispatchBlockedReason: string | null;
+};
+
+// Supplier RFQ Price Revision & GST-Inclusive Order Value — a single
+// quotable RFQ line item (one per OrderItem this supplier is currently
+// assigned to for the enquiry), with the GST breakdown computed from
+// whichever unit price is currently in effect (the supplier's own prior
+// submitted SupplierQuote, if any, otherwise the existing tier-resolved
+// catalogue price per spec §3).
+export type RfqQuotationLine = {
+  lineItemId: string;
+  productName: string;
+  brand: string | null;
+  quantity: number;
+  unit: string;
+  gstRatePercent: number;
+  // Pre-populated per spec §3: the supplier's own prior SupplierQuote price
+  // for this RFQ if one exists, otherwise the existing tier-resolved
+  // catalogue price. The supplier may edit this before submitting.
+  initialUnitPrice: number;
+  lineSubtotal: number;
+  gstAmount: number;
+  lineTotal: number;
+};
+
+export type RfqQuotationContext = {
+  enquiryId: string;
+  // Display-only Meaningful Enquiry ID — falls back to the raw order id for
+  // pre-migration orders (see Order.enquiryId's doc comment in schema.prisma).
+  displayEnquiryId: string;
+  // False once the enquiry's quote selection has already been finalized, or
+  // the enquiry has moved to CANCELLED — the UI must not allow submission
+  // and should show "This RFQ is no longer available for quotation."
+  quotable: boolean;
+  lines: RfqQuotationLine[];
+  subtotal: number;
+  gstAmount: number;
+  grandTotal: number;
 };
 
 
@@ -1278,6 +1774,28 @@ export type SupplierRfqCard = {
   source: "RFQ" | "ENQUIRY";
 };
 
+// Duplicate supplier-action fix (Orders: "Review and Submit Quotation" vs.
+// "Confirm Enquiry"): an enquiry only has a genuine competing-supplier RFQ
+// when at least one of this supplier's line items has MORE THAN ONE eligible
+// candidate row (OrderItemSupplierCandidate — see schema.prisma's doc
+// comment on the multi-supplier fan-out). A single eligible candidate (the
+// common case — most enquiries are resolved to exactly one supplier at
+// checkout time, see order-checkout.ts's `candidates: item.candidates.length
+// > 0 ? {...} : undefined`) means there is no cross-supplier bidding to
+// resolve, so the supplier may confirm directly at the existing ask price —
+// exactly the already-tested, already-shipped single-supplier "Confirm
+// Enquiry" path (see order-status-update-gst.spec.ts). Only when genuinely
+// competing candidates exist should the supplier be routed through the
+// quotation form instead of straight to Confirm/Decline, so the two actions
+// are never offered together for the same enquiry.
+async function hasMultipleEligibleCandidates(orderId: string, supplierId: string): Promise<boolean> {
+  const items = await prisma.orderItem.findMany({
+    where: { orderId, supplierId },
+    select: { candidates: { select: { id: true } } },
+  });
+  return items.some((item: any) => item.candidates.length > 1);
+}
+
 export async function getSupplierOrderDetail(orderId: string, email: string): Promise<SupplierOrderDetail | null> {
   const { supplierProfile } = await ensureSupplierContext(email);
 
@@ -1288,10 +1806,10 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
         include: {
           user: true,
           tracking: { orderBy: { recordedAt: "asc" } },
-          site: { select: { name: true } },
+          site: { select: { name: true, addressLine: true, city: true, state: true, pincode: true } },
         },
       },
-      product: true,
+      product: { include: { brandRef: true } },
     },
   });
 
@@ -1304,19 +1822,69 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     orderBy: { createdAt: "desc" },
   });
 
+  // Duplicate supplier-action fix: only relevant while the enquiry is still
+  // awaiting this supplier's decision — once it has moved past PLACED there
+  // is no longer a choice between quoting and confirming either way.
+  const requiresQuotation =
+    item.order.status === "PLACED" ? await hasMultipleEligibleCandidates(orderId, supplierProfile.id) : false;
+
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — UI-level convenience only (the authoritative enforcement is
+  // updateSupplierOrderStatus's own call to checkOrderDispatchEligibility
+  // above): only computed while the order is PROCESSING, the one state
+  // "Mark Dispatched" is ever offered from (see
+  // lib/order-status-transitions.ts), so this never does unnecessary work
+  // for an order already past that stage.
+  const dispatchEligibility = item.order.status === "PROCESSING" ? await checkOrderDispatchEligibility(prisma as any, orderId) : null;
+
+  const isReadyForDispatch =
+    item.order.status === "DISPATCHED" ||
+    item.order.status === "OUT_FOR_DELIVERY" ||
+    item.order.status === "DELIVERED" ||
+    (item.order.status === "PROCESSING" && dispatchEligibility?.eligible === true);
+
+  const sitePincode =
+    item.order.site?.pincode ??
+    (item.order.deliveryAddress ? item.order.deliveryAddress.match(/\b\d{6}\b/)?.[0] ?? null : null);
+
   return {
     id: item.orderId,
-    buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
+    // S15: canonical supplier-facing Order reference (orderNumber ??
+    // enquiryId, never the raw `id` above) — see
+    // apps/supplier/lib/order-display.ts.
+    displayOrderNumber: resolveSupplierOrderReference(item.order),
+    buyer: getBuyerDisplayName(item.order.user.name ?? item.order.user.phone, item.order.user.id),
     deliveryDate: formatDate(item.deliveryDate ?? item.order.deliveryDate),
     quantity: `${item.quantity} ${item.product.unit}`,
     material: item.product.name,
     status: item.order.status,
+    paymentStatus: item.order.paymentStatus,
     askPrice: `${formatCurrency((item as any).askPrice ?? item.unitPrice)} / ${item.product.unit}`,
-    siteName: item.order.site?.name ?? null,
+    isReadyForDispatch,
+    sitePincode,
+    // Identity privacy: until RFQ is confirmed and order is ready for dispatch,
+    // site name and address are withheld from the supplier (only sitePincode is shown).
+    siteName: isReadyForDispatch ? item.order.site?.name ?? null : null,
+    deliveryAddress: isReadyForDispatch ? (item.order.site?.addressLine ?? item.order.deliveryAddress ?? null) : null,
+    // S06: see getSupplierOrders's brand resolution comment above — same
+    // FK-first, free-text-fallback, null-when-absent rule.
+    brand: (item.product as any).brandRef?.name ?? item.product.brand ?? null,
+    requiresQuotation,
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — null while the order isn't PROCESSING (dispatch isn't a
+    // relevant action yet), otherwise the specific reason "Mark Dispatched"
+    // would currently be rejected by the server (e.g. "invoice not yet
+    // confirmed", "₹X still outstanding"), or null once every requirement
+    // is satisfied. UI-level only — see OrderStatusActions.tsx.
+    dispatchBlockedReason: dispatchEligibility && !dispatchEligibility.eligible ? dispatchEligibility.reason : null,
     tracking: item.order.tracking.map((entry: any) => ({
       id: entry.id,
       label: entry.note ?? humanizeToken(entry.status),
       status: entry.status,
+      // S11: OrderTracking.recordedAt is the authoritative timestamp for
+      // this event (set at row-creation time, defaulting to now() —
+      // packages/db/prisma/schema.prisma) — never Order.updatedAt.
+      recordedAt: entry.recordedAt.toISOString(),
     })),
     purchaseOrder: purchaseOrder
 
@@ -1326,12 +1894,118 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
           status: purchaseOrder.status,
           version: purchaseOrder.version,
           approvedAt: purchaseOrder.approvedAt ? purchaseOrder.approvedAt.toISOString() : null,
-          exportUrl: `/api/builder/purchase-orders/${purchaseOrder.id}/export`,
+          // Same-origin supplier-portal route (NOT apps/web's builder
+          // route) — a supplier session can never satisfy the builder
+          // app's builderId ownership check, and the two apps are separate
+          // domains, so pointing here at a relative /api/builder/... path
+          // 404'd. See
+          // app/api/supplier/purchase-orders/[id]/export/route.ts's doc
+          // comment.
+          exportUrl: `/api/supplier/purchase-orders/${purchaseOrder.id}/export`,
         }
       : null,
   };
 }
 
+// Supplier RFQ Price Revision & GST-Inclusive Order Value (spec §1-§9).
+//
+// Returns every RFQ/enquiry line item this supplier is currently assigned
+// to (OrderItem.supplierId === this supplier — the active PENDING candidate
+// in the multi-supplier fan-out), pre-populated with:
+//   - the supplier's own most recent prior SupplierQuote.unitPrice for this
+//     RFQ, if one exists (so reopening the RFQ shows what was last entered —
+//     spec §17's "at minimum... reopening the RFQ should show the
+//     previously entered prices", the only draft-like persistence this
+//     app already has), otherwise
+//   - the existing tier-resolved catalogue price for this quantity (spec
+//     §3 — "use that as the initial value"), via the SAME
+//     resolveLowestPriceForQuantity used everywhere else prices are
+//     resolved for a given quantity.
+// GST is resolved per line item from OrderItem.taxRatePercent (falling back
+// to DEFAULT_TAX_RATE_PERCENT via calculateLineGst — never hard-coded).
+export async function getEnquiryQuotationContext(enquiryId: string, email: string): Promise<RfqQuotationContext | null> {
+  const { supplierProfile } = await ensureSupplierContext(email);
+
+  const order = await prisma.order.findUnique({
+    where: { id: enquiryId },
+    include: {
+      items: {
+        where: { supplierId: supplierProfile.id },
+        include: {
+          product: {
+            include: {
+              brandRef: true,
+              pricingTiers: { select: { minQty: true, maxQty: true, tierPrice: true } },
+            },
+          },
+          supplierQuotes: {
+            where: { supplierId: supplierProfile.id },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  if (!order || order.items.length === 0) return null;
+
+  const quotable = !order.quoteSelectionCompletedAt && order.status !== "CANCELLED";
+
+  const lines: RfqQuotationLine[] = order.items.map((item: any) => {
+    const priorQuote = item.supplierQuotes[0];
+
+    let initialUnitPrice: number;
+    if (priorQuote) {
+      initialUnitPrice = Number(priorQuote.unitPrice);
+    } else {
+      const candidate: ResolutionCandidate = {
+        listingId: item.productId,
+        supplierId: supplierProfile.id,
+        basePrice: Number(item.product.basePrice),
+        stock: item.product.stock,
+        maxServiceableQty: item.product.maxServiceableQty ?? item.product.stock,
+        pricingTiers: item.product.pricingTiers.map((tier: any) => ({
+          minQty: tier.minQty,
+          maxQty: tier.maxQty,
+          tierPrice: Number(tier.tierPrice),
+        })),
+        isActive: item.product.isActive,
+      };
+      const resolution = resolveLowestPriceForQuantity([candidate], item.quantity);
+      initialUnitPrice = resolution?.unitPrice ?? Number(item.unitPrice);
+    }
+
+    const gstRatePercent = item.taxRatePercent !== null && item.taxRatePercent !== undefined ? Number(item.taxRatePercent) : null;
+    const gst = calculateLineGst({ quantity: item.quantity, unitPrice: initialUnitPrice, gstRatePercent });
+
+    return {
+      lineItemId: item.id,
+      productName: item.product.name,
+      brand: item.product.brandRef?.name ?? item.product.brand ?? null,
+      quantity: item.quantity,
+      unit: item.product.unit,
+      gstRatePercent: gst.gstRatePercent,
+      initialUnitPrice: gst.unitPrice,
+      lineSubtotal: gst.lineSubtotal,
+      gstAmount: gst.gstAmount,
+      lineTotal: gst.lineTotal,
+    };
+  });
+
+  const subtotal = lines.reduce((sum, line) => sum + line.lineSubtotal, 0);
+  const gstAmountTotal = lines.reduce((sum, line) => sum + line.gstAmount, 0);
+
+  return {
+    enquiryId,
+    displayEnquiryId: order.enquiryId ?? enquiryId,
+    quotable,
+    lines,
+    subtotal: Math.round(subtotal * 100) / 100,
+    gstAmount: Math.round(gstAmountTotal * 100) / 100,
+    grandTotal: Math.round((subtotal + gstAmountTotal) * 100) / 100,
+  };
+}
 
 // Multi-supplier fan-out: when the ACTING supplier declines (status ===
 // "CANCELLED"), we must not immediately cancel the whole enquiry if other
@@ -1345,11 +2019,27 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
 async function declineOrderForSupplier(orderId: string, supplierId: string, reason?: string) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { items: { include: { candidates: { orderBy: { rank: "asc" } } } } },
+    // Admin-Configurable Product Markup: `product` (for categoryId) is
+    // needed to resolve the applicable markup for a promoted candidate's
+    // ORIGINAL (supplier-side) price — see the promotion branch below.
+    include: {
+      items: {
+        include: {
+          candidates: { orderBy: { rank: "asc" } },
+          product: { select: { categoryId: true } },
+        },
+      },
+    },
   });
   if (!order) return null;
 
   const now = new Date();
+  // Order-Total Synchronization: tracks whether any line's buyer-facing
+  // unitPrice actually changed during this decline/promotion pass, so
+  // Order.totalAmount can be resynced once, after the loop, from every
+  // line's current (possibly just-promoted) price — mirrors the identical
+  // pattern in createEnquiryLineQuotesForSupplier/BestPriceSelectionService.
+  let pricingChanged = false;
 
   for (const item of order.items) {
     // Only act on items currently assigned to the declining supplier.
@@ -1370,16 +2060,37 @@ async function declineOrderForSupplier(orderId: string, supplierId: string, reas
     );
 
     if (nextCandidate) {
+      // Admin-Configurable Product Markup: OrderItemSupplierCandidate.unitPrice
+      // is the ORIGINAL, never-marked-up supplier price captured for this
+      // candidate at checkout time (see apps/web/lib/order-checkout.ts's
+      // `candidates: { create: ... unitPrice: candidate.unitPrice }`,
+      // sourced from the cross-supplier price resolver, never from a
+      // marked-up figure). Promoting this candidate onto OrderItem.unitPrice
+      // (a BUYER-facing field) must therefore re-apply markup here — it must
+      // never copy the candidate's raw price straight across, exactly like
+      // every other authoritative buyer-price-setting call site.
+      const supplierUnitPrice = Number(nextCandidate.unitPrice);
+      const markup = await resolveMarkupForProduct(prisma as any, {
+        productId: item.productId,
+        categoryId: (item as any).product?.categoryId,
+        supplierUnitPrice,
+      }).catch(() => null);
+      const resolved = markup ?? { supplierUnitPrice, buyerUnitPrice: supplierUnitPrice, markupPercent: 0, markupAmount: 0 };
+
       // Promote the next-ranked candidate — the item stays PENDING supplier
       // confirmation, just with a different supplier now assigned.
       await prisma.orderItem.update({
         where: { id: item.id },
         data: {
           supplierId: nextCandidate.supplierId,
-          unitPrice: nextCandidate.unitPrice,
+          unitPrice: resolved.buyerUnitPrice,
+          supplierUnitPrice: resolved.supplierUnitPrice,
+          markupPercent: resolved.markupPercent,
+          markupAmount: resolved.markupAmount,
           resolvedListingId: nextCandidate.listingId ?? undefined,
         },
       });
+      pricingChanged = true;
 
       // Best-effort: let the newly-promoted supplier know they have a new
       // enquiry. Scheduled via waitUntil (see updateSupplierOrderStatus's
@@ -1401,6 +2112,23 @@ async function declineOrderForSupplier(orderId: string, supplierId: string, reas
     }
   }
 
+  // Order-Total Synchronization: if any line's buyer-facing price changed
+  // above (a promotion occurred), resync Order.totalAmount from the FULL,
+  // current set of order lines — never leave it at the stale figure
+  // computed before this decline/promotion. Mirrors the identical fix in
+  // createEnquiryLineQuotesForSupplier / BestPriceSelectionService.
+  if (pricingChanged) {
+    const refreshedItemsForTotal = await prisma.orderItem.findMany({
+      where: { orderId },
+      select: { unitPrice: true, quantity: true },
+    });
+    const totalAmount = refreshedItemsForTotal.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0);
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { totalAmount },
+    });
+  }
+
   const refreshed = await prisma.order.findUnique({
     where: { id: orderId },
     include: { items: true },
@@ -1410,17 +2138,41 @@ async function declineOrderForSupplier(orderId: string, supplierId: string, reas
   const fullyDeclined = refreshed.items.every((item) => item.allCandidatesDeclined);
 
   if (fullyDeclined) {
-    const cancelled = await prisma.order.update({
-      where: { id: orderId },
-      data: { status: "CANCELLED" },
-    });
+    // Advance Balance reservation release: defensive/future-proofing — in
+    // today's application flow a PLACED order (the only status this decline
+    // path runs from) cannot yet have an advance reservation, but if that
+    // ever changes, cancellation must never leave advance money permanently
+    // RESERVED. Atomic with the cancellation itself — mirrors the identical
+    // logic in apps/api's OrdersService.declineForSupplier.
+    const cancelled = await prisma.$transaction(async (tx) => {
+      const updatedOrder = await tx.order.update({
+        where: { id: orderId },
+        data: { status: "CANCELLED" },
+      });
 
-    await prisma.orderTracking.create({
-      data: {
-        orderId,
-        status: "CANCELLED",
-        note: "All eligible suppliers declined this enquiry",
-      },
+      await tx.orderTracking.create({
+        data: {
+          orderId,
+          status: "CANCELLED",
+          note: "All eligible suppliers declined this enquiry",
+        },
+      });
+
+      const advanceAccount = await tx.customerAdvanceAccount.findFirst({
+        where: { buyerId: order.userId },
+        select: { id: true },
+      });
+      if (advanceAccount) {
+        const locked = await lockAdvanceAccountRow(tx as any, advanceAccount.id);
+        await releaseAdvanceReservation(tx as any, {
+          orderId,
+          createdBy: "system",
+          currentAvailable: Number(locked.availableBalance),
+          currentReserved: Number(locked.reservedBalance),
+        });
+      }
+
+      return updatedOrder;
     });
 
     // Notification Engine — customer_order_status Meta WhatsApp template.
@@ -1519,7 +2271,7 @@ export async function updateSupplierOrderStatus(
   // supplier-triggered transitions between the existing OrderStatus values.
   const current = await prisma.order.findUnique({
     where: { id: orderId },
-    select: { status: true },
+    select: { status: true, paymentStatus: true },
   });
   if (!current) {
     throw new Error("Order not found");
@@ -1528,6 +2280,68 @@ export async function updateSupplierOrderStatus(
     throw new Error(
       `Invalid order status transition: cannot move from ${current.status} to ${status}`
     );
+  }
+
+  // Duplicate supplier-action fix — backend enforcement: a genuine
+  // competing-supplier RFQ (more than one eligible candidate on at least
+  // one of this supplier's line items — see hasMultipleEligibleCandidates's
+  // doc comment) must go through the quotation flow first; "Confirm
+  // Enquiry" is only a valid direct action for the single-supplier case.
+  // Mirrors the UI gating in getSupplierOrderDetail/OrderStatusActions so a
+  // request that bypasses the UI (or a stale page) can never confirm an
+  // enquiry that should have been quoted instead.
+  if (status === "PROCESSING" && actingSupplierId) {
+    const requiresQuotation = await hasMultipleEligibleCandidates(orderId, actingSupplierId);
+    if (requiresQuotation) {
+      throw new Error(
+        "This enquiry has competing supplier quotes — submit a quotation instead of confirming directly."
+      );
+    }
+  }
+
+  // C34 — server-side enforcement: an order must never be marked DELIVERED
+  // while its payment is not yet settled. This function is the single
+  // authoritative place the supplier portal transitions Order.status to
+  // DELIVERED through (the "Mark Delivered" button -> PATCH
+  // /api/supplier/orders/:id -> this function), so gating here blocks the
+  // transition even if a request bypasses the UI and calls the API route
+  // directly. Mirrors the equivalent guard in apps/api's OrdersService
+  // (src/supplier/orders/orders.service.ts), which apps/api's own
+  // "Mark Delivered" path and the WhatsApp delivery-confirmation flow both
+  // go through — both apps enforce the identical rule using the existing
+  // PaymentStatus enum (packages/db/prisma/schema.prisma). PAID is the only
+  // status that means payment has actually been settled, regardless of
+  // which configured payment method (UPI/CARD/NET_BANKING/COD/CREDIT/
+  // BANK_TRANSFER) was used — every one of those funnels into
+  // paymentStatus = PAID via the payment gateway, admin bank-transfer
+  // verification, or admin invoice flow, never guessed or auto-set here.
+  // REFUNDED is deliberately not treated as paid.
+  if (status === "DELIVERED" && current.paymentStatus !== "PAID") {
+    throw new Error("This order cannot be marked as delivered until payment has been confirmed.");
+  }
+
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — server-side enforcement: an order must never be marked
+  // DISPATCHED until an Admin has reviewed and CONFIRMED the
+  // SupplierInvoice's freight/other charges AND the resulting
+  // freight-inclusive final payable amount has been fully, verifiably
+  // settled (never merely Order.paymentStatus === "PAID", which may still
+  // reflect an earlier, pre-confirmation estimate — see
+  // checkOrderDispatchEligibility's own doc comment for the full
+  // rationale). This is the single authoritative place the supplier portal
+  // transitions Order.status to DISPATCHED through (the "Mark Dispatched"
+  // button -> PATCH /api/supplier/orders/:id -> this function), so gating
+  // here blocks the transition even if a request bypasses the UI and calls
+  // the API route directly. Mirrors the equivalent guard in apps/api's
+  // OrdersService (src/supplier/orders/orders.service.ts) — both apps call
+  // the SAME shared, framework-agnostic checkOrderDispatchEligibility
+  // (packages/db/lib/order-dispatch-eligibility.ts) so there is exactly
+  // one place this decision is computed.
+  if (status === "DISPATCHED") {
+    const eligibility = await checkOrderDispatchEligibility(prisma as any, orderId);
+    if (!eligibility.eligible) {
+      throw new Error(eligibility.reason);
+    }
   }
 
   // Decline path: run the multi-supplier fan-out promote-or-cascade logic
@@ -1540,10 +2354,20 @@ export async function updateSupplierOrderStatus(
 
   const existing = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { items: true },
+    include: { items: { include: { product: true } } },
   });
 
   const additionalData: Record<string, unknown> = {};
+
+  // Product-Level GST / GST-Inclusive Buyer Payable (Phase 3) — resolved
+  // once, before the write transaction, exactly like
+  // BestPriceSelectionService.selectAndFinalizeIfEligible. Only computed
+  // for a genuine first-time PLACED -> PROCESSING confirmation through this
+  // single-supplier path (mirrors the existing quoteSelectionCompletedAt
+  // guard immediately below) — a retry/already-finalized order never
+  // re-enters this branch, so markup/GST can never be re-resolved or
+  // re-applied to an already-marked-up snapshot.
+  let confirmationSnapshot: Awaited<ReturnType<typeof resolveOrderConfirmationSnapshot>> | null = null;
 
   // When the supplier confirms an enquiry directly (single-supplier flow, no competing
   // RFQ quotes), also finalize quote selection fields — mirrors what apps/api's
@@ -1570,12 +2394,173 @@ export async function updateSupplierOrderStatus(
       existing.deliveryDate ??
       new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
     additionalData.quoteSelectionCompletedAt = new Date();
+
+    // Each OrderItem here already carries its checkout-time-resolved
+    // markup snapshot (unitPrice is the marked-up buyer price;
+    // supplierUnitPrice/markupPercent are the original/already-resolved
+    // figures — see order-checkout.ts). GST is resolved fresh here, on top
+    // of that already-resolved markup, never re-deriving markup itself.
+    confirmationSnapshot = await resolveOrderConfirmationSnapshot(
+      prisma as any,
+      existing.items.map((item) => ({
+        lineItemId: item.id,
+        productId: item.productId,
+        categoryId: item.product.categoryId,
+        supplierUnitPrice: item.supplierUnitPrice !== null ? Number(item.supplierUnitPrice) : Number(item.unitPrice),
+        markupPercent: item.markupPercent !== null ? Number(item.markupPercent) : 0,
+        quantity: item.quantity,
+      }))
+    );
+
+    if (!confirmationSnapshot.ok) {
+      throw new Error(
+        `Cannot confirm this enquiry: one or more products have no valid effective GST rate configured. ${JSON.stringify(
+          confirmationSnapshot.errors
+        )}`
+      );
+    }
+
+    additionalData.taxAmount = confirmationSnapshot.snapshot.taxAmount;
+    additionalData.finalPayableAmount = confirmationSnapshot.snapshot.finalPayableAmount;
+    additionalData.advancePercent = confirmationSnapshot.snapshot.advancePercent;
+    additionalData.requiredAdvanceAmount = confirmationSnapshot.snapshot.requiredAdvanceAmount;
+  } else if (existing && existing.quoteSelectionCompletedAt) {
+    // Legacy/retry safety: this order already has a frozen snapshot (or
+    // predates this feature, in which case all four fields remain null —
+    // see Order.taxAmount's schema doc comment). Validate FULL integrity
+    // (order-level nullness/arithmetic AND per-line nullability/
+    // reconciliation) on EVERY subsequent transition (not just a repeated
+    // PROCESSING attempt) — NEVER recompute/overwrite — a confirmed
+    // order's financial snapshot is immutable once set. `existing.items`
+    // is already loaded above (include: { items: { include: { product } } }),
+    // so this reuses that fetch rather than issuing a second query.
+    assertFullOrderSnapshotIntegrity(
+      orderId,
+      {
+        totalAmount: Number(existing.totalAmount),
+        taxAmount: existing.taxAmount !== null ? Number(existing.taxAmount) : null,
+        finalPayableAmount: existing.finalPayableAmount !== null ? Number(existing.finalPayableAmount) : null,
+        advancePercent: existing.advancePercent !== null ? Number(existing.advancePercent) : null,
+        requiredAdvanceAmount: existing.requiredAdvanceAmount !== null ? Number(existing.requiredAdvanceAmount) : null,
+      },
+      existing.items.map((item) => ({
+        id: item.id,
+        taxRatePercent: item.taxRatePercent !== null ? Number(item.taxRatePercent) : null,
+        taxAmount: item.taxAmount !== null ? Number(item.taxAmount) : null,
+      }))
+    );
   }
 
-  const order = await prisma.order.update({
-    where: { id: orderId },
-    data: { status, ...additionalData },
-  });
+  // Business Numbering (Buyer-Facing/Supplier-Facing PO Identity fix):
+  // Order.orderNumber (the "OD/YYMM/SSSSS" business number — see
+  // packages/db/lib/business-number.ts) is the buyer-facing document
+  // number printed on the customer/builder portal's Purchase Order PDF
+  // (apps/web's renderPoPdfContent in "BUYER" mode) — it must never be
+  // confused with the separate PurchaseOrder.poNumber series the
+  // supplier-facing document uses. apps/api's PaymentsService.approve and
+  // OrdersService.updateStatus both already generate this atomically the
+  // moment an order genuinely transitions PLACED -> PROCESSING; this
+  // function is the supplier portal's OWN single-supplier "Confirm
+  // Enquiry" path (no competing RFQ quotes) for that exact same
+  // transition, and was previously missing this assignment entirely —
+  // leaving orderNumber permanently null for every order confirmed
+  // through this path, which silently fell back to displaying the
+  // supplier's poNumber on the buyer-facing PDF instead of its own,
+  // independent number. Generated inside the same transaction as the
+  // status update (row-locked via generateOrderNumber's own FOR UPDATE on
+  // the BusinessSequence row), so concurrent confirmations can never be
+  // handed duplicate numbers, and a number already assigned (e.g. by a
+  // retried/duplicate call) is never regenerated or overwritten.
+  let order;
+  try {
+    order = await prisma.$transaction(async (tx) => {
+      const existingOrderNumber = await tx.order.findUnique({
+        where: { id: orderId },
+        select: { orderNumber: true },
+      });
+
+      let orderNumber = existingOrderNumber?.orderNumber ?? null;
+      if (!orderNumber && status === "PROCESSING") {
+        orderNumber = await generateOrderNumber(tx as any);
+      }
+
+      if (confirmationSnapshot && confirmationSnapshot.ok) {
+        // Concurrency guard — re-check eligibility immediately before the
+        // write, inside the transaction: a conditional updateMany keyed on
+        // quoteSelectionCompletedAt still being null (mirrors
+        // BestPriceSelectionService.selectAndFinalizeIfEligible's identical
+        // guard for the multi-supplier RFQ path). Only one concurrent
+        // request can affect a row here; a losing request throws before
+        // writing any OrderItem, so no line item is ever partially
+        // updated by a request that lost this race.
+        const claimed = await tx.order.updateMany({
+          where: { id: orderId, quoteSelectionCompletedAt: null },
+          data: { status, ...additionalData, ...(orderNumber ? { orderNumber } : {}) },
+        });
+        if (claimed.count === 0) {
+          throw new ConcurrentConfirmationLostError(orderId);
+        }
+
+        const snapshotByLineItemId = new Map(
+          confirmationSnapshot.snapshot.lines.map((line) => [line.lineItemId, line])
+        );
+        for (const item of existing!.items) {
+          const lineSnapshot = snapshotByLineItemId.get(item.id);
+          if (!lineSnapshot) continue;
+          await tx.orderItem.update({
+            where: { id: item.id },
+            data: {
+              taxRatePercent: lineSnapshot.taxRatePercent,
+              taxAmount: lineSnapshot.taxAmount,
+            },
+          });
+        }
+
+        return tx.order.findUniqueOrThrow({ where: { id: orderId } });
+      }
+
+      return tx.order.update({
+        where: { id: orderId },
+        data: { status, ...additionalData, ...(orderNumber ? { orderNumber } : {}) },
+      });
+    });
+  } catch (error) {
+    if (error instanceof ConcurrentConfirmationLostError) {
+      // Lost the race — a concurrent request already finalized this order.
+      // Re-read fresh and return the winner's result rather than
+      // surfacing an error, retrying the write ourselves, or sending a
+      // second round of notifications for a transition this request did
+      // not actually cause (mirrors BestPriceSelectionService's identical
+      // handling).
+      const finalized = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { items: { select: { id: true, taxRatePercent: true, taxAmount: true } } },
+      });
+      if (!finalized) throw error;
+      // Validate the WINNER's full snapshot integrity (order-level +
+      // per-line) before trusting it enough to return it as this
+      // request's own result — a lost race must never blindly assume the
+      // winning transaction produced a consistent result.
+      assertFullOrderSnapshotIntegrity(
+        orderId,
+        {
+          totalAmount: Number(finalized.totalAmount),
+          taxAmount: finalized.taxAmount !== null ? Number(finalized.taxAmount) : null,
+          finalPayableAmount: finalized.finalPayableAmount !== null ? Number(finalized.finalPayableAmount) : null,
+          advancePercent: finalized.advancePercent !== null ? Number(finalized.advancePercent) : null,
+          requiredAdvanceAmount:
+            finalized.requiredAdvanceAmount !== null ? Number(finalized.requiredAdvanceAmount) : null,
+        },
+        finalized.items.map((item) => ({
+          id: item.id,
+          taxRatePercent: item.taxRatePercent !== null ? Number(item.taxRatePercent) : null,
+          taxAmount: item.taxAmount !== null ? Number(item.taxAmount) : null,
+        }))
+      );
+      return finalized;
+    }
+    throw error;
+  }
 
   await prisma.orderTracking.create({
     data: {
@@ -1717,12 +2702,21 @@ export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]>
   return [...rfqCards, ...enquiryCards];
 }
 
+export type RfqQuoteLineInput = { lineItemId: string; unitPrice: string };
+
 export async function createSupplierQuote(
   rfqId: string,
-  input: { price: string; validUntil?: string; notes?: string },
+  input: { price: string; validUntil?: string; notes?: string; lineQuotes?: RfqQuoteLineInput[] },
   email: string
 ) {
   const { supplierProfile } = await ensureSupplierContext(email);
+
+  // Supplier RFQ Price Revision & GST-Inclusive Order Value: when the
+  // caller submits `lineQuotes`, this is a real enquiry (OrderItem-backed)
+  // RFQ quotation, not the legacy QuickRequest `Quote` flow below.
+  if (Array.isArray(input.lineQuotes) && input.lineQuotes.length > 0) {
+    return createEnquiryLineQuotesForSupplier(rfqId, input.lineQuotes, supplierProfile.id);
+  }
 
   const rfq = await prisma.quickRequest.findUnique({ where: { id: rfqId } });
   if (!rfq) return null;
@@ -1736,6 +2730,162 @@ export async function createSupplierQuote(
       notes: input.notes?.trim() || null,
     },
   });
+}
+
+// Supplier RFQ Price Revision & GST-Inclusive Order Value (spec §11): the
+// server-side authority for the supplier portal's own RFQ quotation
+// submission. Mirrors apps/api's RfqsService.createEnquiryLineQuotes
+// (same validation/GST-calculation rules, same SupplierQuote persistence
+// shape) since apps/supplier's Next.js API routes have direct Prisma
+// access and don't proxy through apps/api for this flow.
+async function createEnquiryLineQuotesForSupplier(
+  enquiryId: string,
+  lineQuotes: RfqQuoteLineInput[],
+  supplierId: string
+) {
+  const enquiry = await prisma.order.findUnique({
+    where: { id: enquiryId },
+    // Admin-Configurable Product Markup: `product` (for categoryId) is now
+    // required to resolve the applicable PRODUCT->CATEGORY->GLOBAL markup
+    // for each submitted line — see resolvedLines below. `items` (ALL order
+    // items, not just the ones being quoted here) is also needed so
+    // Order.totalAmount can be correctly resynced from the FULL set of
+    // lines after this submission, not just the submitted subset.
+    include: { items: { include: { product: { select: { categoryId: true } } } } },
+  });
+
+  if (!enquiry) {
+    throw new Error("Enquiry not found");
+  }
+
+  // Spec §11/§20: reject submissions against an RFQ that is no longer
+  // open/quotable.
+  if (enquiry.quoteSelectionCompletedAt || enquiry.status === "CANCELLED") {
+    throw new Error("This RFQ is no longer available for quotation.");
+  }
+
+  const itemsById = new Map(enquiry.items.map((item: any) => [item.id, item]));
+
+  const resolvedLines = await Promise.all(
+    lineQuotes.map(async (lineQuote) => {
+      const item = itemsById.get(lineQuote.lineItemId);
+      if (!item) {
+        throw new Error(`Line item ${lineQuote.lineItemId} not found for enquiry`);
+      }
+
+      // Authorization: only the supplier currently assigned to this line
+      // item may submit a quotation for it.
+      if ((item as any).supplierId !== supplierId) {
+        throw new Error(`You are not authorized to quote line item ${lineQuote.lineItemId}.`);
+      }
+
+      const supplierUnitPrice = parseQuotedPrice(lineQuote.unitPrice);
+      if (supplierUnitPrice === null) {
+        throw new Error(`Invalid quoted price for line item ${lineQuote.lineItemId} — price must be a non-negative number.`);
+      }
+
+      // Quantity is always the RFQ's own OrderItem quantity — never
+      // client-supplied.
+      const quantity = (item as any).quantity;
+      const taxRatePercent = (item as any).taxRatePercent;
+      const gstRatePercent = taxRatePercent !== null && taxRatePercent !== undefined ? Number(taxRatePercent) : null;
+
+      // Admin-Configurable Product Markup — the SupplierQuote record itself
+      // (gst.unitPrice below) remains the supplier's OWN original
+      // quotation, unmarked-up, exactly as before this fix. Buyer-facing
+      // pricing is a SEPARATE figure derived from it (see buyerUnitPrice
+      // resolution below) and is never written back onto SupplierQuote's
+      // own `unitPrice` field.
+      const gst = calculateLineGst({ quantity, unitPrice: supplierUnitPrice, gstRatePercent });
+
+      // Resolve the buyer-facing markup from this ORIGINAL supplier price —
+      // never from an already-marked-up value — mirroring
+      // BestPriceSelectionService.selectAndFinalizeIfEligible's identical
+      // resolution for the multi-supplier RFQ flow. Fails safe to 0% markup
+      // (never blocks quote submission) when no markup configuration is
+      // enabled at any tier, exactly like every other pricing call site.
+      const markup = await resolveMarkupForProduct(prisma as any, {
+        productId: (item as any).productId,
+        categoryId: (item as any).product?.categoryId,
+        supplierUnitPrice,
+      }).catch(() => null);
+
+      const resolved = markup ?? { supplierUnitPrice, buyerUnitPrice: supplierUnitPrice, markupPercent: 0, markupAmount: 0 };
+
+      return { lineItemId: lineQuote.lineItemId, gst, resolved };
+    })
+  );
+
+  const created = await prisma.$transaction(async (tx) => {
+    const rows: Array<{ id: string; unitPrice: any }> = [];
+    for (const { lineItemId, gst, resolved } of resolvedLines) {
+      const row = await tx.supplierQuote.create({
+        data: {
+          enquiryId,
+          supplierId,
+          lineItemId,
+          // Unchanged: the supplier's own original quotation — never the
+          // marked-up buyer price.
+          unitPrice: gst.unitPrice,
+          currency: "INR",
+          quantity: gst.quantity,
+          gstRatePercent: gst.gstRatePercent,
+          lineSubtotal: gst.lineSubtotal,
+          gstAmount: gst.gstAmount,
+          lineTotal: gst.lineTotal,
+          // Admin-Configurable Product Markup — buyer-facing traceability
+          // mirror, exactly like BestPriceSelectionService's own
+          // SupplierQuote.updateMany for the multi-supplier RFQ flow.
+          buyerUnitPrice: resolved.buyerUnitPrice,
+          markupPercent: resolved.markupPercent,
+          markupAmount: resolved.markupAmount,
+        },
+      });
+      rows.push({ id: row.id, unitPrice: row.unitPrice });
+
+      // Supplier RFQ Price Revision (spec §15/§22): the single-supplier
+      // confirm flow (this app's "Confirm Enquiry" action) has no separate
+      // cross-supplier best-price-selection step — the order must use the
+      // submitted quotation price directly. Admin-Configurable Product
+      // Markup: OrderItem.unitPrice is the BUYER-FACING price, so this is
+      // now the MARKED-UP figure — never the supplier's raw quotation
+      // (`gst.unitPrice`) — with the original supplier price + applied
+      // markup frozen alongside it, mirroring OrderItem's documented
+      // snapshot lifecycle.
+      await tx.orderItem.update({
+        where: { id: lineItemId },
+        data: {
+          unitPrice: resolved.buyerUnitPrice,
+          supplierUnitPrice: resolved.supplierUnitPrice,
+          markupPercent: resolved.markupPercent,
+          markupAmount: resolved.markupAmount,
+        },
+      });
+    }
+
+    // Order-Total Synchronization (mirrors
+    // BestPriceSelectionService.selectAndFinalizeIfEligible's identical fix
+    // for the multi-supplier RFQ flow): Order.totalAmount must reflect the
+    // FULL set of order lines — including any lines not part of this
+    // particular submission — using each line's CURRENT (just-updated,
+    // buyer-facing) unitPrice, never the stale total computed at
+    // enquiry-creation time. Read fresh inside the same transaction so this
+    // always reflects the just-written OrderItem rows.
+    const refreshedItems = await tx.orderItem.findMany({
+      where: { orderId: enquiryId },
+      select: { unitPrice: true, quantity: true },
+    });
+    const totalAmount = refreshedItems.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0);
+    await tx.order.update({
+      where: { id: enquiryId },
+      data: { totalAmount },
+    });
+
+    return rows;
+  });
+
+  const latest = created[created.length - 1];
+  return { id: latest?.id ?? enquiryId, rfqId: enquiryId, price: latest?.unitPrice?.toString() ?? "0" };
 }
 
 export async function getSupplierProfileData(email: string) {
@@ -1967,6 +3117,11 @@ export async function updateListingAggregationSettings(
       aggregationPriceTiers: input.aggregationEnabled ? (priceTiers as any) : undefined,
       aggregationWindowDays: defaultWindowDays,
     },
+  });
+
+  void notifyBuyerCatalogueUpdated({
+    tags: ["catalog-listings", `product-${product.id}`],
+    paths: ["/products", `/products/${product.id}`],
   });
 
   return {

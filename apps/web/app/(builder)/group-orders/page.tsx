@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 type PriceTier = { minQty: number; unitPrice: number };
 
@@ -126,7 +127,7 @@ export default function GroupOrdersPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {pools.map(({ participant, pool, productName, supplierName }) => {
+          {pools.map(({ participant, pool, productName, supplierName }, idx) => {
             const isLocked = pool.status === "LOCKED" || pool.status === "FULFILLING" || pool.status === "CLOSED";
             const savingsPerUnit = pool.priceTiers.length
               ? Math.max(0, pool.priceTiers[0].unitPrice - pool.currentUnitPrice)
@@ -138,7 +139,7 @@ export default function GroupOrdersPage() {
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{productName}</p>
                     <p className="text-xs text-slate-400">
-                      {supplierName} · Zone {pool.zoneKey} · Qty joined: {participant.quantity}
+                      {getSupplierDisplayName(supplierName, pool.supplierId, idx)} · Zone {pool.zoneKey} · Qty joined: {participant.quantity}
                     </p>
                   </div>
                   <span

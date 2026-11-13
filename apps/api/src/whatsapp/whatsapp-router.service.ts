@@ -7,6 +7,7 @@ import { EnquiryDecisionFlow } from "./flows/enquiry-decision.flow";
 import { OrderStatusFlow } from "./flows/order-status.flow";
 import { DailyReportFlow } from "./flows/daily-report.flow";
 import { SupplierDailyPriceReplyFlow } from "./flows/supplier-daily-price-reply.flow";
+import { InboundTemplateReplyFlow } from "./flows/inbound-template-reply.flow";
 
 import {
   BotMessage,
@@ -66,12 +67,35 @@ export class WhatsAppRouterService {
     private readonly enquiryDecisionFlow: EnquiryDecisionFlow,
     private readonly orderStatusFlow: OrderStatusFlow,
     private readonly dailyReportFlow: DailyReportFlow,
-    private readonly dailyPriceReplyFlow: SupplierDailyPriceReplyFlow
+    private readonly dailyPriceReplyFlow: SupplierDailyPriceReplyFlow,
+    private readonly inboundTemplateReplyFlow: InboundTemplateReplyFlow
   ) {}
 
-  async handleInboundMessage(phone: string, rawText: string): Promise<BotMessage> {
+  async handleInboundMessage(
+    phone: string,
+    rawText: string,
+    templateContext?: { templateButtonPayload?: string; templateMessageId?: string }
+  ): Promise<BotMessage> {
     const text = (rawText ?? "").trim();
     const upper = text.toUpperCase();
+
+    // Quick-reply TEMPLATE button tap (C41 — see InboundTemplateReplyFlow's
+    // doc comment for the full correlation/authorization contract).
+    // Intercepted FIRST, before any menu/keyword/session handling, because
+    // it is correlated by Meta's `context.id` (the wamid of the originating
+    // template message) rather than by session state or text content — a
+    // button's label text (e.g. "Review RFQ") could otherwise coincidentally
+    // collide with a menu keyword. `tryHandle` is a safe no-op (returns
+    // null) whenever this isn't actually a template button tap, the
+    // originating send can't be correlated, or the caller can't be safely
+    // re-authorized against the NotificationEvent's recipient — in every
+    // such case this falls through to the existing handling below unchanged.
+    if (templateContext?.templateMessageId) {
+      const templateReply = await this.inboundTemplateReplyFlow.tryHandle(phone, templateContext);
+      if (templateReply) {
+        return templateReply;
+      }
+    }
 
     if (HUMAN_HANDOFF_KEYWORDS.has(upper)) {
       const session = this.sessionService.get(phone);

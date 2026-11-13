@@ -250,7 +250,7 @@ describe("QuoteReceivedNotificationService.notify — policy", () => {
 });
 
 describe("QuoteReceivedNotificationService.notify — live Meta payload / failure handling", () => {
-  it("live mode: sends exactly three body parameters, no header, correct template name, no button component (static View Quote button rendered by Meta)", async () => {
+  it("live mode: sends exactly three body parameters (unchanged order/values), no header, correct template name, plus a dynamic URL button component with the bare Order.id (never the Business Number) as its sole parameter at index 0", async () => {
     const { service, prisma } = buildHarness({ mode: "live" });
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
@@ -265,17 +265,51 @@ describe("QuoteReceivedNotificationService.notify — live Meta payload / failur
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
     expect(sentBody.template.name).toBe("quote_received");
-    expect(sentBody.template.components).toHaveLength(1);
+    expect(sentBody.template.components).toHaveLength(2);
     expect(sentBody.template.components[0].type).toBe("body");
     expect(sentBody.template.components[0].parameters).toHaveLength(3);
     expect(sentBody.template.components[0].parameters[0]).toEqual({ type: "text", text: "BH-2026-00452" });
     expect(sentBody.template.components[0].parameters[1]).toEqual({ type: "text", text: "TMT 10mm Steel" });
     expect(sentBody.template.components[0].parameters[2]).toEqual({ type: "text", text: "10 MT" });
-    expect(sentBody.template.components.some((c: any) => c.type === "button")).toBe(false);
     expect(sentBody.template.components.some((c: any) => c.type === "header")).toBe(false);
+
+    const buttonComponent = sentBody.template.components[1];
+    expect(buttonComponent).toEqual({
+      type: "button",
+      sub_type: "url",
+      index: 0,
+      // The bare Order.id ("enq-1" — the id `notify()` was called with),
+      // NEVER the human-readable Business Number ("BH-2026-00452") used in
+      // the body, never a full URL, and never re-prefixed with "/orders/"
+      // (that path segment is already part of Meta's approved fixed prefix
+      // `https://buildohub.in/orders/{{1}}`).
+      parameters: [{ type: "text", text: "enq-1" }],
+    });
     expect(prisma.whatsAppMessageLog.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "sent", metaMessageId: "wamid.QUOTE-RECEIVED-1" }) })
     );
+  });
+
+  it("live mode: the button's dynamic parameter is never a SupplierQuote.id/OrderItem.id, even though those ids are also in scope at the call site", async () => {
+    const { service } = buildHarness({ mode: "live" });
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ messages: [{ id: "wamid.QUOTE-RECEIVED-2" }] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await service.notify("enq-1", "sup-1", ["sq-1"]);
+
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    const buttonComponent = sentBody.template.components.find((c: any) => c.type === "button");
+    const suffix = buttonComponent.parameters[0].text;
+    expect(suffix).not.toBe("sq-1");
+    expect(suffix).not.toBe("line-1");
+    expect(suffix).not.toContain("?");
+    expect(suffix).not.toContain("/orders/");
+    expect(suffix).not.toMatch(/^https?:\/\//);
   });
 
   it("live mode: a Meta API failure is recorded as failed and never throws — the quote submission itself is unaffected", async () => {

@@ -43,18 +43,30 @@
 // the `status: ISSUED` update commits.
 //
 // Template variable sources (spec §5 — no invented/reconstructed values),
-// confirmed against the live, Meta-approved `supplier_po_alert` template
-// (ID 1999605497419495, category UTILITY, language "en"):
+// CONFIRMED LIVE directly against the Graph API (GET
+// /{WABA_ID}/message_templates?name=supplier_po_alert, verified 2026-10-12)
+// for the live, Meta-approved `supplier_po_alert` template (ID
+// 1999605497419495, category UTILITY, language "en"):
 //   Body: "A purchase order {{1}} has been issued to you by Buildohub.
 //          Material: {{2}}
 //          Quantity: {{3}}
 //          Please review the purchase order on Buildohub."
-//   Buttons: one static QUICK_REPLY button ("View Purchase Order") — NOT a
-//          dynamic URL button, so no extra `components` entry/URL parameter
-//          is required when sending (WhatsApp renders the static button
-//          itself, same as `supplier_quote_alert`'s "Review RFQ" button —
-//          see WhatsappNotificationService's doc comment for why body-only
-//          `components` is correct here).
+//          (unchanged — still exactly 3 body parameters, same order.)
+//   Buttons: one dynamic URL button ("View Purchase Order"), upgraded from
+//          the previous static QUICK_REPLY button once Meta approved the
+//          URL CTA. Approved FIXED prefix is
+//          `https://supplier.buildohub.in/purchase-orders/{{1}}` — the
+//          `/purchase-orders/` segment is already part of the fixed prefix,
+//          NOT the dynamic `{{1}}` parameter, so only the BARE
+//          `purchaseOrderId` (PurchaseOrder.id, built by
+//          `buildPurchaseOrderButtonUrlSuffix` below) is ever sent as the
+//          button's `{{1}}` parameter — never the full URL, and never
+//          `poNumber` (a different, human-readable identifier that is NOT
+//          the route's dynamic segment — see
+//          apps/supplier/app/(supplier)/purchase-orders/[id]/page.tsx,
+//          whose `[id]` route param is PurchaseOrder.id). Resolved
+//          destination:
+//          `https://supplier.buildohub.in/purchase-orders/{purchaseOrderId}`.
 //   {{1}} PO/order ID = PurchaseOrder.poNumber (the canonical, supplier-
 //          facing PO identifier — the exact string shown as the page title
 //          on the supplier portal PO detail page, see
@@ -212,13 +224,41 @@ export function summarizePoQuantities(
 }
 
 /**
+ * Dynamic suffix for the approved `supplier_po_alert` Meta URL button
+ * ("View Purchase Order"). CONFIRMED LIVE directly against the Graph API
+ * (verified 2026-10-12 — the button was upgraded from a static QUICK_REPLY
+ * to a URL CTA; the body is unchanged). Approved fixed prefix is
+ * `https://supplier.buildohub.in/purchase-orders/{{1}}` — the
+ * `/purchase-orders/` segment is already part of the fixed prefix, NOT the
+ * dynamic `{{1}}` parameter, so only the BARE `purchaseOrderId` (never
+ * `poNumber`, which is a different, human-readable identifier that is NOT
+ * the route's dynamic segment) is ever sent, resolving to
+ * `https://supplier.buildohub.in/purchase-orders/{purchaseOrderId}` —
+ * matching the existing, already-authenticated supplier PO detail page at
+ * `apps/supplier/app/(supplier)/purchase-orders/[id]/page.tsx` (route
+ * unchanged by this task). That page's `getSupplierPurchaseOrderDetail()`
+ * re-authenticates the session and re-scopes the Prisma lookup to
+ * `supplierId: supplierProfile.id` — this button never grants access to a
+ * PO merely because its id appears in the URL. Mirrors apps/api's
+ * `SupplierPoReceivedNotificationService`'s identical helper byte-for-byte
+ * so both send paths produce the exact same button payload.
+ */
+export function buildPurchaseOrderButtonUrlSuffix(purchaseOrderId: string): string {
+  return purchaseOrderId;
+}
+
+/**
  * Low-level Meta Cloud API template send — exactly 3 body parameters, no
- * header. The approved template's static "View Purchase Order" QUICK_REPLY
- * button is rendered automatically by WhatsApp from the template definition
- * itself (it is not a dynamic URL button, so no extra `components` entry is
- * needed — see WhatsappNotificationService's doc comment). Mirrors
- * apps/api's WhatsappNotificationService.sendTemplateAlert / this package's
- * other *-notification.ts `sendTemplateViaMeta` byte-for-byte (same payload
+ * header, plus an optional dynamic URL `button` component when
+ * `buttonUrlSuffix` is supplied. The approved template's button was
+ * originally a static "View Purchase Order" QUICK_REPLY (rendered
+ * automatically by WhatsApp from the template definition, no extra
+ * component needed) and has since been re-approved by Meta as a dynamic
+ * "View Purchase Order" URL button (fixed prefix
+ * `https://supplier.buildohub.in/purchase-orders/{{1}}`) — see
+ * `buildPurchaseOrderButtonUrlSuffix`'s doc comment above. Mirrors apps/api's
+ * WhatsappNotificationService.sendTemplateAlert / this package's other
+ * *-notification.ts `sendTemplateViaMeta` byte-for-byte (same payload
  * shape, same WhatsAppMessageLog bookkeeping, same live/dry-run/off
  * branching) so every app produces identical audit-trail rows and identical
  * Meta payloads.
@@ -228,7 +268,8 @@ async function sendTemplateViaMeta(
   phone: string,
   templateName: string,
   parameters: string[],
-  log: (message: string) => void
+  log: (message: string) => void,
+  buttonUrlSuffix?: string
 ): Promise<{ success: boolean; externalId?: string; error?: string }> {
   const mode = getSupplierPoReceivedWhatsAppMode();
 
@@ -264,6 +305,19 @@ async function sendTemplateViaMeta(
       return { success: false, error: errorDetails };
     }
 
+    // Dynamic URL button component — only added when a suffix is supplied
+    // (the approved "View Purchase Order" URL CTA). Mirrors apps/api's
+    // WhatsappNotificationService.sendLive's identical button-component
+    // shape byte-for-byte.
+    const components = [
+      ...(parameters.length > 0
+        ? [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text })) }]
+        : []),
+      ...(buttonUrlSuffix
+        ? [{ type: "button", sub_type: "url", index: 0, parameters: [{ type: "text", text: buttonUrlSuffix }] }]
+        : []),
+    ];
+
     const payload = {
       messaging_product: "whatsapp",
       recipient_type: "individual",
@@ -272,9 +326,7 @@ async function sendTemplateViaMeta(
       template: {
         name: templateName,
         language: { code: getTemplateLanguage() },
-        ...(parameters.length > 0
-          ? { components: [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text })) }] }
-          : {}),
+        ...(components.length > 0 ? { components } : {}),
       },
     };
 
@@ -456,7 +508,8 @@ export async function notifySupplierPoReceived(
       phone,
       decision.templateName,
       [poDisplayId, material, quantity],
-      onLog
+      onLog,
+      buildPurchaseOrderButtonUrlSuffix(purchaseOrderId)
     );
 
     await prisma.notificationEvent.update({ where: { id: event.id }, data: { status: sendResult.success ? "sent" : "failed" } });

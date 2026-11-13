@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
-import { OrderStatus, PaymentStatus, Prisma } from "@matsrc/db";
+import {
+  OrderStatus,
+  PaymentStatus,
+  Prisma,
+  assertConsistentOrderSnapshot,
+  resolveBuyerConfirmationState,
+  resolveOrderFinalPayableAmount,
+  BUYER_CONFIRMATION_STATE_LABELS,
+} from "@matsrc/db";
 import {
   prisma,
   formatCurrency,
@@ -68,11 +76,20 @@ export async function GET(request: Request) {
         status: true,
         paymentStatus: true,
         totalAmount: true,
+        taxAmount: true,
+        finalPayableAmount: true,
+        advancePercent: true,
+        requiredAdvanceAmount: true,
         createdAt: true,
         isAggregated: true,
         aggregationPoolId: true,
         siteId: true,
         site: { select: { id: true, name: true } },
+        // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+        // Dispatch — drives `confirmationState`/`total`/`paymentLinkAvailable`
+        // below for each order in the list, exactly like the order-detail
+        // route. See packages/db/lib/order-buyer-confirmation.ts.
+        supplierInvoice: { select: { status: true, confirmedTotalAmount: true } },
         items: {
 
           select: {
@@ -89,15 +106,47 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(
-      orders.map((order, idx) => ({
+      orders.map((order, idx) => {
+        // Product-Level GST / GST-Inclusive Buyer Payable (Phase 4): same
+        // resolution rule as the order-detail route and
+        // apps/web/lib/order-outstanding.ts — prefer the frozen,
+        // GST-inclusive finalPayableAmount once confirmed; fall back to the
+        // pre-existing GST-exclusive totalAmount for a legacy/not-yet-
+        // confirmed order.
+        assertConsistentOrderSnapshot(order.id, {
+          taxAmount: order.taxAmount == null ? null : Number(order.taxAmount),
+          finalPayableAmount: order.finalPayableAmount == null ? null : Number(order.finalPayableAmount),
+          advancePercent: order.advancePercent == null ? null : Number(order.advancePercent),
+          requiredAdvanceAmount: order.requiredAdvanceAmount == null ? null : Number(order.requiredAdvanceAmount),
+        });
+        const hasGstSnapshot = order.finalPayableAmount != null;
+        const preConfirmationEstimate = hasGstSnapshot ? Number(order.finalPayableAmount) : Number(order.totalAmount ?? 0);
+
+        // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+        // Dispatch — see the order-detail route's identical derivation for
+        // the full rationale; both routes must always agree.
+        const supplierInvoiceSnapshot = order.supplierInvoice
+          ? {
+              status: order.supplierInvoice.status,
+              confirmedTotalAmount:
+                order.supplierInvoice.confirmedTotalAmount != null ? Number(order.supplierInvoice.confirmedTotalAmount) : null,
+            }
+          : null;
+        const confirmationState = resolveBuyerConfirmationState(order.status, supplierInvoiceSnapshot);
+        const { amount: resolvedTotal } = resolveOrderFinalPayableAmount(preConfirmationEstimate, supplierInvoiceSnapshot);
+
+        return {
         id: order.id,
         enquiryId: order.enquiryId ?? order.id,
         orderNumber: order.orderNumber ?? null,
         status: order.status,
+        confirmationState,
+        confirmationStateLabel: BUYER_CONFIRMATION_STATE_LABELS[confirmationState],
         paymentStatus: order.paymentStatus,
         itemCount: order.items.length,
-        total: Number(order.totalAmount),
-        totalLabel: formatCurrency(order.totalAmount),
+        total: resolvedTotal,
+        totalLabel: formatCurrency(resolvedTotal),
+        gstInclusive: hasGstSnapshot,
         createdAt: order.createdAt,
         isAggregated: order.isAggregated,
         aggregationPoolId: order.aggregationPoolId,
@@ -109,12 +158,19 @@ export async function GET(request: Request) {
         siteId: order.siteId,
         siteName: order.site?.name ?? "Unassigned",
 
+        // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+        // Dispatch — a payment link is never offered before
+        // confirmationState === "CONFIRMED" (mirrors the order-detail
+        // route's identical gate).
         paymentLinkAvailable:
-          order.status === OrderStatus.PROCESSING &&
+          confirmationState === "CONFIRMED" &&
           (order.paymentStatus === PaymentStatus.PENDING ||
             order.paymentStatus === PaymentStatus.PENDING_VERIFICATION),
-        paymentLink: `/orders/${order.id}/payment`,
-      }))
+        // Order reference number is always the LAST path segment — route
+        // moved from /orders/[id]/payment -> /orders/payment/[id].
+        paymentLink: `/orders/payment/${order.id}`,
+        };
+      })
     );
   } catch (error) {
     console.error("Orders GET error:", error);

@@ -3,6 +3,7 @@ import { PaymentMethod, PaymentStatus } from "@matsrc/db";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
 import { notifyPaymentProofSubmitted } from "@/lib/notify";
 import { validatePaymentProofFile, buildSafePaymentProofFileName } from "@/lib/payment-proof-validation";
+import { computeOrderOutstandingAmount } from "@/lib/order-outstanding";
 
 export const dynamic = "force-dynamic";
 
@@ -74,10 +75,38 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // Ownership check: the order must belong to the authenticated customer.
     const order = await prisma.order.findFirst({
       where: { id: params.id, userId: user.id },
-      select: { id: true, paymentMethod: true, paymentStatus: true, totalAmount: true, status: true },
+      select: {
+        id: true,
+        paymentMethod: true,
+        paymentStatus: true,
+        totalAmount: true,
+        status: true,
+        // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+        // Dispatch — see the guard immediately below.
+        supplierInvoice: { select: { status: true } },
+      },
     });
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — a buyer must not be able to initiate a NEW bank-transfer
+    // payment submission until an Admin has reviewed and confirmed the
+    // SupplierInvoice's freight/other charges, so the amount they're asked
+    // to pay is always the final, freight-inclusive figure rather than a
+    // pre-confirmation estimate that may still change. A REJECTED/missing
+    // invoice never satisfies this — only an explicit CONFIRMED status
+    // does (mirrors SupplierInvoicesService.confirm()'s own immutability
+    // guarantee: a CONFIRMED invoice is never silently un-confirmed).
+    if (!order.supplierInvoice || order.supplierInvoice.status !== "CONFIRMED") {
+      return NextResponse.json(
+        {
+          error:
+            "This order is awaiting final confirmation from our team (freight/other charges review) before payment can be submitted. Please check back shortly.",
+        },
+        { status: 400 }
+      );
     }
 
     if (order.paymentMethod !== PaymentMethod.BANK_TRANSFER) {
@@ -136,12 +165,20 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // Never trust the uploaded filename for storage — only used for display.
     const safeFileName = buildSafePaymentProofFileName(order.id, file.name);
 
+    // Mixed payment support (Buildohub Advance Balance + bank transfer, see
+    // spec §30): the bank-transfer screenshot's declared amount is the
+    // order's current OUTSTANDING amount (totalAmount minus any advance
+    // already applied via /api/builder/orders/[id]/advance-payment), not
+    // the full order total — never double-charges a buyer who already used
+    // part of their advance balance toward this order.
+    const { outstanding } = await computeOrderOutstandingAmount(order.id);
+
     if (existing) {
       await prisma.paymentVerification.update({
         where: { id: existing.id },
         data: {
           paymentMethod: PaymentMethod.BANK_TRANSFER,
-          amount: order.totalAmount,
+          amount: outstanding,
           screenshotData: buffer,
           screenshotMimeType: file.type,
           screenshotFileName: safeFileName,
@@ -159,7 +196,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
           orderId: order.id,
           userId: user.id,
           paymentMethod: PaymentMethod.BANK_TRANSFER,
-          amount: order.totalAmount,
+          amount: outstanding,
           screenshotData: buffer,
           screenshotMimeType: file.type,
           screenshotFileName: safeFileName,

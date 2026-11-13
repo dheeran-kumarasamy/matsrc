@@ -108,6 +108,19 @@ export function matchDeliveredCommand(input: string): string | null {
  * dash, so it does not misfire on hyphenated product names with no spaces
  * around the hyphen.
  */
+/**
+ * Recognizes the `SAME` keyword a supplier can use in place of a numeric
+ * price in a Daily Price Update reply line, to explicitly confirm that a
+ * product's current base price is unchanged (see
+ * SupplierDailyPriceReplyFlow). Case-insensitive, whitespace-tolerant.
+ * Deliberately a single exact-word match (not a substring/fuzzy check) so
+ * it can never be confused with a numeric value or a product name that
+ * happens to contain "same".
+ */
+export function isSameKeyword(value: string): boolean {
+  return value.trim().toUpperCase() === "SAME";
+}
+
 export function parseDailyPriceReplyInput(input: string): Array<{ product: string; price: string }> {
   const lines = input
     .split(/\r?\n/)

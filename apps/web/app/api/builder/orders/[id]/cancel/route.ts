@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { OrderStatus } from "@matsrc/db";
+import { OrderStatus, lockAdvanceAccountRow, releaseAdvanceReservation } from "@matsrc/db";
 import { getOrCreateBuilder, getUserCtx, prisma } from "@/lib/builder-db";
 import {
   builderCancellationRejectionReason,
@@ -67,18 +67,45 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // PurchaseOrder/PurchaseOrderLineItem rows for this order (if a PO was
     // already issued) are never read or written here, so the confirmed PO
     // quantity is guaranteed untouched by this action.
-    const updated = await prisma.order.update({
-      where: { id: order.id },
-      data: { status: OrderStatus.CANCELLED },
-      select: { id: true, status: true },
-    });
+    //
+    // Advance Balance reservation release: defensive/future-proofing — in
+    // today's application flow a PLACED order cannot yet have an advance
+    // reservation (the "Use Advance Balance" panel only appears once
+    // paymentLinkAvailable is true, which requires the order to have left
+    // PLACED), but if that ever changes, cancellation must never leave
+    // advance money permanently RESERVED. Atomic with the cancellation
+    // itself — if the release somehow fails, the whole transaction (and the
+    // cancellation) rolls back rather than leaving an inconsistent state.
+    const updated = await prisma.$transaction(async (tx) => {
+      const cancelled = await tx.order.update({
+        where: { id: order.id },
+        data: { status: OrderStatus.CANCELLED },
+        select: { id: true, status: true },
+      });
 
-    await prisma.orderTracking.create({
-      data: {
-        orderId: order.id,
-        status: OrderStatus.CANCELLED,
-        note: formatBuilderCancellationNote(reasonKey, otherDetail),
-      },
+      await tx.orderTracking.create({
+        data: {
+          orderId: order.id,
+          status: OrderStatus.CANCELLED,
+          note: formatBuilderCancellationNote(reasonKey, otherDetail),
+        },
+      });
+
+      const advanceAccount = await tx.customerAdvanceAccount.findFirst({
+        where: { buyerId: user.id },
+        select: { id: true },
+      });
+      if (advanceAccount) {
+        const locked = await lockAdvanceAccountRow(tx as any, advanceAccount.id);
+        await releaseAdvanceReservation(tx as any, {
+          orderId: order.id,
+          createdBy: user.id,
+          currentAvailable: Number(locked.availableBalance),
+          currentReserved: Number(locked.reservedBalance),
+        });
+      }
+
+      return cancelled;
     });
 
     return NextResponse.json({ id: updated.id, status: updated.status });

@@ -28,11 +28,8 @@ const links: { href: string; label: string }[] = [
   // /newdashboard), so keeping it in the sidebar too was a duplicate
   // entry point to the same page.
   { href: "/sourcing", label: "AI Sourcing Assistant" },
-  { href: "/sites", label: "Sites" },
-  { href: "/watchlist", label: "Watchlist" },
   { href: "/orders", label: "My Orders" },
-  { href: "/purchase-orders", label: "Purchase Orders" },
-  { href: "/disputes", label: "Disputes" },
+  { href: "/advance", label: "Advance Balance" },
 ];
 
 // Shared by BOTH the desktop sidebar (BuilderNav) and the mobile Sheet drawer

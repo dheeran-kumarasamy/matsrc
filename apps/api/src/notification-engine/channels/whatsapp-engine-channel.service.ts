@@ -17,7 +17,12 @@ export class WhatsAppEngineChannel implements NotificationChannel {
       return { success: false, error: "NO_PHONE_NUMBER" };
     }
 
-    const result = await this.whatsapp.sendTemplateAlert(notification.phone, notification.templateName, notification.parameters);
+    const result = await this.whatsapp.sendTemplateAlert(
+      notification.phone,
+      notification.templateName,
+      notification.parameters,
+      notification.buttonUrlSuffix
+    );
 
     return {
       success: result.status === "sent",

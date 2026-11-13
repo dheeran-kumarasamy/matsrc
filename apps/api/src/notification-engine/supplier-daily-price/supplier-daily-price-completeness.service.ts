@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { KycStatus, Role } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
+import { buildDailyPriceDedupeKey, parseDailyPricePayload } from "./supplier-daily-price.util";
 
 export type SupplierPriceCompletenessResult = {
   supplierId: string;
@@ -34,6 +35,21 @@ export type SupplierPriceCompletenessResult = {
  * the same value) always creates a new PriceSnapshot row, so this is a
  * reliable "did the supplier touch this listing's price today" signal
  * without inventing a new column.
+ *
+ * Supplier Daily Price Update enhancement — a product also counts as
+ * accounted for when the supplier has explicitly CONFIRMed (not merely
+ * previewed) a `SAME` (price-unchanged) acknowledgement for it on this
+ * exact business date. Per the confirmed product decision, a `SAME`
+ * confirmation deliberately never creates a `PriceSnapshot` row (that would
+ * misrepresent an explicit "no change" as a genuine repricing event in the
+ * price-discovery time series), so this service reads that confirmation
+ * from the same `NotificationEvent` row that already acts as today's
+ * price-update "session" (`payload.confirmedSameProductIds` — see
+ * SupplierDailyPriceReplyFlow.handleConfirm) rather than faking a snapshot
+ * or mutating `basePrice` to satisfy this check. An UNCONFIRMED (merely
+ * previewed) `SAME` line must never satisfy completeness — only
+ * `confirmedSameProductIds`, written exclusively at CONFIRM time, is
+ * consulted here.
  */
 @Injectable()
 export class SupplierDailyPriceCompletenessService {
@@ -80,7 +96,24 @@ export class SupplierDailyPriceCompletenessService {
     });
 
     const updatedProductIds = new Set(updatedToday.map((row) => row.productId));
-    const missingProducts = requiredProducts.filter((product) => !updatedProductIds.has(product.id));
+
+    // Confirmed SAME acknowledgements for THIS exact business date — read
+    // from the matching NotificationEvent row (the existing daily
+    // price-update "session"), never from a different day's row. A
+    // business-date rollover creates a brand-new NotificationEvent (fresh
+    // dedupeKey), so yesterday's confirmedSameProductIds can never leak
+    // into today's completeness check even though the lookup is keyed only
+    // by dedupeKey, not by a separate date comparison.
+    const dedupeKey = buildDailyPriceDedupeKey(supplierId, businessDate);
+    const sessionEvent = await this.prisma.notificationEvent.findUnique({
+      where: { dedupeKey },
+      select: { payload: true },
+    });
+    const confirmedSameProductIds = new Set(parseDailyPricePayload(sessionEvent?.payload).confirmedSameProductIds ?? []);
+
+    const missingProducts = requiredProducts.filter(
+      (product) => !updatedProductIds.has(product.id) && !confirmedSameProductIds.has(product.id)
+    );
 
     return {
       supplierId,

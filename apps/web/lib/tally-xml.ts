@@ -39,6 +39,24 @@ export type TallyVoucherInput = {
   siteGstin: string | null;
   lineItems: TallyVoucherLineItem[];
   total: number;
+  // Tally Purchase Voucher Supplier-Cost Fix — true when this voucher's
+  // prices/GST were sourced from OrderItem.supplierUnitPrice (falling back
+  // to OrderItem.unitPrice only for legacy rows with no recorded supplier
+  // price) because the order's SupplierInvoice is absent or not yet
+  // CONFIRMED. False only when every figure was sourced from an
+  // admin-confirmed SupplierInvoice/SupplierInvoiceLineItem. Never
+  // inferred from current markup configuration — see
+  // apps/web/lib/tally-vouchers.ts, the sole writer of this field.
+  isEstimate: boolean;
+  // Tally Purchase Voucher Supplier-Cost Fix — the genuine rounding
+  // adjustment carried on a CONFIRMED SupplierInvoice
+  // (SupplierInvoice.roundingAdjustment), passed through untouched to the
+  // existing round-off ledger entry below. Never used to absorb freight/
+  // other-charges/discount (those are blocked upstream in
+  // apps/web/lib/tally-vouchers.ts when non-zero, since no dedicated ledger
+  // mapping exists for them). Omitted/0 for estimate vouchers, which never
+  // have an invoice-level rounding figure to apply.
+  roundingAdjustment?: number;
 };
 
 export type TallyValidationBlocker = {
@@ -50,6 +68,14 @@ export type TallyDryRunResult = {
   voucherCount: number;
   totalValue: number;
   blockers: TallyValidationBlocker[];
+  // Tally Purchase Voucher Supplier-Cost Fix — explicit confirmed/estimate
+  // breakdown so the builder UI can warn before export that some vouchers
+  // (`estimatedCount`) are priced from the agreed supplier rate rather than
+  // an admin-confirmed supplier invoice. voucherCount === confirmedCount +
+  // estimatedCount always (both counts are derived from the SAME
+  // `vouchers` array validateVouchers() already receives).
+  confirmedCount: number;
+  estimatedCount: number;
 };
 
 function gstStateCode(gstin: string | null | undefined): string | null {
@@ -105,9 +131,16 @@ export function validateVouchers(
 ): TallyDryRunResult {
   const blockers: TallyValidationBlocker[] = [];
   let totalValue = 0;
+  let confirmedCount = 0;
+  let estimatedCount = 0;
 
   for (const voucher of vouchers) {
     totalValue += voucher.total;
+    if (voucher.isEstimate) {
+      estimatedCount += 1;
+    } else {
+      confirmedCount += 1;
+    }
     if (!mapping.supplierLedgerMap[voucher.supplierId]) {
       blockers.push({
         orderId: voucher.orderId,
@@ -120,6 +153,8 @@ export function validateVouchers(
     voucherCount: vouchers.length,
     totalValue: round2(totalValue),
     blockers,
+    confirmedCount,
+    estimatedCount,
   };
 }
 
@@ -160,15 +195,22 @@ function buildSingleVoucherXml(voucher: TallyVoucherInput, mapping: TallyLedgerM
 
   const totalTaxable = round2(voucher.lineItems.reduce((s, li) => s + li.taxableValue, 0));
   const totalGst = round2(voucher.lineItems.reduce((s, li) => s + li.gstAmount, 0));
-  const grossTotal = round2(totalTaxable + totalGst);
+  // Tally Purchase Voucher Supplier-Cost Fix: a CONFIRMED SupplierInvoice's
+  // genuine roundingAdjustment (see TallyVoucherInput's own doc comment) is
+  // folded into the gross total here — the ONLY invoice-level adjustment
+  // this renderer accepts, since it already matches the round-off ledger's
+  // intended accounting purpose. Defaults to 0 for estimate vouchers.
+  const invoiceRoundingAdjustment = voucher.roundingAdjustment ?? 0;
+  const grossTotal = round2(totalTaxable + totalGst + invoiceRoundingAdjustment);
 
   // Debits = credits: party ledger is debited (positive/DR from a purchase
   // perspective in Tally's XML convention, amount is negative for the
   // debit-side ledger entry per Tally's XML sign convention where credit
   // amounts are positive and debit amounts are negative) the full gross
   // total; purchase + tax ledgers are credited for their respective shares.
-  // Round-off ledger absorbs any residual paisa-level rounding difference
-  // so the voucher always balances exactly.
+  // Round-off ledger absorbs both any residual paisa-level rounding
+  // difference AND the genuine invoiceRoundingAdjustment above, so the
+  // voucher always balances exactly.
   const roundOff = round2(grossTotal - (totalTaxable + totalGst));
 
   const ledgerEntries: string[] = [];
@@ -248,7 +290,9 @@ function buildSingleVoucherXml(voucher: TallyVoucherInput, mapping: TallyLedgerM
       <VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>
       <VOUCHERNUMBER>${escapeXml(voucherNumber)}</VOUCHERNUMBER>
       <PARTYLEDGERNAME>${escapeXml(partyLedger)}</PARTYLEDGERNAME>
-      <NARRATION>Buildohub order ${escapeXml(voucher.orderId)}</NARRATION>
+      <NARRATION>Buildohub order ${escapeXml(voucher.orderId)}${
+    voucher.isEstimate ? " (ESTIMATE - Supplier invoice not confirmed)" : ""
+  }</NARRATION>
 ${inventoryEntries}
 ${ledgerEntries.join("\n")}
      </VOUCHER>

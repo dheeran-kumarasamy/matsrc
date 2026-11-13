@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -107,6 +108,30 @@ export function InvoiceGenerationQueue({ items }: { items: VerifiedPayment[] }) 
                     {loadingId === item.orderId ? "Generating…" : "Generate Invoice"}
                   </button>
                 )}
+                {/* RFQ PDF download discoverability fix: this queue only
+                    lists orders whose payment has ALREADY moved past
+                    PENDING (see PaymentsService.findApprovedWithInvoiceStatus),
+                    so without these links an admin loses any UI-reachable
+                    path to the RFQ the moment a payment is verified —
+                    PaymentVerificationQueue's own identical links only show
+                    while status is still PENDING. Reuses the exact same
+                    Admin RFQ detail page / authenticated proxy route (no new
+                    endpoint), available whether or not the invoice has been
+                    generated yet. */}
+                <Link
+                  href={`/orders/${item.orderId}`}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700"
+                >
+                  View RFQ
+                </Link>
+                <a
+                  href={`/api/admin/orders/${item.orderId}/rfq-pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700"
+                >
+                  Download RFQ PDF
+                </a>
               </div>
             </article>
           ))}

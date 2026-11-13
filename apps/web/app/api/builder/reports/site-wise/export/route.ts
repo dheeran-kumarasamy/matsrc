@@ -250,6 +250,20 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ error: "Unsupported format" }, { status: 400 });
   } catch (error) {
+    // This route's CSV/XLSX links are plain <a href> downloads and its PDF
+    // link opens via <a href target="_blank"> — none go through the
+    // fetch-based builderApi* helpers, so resolveUserCtx() falls back to the
+    // NextAuth session cookie and throws "UNAUTHENTICATED" if that session
+    // check fails (expired/missing cookie). Every other resolveUserCtx()
+    // consumer in this app (e.g. the sibling
+    // app/api/builder/reports/[reportId]/export/route.ts and
+    // app/api/builder/purchase-orders/[id]/export/route.ts) maps this to a
+    // clean 401 — this route was missing that check and fell through to a
+    // generic 500, which is what surfaced as
+    // "GET .../export?format=pdf 500 (Internal Server Error)".
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    }
     console.error("Site-wise report export error:", error);
     return NextResponse.json({ error: "Failed to export report" }, { status: 500 });
   }

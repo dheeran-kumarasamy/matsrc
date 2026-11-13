@@ -44,6 +44,7 @@ function voucher(overrides: Partial<TallyVoucherInput> = {}): TallyVoucherInput 
     siteGstin: "27BBBBB0000B1Z5",
     lineItems,
     total,
+    isEstimate: false,
     ...overrides,
   };
 }

@@ -40,9 +40,10 @@ environment variables (the same pattern already used for the WhatsApp Meta
 credentials in this repo).
 
 The ICICI payment UI panel on the builder payment page is also gated
-server-side by this exact same check (`app/(builder)/orders/[id]/payment/page.tsx`)
-— it is never rendered into the HTML at all on a non-UAT deployment, not
-merely hidden by client-side CSS/JS.
+server-side by this exact same check (`app/(builder)/orders/payment/[id]/page.tsx`
+— route moved from `/orders/[id]/payment` so the order reference number is
+always the last path segment) — it is never rendered into the HTML at all on
+a non-UAT deployment, not merely hidden by client-side CSS/JS.
 
 ## 2. Required environment variables
 
@@ -83,10 +84,9 @@ URL is configurable via `ICICI_PG_RETURN_URL`; `getIciciConfig()` additionally
 refuses to use any return URL that does not contain `uat.buildohub.in`, as a
 defence-in-depth guard against ever pointing a UAT transaction at the
 production callback.
-
 ## 5. Payment flow
 
-1. Builder opens `/orders/[id]/payment`. If `isIciciUatAvailable()` is true
+1. Builder opens `/orders/payment/[id]`. If `isIciciUatAvailable()` is true
    server-side, the "ICICI Online Payment — UAT" panel is rendered alongside
    the existing bank-transfer panel (additive, never replacing it).
 2. Builder clicks "Pay Now" → `POST /api/builder/orders/[id]/payment/icici/initiate`.
@@ -112,7 +112,7 @@ production callback.
    - Only on a verified `SUCCESS` status does it mark
      `PaymentTransaction.status = SUCCESS` and `Order.paymentStatus = PAID`
      (within a DB transaction, idempotent against duplicate callbacks).
-   - Redirects the builder to `/orders/[id]/payment/result`.
+   - Redirects the builder to `/orders/payment/[id]/result`.
 5. The result page reads `GET /api/builder/orders/[id]/payment/icici/status`
    — always the verified backend state, never the raw redirect query string.
 

@@ -19,6 +19,18 @@ type MetaWebhookMessage = {
     list_reply?: { id: string; title: string };
     button_reply?: { id: string; title: string };
   };
+  // Quick-reply TEMPLATE button tap (distinct from `interactive.button_reply`,
+  // which only ever describes a tap on a Reply Button / List message THIS bot
+  // sent as part of the menu flow). Meta always sets `type: "button"` for this
+  // case and includes `context.id` — the wamid of the outbound TEMPLATE
+  // message the tapped button belongs to (see
+  // https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages/button).
+  // `button.payload` equals the static button's label text for a QUICK_REPLY
+  // button (never a dynamic URL button, which generates no inbound webhook at
+  // all — see InboundTemplateReplyFlow's doc comment for the full audit of
+  // which templates/buttons this applies to).
+  button?: { text: string; payload: string };
+  context?: { id: string };
 };
 
 type MetaWebhookStatus = {
@@ -185,7 +197,7 @@ export class WhatsAppController {
       return;
     }
 
-    const { phone, text, messageId } = inbound;
+    const { phone, text, messageId, templateButtonPayload, templateMessageId } = inbound;
 
     if (!phone) {
       res.status(HttpStatus.OK).send("EVENT_RECEIVED");
@@ -201,9 +213,9 @@ export class WhatsAppController {
 const reply = messageId
   ? await this.sessionService.withIdempotency(
       `webhook-message:${messageId}`,
-      () => this.router.handleInboundMessage(phone, text)
+      () => this.router.handleInboundMessage(phone, text, { templateButtonPayload, templateMessageId })
     )
-  : await this.router.handleInboundMessage(phone, text);
+  : await this.router.handleInboundMessage(phone, text, { templateButtonPayload, templateMessageId });
 
 console.log(`[WhatsApp Webhook] handleInboundMessage took ${(performance.now() - handleInboundMessageStart).toFixed(2)}ms`);
 
@@ -278,7 +290,9 @@ res.status(HttpStatus.OK).send("EVENT_RECEIVED");
     }
   }
 
-  private extractInboundMessage(body: MetaWebhookPayload): { phone: string; text: string; messageId?: string } | null {
+  private extractInboundMessage(
+    body: MetaWebhookPayload
+  ): { phone: string; text: string; messageId?: string; templateButtonPayload?: string; templateMessageId?: string } | null {
     for (const entry of body.entry ?? []) {
       for (const change of entry.changes ?? []) {
         const message = change.value?.messages?.[0];
@@ -287,8 +301,19 @@ res.status(HttpStatus.OK).send("EVENT_RECEIVED");
             message.text?.body ??
             message.interactive?.list_reply?.id ??
             message.interactive?.button_reply?.id ??
+            message.button?.payload ??
             "";
-          return { phone: message.from, text, messageId: message.id };
+          return {
+            phone: message.from,
+            text,
+            messageId: message.id,
+            // Only set for a quick-reply TEMPLATE button tap (message.type === "button")
+            // — never for a menu-flow Reply Button/List tap, which already carries its own
+            // routable `id` via `interactive.*_reply.id` above and has no originating
+            // template message to correlate against.
+            templateButtonPayload: message.type === "button" ? message.button?.payload : undefined,
+            templateMessageId: message.type === "button" ? message.context?.id : undefined,
+          };
         }
       }
     }

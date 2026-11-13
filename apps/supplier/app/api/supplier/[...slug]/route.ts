@@ -9,6 +9,7 @@ import {
   getSupplierOrderDetail,
   getSupplierOrders,
   getSupplierRfqs,
+  getEnquiryQuotationContext,
   updateSupplierListing,
   updateSupplierOrderStatus,
   updateSupplierProfile,
@@ -84,6 +85,19 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(detail);
       }
 
+      // Supplier RFQ Price Revision & GST-Inclusive Order Value: used by the
+      // supplier's RFQ quotation form to fetch quotable line items
+      // pre-populated with the applicable price + server-calculated GST
+      // breakdown before the supplier edits/submits.
+      const quotationMatch = path.match(/^\/rfqs\/([^/]+)\/quotation$/);
+      if (quotationMatch) {
+        const context = await getEnquiryQuotationContext(quotationMatch[1], email);
+        if (!context) {
+          return NextResponse.json({ message: "RFQ not found" }, { status: 404 });
+        }
+        return NextResponse.json(context);
+      }
+
       // Used by the dashboard "View" overlay to fetch product/listing details on demand.
       const listingMatch = path.match(/^\/listings\/([^/]+)$/);
       if (listingMatch) {
@@ -121,11 +135,22 @@ export async function POST(req: NextRequest) {
     const quoteMatch = path.match(/^\/rfqs\/([^/]+)\/quote$/);
     if (quoteMatch) {
       const rfqId = quoteMatch[1];
-      const created = await createSupplierQuote(rfqId, body, email);
-      if (!created) {
-        return NextResponse.json({ message: "RFQ not found" }, { status: 404 });
+      try {
+        const created = await createSupplierQuote(rfqId, body, email);
+        if (!created) {
+          return NextResponse.json({ message: "RFQ not found" }, { status: 404 });
+        }
+        return NextResponse.json(created, { status: 201 });
+      } catch (quoteError: any) {
+        // Supplier RFQ Price Revision & GST-Inclusive Order Value: every
+        // validation failure thrown by createEnquiryLineQuotesForSupplier
+        // (invalid/negative price, unauthorized line item, RFQ no longer
+        // quotable, missing line item) is a client error — return 400 with
+        // the specific message rather than falling through to the generic
+        // 500 handler below.
+        const message = typeof quoteError?.message === "string" ? quoteError.message : "Invalid quotation submission";
+        return NextResponse.json({ message }, { status: 400 });
       }
-      return NextResponse.json(created, { status: 201 });
     }
 
     // Supplier-side: POST /supplier/purchase-orders/:id/acknowledge — confirm receipt in-app.
@@ -198,8 +223,47 @@ export async function PATCH(req: NextRequest) {
         if (typeof transitionError?.message === "string" && transitionError.message.startsWith("Invalid order status transition")) {
           return NextResponse.json({ message: transitionError.message }, { status: 400 });
         }
+        // C34: payment-before-delivery business-rule rejection (see
+        // updateSupplierOrderStatus's guard in lib/supplier-data.ts) is also
+        // a client error (attempting a disallowed transition), not a server
+        // fault — return 400 with the same safe, non-internal message
+        // rather than falling through to the generic 500 handler below.
+        if (
+          typeof transitionError?.message === "string" &&
+          transitionError.message === "This order cannot be marked as delivered until payment has been confirmed."
+        ) {
+          return NextResponse.json({ message: transitionError.message }, { status: 400 });
+        }
+        // Duplicate supplier-action fix: rejecting a direct "Confirm Enquiry"
+        // call against a genuine competing-supplier RFQ (see
+        // updateSupplierOrderStatus's guard in lib/supplier-data.ts) is also
+        // a client error (stale UI / a direct API call bypassing the
+        // quotation requirement), not a server fault.
+        if (
+          typeof transitionError?.message === "string" &&
+          transitionError.message.includes("submit a quotation instead of confirming directly")
+        ) {
+          return NextResponse.json({ message: transitionError.message }, { status: 400 });
+        }
         if (transitionError?.message === "Order not found") {
           return NextResponse.json({ message: "Order not found" }, { status: 404 });
+        }
+        // Product-Level GST: confirming an enquiry whose product(s) have no
+        // valid effective GST rate configured at any tier (PRODUCT/CATEGORY/
+        // GLOBAL) is a configuration/client error — the admin must configure
+        // a rate before this order can be confirmed — not a server fault.
+        // Mirrors apps/api's identical handling of the same
+        // resolveOrderConfirmationSnapshot failure in
+        // OrdersService.updateStatus (400) and
+        // BestPriceSelectionService.selectAndFinalizeIfEligible (422). See
+        // updateSupplierOrderStatus's guard in lib/supplier-data.ts.
+        if (
+          typeof transitionError?.message === "string" &&
+          transitionError.message.startsWith(
+            "Cannot confirm this enquiry: one or more products have no valid effective GST rate configured."
+          )
+        ) {
+          return NextResponse.json({ message: transitionError.message }, { status: 400 });
         }
         throw transitionError;
       }

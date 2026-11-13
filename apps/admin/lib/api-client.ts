@@ -76,3 +76,36 @@ export async function adminApiPost<T>(path: string, body?: unknown): Promise<T> 
 
   return response.json() as Promise<T>;
 }
+
+// Admin-Configurable Product Markup — the markup settings API uses PUT for
+// idempotent upsert-by-scope (never POST, since there is exactly one row
+// per scope/scopeId) and DELETE to clear a category/product override.
+export async function adminApiPut<T>(path: string, body: unknown): Promise<T> {
+  const headers = await getAdminHeaders({ "Content-Type": "application/json" });
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.message || `Admin API put failed: ${response.status}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export async function adminApiDelete<T>(path: string): Promise<T> {
+  const headers = await getAdminHeaders();
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "DELETE",
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Admin API delete failed: ${response.status}`);
+  }
+
+  return response.json() as Promise<T>;
+}

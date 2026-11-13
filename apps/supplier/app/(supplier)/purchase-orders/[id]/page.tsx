@@ -28,7 +28,13 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
             {po.version > 1 ? <span className="ml-2 text-sm text-slate-400">v{po.version}</span> : null}
           </h3>
           <p className="text-sm text-slate-600">Buyer: {po.buyerName}</p>
-          <p className="text-xs text-slate-400">Linked order: {po.orderId}</p>
+          {/* S15: the associated Order reference must be the same
+              supplier-facing business identifier shown on the order
+              pages (orderNumber ?? enquiryId), never the raw internal
+              cuid `po.orderId` — see apps/supplier/lib/order-display.ts.
+              The PO's own `poNumber` above is a separate identifier
+              series and is unaffected. */}
+          <p className="text-xs text-slate-400">Linked order: {po.orderReference}</p>
         </div>
         <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${STATUS_STYLES[po.status] ?? ""}`}>
           {po.status}
@@ -53,6 +59,7 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
                 <th className="px-4 py-2 font-semibold">Product</th>
                 <th className="px-4 py-2 font-semibold">Qty</th>
                 <th className="px-4 py-2 font-semibold">Unit Price</th>
+                <th className="px-4 py-2 font-semibold">GST %</th>
                 <th className="px-4 py-2 font-semibold">Tax</th>
                 <th className="px-4 py-2 font-semibold">Delivery</th>
                 <th className="px-4 py-2 font-semibold">Fulfilled</th>
@@ -67,6 +74,9 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
                     {li.quantity} {li.unit}
                   </td>
                   <td className="px-4 py-2 text-slate-700">₹{li.unitPrice.toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-2 text-slate-700">
+                    {typeof li.taxRatePercent === "number" ? `${li.taxRatePercent}%` : "—"}
+                  </td>
                   <td className="px-4 py-2 text-slate-700">₹{li.tax.toLocaleString("en-IN")}</td>
                   <td className="px-4 py-2 text-slate-700">
                     {li.deliveryDate ? new Date(li.deliveryDate).toLocaleDateString() : "—"}
@@ -82,9 +92,29 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
-          <span className="text-sm text-slate-500">Total</span>
-          <span className="text-lg font-extrabold text-slate-900">₹{po.total.toLocaleString("en-IN")}</span>
+        <div className="space-y-1 border-t border-slate-200 px-4 py-3">
+          {/* Explicit Subtotal / GST / Total breakdown — mirrors the PDF's
+              own structure (see lib/purchase-order-pdf.ts) instead of
+              folding tax silently into a single Total figure. */}
+          <div className="flex items-center justify-between text-sm text-slate-600">
+            <span>Subtotal (Taxable Value)</span>
+            <span>₹{po.subtotal.toLocaleString("en-IN")}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm text-slate-600">
+            <span>
+              {(() => {
+                const rates = Array.from(
+                  new Set(po.lineItems.map((li) => li.taxRatePercent).filter((r) => typeof r === "number"))
+                );
+                return rates.length === 1 ? `GST @ ${rates[0]}%` : "GST";
+              })()}
+            </span>
+            <span>₹{po.taxAmount.toLocaleString("en-IN")}</span>
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-sm text-slate-500">Total</span>
+            <span className="text-lg font-extrabold text-slate-900">₹{po.total.toLocaleString("en-IN")}</span>
+          </div>
         </div>
       </div>
 
@@ -96,10 +126,15 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
       ) : null}
 
       <div className="panel flex flex-wrap items-center justify-between gap-4 p-4">
+        {/* C39 fix: the export endpoint (apps/web's
+            /api/builder/purchase-orders/[id]/export, shared across both
+            portals via po.exportUrl) now returns a real PDF with
+            Content-Disposition: attachment, so the browser downloads it
+            directly — target="_blank" is no longer needed and previously
+            contributed to this always opening a new tab instead of
+            downloading. */}
         <a
           href={`${po.exportUrl}?format=pdf`}
-          target="_blank"
-          rel="noreferrer"
           className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
         >
           Download PO (PDF)

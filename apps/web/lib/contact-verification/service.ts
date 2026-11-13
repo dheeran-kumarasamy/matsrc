@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/builder-db";
+import { linkIdentity, detectCrossIdentityConflict } from "@matsrc/db";
 import type { ContactVerificationChannel } from "@matsrc/db";
 
 import {
@@ -259,6 +260,24 @@ export async function verifyContactChange(
     };
   }
 
+  // Unified Account Identity — Situation 1 account linking (audit §16):
+  // this is the "already-authenticated User proves ownership of a NEW
+  // identifier, then that identity gets linked to their existing account"
+  // flow. Guard against the exact same cross-identity collision
+  // (Situation 2) as every login route: if this normalized value is
+  // ALREADY linked (via AuthIdentity) to a DIFFERENT User, refuse rather
+  // than silently reassigning it.
+  const identityProvider = channel === "EMAIL" ? "EMAIL" : "WHATSAPP";
+  const identityConflict = await detectCrossIdentityConflict(
+    prisma as any,
+    { provider: identityProvider, providerIdentifier: pending.pendingValue, role: "BUILDER" },
+    userId
+  );
+  if (identityConflict) {
+    await prisma.pendingContactVerification.delete({ where: { id: pending.id } }).catch(() => {});
+    return { ok: false, code: "CONFLICT", message: `This ${otpTargetLabel(channel)} can't be used. Please try a different one.` };
+  }
+
   const updateData =
     channel === "EMAIL"
       ? { email: pending.pendingValue, emailVerifiedAt: now }
@@ -270,6 +289,11 @@ export async function verifyContactChange(
     // never be replayed.
     prisma.pendingContactVerification.delete({ where: { id: pending.id } }),
   ]);
+
+  // Link the newly-verified identifier into AuthIdentity so future
+  // WhatsApp/Email OTP logins using this value resolve straight back to
+  // this same User (idempotent — see linkIdentity()'s P2002 handling).
+  await linkIdentity(prisma as any, { provider: identityProvider, providerIdentifier: pending.pendingValue, role: "BUILDER" }, userId);
 
   return { ok: true, value: pending.pendingValue };
 }

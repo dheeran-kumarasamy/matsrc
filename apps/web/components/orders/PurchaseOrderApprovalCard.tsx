@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { builderApiPatch, builderApiPost } from "@/lib/api";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
+import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   CANCELLATION_REASONS,
@@ -20,6 +22,11 @@ type PurchaseOrderLineItem = {
   quantity: number;
   unitPrice: number;
   tax: number;
+  // The GST rate (percentage) used to compute `tax` above — null only for
+  // pre-migration line items created before this column existed (see
+  // PurchaseOrderLineItem's doc comment in schema.prisma); the UI shows a
+  // generic "Tax" label for those rather than fabricating a rate.
+  taxRatePercent: number | null;
   deliveryDate: string | null;
   fulfilledQuantity: number;
   lineTotal: number;
@@ -28,6 +35,13 @@ type PurchaseOrderLineItem = {
 type PurchaseOrderDetail = {
   id: string;
   poNumber: string;
+  // The underlying Order's own independent, already-authoritative
+  // business number ("OD/YYMM/SSSSS") — the SAME number the downloaded
+  // buyer-facing PDF prints/names its file after (see
+  // lib/purchase-order-utils.ts's resolveBuyerPoDocumentNumber). Null only
+  // for a pre-payment-approval order that has not yet been assigned one —
+  // see resolveBuyerPoDocumentNumber's fallback to poNumber for that case.
+  orderNumber?: string | null;
   status: "DRAFT" | "ISSUED" | "ACKNOWLEDGED" | "FULFILLED";
   version: number;
   notes: string | null;
@@ -43,6 +57,12 @@ type PurchaseOrderDetail = {
   supplier: { id: string; companyName: string };
   builder: { id: string; name: string; email: string };
   lineItems: PurchaseOrderLineItem[];
+  // Explicit subtotal/GST breakdown — mirrors the Invoice's own
+  // subtotal/taxAmount so this card can show the same
+  // "Subtotal + GST = Total" structure instead of folding tax silently
+  // into a single Total figure.
+  subtotal?: number;
+  taxAmount?: number;
   total: number;
   exportUrl: string;
 };
@@ -71,6 +91,14 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
   const [approverName, setApproverName] = useState("");
   const [approverDesignation, setApproverDesignation] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // C37 fix: an explicit Send OTP step — the previous implementation let the
+  // user type any 6-digit number straight into the approval form with no
+  // OTP ever actually sent. `sendingOtp`/`otpSent`/`otpDeliveryMessage`
+  // drive that new step; `otpSent` gates whether the OTP input is shown at
+  // all (no OTP field is rendered until a real send has been attempted).
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpDeliveryMessage, setOtpDeliveryMessage] = useState<string | null>(null);
 
   // "Need to change the quantity?" flow (§ create new enquiry / cancel order)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -144,6 +172,26 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
     }
   }
 
+  // C37 fix: sends a real, PO-scoped OTP via the new /send-otp endpoint
+  // before any OTP input is shown. Never claims success without an honest
+  // delivery outcome — the server's message (e.g. "OTP sent to your
+  // registered email (jo***@example.com)." when MSG91 SMS is stubbed) is
+  // surfaced verbatim rather than a generic "OTP sent".
+  async function sendOtp() {
+    setSendingOtp(true);
+    setError(null);
+    setOtpDeliveryMessage(null);
+    try {
+      const result = await builderApiPost<{ message?: string }>(`/purchase-orders/${po.id}/send-otp`, {});
+      setOtpDeliveryMessage(result.message ?? "OTP sent.");
+      setOtpSent(true);
+    } catch (err: any) {
+      setError(err.message ?? "Could not send the OTP. Please try again.");
+    } finally {
+      setSendingOtp(false);
+    }
+  }
+
   async function approve() {
     setApproving(true);
     setError(null);
@@ -156,9 +204,11 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
       setPo(updated);
       setShowOtp(false);
       setOtp("");
+      setOtpSent(false);
+      setOtpDeliveryMessage(null);
       router.refresh();
     } catch (err: any) {
-      setError("Approval failed. Check the OTP and try again.");
+      setError(err.message ?? "Approval failed. Check the OTP and try again.");
     } finally {
       setApproving(false);
     }
@@ -169,10 +219,10 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
       <div className="panel flex flex-wrap items-start justify-between gap-3 p-5">
         <div>
           <h2 className="text-xl font-extrabold text-slate-900">
-            {po.poNumber}
+            {resolveBuyerPoDocumentNumber(po)}
             {po.version > 1 ? <span className="ml-2 text-sm text-slate-400">v{po.version}</span> : null}
           </h2>
-          <p className="text-sm text-slate-600">Supplier: {po.supplier.companyName}</p>
+          <p className="text-sm text-slate-600">Supplier: {getSupplierDisplayName(po.supplier.companyName, po.supplier.id)}</p>
         </div>
         <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${STATUS_STYLES[po.status] ?? ""}`}>
           {po.status}
@@ -182,7 +232,13 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
       {po.approvedAt ? (
         <div className="panel border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] p-4 text-sm font-medium text-[color:var(--posh-fg)]">
           Digitally approved{po.approvedBy ? ` by ${po.approvedBy}` : ""} on{" "}
-          {new Date(po.approvedAt).toLocaleString()}. This OTP-based approval is the legal e-signature equivalent —
+          {/* Hydration fix: toLocaleString() with no explicit locale falls back
+              to the runtime's default locale, which differs between the Node.js
+              SSR pass and the browser's own locale on hydration (e.g. en-US vs
+              en-IN) — causing "Text content does not match server-rendered
+              HTML" (React error #425). Pin the locale explicitly, matching the
+              "en-IN" convention already used elsewhere in this file/app. */}
+          {new Date(po.approvedAt).toLocaleString("en-IN")}. This OTP-based approval is the legal e-signature equivalent —
           no physical signature was required.
         </div>
       ) : null}
@@ -204,6 +260,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                 <th className="px-4 py-2 font-semibold">Product</th>
                 <th className="px-4 py-2 font-semibold">Qty</th>
                 <th className="px-4 py-2 font-semibold">Unit Price</th>
+                <th className="px-4 py-2 font-semibold">GST %</th>
                 <th className="px-4 py-2 font-semibold">Delivery</th>
                 <th className="px-4 py-2 font-semibold">Line Total</th>
               </tr>
@@ -221,6 +278,9 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                     </span>
                   </td>
                   <td className="px-4 py-2 text-slate-700">₹{li.unitPrice.toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-2 text-slate-700">
+                    {typeof li.taxRatePercent === "number" ? `${li.taxRatePercent}%` : "—"}
+                  </td>
                   <td className="px-4 py-2">
                     {isDraft ? (
                       <input
@@ -231,7 +291,9 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                       />
                     ) : (
                       <span className="text-slate-700">
-                        {li.deliveryDate ? new Date(li.deliveryDate).toLocaleDateString() : "—"}
+                        {/* Same hydration fix as above — explicit locale so SSR
+                            and client hydration always render identical text. */}
+                        {li.deliveryDate ? new Date(li.deliveryDate).toLocaleDateString("en-IN") : "—"}
                       </span>
                     )}
                   </td>
@@ -243,9 +305,30 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
-          <span className="text-sm text-slate-500">Total</span>
-          <span className="text-lg font-extrabold text-slate-900">₹{po.total.toLocaleString("en-IN")}</span>
+        <div className="space-y-1 border-t border-slate-200 px-4 py-3">
+          {/* Explicit Subtotal / GST / Total breakdown — mirrors the PDF's
+              own structure (see lib/purchase-order-pdf.ts) instead of
+              folding tax silently into a single Total figure. Falls back
+              to deriving subtotal from total - taxAmount for older POs
+              fetched before the API started returning `subtotal`
+              directly. */}
+          <div className="flex items-center justify-between text-sm text-slate-600">
+            <span>Subtotal (Taxable Value)</span>
+            <span>₹{(po.subtotal ?? po.total - (po.taxAmount ?? 0)).toLocaleString("en-IN")}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm text-slate-600">
+            <span>
+              {(() => {
+                const rates = Array.from(new Set(lineItems.map((li) => li.taxRatePercent).filter((r) => typeof r === "number")));
+                return rates.length === 1 ? `GST @ ${rates[0]}%` : "GST";
+              })()}
+            </span>
+            <span>₹{(po.taxAmount ?? 0).toLocaleString("en-IN")}</span>
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-sm text-slate-500">Total</span>
+            <span className="text-lg font-extrabold text-slate-900">₹{po.total.toLocaleString("en-IN")}</span>
+          </div>
         </div>
       </div>
 
@@ -382,10 +465,13 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
       ) : null}
 
       <div className="panel flex flex-wrap items-center justify-between gap-4 p-4">
+        {/* C39 fix: the export endpoint now returns a real PDF with
+            Content-Disposition: attachment (see export/route.ts), so the
+            browser downloads it directly — target="_blank" is no longer
+            needed and previously contributed to this always opening a new
+            tab instead of downloading. */}
         <a
           href={`${po.exportUrl}?format=pdf`}
-          target="_blank"
-          rel="noreferrer"
           className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
         >
           Download PO (PDF)
@@ -394,46 +480,88 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
         {isDraft ? (
           showOtp ? (
             <div className="w-full max-w-sm space-y-2 rounded-lg border border-slate-200 p-3">
-              <p className="text-xs text-slate-500">
-                Enter the 6-digit OTP sent to your registered mobile/email to digitally approve and issue this PO.
-              </p>
-              <input
-                type="text"
-                maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                placeholder="6-digit OTP"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm tracking-widest"
-              />
-              <input
-                type="text"
-                value={approverName}
-                onChange={(e) => setApproverName(e.target.value)}
-                placeholder="Approver name (optional)"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              <input
-                type="text"
-                value={approverDesignation}
-                onChange={(e) => setApproverDesignation(e.target.value)}
-                placeholder="Designation (optional)"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={approve}
-                  disabled={approving || otp.length !== 6}
-                  className="flex-1 rounded-md bg-[color:var(--posh-primary)] px-3 py-2 text-sm font-semibold text-[color:var(--posh-primary-fg)] disabled:opacity-60"
-                >
-                  {approving ? "Approving..." : "Confirm & Issue PO"}
-                </button>
-                <button
-                  onClick={() => setShowOtp(false)}
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
-                >
-                  Cancel
-                </button>
-              </div>
+              {!otpSent ? (
+                // C37 fix: no OTP input is shown until a real OTP has
+                // actually been requested/sent — the previous implementation
+                // let the user type any 6-digit number here with nothing
+                // ever sent.
+                <>
+                  <p className="text-xs text-slate-500">
+                    Approving this PO requires a one-time OTP for digital approval. Click below to send it to your
+                    registered mobile/email.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={sendOtp}
+                      disabled={sendingOtp}
+                      className="flex-1 rounded-md bg-[color:var(--posh-primary)] px-3 py-2 text-sm font-semibold text-[color:var(--posh-primary-fg)] disabled:opacity-60"
+                    >
+                      {sendingOtp ? "Sending OTP..." : "Send OTP"}
+                    </button>
+                    <button
+                      onClick={() => setShowOtp(false)}
+                      className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-500">
+                    {otpDeliveryMessage || "Enter the 6-digit OTP sent to approve and issue this PO."}
+                  </p>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                    placeholder="6-digit OTP"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm tracking-widest"
+                  />
+                  <input
+                    type="text"
+                    value={approverName}
+                    onChange={(e) => setApproverName(e.target.value)}
+                    placeholder="Approver name (optional)"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={approverDesignation}
+                    onChange={(e) => setApproverDesignation(e.target.value)}
+                    placeholder="Designation (optional)"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={approve}
+                      disabled={approving || otp.length !== 6}
+                      className="flex-1 rounded-md bg-[color:var(--posh-primary)] px-3 py-2 text-sm font-semibold text-[color:var(--posh-primary-fg)] disabled:opacity-60"
+                    >
+                      {approving ? "Approving..." : "Confirm & Issue PO"}
+                    </button>
+                    <button
+                      onClick={sendOtp}
+                      disabled={sendingOtp}
+                      className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
+                    >
+                      {sendingOtp ? "Resending..." : "Resend OTP"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowOtp(false);
+                        setOtpSent(false);
+                        setOtp("");
+                        setOtpDeliveryMessage(null);
+                      }}
+                      className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <button

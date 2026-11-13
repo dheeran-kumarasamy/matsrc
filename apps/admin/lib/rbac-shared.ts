@@ -8,11 +8,15 @@ export const MENU_CONFIG = [
   { key: "kyc", href: "/kyc", label: "KYC Queue" },
   { key: "disputes", href: "/disputes", label: "Disputes" },
   { key: "payments", href: "/payments", label: "Payment Verification" },
+  { key: "advance-payments", href: "/advance-payments", label: "Advance Payments" },
+  { key: "supplier-invoices", href: "/supplier-invoices", label: "Supplier Invoices" },
   // ICICI Bank Payment Gateway — UAT ONLY (read-only transaction visibility +
   // refund). Additive menu entry, never affecting existing menus/DEFAULT_ADMIN_MENUS.
   { key: "icici-payments", href: "/icici-payments", label: "ICICI Payments (UAT)" },
   { key: "aggregation", href: "/aggregation", label: "Aggregation Pools" },
   { key: "catalog", href: "/catalog", label: "Catalog Master Data" },
+  { key: "markup", href: "/markup", label: "Product Markup" },
+  { key: "gst", href: "/gst", label: "GST & Advance Configuration" },
   { key: "pricing", href: "/pricing", label: "Price Intelligence" },
   { key: "notifications", href: "/notifications", label: "Notification Engine" },
   { key: "whatsapp-alerts", href: "/whatsapp-alerts", label: "WhatsApp Alerts (Test)" },

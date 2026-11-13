@@ -7,12 +7,13 @@
 // (spec section 5A).
 
 import { useRouter, usePathname } from "next/navigation";
-import Link from "next/link";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import EnquiryPanel from "@/components/products/EnquiryPanel";
 import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import WatchlistButton from "@/components/products/WatchlistButton";
 import { getCategoryEmoji } from "@/lib/category-images";
+import { DELIVERY_TIMING_BROWSING_NOTE } from "@/lib/delivery-estimate";
+import { formatGstExclusiveNote } from "@/lib/gst-display";
 
 import { parseNumericLabel, type SupplierListing } from "@/lib/listings";
 
@@ -77,23 +78,27 @@ export default function ProductQuickView({ product }: Props) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
                 <div>
                   <p className="text-xs text-slate-400">Base price</p>
                   <p className="mt-1 font-semibold text-slate-900">{product.price}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-slate-400">Stock</p>
-                  <p className="mt-1 font-semibold text-slate-900">{product.stock}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">Max qty</p>
-                  <p className="mt-1 font-semibold text-slate-900">{product.maxServiceableQty}</p>
-                </div>
               </div>
+
+              {/* C13 — same truthful delivery-timing framing as ProductCard
+                  (see lib/delivery-estimate.ts). Kept visually secondary,
+                  below the price/stock grid and above pricing tiers. */}
+              <p className="text-xs text-slate-400">{DELIVERY_TIMING_BROWSING_NOTE}</p>
 
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-slate-800">Pricing tiers</h3>
+                {/* C29 — disclose GST treatment here, before the
+                    "Add to Enquiry Basket" action in the aside. Prices
+                    below are exclusive of GST, same rate uniformly applied
+                    across every tier/supplier today (lib/gst-display.ts). */}
+                <p className="text-xs text-slate-400">
+                  Prices below exclude GST — {formatGstExclusiveNote().replace("+ ", "")} applies in addition.
+                </p>
                 <div className="grid gap-2">
                   {product.pricingTiers.slice(0, 3).map((tier) => (
                     <div
@@ -111,9 +116,24 @@ export default function ProductQuickView({ product }: Props) {
                 </div>
               </div>
 
-              <Link href={`/products/${product.id}`} className="inline-block text-xs text-[color:var(--posh-primary)] hover:underline">
+              {/* C14 fix: this previously used next/link, whose href
+                  (`/products/${product.id}`) is identical to the CURRENT
+                  browser URL — the Next.js intercepting-route convention
+                  ((.)products/[slug]) that renders this very overlay only
+                  ever activates on a *client-side* navigation to that URL;
+                  the URL here never actually changes (we're already on it,
+                  the overlay is just layered over the PLP underneath), so
+                  next/link's client-side router saw "same URL" and did
+                  nothing at all when clicked. A plain <a> forces a real
+                  hard navigation, which (per this file's own top doc
+                  comment and app/(builder)/products/[slug]/page.tsx)
+                  bypasses route interception entirely and renders the full
+                  standalone Product Detail page — the same canonical
+                  id/slug-based URL used everywhere else (direct links,
+                  refresh, sharing). */}
+              <a href={`/products/${product.id}`} className="inline-block text-xs text-[color:var(--posh-primary)] hover:underline">
                 View full product page →
-              </Link>
+              </a>
             </div>
           </section>
 

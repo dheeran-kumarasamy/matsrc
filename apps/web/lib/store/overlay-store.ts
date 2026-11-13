@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { ConfirmedOrderSummary } from "@/lib/order-confirmation";
 
 // UF-02/UF-03 — Single-page overlay ordering architecture (spec section 5A).
 // This store coordinates the two overlay surfaces that sit on top of the
@@ -19,13 +20,21 @@ interface OverlayState {
   // Cart drawer + inline stepped checkout
   isCartOpen: boolean;
   checkoutStep: CheckoutStep;
-  lastOrderReference: string | null;
+  // S12 Phase 1: every enquiry/order created by the checkout that just
+  // completed (one per supplier — see apps/web/lib/order-checkout.ts).
+  // Previously this was a single `lastOrderReference: string | null`,
+  // which silently discarded every sibling Order's reference for a
+  // multi-supplier checkout. Renamed + widened to the same
+  // ConfirmedOrderSummary[] shape used by the standalone /checkout and
+  // /cart pages (see lib/order-confirmation.ts) so both confirmation
+  // surfaces behave identically.
+  lastCompletedOrders: ConfirmedOrderSummary[];
   openCart: (step?: CheckoutStep) => void;
   closeCart: () => void;
   setCheckoutStep: (step: CheckoutStep) => void;
   goToNextStep: () => void;
   goToPreviousStep: () => void;
-  completeCheckout: (orderReference: string) => void;
+  completeCheckout: (orders: ConfirmedOrderSummary[]) => void;
   resetCheckout: () => void;
 }
 
@@ -38,7 +47,7 @@ export const useOverlayStore = create<OverlayState>((set, get) => ({
 
   isCartOpen: false,
   checkoutStep: "review",
-  lastOrderReference: null,
+  lastCompletedOrders: [],
   openCart: (step = "review") => set({ isCartOpen: true, checkoutStep: step }),
   closeCart: () => set({ isCartOpen: false }),
   setCheckoutStep: (step) => set({ checkoutStep: step }),
@@ -52,6 +61,7 @@ export const useOverlayStore = create<OverlayState>((set, get) => ({
     const previous = STEP_ORDER[Math.max(currentIndex - 1, 0)];
     set({ checkoutStep: previous });
   },
-  completeCheckout: (orderReference) => set({ checkoutStep: "success", lastOrderReference: orderReference }),
-  resetCheckout: () => set({ checkoutStep: "review", lastOrderReference: null }),
+  completeCheckout: (orders) => set({ checkoutStep: "success", lastCompletedOrders: orders }),
+  resetCheckout: () => set({ checkoutStep: "review", lastCompletedOrders: [] }),
 }));
+

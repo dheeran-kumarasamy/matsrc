@@ -35,7 +35,7 @@ export default async function SupplierOrdersPage() {
                 <td className="px-4 py-3 font-semibold text-slate-800">
                   <OrderDetailButton
                     orderId={order.id}
-                    label={`#${order.id}`}
+                    label={order.displayOrderNumber}
                     className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
                   />
                   {order.isAggregated ? (
@@ -46,7 +46,10 @@ export default async function SupplierOrdersPage() {
                 </td>
 
                 <td className="px-4 py-3 text-slate-700">{order.buyer}</td>
-                <td className="px-4 py-3 text-slate-700">{order.material}</td>
+                <td className="px-4 py-3 text-slate-700">
+                  {order.brand ? <p className="text-xs font-semibold text-slate-400">{order.brand}</p> : null}
+                  <p>{order.material}</p>
+                </td>
                 <td className="px-4 py-3 text-slate-700">{order.qty}</td>
                 <td className="px-4 py-3 text-slate-700">{order.status}</td>
                 <td className="px-4 py-3">

@@ -1,7 +1,7 @@
 // packages/db/lib/payment-required-notification.ts
 //
-// Shared, framework-agnostic implementation of the `payment_required` Meta
-// WhatsApp template (Notification Engine pipeline) — fired the ONE time an
+// Shared, framework-agnostic implementation of the `payment_required_v2`
+// Meta WhatsApp template (Notification Engine pipeline) — fired the ONE time an
 // Order becomes payable, i.e. the moment it transitions PLACED -> PROCESSING
 // while its PaymentStatus is still PENDING (no payment made yet).
 //
@@ -60,56 +60,56 @@
 // `notifyCustomerOrderStatusChanged` (order.user.whatsappNumber || .phone),
 // never a new/duplicated phone lookup.
 //
-// Approved Meta template contract (fetched directly from the Graph API
-// message_templates endpoint using this repo's own configured
-// WHATSAPP_BUSINESS_ACCOUNT_ID / WHATSAPP_ACCESS_TOKEN — not invented):
-//   Template name:   payment_required
-//   Meta Template ID: 1457666726425273
+// Approved Meta template contract — CONFIRMED LIVE directly against the
+// Graph API (GET /{WABA_ID}/message_templates?name=payment_required_v2,
+// using this repo's own configured WHATSAPP_BUSINESS_ACCOUNT_ID /
+// WHATSAPP_ACCESS_TOKEN, verified 2026-10-12). IMPORTANT — this is NOT the
+// same body as the superseded "payment_required" template: an earlier
+// revision of this file incorrectly assumed the body/parameter contract was
+// unchanged across the template rename, which caused every live
+// payment_required_v2 send to be rejected by Meta with HTTP 400
+// code=132000 "Number of parameters does not match the expected number of
+// params" (confirmed production incident — order EQ/2607/00003 and every
+// other PAYMENT_REQUIRED send since the payment_required_v2 cutover never
+// delivered). Never assume a template's body/parameter contract carries
+// over across a Meta template name change without re-verifying via the
+// Graph API.
+//   Template name:   payment_required_v2
+//   Meta Template ID: 1645900400305073
 //   Language:        en
 //   Category:        UTILITY
-//   Body: "Payment is required for your Buildohub requirement {{1}}.
+//   Body: "Hi {{1}},
 //
-//          Amount payable: {{2}}
-//          Payment deadline: {{3}}
+//          Payment is pending for your BuildOhub order {{2}}.
 //
-//          Please complete the payment to proceed with your order."
-//   Buttons: one static QUICK_REPLY button ("Make Payment") — NOT a dynamic
-//          URL button, so (exactly like `supplier_po_alert`'s "View Purchase
-//          Order" button) WhatsApp renders it automatically from the
-//          template definition; no extra `components` entry/URL parameter is
-//          sent for it.
-//   {{1}} = enquiry/order display ID  = Order.enquiryId ?? Order.id (the
+//          Please open your order to review the details and complete payment.
+//
+//          Thank you,
+//          Team BuildOhub"
+//          Exactly TWO body variables — no amount-payable or
+//          payment-deadline variable exists in the approved copy at all.
+//   Buttons: one dynamic URL button ("Complete Payment"), approved FIXED
+//          prefix `https://buildohub.in/orders/payment/` (note: `/payment/`
+//          is part of the fixed prefix itself, NOT the dynamic `{{1}}`
+//          parameter). Only the BARE `orderId` (built by
+//          `buildPaymentButtonUrlSuffix` below) is ever sent as the
+//          button's `{{1}}` parameter — never the full URL, and never a
+//          `payment/{orderId}` suffix, which would resolve to a broken
+//          double `/payment/payment/` URL. Resolved destination:
+//          `https://buildohub.in/orders/payment/{orderId}`, matching the
+//          existing `/orders/payment/[id]` route.
+//   {{1}} = buyer display name        = User.name, falling back to a
+//          generic "Customer" greeting when empty (never left blank — Meta
+//          rejects an empty body parameter).
+//   {{2}} = enquiry/order display ID  = Order.enquiryId ?? Order.id (the
 //          exact same canonical display-ID fallback used by
 //          `customer_order_status` / `supplier_po_alert`).
-//   {{2}} = amount payable            = Order.totalAmount (the canonical,
-//          single order total already shown to the customer on the
-//          payment page — apps/web/app/(builder)/orders/[id]/payment/page.tsx
-//          — and the exact same amount PaymentVerification.amount is set to
-//          when a proof is later submitted, see payment-proof/route.ts:
-//          `amount: order.totalAmount`). Never independently
-//          recalculated/derived — this schema has no partial-payment,
-//          already-paid, or outstanding-balance concept at this point in the
-//          lifecycle (PaymentStatus is a simple
-//          PENDING -> PENDING_VERIFICATION -> PAID state machine with no
-//          amount tracking of its own), so `totalAmount` IS the canonical
-//          "amount currently payable" figure. Formatted with the exact same
-//          `₹${n.toLocaleString("en-IN")}` convention already used by
-//          apps/web/lib/builder-db.ts's formatCurrency (what the customer
-//          sees on the payment page), so the WhatsApp message always matches
-//          the UI.
-//   {{3}} = payment deadline          = There is no due-date column on Order
-//          anywhere in the schema (confirmed — no `dueAt`/`deadline`/
-//          `paymentDeadline` field exists on Order, Invoice, or
-//          PaymentVerification). Rather than inventing a stored field or a
-//          second payment-calculation service, this mirrors the existing,
-//          explicitly-sanctioned pattern of introducing a clean,
-//          environment-driven configuration value when no such table/column
-//          exists yet (see apps/web/lib/bank-account-config.ts's own doc
-//          comment for the identical justification) — PAYMENT_DUE_DAYS
-//          (default 2 days), computed as `now + N days` at the moment this
-//          transition is processed and formatted with the exact same
-//          `toLocaleDateString("en-IN")` convention already used by
-//          apps/web/lib/builder-db.ts's formatDate.
+//
+// `formatPaymentAmount`/`formatPaymentDeadline`/`PAYMENT_DUE_DAYS` below are
+// kept (still exported, still unit-tested) for any other caller that may
+// want the order's payable amount/deadline for a different purpose (e.g. an
+// in-app surface), but are NO LONGER passed to the WhatsApp send — the
+// approved payment_required_v2 body has no corresponding variables.
 //
 // Deduplication: dedupe key is `PAYMENT_REQUIRED:{orderId}` — the
 // PLACED -> PROCESSING transition is a one-directional, one-time event per
@@ -145,6 +145,31 @@ export type NotifyPaymentRequiredParams = {
  * `NotificationEnginePrismaClient` in customer-order-status-notification.ts
  * (see that file's doc comment for why this is safe here).
  */
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — this notification must now ALSO never fire before an Admin
+// has confirmed the order's SupplierInvoice (freight/other charges). Two
+// trigger points exist (both guarded by the SAME dedupe key
+// `PAYMENT_REQUIRED:{orderId}`, so whichever fires first "wins" and the
+// other is a safe, silent no-op — never a duplicate):
+//   1. notifyPaymentRequired (existing, called on the PLACED -> PROCESSING
+//      transition) — now ALSO requires the SupplierInvoice to already be
+//      CONFIRMED at that exact moment (an edge case: an Admin could in
+//      principle confirm a SupplierInvoice before the supplier formally
+//      "Confirm Enquiry"s via this transition, though in practice the
+//      existing SupplierInvoiceUpload UI only ever shows itself once
+//      order.status !== "PLACED" — see
+//      apps/supplier/app/(supplier)/orders/[id]/page.tsx). In the common
+//      case (supplier accepts BEFORE any invoice is confirmed), this call
+//      site now correctly no-ops.
+//   2. notifyPaymentRequiredOnSupplierInvoiceConfirmed (NEW) — called by
+//      SupplierInvoicesService.confirm() (apps/api) immediately after a
+//      SupplierInvoice is confirmed, for the common real-world sequence:
+//      supplier accepts first (order already PROCESSING, paymentStatus
+//      still PENDING), THEN an Admin later confirms freight/other
+//      charges. This is the point payment first genuinely becomes
+//      actionable for the buyer — paymentLinkAvailable (apps/web's order
+//      routes) only flips true once confirmationState === "CONFIRMED",
+//      which requires exactly this.
 export type PaymentRequiredPrismaClient = {
   order: { findUnique: (args: any) => Promise<any> };
   notificationEventPolicy: { findUnique: (args: any) => Promise<any> };
@@ -225,6 +250,33 @@ export function buildPaymentRequiredDedupeKey(orderId: string): string {
   return `${EVENT_TYPE}:${orderId}`;
 }
 
+/**
+ * Dynamic suffix for the approved `payment_required_v2` Meta URL button
+ * ("Complete Payment"). Meta's approved FIXED prefix is
+ * `https://buildohub.in/orders/payment/` — the `/payment/` segment is
+ * already part of the fixed prefix, NOT the dynamic `{{1}}` parameter — so
+ * only the BARE `orderId` is ever sent to Meta, resolving to
+ * `https://buildohub.in/orders/payment/{orderId}`, which matches the
+ * existing, already-authenticated buyer payment page at
+ * `apps/web/app/(builder)/orders/payment/[id]/page.tsx` (route unchanged by
+ * this task). Sending the previous `payment_required` template's
+ * `payment/{orderId}` suffix here would now produce a broken double
+ * `/payment/payment/` URL. Mirrors apps/api's
+ * `PaymentRequiredNotificationService`'s identical helper byte-for-byte so
+ * both send paths produce the exact same button payload.
+ */
+export function buildPaymentButtonUrlSuffix(orderId: string): string {
+  return orderId;
+}
+
+/**
+ * Fallback display name when the recipient's User.name is empty — mirrors
+ * apps/api's identical fallback (PaymentRequiredNotificationService) so both
+ * send paths never leave the approved template's {{1}} body parameter
+ * blank, which Meta rejects.
+ */
+const DEFAULT_BUYER_NAME = "Customer";
+
 type MetaGraphErrorBody = {
   error?: { message?: string; code?: number; error_subcode?: number };
 };
@@ -241,23 +293,31 @@ function formatMetaError(status: number, body: MetaGraphErrorBody): string {
 }
 
 /**
- * Low-level Meta Cloud API template send — exactly 3 body parameters, no
- * header. The approved template's static "Make Payment" QUICK_REPLY button
- * is rendered automatically by WhatsApp from the template definition itself
- * (not a dynamic URL button, so no extra `components` entry is needed — see
- * WhatsappNotificationService's doc comment / supplier_po_alert's identical
- * static-button handling). Mirrors apps/api's
- * WhatsappNotificationService.sendTemplateAlert / this package's other
- * *-notification.ts `sendTemplateViaMeta` byte-for-byte (same payload shape,
- * same WhatsAppMessageLog bookkeeping, same live/dry-run/off branching) so
- * every app produces identical audit-trail rows and identical Meta payloads.
+ * Low-level Meta Cloud API template send — exactly 2 body parameters
+ * ([buyerName, enquiryDisplayId], matching payment_required_v2's actually
+ * approved body — see this file's top doc comment for the confirmed
+ * incident where sending 3 parameters caused every live send to be
+ * rejected), no header, plus an optional dynamic URL `button` component
+ * when `buttonUrlSuffix` is supplied. The approved template's button was
+ * originally a static "Make Payment" QUICK_REPLY (rendered automatically by
+ * WhatsApp from the template definition, no extra component needed), then
+ * re-approved as a dynamic "Complete Payment" URL button under the
+ * `payment_required` template (fixed prefix `https://buildohub.in/orders/{{1}}`),
+ * and now sent via the newly approved `payment_required_v2` template (fixed
+ * prefix `https://buildohub.in/orders/payment/{{1}}` — note `/payment/` is
+ * now part of the fixed prefix) — see `buildPaymentButtonUrlSuffix`'s doc
+ * comment above. Mirrors apps/api's WhatsappNotificationService.sendLive's
+ * identical button-component shape byte-for-byte (same payload shape, same
+ * WhatsAppMessageLog bookkeeping, same live/dry-run/off branching) so every
+ * app produces identical audit-trail rows and identical Meta payloads.
  */
 async function sendTemplateViaMeta(
   prisma: PaymentRequiredPrismaClient,
   phone: string,
   templateName: string,
   parameters: string[],
-  log: (message: string) => void
+  log: (message: string) => void,
+  buttonUrlSuffix?: string
 ): Promise<{ success: boolean; externalId?: string; error?: string }> {
   const mode = getPaymentRequiredWhatsAppMode();
 
@@ -293,6 +353,20 @@ async function sendTemplateViaMeta(
       return { success: false, error: errorDetails };
     }
 
+    // Dynamic URL button component — only added when a suffix is supplied
+    // (the approved "Complete Payment" button). Mirrors apps/api's
+    // WhatsappNotificationService.sendLive's identical component shape
+    // (sub_type "url", index 0, single text parameter) so both send paths
+    // produce byte-for-byte the same Meta payload shape.
+    const components = [
+      ...(parameters.length > 0
+        ? [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text })) }]
+        : []),
+      ...(buttonUrlSuffix
+        ? [{ type: "button", sub_type: "url", index: 0, parameters: [{ type: "text", text: buttonUrlSuffix }] }]
+        : []),
+    ];
+
     const payload = {
       messaging_product: "whatsapp",
       recipient_type: "individual",
@@ -301,9 +375,7 @@ async function sendTemplateViaMeta(
       template: {
         name: templateName,
         language: { code: getTemplateLanguage() },
-        ...(parameters.length > 0
-          ? { components: [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text })) }] }
-          : {}),
+        ...(components.length > 0 ? { components } : {}),
       },
     };
 
@@ -407,8 +479,39 @@ export async function notifyPaymentRequired(
     return;
   }
 
+  await sendPaymentRequiredIfEligible(prisma, orderId, onLog);
+}
+
+/**
+ * Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+ * Dispatch — the SECOND trigger point for this notification (see this
+ * file's top "Admin-Confirmed Freight" doc comment): called by
+ * SupplierInvoicesService.confirm() immediately after a SupplierInvoice
+ * is confirmed, covering the common real-world sequence where the
+ * supplier already accepted the enquiry (order already PROCESSING) BEFORE
+ * an Admin later confirms the freight/other charges. Shares the exact
+ * same eligibility checks and dedupe key as notifyPaymentRequired, so
+ * whichever of the two trigger points fires first for a given order is
+ * the only one that actually sends — the other is a safe, silent no-op.
+ */
+export async function notifyPaymentRequiredOnSupplierInvoiceConfirmed(
+  prisma: PaymentRequiredPrismaClient,
+  orderId: string,
+  onLog: (message: string) => void = () => undefined
+): Promise<void> {
+  await sendPaymentRequiredIfEligible(prisma, orderId, onLog);
+}
+
+async function sendPaymentRequiredIfEligible(
+  prisma: PaymentRequiredPrismaClient,
+  orderId: string,
+  onLog: (message: string) => void
+): Promise<void> {
   try {
-    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { user: true } });
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { user: true, supplierInvoice: { select: { status: true } } },
+    });
     if (!order) {
       onLog(`PAYMENT_REQUIRED: order ${orderId} not found — skipping notification`);
       return;
@@ -425,10 +528,27 @@ export async function notifyPaymentRequired(
       return;
     }
 
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — payment is never "required" (in the sense this
+    // notification represents) until an Admin has confirmed the
+    // SupplierInvoice's freight/other charges; the buyer-facing payment
+    // page itself stays disabled until then (see
+    // apps/web/app/api/builder/orders/[id]/route.ts's
+    // confirmationState/paymentLinkAvailable derivation). A missing or
+    // not-yet-CONFIRMED SupplierInvoice means this is not yet the right
+    // moment to notify — the OTHER trigger point
+    // (notifyPaymentRequiredOnSupplierInvoiceConfirmed) will fire once it
+    // genuinely is.
+    if (!order.supplierInvoice || order.supplierInvoice.status !== "CONFIRMED") {
+      onLog(
+        `PAYMENT_REQUIRED: order ${orderId} SupplierInvoice is not yet CONFIRMED — skipping notification until final confirmation`
+      );
+      return;
+    }
+
     const phone = order.user.whatsappNumber?.trim() || order.user.phone?.trim() || null;
     const enquiryDisplayId = order.enquiryId ?? order.id;
-    const amountPayable = formatPaymentAmount(order.totalAmount);
-    const paymentDeadline = formatPaymentDeadline();
+    const buyerName = order.user.name?.trim() || DEFAULT_BUYER_NAME;
 
     const dedupeKey = buildPaymentRequiredDedupeKey(orderId);
 
@@ -443,7 +563,7 @@ export async function notifyPaymentRequired(
           entityType: "Order",
           entityId: orderId,
           channel: CHANNEL,
-          payload: { orderId, enquiryDisplayId, amountPayable, paymentDeadline },
+          payload: { orderId, enquiryDisplayId, buyerName },
           status: "suppressed",
           suppressReason: decision.reason,
         },
@@ -461,7 +581,7 @@ export async function notifyPaymentRequired(
         entityId: orderId,
         channel: CHANNEL,
         dedupeKey,
-        payload: { orderId, enquiryDisplayId, amountPayable, paymentDeadline },
+        payload: { orderId, enquiryDisplayId, buyerName },
         status: "created",
       },
     });
@@ -476,8 +596,11 @@ export async function notifyPaymentRequired(
       prisma,
       phone,
       decision.templateName,
-      [enquiryDisplayId, amountPayable, paymentDeadline],
-      onLog
+      // Exactly 2 parameters, matching the approved payment_required_v2
+      // template's actual body contract — see this file's top doc comment.
+      [buyerName, enquiryDisplayId],
+      onLog,
+      buildPaymentButtonUrlSuffix(orderId)
     );
 
     await prisma.notificationEvent.update({ where: { id: event.id }, data: { status: sendResult.success ? "sent" : "failed" } });

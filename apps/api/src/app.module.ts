@@ -24,9 +24,15 @@ import { AuditModule } from "./admin/audit/audit.module";
 import { WhatsAppEscalationsModule } from "./admin/whatsapp-escalations/whatsapp-escalations.module";
 import { SupplierRejectionsModule } from "./admin/supplier-rejections/supplier-rejections.module";
 import { CatalogModule } from "./admin/catalog/catalog.module";
+import { MarkupModule } from "./admin/markup/markup.module";
+import { GstModule } from "./admin/gst/gst.module";
 import { PaymentsModule } from "./admin/payments/payments.module";
+import { AdvancePaymentsModule } from "./admin/advance-payments/advance-payments.module";
 import { IciciPaymentsModule } from "./admin/icici-payments/icici-payments.module";
 import { InvoicesModule } from "./admin/invoices/invoices.module";
+import { AdminRfqPdfModule } from "./admin/orders/rfq-pdf.module";
+import { SupplierInvoicesModule } from "./admin/supplier-invoices/supplier-invoices.module";
+import { AdminRatingsModule } from "./admin/ratings/ratings.module";
 
 import { NotificationsModule } from "./notifications/notifications.module";
 import { PublicInsightsModule } from "./public-insights/public-insights.module";
@@ -77,9 +83,15 @@ import { AdminNotificationEngineModule } from "./notification-engine/admin/admin
     SupplierRejectionsModule,
     SupplierReportsModule,
     CatalogModule,
+    MarkupModule,
+    GstModule,
     PaymentsModule,
+    AdvancePaymentsModule,
     IciciPaymentsModule,
     InvoicesModule,
+    AdminRfqPdfModule,
+    SupplierInvoicesModule,
+    AdminRatingsModule,
 
     WhatsAppModule,
     PricingModule,

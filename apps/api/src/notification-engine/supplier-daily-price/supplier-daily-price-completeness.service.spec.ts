@@ -12,6 +12,14 @@ function makePrisma(overrides: Record<string, any> = {}) {
     priceSnapshot: {
       findMany: vi.fn().mockResolvedValue(overrides.snapshotsToday ?? []),
     },
+    // Supplier Daily Price Update enhancement: the completeness check also
+    // reads the matching NotificationEvent row's confirmedSameProductIds
+    // (see this service's doc comment). Defaults to "no session row yet"
+    // (null) — i.e. no confirmed SAME acknowledgements — unless a test
+    // explicitly overrides it via `confirmedSameEvent`.
+    notificationEvent: {
+      findUnique: vi.fn().mockResolvedValue(overrides.confirmedSameEvent ?? null),
+    },
   };
 }
 
@@ -56,6 +64,66 @@ describe("SupplierDailyPriceCompletenessService", () => {
     const result = await service.evaluateSupplier("supplier-1");
 
     expect(result.missingProducts).toEqual([]);
+  });
+
+  describe("Supplier Daily Price Update — confirmed SAME acknowledgements", () => {
+    it("a confirmed SAME acknowledgement satisfies completeness without a PriceSnapshot", async () => {
+      const prisma = makePrisma({
+        products: [
+          { id: "p1", name: "TMT 10mm" },
+          { id: "p2", name: "TMT 12mm" },
+        ],
+        snapshotsToday: [], // no snapshot for either product at all
+        confirmedSameEvent: { payload: { confirmedSameProductIds: ["p1", "p2"] } },
+      });
+      const service = new SupplierDailyPriceCompletenessService(prisma as any);
+
+      const result = await service.evaluateSupplier("supplier-1");
+
+      expect(result.missingProducts).toEqual([]);
+    });
+
+    it("an unconfirmed (merely previewed) SAME — i.e. absent from confirmedSameProductIds — does NOT satisfy completeness", async () => {
+      const prisma = makePrisma({
+        products: [{ id: "p1", name: "TMT 10mm" }],
+        snapshotsToday: [],
+        confirmedSameEvent: { payload: { confirmedSameProductIds: [] } },
+      });
+      const service = new SupplierDailyPriceCompletenessService(prisma as any);
+
+      const result = await service.evaluateSupplier("supplier-1");
+
+      expect(result.missingProducts).toEqual([{ id: "p1", name: "TMT 10mm" }]);
+    });
+
+    it("a mix of a genuine PriceSnapshot and a confirmed SAME both satisfy completeness", async () => {
+      const prisma = makePrisma({
+        products: [
+          { id: "p1", name: "TMT 10mm" },
+          { id: "p2", name: "TMT 12mm" },
+        ],
+        snapshotsToday: [{ productId: "p1" }],
+        confirmedSameEvent: { payload: { confirmedSameProductIds: ["p2"] } },
+      });
+      const service = new SupplierDailyPriceCompletenessService(prisma as any);
+
+      const result = await service.evaluateSupplier("supplier-1");
+
+      expect(result.missingProducts).toEqual([]);
+    });
+
+    it("missing/resolved session rows (no NotificationEvent at all) are handled safely — treated as zero confirmed SAME", async () => {
+      const prisma = makePrisma({
+        products: [{ id: "p1", name: "TMT 10mm" }],
+        snapshotsToday: [],
+        confirmedSameEvent: null,
+      });
+      const service = new SupplierDailyPriceCompletenessService(prisma as any);
+
+      const result = await service.evaluateSupplier("supplier-1");
+
+      expect(result.missingProducts).toEqual([{ id: "p1", name: "TMT 10mm" }]);
+    });
   });
 
   it("evaluateAllActiveSuppliers evaluates every active supplier and tolerates a single failure", async () => {

@@ -63,6 +63,14 @@ export const AUTHENTICATION_EVENT_TYPES = [
   "EMAIL_CHANGE_OTP",
   "PHONE_CHANGE_OTP",
   "SECURITY_ALERT",
+  // Buyer/Supplier portal login OTP delivered via WhatsApp (see
+  // packages/db/lib/login-otp-whatsapp-notification.ts, the shared
+  // framework-agnostic sender both apps/web and apps/supplier call
+  // directly). No equivalent event existed in this registry before — see
+  // the repository audit's "Notification Event/Template Architecture"
+  // finding. Mandatory per MANDATORY_EVENT_TYPES below: must never be
+  // suppressible by the business WhatsApp kill-switch or user opt-out.
+  "LOGIN_OTP",
 ] as const;
 
 export const SUMMARY_EVENT_TYPES = [

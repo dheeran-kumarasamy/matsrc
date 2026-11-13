@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { builderApiGet, builderApiPost, builderApiDelete } from "@/lib/api";
 import ContactOtpModal, { type ContactOtpChannel } from "@/components/profile/ContactOtpModal";
+import ProfileNavOptions from "@/components/profile/ProfileNavOptions";
 
 type ContactInfo = {
   name: string | null;
@@ -218,11 +219,14 @@ export default function BuilderProfilePage() {
   const phoneVerified = contact?.phoneVerified ?? false;
 
   return (
-    <div className="max-w-md mx-auto p-6 space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-800 mb-1">Your Profile</h1>
-        <p className="text-sm text-gray-500">Manage your contact information and notification preferences</p>
-      </div>
+    <div className="space-y-6">
+      <ProfileNavOptions />
+
+      <div className="max-w-md mx-auto p-6 space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-1">Your Profile</h1>
+          <p className="text-sm text-gray-500">Manage your contact information and notification preferences</p>
+        </div>
 
       {/* Name - Read-only */}
       <div>
@@ -365,6 +369,7 @@ export default function BuilderProfilePage() {
           onVerified={handleModalVerified}
         />
       )}
+      </div>
     </div>
   );
 }

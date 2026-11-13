@@ -59,19 +59,26 @@ POLICIES.push(
   // apps/api/src/notification-engine/supplier-daily-price/supplier-daily-price-reminder.service.ts.
   { eventType: "SUPPLIER_DAILY_PRICE_UPDATE_REQUIRED", channel: "WHATSAPP", templateName: "supplier_price_update", metaTemplateId: "1889118722523200", displayName: "Daily Price Update Required", description: "Reminds a supplier that today's price list update is incomplete for one or more active listings.", priority: "P1", cooldownMinutes: null, maxPerDay: 1, businessHoursOnly: true },
   // Meta template mapping: approved Utility template (ID 1055000930652376,
-  // language "en"), static "View Quote" QUICK_REPLY button (not a dynamic
-  // URL button), exactly 3 body variables ({{1}}=enquiry/RFQ ID,
-  // {{2}}=material, {{3}}=quantity) — see
-  // apps/api/src/notification-engine/whatsapp/quote-received-notification.service.ts.
+  // language "en"), exactly 3 body variables ({{1}}=enquiry/order display
+  // ID, {{2}}=material, {{3}}=quantity). The "View Quote" button was
+  // upgraded from a static QUICK_REPLY to a dynamic URL CTA with approved
+  // fixed prefix https://buildohub.in/orders/{{1}} (no query string) — see
+  // apps/api/src/notification-engine/whatsapp/quote-received-notification.service.ts
+  // for the full Graph-API-verified audit.
   { eventType: "QUOTE_RECEIVED", channel: "WHATSAPP", templateName: "quote_received", metaTemplateId: "1055000930652376", displayName: "Quote Received", description: "Notifies a customer that a supplier has responded to their RFQ with a quote.", priority: "P1", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   { eventType: "QUOTE_COMPARISON_READY", channel: "WHATSAPP", templateName: "quote_comparison_ready", displayName: "Quote Comparison Ready", description: "Notifies a customer that enough quotes have been received to compare and select.", priority: "P1", cooldownMinutes: null, maxPerDay: 1, businessHoursOnly: false },
   { eventType: "QUOTE_EXPIRY_REMINDER", channel: "WHATSAPP", templateName: "quote_expiry_reminder", displayName: "Quote Expiry Reminder", description: "Reminds a customer that a received quote is about to expire.", priority: "P1", cooldownMinutes: 240, maxPerDay: 1, businessHoursOnly: true },
-  // Meta template mapping: approved Utility template (ID 1457666726425273,
-  // language "en"), static "Make Payment" QUICK_REPLY button (not a dynamic
-  // URL button), exactly 3 body variables ({{1}}=order/enquiry ID,
-  // {{2}}=amount payable, {{3}}=payment deadline) — see
-  // packages/db/lib/payment-required-notification.ts.
-  { eventType: "PAYMENT_REQUIRED", channel: "WHATSAPP", templateName: "payment_required", metaTemplateId: "1457666726425273", displayName: "Payment Required", description: "Notifies a customer that payment is required to proceed with an order.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
+  // Meta template mapping updated: the original "payment_required" template
+  // (ID 1457666726425273, static "Make Payment" QUICK_REPLY button) was
+  // superseded by the newly approved "payment_required_v2" (ID
+  // 1645900400305073), which upgrades the button to a dynamic "Complete
+  // Payment" URL button with approved fixed prefix
+  // `https://buildohub.in/orders/payment/` + bare orderId suffix — see
+  // packages/db/lib/payment-required-notification.ts's doc comment. Body
+  // parameter count/order (3: {{1}}=order/enquiry ID, {{2}}=amount payable,
+  // {{3}}=payment deadline) is unchanged. Do NOT reintroduce
+  // "payment_required" here.
+  { eventType: "PAYMENT_REQUIRED", channel: "WHATSAPP", templateName: "payment_required_v2", metaTemplateId: "1645900400305073", displayName: "Payment Required", description: "Notifies a customer that payment is required to proceed with an order.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   { eventType: "PAYMENT_FAILED", channel: "WHATSAPP", templateName: "payment_failed", displayName: "Payment Failed", description: "Notifies a customer that a payment attempt failed.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   // Meta template mapping: approved Utility/"Order Status" template, no
   // header, no buttons, exactly 2 body variables ({{1}}=enquiry/order ID,
@@ -79,7 +86,29 @@ POLICIES.push(
   // apps/api/src/notification-engine/whatsapp/customer-order-status-notification.service.ts.
   { eventType: "ORDER_STATUS_CHANGED", channel: "WHATSAPP", templateName: "customer_order_status", metaTemplateId: "1788249542353441", displayName: "Order Status Update", description: "Notifies a customer whenever their order's status changes.", priority: "P1", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
   { eventType: "DELIVERY_EXCEPTION", channel: "WHATSAPP", templateName: "delivery_exception", displayName: "Delivery Exception", description: "Alerts a customer of a delivery exception (delay, damage, failed attempt) on their order.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false },
-  { eventType: "ACTION_REQUIRED", channel: "WHATSAPP", templateName: "action_reminder_alert", displayName: "Action Required", description: "Generic action-required nudge for a customer (e.g. confirm delivery slot, upload document).", priority: "P1", cooldownMinutes: 240, maxPerDay: 1, businessHoursOnly: true }
+  { eventType: "ACTION_REQUIRED", channel: "WHATSAPP", templateName: "action_reminder_alert", displayName: "Action Required", description: "Generic action-required nudge for a customer (e.g. confirm delivery slot, upload document).", priority: "P1", cooldownMinutes: 240, maxPerDay: 1, businessHoursOnly: true },
+  // buildohub_login_otp — Buyer/Supplier portal primary login OTP delivery
+  // channel (WhatsApp). AUTHENTICATION-category Meta template, APPROVED
+  // (verified live via Graph API GET /{WABA_ID}/message_templates?name=buildohub_login_otp
+  // on 2026-10-08): metaTemplateId "1454146059894282", language "en", body
+  // has exactly 1 variable ({{1}}=OTP), button is a URL-type "Copy code"
+  // button (Meta's COPY_CODE-via-URL-button mechanism) with 1 dynamic
+  // parameter ({{1}}=OTP) — matches the existing payload shape in
+  // packages/db/lib/login-otp-whatsapp-notification.ts exactly (body text
+  // param + button sub_type "url" index 0 text param), no correction
+  // needed. Footer text says "Expires in 10 minutes" (code_expiration_minutes:
+  // 10) — NOTE this is template copy only; actual OTP expiry enforcement is
+  // the backend OtpChallenge's 5-minute OTP_TTL_MS (apps/web/lib/otp-service/constants.ts
+  // / packages/db/lib/otp-challenge.ts), which is stricter than the
+  // template's stated 10 minutes. This is a display-copy mismatch, not a
+  // security issue (backend expiring OTPs sooner than the message implies
+  // is safe) — flagged for the project owner to resolve by either getting
+  // Meta to approve updated footer copy or extending OTP_TTL_MS, NOT
+  // silently changed here since OTP_TTL_MS is shared with PO_APPROVAL_OTP.
+  // No cooldown/daily-limit/business-hours restriction — OTP delivery must
+  // never be throttled the way business notifications are (see
+  // notification-event-types.ts MANDATORY_EVENT_TYPES).
+  { eventType: "LOGIN_OTP", channel: "WHATSAPP", templateName: "buildohub_login_otp", metaTemplateId: "1454146059894282", displayName: "Login OTP (WhatsApp)", description: "Delivers the Buyer/Supplier portal login OTP via WhatsApp — primary login delivery channel.", priority: "P0", cooldownMinutes: null, maxPerDay: null, businessHoursOnly: false }
 );
 
 async function main() {

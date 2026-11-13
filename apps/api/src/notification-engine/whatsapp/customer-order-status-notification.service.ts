@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { OrderStatus, getOrderStatusDisplayLabel } from "@matsrc/db";
+import { OrderStatus, getOrderStatusDisplayLabel, writeInAppOrderStatusAlert } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationEngineService } from "../notification-engine.service";
 
@@ -69,12 +69,27 @@ export class CustomerOrderStatusNotificationService {
     try {
       const order = await this.prisma.order.findUnique({
         where: { id: orderId },
-        include: { user: true },
+        include: { user: true, items: { include: { supplier: true } } },
       });
       if (!order) {
         this.logger.warn(`ORDER_STATUS_CHANGED: order ${orderId} not found — skipping notification`);
         return;
       }
+
+      // In-app Alerts bell write (Notification table) — see
+      // packages/db/lib/customer-order-status-notification.ts's
+      // writeInAppOrderStatusAlert doc comment for the full audit of why
+      // this additive write exists alongside the WhatsApp send below.
+      // Shared with apps/supplier's direct call to
+      // notifyCustomerOrderStatusChanged() so both implementations produce
+      // identical Notification rows; never blocks/affects the WhatsApp
+      // dispatch that follows.
+      await writeInAppOrderStatusAlert(
+        this.prisma as any,
+        order,
+        newStatus,
+        (message) => this.logger.warn(message)
+      );
 
       const phone = order.user.whatsappNumber?.trim() || order.user.phone?.trim() || null;
       const enquiryDisplayId = order.enquiryId ?? order.id;

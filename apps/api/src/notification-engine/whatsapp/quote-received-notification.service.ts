@@ -14,6 +14,26 @@ import { NotificationEngineService } from "../notification-engine.service";
  * `packages/db/scripts/seed-notification-templates.js` (templateName
  * "quote_received", metaTemplateId "1055000930652376", language "en").
  *
+ * CONFIRMED LIVE FROM META GRAPH API (GET /{WABA_ID}/message_templates?name=quote_received,
+ * 2026-10-13): body unchanged — exactly 3 parameters ({{1}}=enquiry/order
+ * display ID, {{2}}=material, {{3}}=quantity), POSITIONAL format. The "View
+ * Quote" button was upgraded from a static QUICK_REPLY to a dynamic URL CTA
+ * with approved fixed prefix `https://buildohub.in/orders/{{1}}` — NO query
+ * string (the button's live `url` field is exactly
+ * "https://buildohub.in/orders/{{1}}", confirmed by its own example value
+ * `https://buildohub.in/orders/abc3k4ln50001u0lxv6xsc24j`, a bare id with no
+ * `?` anywhere). The dynamic `{{1}}` is therefore the bare `Order.id` this
+ * notification already carries as `enquiryId` — NEVER `order.enquiryId`
+ * (the human-readable Business Number, e.g. "BH-2026-00452", used only in
+ * body text) and never a `SupplierQuote.id`/`OrderItem.id`. This matches
+ * `apps/web/app/(builder)/orders/[id]/page.tsx` exactly, which fetches via
+ * `GET /builder/orders/:id` -> `BuilderOrdersService.findOne` ->
+ * `prisma.order.findFirst({ where: { id, userId: user.id } })` — i.e. the
+ * route's `[id]` param IS `Order.id`, and ownership is already enforced
+ * server-side (a buyer can never open another buyer's order by guessing an
+ * id). See `buildOrderButtonUrlSuffix`'s doc comment below for the exact
+ * dynamic-parameter format.
+ *
  * AUDIT (repository evidence): the canonical, builder-visible "a supplier
  * has submitted a quotation" entity in this codebase is `SupplierQuote`
  * (enquiryId=Order.id, lineItemId=OrderItem.id) — NOT the separate
@@ -41,6 +61,20 @@ import { NotificationEngineService } from "../notification-engine.service";
  * call site in this codebase. Callers MUST invoke `notify()` only AFTER the
  * `SupplierQuote` row(s) have already committed.
  */
+/**
+ * Builds the dynamic `{{1}}` parameter for `quote_received`'s "View Quote"
+ * URL button. The approved fixed prefix
+ * `https://buildohub.in/orders/{{1}}` already includes the `/orders/` path
+ * segment, so this must be the bare `Order.id` only — never
+ * `order.enquiryId` (display-only Business Number), never re-prefixed with
+ * `/orders/`, and never the full URL. Exported as a standalone function
+ * purely so it can be unit-tested in isolation without needing to mock
+ * Prisma/the Notification Engine for every case.
+ */
+function buildOrderButtonUrlSuffix(orderId: string): string {
+  return orderId;
+}
+
 @Injectable()
 export class QuoteReceivedNotificationService {
   private readonly logger = new Logger(QuoteReceivedNotificationService.name);
@@ -99,6 +133,7 @@ export class QuoteReceivedNotificationService {
           parameters: [enquiryDisplayId, material, quantity],
           title: "Quote Received",
           body: `A supplier has submitted a quotation for your requirement ${enquiryDisplayId}. Material: ${material}. Quantity: ${quantity}. Please review the quotation on Buildohub.`,
+          buttonUrlSuffix: buildOrderButtonUrlSuffix(enquiryId),
           dedupeKey,
           payload: { enquiryId, supplierId, quoteIds, enquiryDisplayId, material, quantity },
         },

@@ -12,32 +12,37 @@ import { prisma } from "@/lib/prisma";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const siteUrl = getSiteUrl();
 
-  const [categories, listings] = await Promise.all([
-    prisma.category.findMany({
-      where: { isActive: true, products: { some: { isActive: true } } },
-      select: { name: true },
-    }),
-    getSupplierListings(),
-  ]);
-
-  const activeProducts = dedupeByCanonicalGroup(listings.filter((l) => l.active));
-
   const staticEntries: MetadataRoute.Sitemap = [
     { url: siteUrl, changeFrequency: "daily", priority: 1 },
     { url: `${siteUrl}/products`, changeFrequency: "daily", priority: 0.9 },
   ];
 
-  const categoryEntries: MetadataRoute.Sitemap = categories.map((c) => ({
-    url: `${siteUrl}/products?category=${encodeURIComponent(c.name)}`,
-    changeFrequency: "daily",
-    priority: 0.7,
-  }));
+  try {
+    const [categories, listings] = await Promise.all([
+      prisma.category.findMany({
+        where: { isActive: true, products: { some: { isActive: true } } },
+        select: { name: true },
+      }),
+      getSupplierListings(),
+    ]);
 
-  const productEntries: MetadataRoute.Sitemap = activeProducts.map((p) => ({
-    url: `${siteUrl}/products/${p.id}`,
-    changeFrequency: "daily",
-    priority: 0.6,
-  }));
+    const activeProducts = dedupeByCanonicalGroup(listings.filter((l) => l.active));
 
-  return [...staticEntries, ...categoryEntries, ...productEntries];
+    const categoryEntries: MetadataRoute.Sitemap = categories.map((c) => ({
+      url: `${siteUrl}/products?category=${encodeURIComponent(c.name)}`,
+      changeFrequency: "daily",
+      priority: 0.7,
+    }));
+
+    const productEntries: MetadataRoute.Sitemap = activeProducts.map((p) => ({
+      url: `${siteUrl}/products/${p.id}`,
+      changeFrequency: "daily",
+      priority: 0.6,
+    }));
+
+    return [...staticEntries, ...categoryEntries, ...productEntries];
+  } catch (err) {
+    console.warn("[sitemap] Failed to fetch dynamic entries during build:", err);
+    return staticEntries;
+  }
 }

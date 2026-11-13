@@ -9,8 +9,8 @@ import ProfileMenu from "@/components/shared/ProfileMenu";
 
 // Single top-navigation reference implementation, standardized on the
 // visual layout/spacing previously bespoke to /newdashboard: a search bar
-// that grows to fill available space, followed by Cart -> Alerts ->
-// Reports -> Profile, in that fixed order, at the far right.
+// that grows to fill available space, followed by Alerts -> Reports ->
+// Cart -> Profile, in that fixed order, at the far right.
 //
 // This is now the ONE place that composes those five controls. Every page
 // that shows the main application top navigation renders THIS component
@@ -45,7 +45,6 @@ export default function AppHeader({
       <HeaderSearchForm />
 
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-        <CartLauncher />
         {/* Alerts: overlay dropdown from the bell icon (not a separate
             page) — see NotificationBell.tsx. Every order status change
             already creates a Notification row via apps/api's
@@ -55,6 +54,10 @@ export default function AppHeader({
         {/* "Reports" entry point: opens the Reports catalogue overlay
             (Material Consumption, Best Supplier Pricing, etc). */}
         <HeaderIconLink href="/reports" label="Reports" icon={FileBarChart} ariaLabel="View reports" />
+        {/* Cart now sits immediately before Profile (Alerts -> Reports ->
+            Cart -> Profile), same CartLauncher control/state as before —
+            only its position in this row changed. */}
+        <CartLauncher />
         <ProfileMenu />
       </div>
     </header>

@@ -9,11 +9,13 @@
 // and aggregation event) via /api/builder/notifications. Polls periodically
 // so the unread badge stays fresh without a full websocket setup.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Bell } from "lucide-react";
 
 import { builderApiGet, builderApiPatch } from "@/lib/api";
+import { usePolling } from "@/lib/use-polling";
 
 type NotificationItem = {
   id: string;
@@ -33,6 +35,17 @@ type NotificationsResponse = {
   unreadCount: number;
 };
 
+type AccountNotificationState = {
+  accountId: string | null;
+  items: NotificationItem[];
+  unreadCount: number;
+};
+
+type AccountErrorState = {
+  accountId: string | null;
+  hasError: boolean;
+};
+
 const POLL_INTERVAL_MS = 30_000;
 
 function timeAgo(dateString: string): string {
@@ -50,42 +63,174 @@ function timeAgo(dateString: string): string {
 
 export default function NotificationBell() {
   const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
   const [open, setOpen] = useState(false);
 
-  const [items, setItems] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Atomic account-scoped notification data structure.
+  // Associating items and unreadCount with the owning account ID guarantees that
+  // on logout or account switch, the previous account's notifications are immediately
+  // hidden during the first render, without waiting for passive cleanup effects.
+  const [accountData, setAccountData] = useState<AccountNotificationState>({
+    accountId: null,
+    items: [],
+    unreadCount: 0,
+  });
 
-  const fetchNotifications = useCallback(() => {
-    builderApiGet<NotificationsResponse>("/notifications")
-      .then((data) => {
-        setItems(data.items ?? []);
-        setUnreadCount(data.unreadCount ?? 0);
-        setError(false);
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
-  }, []);
+  const [loading, setLoading] = useState(false);
+
+  const [accountError, setAccountError] = useState<AccountErrorState>({
+    accountId: null,
+    hasError: false,
+  });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isMountedRef = useRef(true);
+
+  // Reliable account identifier:
+  // sessionStatus === "authenticated" and session.user must both be present.
+  const isAuthenticated = sessionStatus === "authenticated" && Boolean(session?.user);
+  const currentAccountId = isAuthenticated
+    ? (session?.user?.id || session?.user?.email || null)
+    : null;
+
+  // Account-scoped ownership check:
+  // Derived state ensures that if currentAccountId is null (logout) or differs from
+  // accountData.accountId (account switch), rendered items and unread count are immediately
+  // empty during the first render before any passive effect runs.
+  const isOwnedByCurrentAccount = Boolean(
+    currentAccountId && accountData.accountId === currentAccountId
+  );
+  const items = isOwnedByCurrentAccount ? accountData.items : [];
+  const unreadCount = isOwnedByCurrentAccount ? accountData.unreadCount : 0;
+
+  // Account-scoped error check:
+  // An error is only displayed if it belongs to the currently authenticated account.
+  // When switching accounts or logging out, any previous account error is immediately
+  // hidden on the first render before passive effects execute, preventing it from
+  // leaking to the new account or suppressing its initial loading indicator.
+  const isErrorOwnedByCurrentAccount = Boolean(
+    currentAccountId && accountError.accountId === currentAccountId && accountError.hasError
+  );
+  const error = isErrorOwnedByCurrentAccount;
+
+  // Initial account loading indicator:
+  // Show loading if authenticated, but no response has yet arrived for this account and no error occurred.
+  // Ordinary 30-second background polling retains existing notifications without flashing loading.
+  const isInitialAccountLoading = Boolean(
+    currentAccountId && accountData.accountId !== currentAccountId && !error
+  );
+  const showLoading = loading || isInitialAccountLoading;
+
+  const currentAccountIdRef = useRef<string | null>(currentAccountId);
+  currentAccountIdRef.current = currentAccountId;
+
+  const prevAccountIdRef = useRef<string | null>(currentAccountId);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [fetchNotifications]);
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const fetchNotifications = useCallback(async () => {
+    const requestUser = currentAccountIdRef.current;
+    const requestId = ++requestIdRef.current;
+
+    // Do not initiate or process requests if not authenticated
+    if (!requestUser) return;
+
+    try {
+      const data = await builderApiGet<NotificationsResponse>("/notifications");
+      if (!isMountedRef.current) return;
+
+      // Stale-response guard:
+      // If the authenticated user changed, or if user logged out,
+      // or if a newer request was dispatched while this was in flight, discard the response.
+      if (currentAccountIdRef.current !== requestUser || requestIdRef.current !== requestId) {
+        return;
+      }
+
+      setAccountData({
+        accountId: requestUser,
+        items: data.items ?? [],
+        unreadCount: data.unreadCount ?? 0,
+      });
+      setAccountError({
+        accountId: requestUser,
+        hasError: false,
+      });
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      if (currentAccountIdRef.current !== requestUser || requestIdRef.current !== requestId) {
+        return;
+      }
+      setAccountError({
+        accountId: requestUser,
+        hasError: true,
+      });
+      throw err;
+    } finally {
+      if (
+        isMountedRef.current &&
+        currentAccountIdRef.current === requestUser &&
+        requestIdRef.current === requestId
+      ) {
+        setLoading(false);
+      }
+    }
+  }, [currentAccountId]);
+
+  const { refresh } = usePolling(fetchNotifications, {
+    intervalMs: POLL_INTERVAL_MS,
+    enabled: Boolean(currentAccountId),
+  });
+
+  // Handle session transitions (logout, login, account switch)
+  useEffect(() => {
+    if (prevAccountIdRef.current !== currentAccountId) {
+      // Invalidate any in-flight requests from the previous account or session
+      requestIdRef.current++;
+      prevAccountIdRef.current = currentAccountId;
+
+      // Immediately clear previous account's notification state on logout or account switch
+      setAccountData({
+        accountId: null,
+        items: [],
+        unreadCount: 0,
+      });
+      setAccountError({
+        accountId: null,
+        hasError: false,
+      });
+      setOpen(false);
+
+      if (currentAccountId) {
+        setLoading(true);
+        void refresh();
+      } else {
+        setLoading(false);
+      }
+    }
+  }, [currentAccountId, refresh]);
 
   // Refresh the moment the dropdown is opened, so it's never stale.
   useEffect(() => {
     if (open) {
-      fetchNotifications();
+      void refresh();
     }
-  }, [open, fetchNotifications]);
+  }, [open, refresh]);
 
   const handleItemClick = async (item: NotificationItem) => {
     if (!item.read) {
-      setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)));
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      setAccountData((prev) => {
+        if (!currentAccountId || prev.accountId !== currentAccountId) return prev;
+        return {
+          ...prev,
+          items: prev.items.map((n) => (n.id === item.id ? { ...n, read: true } : n)),
+          unreadCount: Math.max(0, prev.unreadCount - 1),
+        };
+      });
       try {
         await builderApiPatch(`/notifications/${item.id}`, { read: true });
       } catch {
@@ -106,8 +251,14 @@ export default function NotificationBell() {
 
   const handleMarkAllRead = async () => {
     if (unreadCount === 0) return;
-    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
-    setUnreadCount(0);
+    setAccountData((prev) => {
+      if (!currentAccountId || prev.accountId !== currentAccountId) return prev;
+      return {
+        ...prev,
+        items: prev.items.map((n) => ({ ...n, read: true })),
+        unreadCount: 0,
+      };
+    });
     try {
       await builderApiPatch("/notifications", { all: true });
     } catch {
@@ -151,7 +302,7 @@ export default function NotificationBell() {
             </div>
 
             <div className="max-h-96 overflow-y-auto">
-              {loading ? (
+              {showLoading ? (
                 <p className="px-4 py-6 text-center text-xs text-slate-400">Loading alerts…</p>
               ) : error ? (
                 <p className="px-4 py-6 text-center text-xs font-bold text-[color:var(--posh-fg)]">Could not load alerts.</p>

@@ -37,7 +37,7 @@ importers:
         version: 14.2.35(@babel/core@7.29.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       next-auth:
         specifier: ^5.0.0-beta.19
-        version: 5.0.0-beta.31(next@14.2.35(@babel/core@7.29.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(nodemailer@9.0.5)(react@18.3.1)
+        version: 5.0.0-beta.31(next@14.2.35(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(nodemailer@9.0.5)(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -178,6 +178,9 @@ importers:
       '@types/pdfkit':
         specifier: ^0.17.6
         version: 0.17.6
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
       typescript:
         specifier: ^5.4.5
         version: 5.9.3
@@ -205,12 +208,21 @@ importers:
       libphonenumber-js:
         specifier: ^1.12.42
         version: 1.12.42
+      lucide-react:
+        specifier: ^0.395.0
+        version: 0.395.0(react@18.3.1)
       next:
         specifier: ^14.2.3
         version: 14.2.35(@babel/core@7.29.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       next-auth:
         specifier: ^5.0.0-beta.19
-        version: 5.0.0-beta.31(next@14.2.35(@babel/core@7.29.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(nodemailer@9.0.5)(react@18.3.1)
+        version: 5.0.0-beta.31(next@14.2.35(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(nodemailer@9.0.5)(react@18.3.1)
+      nodemailer:
+        specifier: ^9.0.5
+        version: 9.0.5
+      pdfkit:
+        specifier: ^0.20.2
+        version: 0.20.2
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -227,6 +239,12 @@ importers:
       '@types/node':
         specifier: ^20.14.2
         version: 20.19.39
+      '@types/nodemailer':
+        specifier: ^8.0.1
+        version: 8.0.1
+      '@types/pdfkit':
+        specifier: ^0.17.6
+        version: 0.17.6
       '@types/react':
         specifier: ^18.3.3
         version: 18.3.28
@@ -10225,6 +10243,14 @@ snapshots:
   netmask@2.1.1: {}
 
   next-auth@5.0.0-beta.31(next@14.2.35(@babel/core@7.29.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(nodemailer@9.0.5)(react@18.3.1):
+    dependencies:
+      '@auth/core': 0.41.2(nodemailer@9.0.5)
+      next: 14.2.35(@babel/core@7.29.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react: 18.3.1
+    optionalDependencies:
+      nodemailer: 9.0.5
+
+  next-auth@5.0.0-beta.31(next@14.2.35(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(nodemailer@9.0.5)(react@18.3.1):
     dependencies:
       '@auth/core': 0.41.2(nodemailer@9.0.5)
       next: 14.2.35(@babel/core@7.29.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

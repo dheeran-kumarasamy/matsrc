@@ -199,4 +199,96 @@ describe("WhatsappNotificationService", () => {
       });
     });
   });
+
+  describe("buttonUrlSuffix — payment_required_v2's approved dynamic Complete Payment URL button", () => {
+    it("adds a dynamic URL button component (sub_type url, index 0) only when buttonUrlSuffix is supplied", async () => {
+      vi.spyOn(config, "getMode").mockReturnValue("live");
+      vi.spyOn(config, "getPhoneNumberId").mockReturnValue("PHONE_ID");
+      vi.spyOn(config, "getAccessToken").mockReturnValue("SECRET_TOKEN");
+      vi.spyOn(config, "getTemplateLanguage").mockReturnValue("en");
+      const fetchSpy = vi.fn().mockResolvedValue(jsonResponse({ messages: [{ id: "wamid.PAY1" }] }));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const service = new WhatsappNotificationService(prisma as any, config);
+      const result = await service.sendTemplateAlert(
+        "919876543210",
+        "payment_required_v2",
+        ["BH-2026-00452", "₹50,000", "14 Oct 2026"],
+        "order-1"
+      );
+
+      expect(result.status).toBe("sent");
+      const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+      expect(sentBody.template.components).toHaveLength(2);
+      expect(sentBody.template.components[0]).toEqual({
+        type: "body",
+        parameters: [
+          { type: "text", text: "BH-2026-00452" },
+          { type: "text", text: "₹50,000" },
+          { type: "text", text: "14 Oct 2026" },
+        ],
+      });
+      expect(sentBody.template.components[1]).toEqual({
+        type: "button",
+        sub_type: "url",
+        index: 0,
+        parameters: [{ type: "text", text: "order-1" }],
+      });
+    });
+
+    it("never sends a full URL as the button parameter — only the bare dynamic suffix", async () => {
+      vi.spyOn(config, "getMode").mockReturnValue("live");
+      vi.spyOn(config, "getPhoneNumberId").mockReturnValue("PHONE_ID");
+      vi.spyOn(config, "getAccessToken").mockReturnValue("SECRET_TOKEN");
+      const fetchSpy = vi.fn().mockResolvedValue(jsonResponse({ messages: [{ id: "wamid.PAY2" }] }));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const service = new WhatsappNotificationService(prisma as any, config);
+      await service.sendTemplateAlert("919876543210", "payment_required_v2", ["BH-1", "₹1,000", "1 Jan 2027"], "order-77");
+
+      const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+      const buttonText = sentBody.template.components.find((c: any) => c.type === "button").parameters[0].text;
+      expect(buttonText).toBe("order-77");
+      expect(buttonText).not.toMatch(/^https?:\/\//);
+      expect(buttonText).not.toContain("buildohub.in");
+      expect(buttonText).not.toContain("payment/");
+    });
+
+    it("omitting buttonUrlSuffix preserves the pre-existing body-only payload exactly (backward compatible)", async () => {
+      vi.spyOn(config, "getMode").mockReturnValue("live");
+      vi.spyOn(config, "getPhoneNumberId").mockReturnValue("PHONE_ID");
+      vi.spyOn(config, "getAccessToken").mockReturnValue("SECRET_TOKEN");
+      const fetchSpy = vi.fn().mockResolvedValue(jsonResponse({ messages: [{ id: "wamid.PAY3" }] }));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const service = new WhatsappNotificationService(prisma as any, config);
+      await service.sendTemplateAlert("919876543210", "payment_required_v2", ["BH-1", "₹1,000", "1 Jan 2027"]);
+
+      const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+      expect(sentBody.template.components).toHaveLength(1);
+      expect(sentBody.template.components[0].type).toBe("body");
+      expect(sentBody.template.components.some((c: any) => c.type === "button")).toBe(false);
+    });
+
+    it("resolves to the correct destination URL for a representative order id, with no duplicated 'payment/' prefix", async () => {
+      vi.spyOn(config, "getMode").mockReturnValue("live");
+      vi.spyOn(config, "getPhoneNumberId").mockReturnValue("PHONE_ID");
+      vi.spyOn(config, "getAccessToken").mockReturnValue("SECRET_TOKEN");
+      const fetchSpy = vi.fn().mockResolvedValue(jsonResponse({ messages: [{ id: "wamid.PAY4" }] }));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const service = new WhatsappNotificationService(prisma as any, config);
+      await service.sendTemplateAlert("919876543210", "payment_required_v2", ["BH-1", "₹1,000", "1 Jan 2027"], "abc123");
+
+      const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+      const buttonText = sentBody.template.components.find((c: any) => c.type === "button").parameters[0].text;
+      // Approved fixed prefix is https://buildohub.in/orders/payment/ — the
+      // resolved destination is prefix + buttonText, which must be exactly
+      // https://buildohub.in/orders/payment/abc123, never a duplicated
+      // .../payment/payment/abc123.
+      const resolvedUrl = `https://buildohub.in/orders/payment/${buttonText}`;
+      expect(resolvedUrl).toBe("https://buildohub.in/orders/payment/abc123");
+      expect(resolvedUrl).not.toContain("payment/payment");
+    });
+  });
 });

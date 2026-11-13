@@ -42,6 +42,9 @@ function makeFakePrisma(opts: { endpoint?: any; existingDedupeHashes?: Set<strin
       findUnique: vi.fn(async ({ where }: any) => (existing.has(where.dedupeHash) ? { id: "existing-raw" } : null)),
       create: vi.fn(async () => ({})),
     },
+    pricingObservation: {
+      update: vi.fn(async () => ({})),
+    },
   } as any;
 }
 
@@ -113,6 +116,58 @@ describe("PricingIngestionService.ingestEndpoint", () => {
     expect(result.itemsDuplicate).toBe(1);
     expect(result.itemsLanded).toBe(1);
     expect(prisma.pricingRawObservation.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("BUGFIX (watchlist alerts stop firing when a source's price is unchanged): re-stamps the existing normalized PricingObservation's fetchedAt to today when a scrape re-confirms an unchanged (duplicate) dedupeHash, so the daily rollup sees a fresh row every day the source still publishes the same price", async () => {
+    const endpoint = makeEndpoint();
+    const prisma = makeFakePrisma({ endpoint });
+    (prisma.pricingRawObservation.findUnique as any).mockImplementation(async () => ({
+      id: "existing-raw",
+      observation: { id: "obs-1" },
+    }));
+    const actorClient = {
+      runActor: vi.fn(async () => ({
+        status: "SUCCEEDED",
+        items: [{ title: "TMT Fe 550D 12mm", price: "60", unit: "piece", location: "Delhi", date: "2026-01-10" }],
+        apifyRunId: "apify-run-1",
+        apifyDatasetId: "dataset-1",
+        errorMessage: null,
+      })),
+    };
+    const service = buildService(prisma, enabledConfig, actorClient);
+
+    const result = await service.ingestEndpoint("endpoint-1");
+
+    expect(result.itemsDuplicate).toBe(1);
+    expect(result.itemsLanded).toBe(0);
+    expect(prisma.pricingObservation.update).toHaveBeenCalledTimes(1);
+    expect(prisma.pricingObservation.update).toHaveBeenCalledWith({
+      where: { id: "obs-1" },
+      data: { fetchedAt: expect.any(Date) },
+    });
+  });
+
+  it("does not attempt to re-stamp fetchedAt when the duplicate raw row has not yet been normalized (no PricingObservation exists)", async () => {
+    const endpoint = makeEndpoint();
+    const prisma = makeFakePrisma({ endpoint });
+    (prisma.pricingRawObservation.findUnique as any).mockImplementation(async () => ({
+      id: "existing-raw",
+      observation: null,
+    }));
+    const actorClient = {
+      runActor: vi.fn(async () => ({
+        status: "SUCCEEDED",
+        items: [{ title: "TMT Fe 550D 12mm", price: "60", unit: "piece", location: "Delhi", date: "2026-01-10" }],
+        apifyRunId: "apify-run-1",
+        apifyDatasetId: "dataset-1",
+        errorMessage: null,
+      })),
+    };
+    const service = buildService(prisma, enabledConfig, actorClient);
+
+    await service.ingestEndpoint("endpoint-1");
+
+    expect(prisma.pricingObservation.update).not.toHaveBeenCalled();
   });
 
   it("marks the scrape run FAILED and rethrows when the actor client throws", async () => {

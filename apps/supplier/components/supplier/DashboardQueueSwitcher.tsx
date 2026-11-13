@@ -18,7 +18,13 @@ type DashboardKpi = {
 
 type DashboardOrder = {
   id: string;
+  // S15: canonical supplier-facing Order reference (orderNumber ??
+  // enquiryId), resolved server-side — see
+  // apps/supplier/lib/order-display.ts. Never the raw cuid `id` above.
+  displayOrderNumber: string;
   material: string;
+  // S06: null when the product has no brand on record.
+  brand?: string | null;
   quantity: string;
   eta: string;
   status: "NEW" | "PACKING" | "IN_TRANSIT";
@@ -28,7 +34,14 @@ type QueueKey = "listings" | "orders" | "rfqs";
 
 type PendingEnquiry = {
   id: string;
+  // S15: canonical supplier-facing Order/Enquiry reference (orderNumber ??
+  // enquiryId), resolved server-side — see
+  // apps/supplier/lib/order-display.ts. Never a synthetic label derived
+  // from the raw cuid `id` above.
+  displayOrderNumber: string;
   material: string;
+  // S06: null when the product has no brand on record.
+  brand?: string | null;
   quantity: string;
   eta: string;
 };
@@ -127,11 +140,14 @@ function PendingEnquiryQueueTable({ enquiries }: { enquiries: PendingEnquiry[] }
                   <td className="px-7 py-5 text-slate-800">
                     <OrderDetailButton
                       orderId={enquiry.id}
-                      label={`ENQ-${enquiry.id.slice(-5).toUpperCase()}`}
+                      label={enquiry.displayOrderNumber}
                       className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
                     />
                   </td>
-                  <td className="px-7 py-5 text-slate-800">{enquiry.material}</td>
+                  <td className="px-7 py-5 text-slate-800">
+                    {enquiry.brand ? <p className="text-sm font-semibold text-slate-500">{enquiry.brand}</p> : null}
+                    <p>{enquiry.material}</p>
+                  </td>
                   <td className="px-7 py-5 text-slate-800">{enquiry.quantity}</td>
                   <td className="px-7 py-5 text-slate-800">{enquiry.eta}</td>
                   <td className="px-7 py-5">

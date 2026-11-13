@@ -52,11 +52,141 @@
 // that triggered it. Callers MUST invoke this AFTER the order status
 // mutation has already committed, never inside the same transaction.
 
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus, NotificationChannel, NotificationTemplateType } from "@prisma/client";
 import { getOrderStatusDisplayLabel } from "./order-status-labels";
 
 const EVENT_TYPE = "ORDER_STATUS_CHANGED";
 const CHANNEL = "WHATSAPP";
+
+// ───────────────────────────────────────────────────────────
+// In-app Alerts bell (apps/web/components/builder/NotificationBell.tsx,
+// backed by apps/web/app/api/builder/notifications/route.ts) reads directly
+// from the `Notification` table — a SEPARATE table/UI surface from the
+// WhatsApp-only NotificationEvent/WhatsAppMessageLog pipeline this file was
+// built around. Before the Meta WhatsApp Cloud API migration (see this
+// file's top doc comment), the old `apps/supplier/lib/notify.ts`
+// `notifyBuilderOrderStatusUpdate()` (now deleted) wrote a row into
+// `Notification` for every order-status transition, which is what powered
+// the Alerts bell. That write was accidentally dropped when this module
+// replaced it — the WhatsApp send kept working, but builders stopped
+// seeing any new in-app alerts for order-status changes from that point on.
+//
+// `writeInAppOrderStatusAlert` restores that write (best-effort, wrapped in
+// its own try/catch so it can never block or affect the WhatsApp send
+// below) WITHOUT reintroducing a second/competing WhatsApp implementation —
+// this only ever inserts a row into the pre-existing `Notification` table,
+// it never sends any message itself.
+const IN_APP_STATUS_COPY: Partial<
+  Record<OrderStatus, { title: string; body: (supplierLabel: string, deepLink: string) => string; templateType: NotificationTemplateType }>
+> = {
+  [OrderStatus.PROCESSING]: {
+    title: "Enquiry confirmed",
+    body: (supplierLabel, deepLink) => `Good news! ${supplierLabel} has confirmed your enquiry and is preparing your order. View details: ${deepLink}`,
+    templateType: NotificationTemplateType.ORDER_ACCEPTED,
+  },
+  [OrderStatus.DISPATCHED]: {
+    title: "Order dispatched",
+    body: (supplierLabel, deepLink) => `${supplierLabel} has dispatched your order. It's on its way. View details: ${deepLink}`,
+    templateType: NotificationTemplateType.ORDER_DISPATCHED,
+  },
+  [OrderStatus.OUT_FOR_DELIVERY]: {
+    title: "Out for delivery",
+    body: (supplierLabel, deepLink) => `Your order from ${supplierLabel} is out for delivery. View details: ${deepLink}`,
+    templateType: NotificationTemplateType.ORDER_OUT_FOR_DELIVERY,
+  },
+  [OrderStatus.DELIVERED]: {
+    title: "Order delivered",
+    body: (supplierLabel, deepLink) => `Your order from ${supplierLabel} has been delivered. Thank you for using Buildohub. View details: ${deepLink}`,
+    templateType: NotificationTemplateType.ORDER_DELIVERED,
+  },
+  [OrderStatus.CANCELLED]: {
+    title: "Order cancelled",
+    body: (supplierLabel, deepLink) => `${supplierLabel} has cancelled your order. Please contact support if you have questions. View details: ${deepLink}`,
+    templateType: NotificationTemplateType.ORDER_DECLINED,
+  },
+};
+
+function getBuilderPortalBaseUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_BUILDER_APP_URL ||
+    process.env.BUILDER_PORTAL_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "https://matsrc-web.vercel.app"
+  );
+}
+
+/**
+ * Minimal structural Prisma-client shape needed to write the in-app Alerts
+ * bell row — exported so apps/api's own NestJS
+ * `CustomerOrderStatusNotificationService` (src/notification-engine/
+ * whatsapp/customer-order-status-notification.service.ts), which dispatches
+ * its WhatsApp send through the NestJS `NotificationEngineService` instead
+ * of calling `notifyCustomerOrderStatusChanged` below, can call this SAME
+ * helper rather than re-implementing the copy/idempotency logic a second
+ * time. Both implementations end up writing identical `Notification` rows.
+ */
+export type InAppAlertPrismaClient = {
+  notification: {
+    findFirst: (args: any) => Promise<any>;
+    create: (args: any) => Promise<any>;
+  };
+};
+
+export async function writeInAppOrderStatusAlert(
+  prisma: InAppAlertPrismaClient,
+  order: { id: string; userId: string; enquiryId?: string | null; items?: Array<{ supplier?: { companyName?: string | null } | null }> },
+  newStatus: OrderStatus,
+  onLog: (message: string) => void = () => undefined
+): Promise<void> {
+  try {
+    const copy = IN_APP_STATUS_COPY[newStatus];
+    if (!copy) {
+      // PLACED (and any future status with no builder-facing copy) never
+      // shows an in-app alert — matches the pre-migration behaviour.
+      return;
+    }
+
+    // Idempotency per (order, status) — mirrors the pre-migration
+    // `builder-order-status:{orderId}:{status}` key exactly, so this is
+    // compatible with (and deduped against) any historical rows already
+    // written under that scheme.
+    const idempotencyKey = `builder-order-status:${order.id}:${newStatus}`;
+    const existing = await prisma.notification.findFirst({
+      where: { idempotencyKey },
+      select: { id: true },
+    });
+    if (existing) {
+      return;
+    }
+
+    const enquiryDisplayId = order.enquiryId ?? order.id;
+    const supplierLabel = order.items?.[0]?.supplier?.companyName ?? "your supplier";
+    const deepLink = `${getBuilderPortalBaseUrl().replace(/\/$/, "")}/orders/${order.id}`;
+
+    await prisma.notification.create({
+      data: {
+        userId: order.userId,
+        audience: "builder",
+        channel: NotificationChannel.WHATSAPP,
+        title: copy.title,
+        body: copy.body(supplierLabel, deepLink),
+        status: "sent",
+        idempotencyKey,
+        templateType: copy.templateType,
+        variables: JSON.stringify({
+          orderId: order.id,
+          orderNumber: enquiryDisplayId,
+          deepLink,
+          supplierName: supplierLabel,
+          status: newStatus,
+        }),
+        retryCount: 0,
+      },
+    });
+  } catch (error) {
+    onLog(`ORDER_STATUS_CHANGED in-app alert write failed for order=${order.id} (-> ${newStatus}): ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
 export type NotifyCustomerOrderStatusChangedParams = {
   orderId: string;
@@ -101,6 +231,13 @@ export type NotificationEnginePrismaClient = {
   whatsAppMessageLog: {
     create: (args: any) => Promise<any>;
     update: (args: any) => Promise<any>;
+  };
+  // Backs the in-app Alerts bell (apps/web/components/builder/
+  // NotificationBell.tsx) — see writeInAppOrderStatusAlert's doc comment
+  // above for why this additive write exists alongside the WhatsApp send.
+  notification: {
+    findFirst: (args: any) => Promise<any>;
+    create: (args: any) => Promise<any>;
   };
 };
 
@@ -319,11 +456,20 @@ export async function notifyCustomerOrderStatusChanged(
   }
 
   try {
-    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { user: true } });
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { user: true, items: { include: { supplier: true } } },
+    });
     if (!order) {
       onLog(`ORDER_STATUS_CHANGED: order ${orderId} not found — skipping notification`);
       return;
     }
+
+    // In-app Alerts bell write (Notification table) — independent of, and
+    // always attempted regardless of, the WhatsApp policy/send outcome
+    // below. See writeInAppOrderStatusAlert's doc comment for why this
+    // lives here.
+    await writeInAppOrderStatusAlert(prisma, order, newStatus, onLog);
 
     const phone = order.user.whatsappNumber?.trim() || order.user.phone?.trim() || null;
     const enquiryDisplayId = order.enquiryId ?? order.id;

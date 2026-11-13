@@ -13,16 +13,17 @@ import { getSiteUrl } from "@/lib/site-url";
 
 import { getCategoryEmoji } from "@/lib/category-images";
 
-import { getSupplierListings, getSupplierProduct, parseNumericLabel, type SupplierListing } from "@/lib/listings";
+import { getSupplierProduct, getSupplierProductGroup, parseNumericLabel, type SupplierListing } from "@/lib/listings";
+import { formatGstExclusiveNote } from "@/lib/gst-display";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 // P2-D — unique per-product metadata using only real name/brand/category
 // (no generic duplicated title across products). Canonical points at this
 // product's own slug URL.
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const product = await getSupplierProduct(params.slug);
-  if (!product) return {};
+  if (!product) notFound();
 
   // P2-D fix: Product.name in this catalogue already includes the brand
   // (e.g. "UltraTech Cement OPC 53 Grade Cement"), so prepending
@@ -44,38 +45,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
-// Given the requested listing (by slug/id), resolve the full cross-supplier
-// canonical group it belongs to so the PDP can show the group's lowest
-// (headline) price rather than just this one supplier's own price — fixes
-// the Display bug from the cross-supplier price resolution spec. Falls back
-// to the single listing itself when it has no canonicalProductId /
-// groupedListingIds (legacy / ungrouped data).
-function resolveProductGroup(allListings: SupplierListing[], slug: string) {
-  const requested = allListings.find((listing) => listing.id === slug);
-  if (!requested) return null;
-
-  const groupedIds = requested.groupedListingIds && requested.groupedListingIds.length > 0
-    ? requested.groupedListingIds
-    : [requested.id];
-
-  const siblings = allListings.filter((listing) => groupedIds.includes(listing.id));
-
-  const headline = requested.headlineSupplierId
-    ? siblings.find((listing) => listing.supplierId === requested.headlineSupplierId) ?? requested
-    : requested;
-
-  return {
-    displayListing: {
-      ...headline,
-      price: requested.headlinePrice || headline.price,
-    },
-    siblings,
-  };
-}
-
 export default async function ProductDetailPage({ params }: { params: { slug: string } }) {
-  const allListings = await getSupplierListings();
-  const group = resolveProductGroup(allListings, params.slug);
+  const group = await getSupplierProductGroup(params.slug);
   if (!group) notFound();
 
   const { displayListing: product, siblings } = group;
@@ -155,28 +126,33 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
                 Added a one-line explanation under each so a builder can
                 actually use the distinction when deciding how much to
                 enquire for — no new data introduced. */}
-            <div className="grid gap-4 border-t border-[color:var(--posh-border)] p-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="border-t border-[color:var(--posh-border)] p-6">
               <div>
                 <p className="posh-label">Base price</p>
-                <p className="posh-card-title mt-1">{product.price}</p>
-                <p className="posh-muted mt-1 text-xs">Per {product.unit}, before quantity-tier discounts.</p>
-              </div>
-              <div>
-                <p className="posh-label">Stock</p>
-                <p className="posh-card-title mt-1">{product.stock}</p>
-                <p className="posh-muted mt-1 text-xs">Units the supplier currently holds on hand.</p>
-              </div>
-              <div>
-                <p className="posh-label">Maximum serviceable</p>
-                <p className="posh-card-title mt-1">{product.maxServiceableQty}</p>
-                <p className="posh-muted mt-1 text-xs">Largest single order this supplier says they can fulfil.</p>
+                <p className="posh-card-title mt-1">
+                  {product.price}
+                  {/* C29 — disclose GST treatment before add-to-enquiry.
+                      No rupee amount is shown against this base price
+                      specifically, since the actual enquiry value depends
+                      on the quantity-tier selected below (see Pricing
+                      tiers section) — only the rate, which is uniform
+                      across tiers/suppliers today (lib/gst-display.ts). */}
+                  <span className="ml-1.5 align-middle text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--posh-fg-muted)" }}>
+                    {formatGstExclusiveNote()}
+                  </span>
+                </p>
+                <p className="posh-muted mt-1 text-xs">Per {product.unit}, before quantity-tier discounts. GST is charged in addition to the price shown.</p>
               </div>
             </div>
           </div>
 
           <div className="posh-card p-6">
             <h2 className="posh-card-title">Pricing tiers</h2>
-            <p className="posh-subtitle mt-1">The enquiry value updates automatically as quantity changes.</p>
+            <p className="posh-subtitle mt-1">
+              The enquiry value updates automatically as quantity changes. Prices below are exclusive of GST
+              ({formatGstExclusiveNote().replace("+ ", "")}), applied against whichever tier applies to your selected
+              quantity — never only the lowest tier.
+            </p>
             <div className="mt-4 grid gap-3">
               {product.pricingTiers.map((tier) => (
                 <div key={`${tier.minQty}-${tier.maxQty}`} className="flex items-center justify-between rounded-xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.03)] px-4 py-3 text-sm">

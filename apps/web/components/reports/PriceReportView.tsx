@@ -442,8 +442,6 @@ function BestPriceModule({ offers }: { offers: BestPriceOffer[] }) {
                     </span>
                     <span>GST ({offer.landedCost.gstRatePercent}%)</span>
                     <span className="font-deskMono tabular-nums">{money(offer.landedCost.gstAmount)}</span>
-                    <span>Stock</span>
-                    <span className="font-deskMono tabular-nums">{offer.stock ?? "—"}</span>
                   </div>
                 </div>
               ) : null}

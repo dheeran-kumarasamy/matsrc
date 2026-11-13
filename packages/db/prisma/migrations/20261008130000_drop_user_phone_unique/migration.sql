@@ -1,0 +1,21 @@
+-- Pre-live-review correction: drops the global unique constraint on
+-- "User"."phone" so the same real-world phone number can belong to both a
+-- Buyer (apps/web) account and a Supplier (apps/supplier) account
+-- simultaneously — each portal's phone-based login OTP now provisions its
+-- User row under its own portal-scoped placeholder email (see
+-- apps/web/app/api/auth/verify-otp/route.ts vs
+-- apps/supplier/app/api/auth/verify-otp/route.ts), so `email` remains the
+-- true, still-unique identity key. This was a real, live-tested blocker:
+-- the previous unique index rejected Supplier's User.upsert() with a
+-- unique-constraint violation the moment the same phone number had already
+-- logged into Buyer once.
+--
+-- A plain (non-unique) index "User_phone_idx" already exists from the init
+-- migration (schema.prisma's @@index([phone])) and already covers lookup
+-- performance for phone-based queries — no new index is created here, only
+-- the redundant unique one is dropped.
+--
+-- Non-destructive: removes a constraint, never a column; no data is
+-- altered or deleted. Existing rows and their phone values remain unchanged.
+
+DROP INDEX "User_phone_key";

@@ -72,6 +72,16 @@
 //                               QUOTE_DEADLINE_MINUTES is unset/zero — never
 //                               an invented new default.
 //
+// Buttons: one dynamic URL button ("Review RFQ"), CONFIRMED LIVE directly
+// against the Graph API (GET /{WABA_ID}/message_templates?name=supplier_quote_alert,
+// verified 2026-10-12), upgraded from the previous static QUICK_REPLY button
+// once Meta approved the URL CTA. Approved FIXED prefix is
+// `https://supplier.buildohub.in/orders/{{1}}` — NO query string is part of
+// the approved configuration, so the dynamic `{{1}}` is simply the bare
+// parent Order id (`orderItem.orderId`, never the OrderItem's own id) with
+// no `?respond=` suffix. See `buildRfqButtonUrlSuffix`'s doc comment below
+// for the full route-ownership verification.
+//
 // Deduplication (spec §9): dedupe key is
 // `SUPPLIER_RFQ_RECEIVED:{orderItemId}:{supplierId}` — orderItemId+supplierId
 // is already the exact canonical identifier for "this specific
@@ -197,23 +207,65 @@ export function formatSupplierQuoteDeadlineLabel(value: Date): string {
 }
 
 /**
+ * Dynamic suffix for the approved `supplier_quote_alert` Meta URL button
+ * ("Review RFQ"). CONFIRMED LIVE directly against the Graph API (GET
+ * /{WABA_ID}/message_templates?name=supplier_quote_alert, verified
+ * 2026-10-12 — the button was upgraded from a static QUICK_REPLY to a URL
+ * CTA; the body is unchanged). Approved fixed prefix is
+ * `https://supplier.buildohub.in/orders/{{1}}` — NO query string/`respond`
+ * parameter is part of the approved configuration (Meta URL buttons only
+ * support a single trailing dynamic path segment, never a dynamic query
+ * string). The destination page
+ * (`apps/supplier/app/(supplier)/orders/[id]/page.tsx`) has no
+ * `searchParams` prop at all and unconditionally renders the quotation form
+ * whenever the underlying Order is still PLACED, so a `?respond=` suffix was
+ * never required for this destination (that query param only applies to the
+ * separate `/rfqs` page, which serves `QuickRequest` rows — an entity this
+ * event does NOT fire for; see this file's top doc comment for the full
+ * audit of the real OrderItem-based trigger).
+ *
+ * The dynamic `{{1}}` is the OrderItem's PARENT Order id (`orderItem.orderId`)
+ * — never the OrderItem's own id, and never `Order.enquiryId` — because the
+ * destination route `/orders/[id]` is keyed by Order.id (confirmed via
+ * `getSupplierOrderDetail(orderId, email)`'s
+ * `prisma.orderItem.findFirst({ where: { orderId, supplierId } })` lookup in
+ * apps/supplier/lib/supplier-data.ts, and by `RfqCard.tsx`'s existing
+ * `/orders/${rfq.id}` link, where `rfq.id` is already `item.orderId` for
+ * this exact ENQUIRY-sourced card type). That page's
+ * `getSupplierOrderDetail()` re-authenticates the session and re-scopes the
+ * Prisma lookup to `supplierId: supplierProfile.id` — this button never
+ * grants access to an order merely because its id appears in the URL, and
+ * it only ever navigates to a read/quote-form page, never auto-submits a
+ * quote. Mirrors apps/api's `SupplierRfqReceivedNotificationService`'s
+ * identical helper byte-for-byte so both send paths produce the exact same
+ * button payload.
+ */
+export function buildRfqButtonUrlSuffix(orderId: string): string {
+  return orderId;
+}
+
+/**
  * Low-level Meta Cloud API template send — exactly 4 body parameters, no
- * header (the approved template's "Review RFQ" button is rendered
- * automatically by WhatsApp from the template definition itself — see
- * WhatsappNotificationService's doc comment for why no extra `components`
- * entry is needed). Mirrors apps/api's
- * WhatsappNotificationService.sendTemplateAlert / this package's
- * `customer-order-status-notification.ts` sendTemplateViaMeta byte-for-byte
- * (same payload shape, same WhatsAppMessageLog bookkeeping, same
- * live/dry-run/off branching) so every app produces identical audit-trail
- * rows and identical Meta payloads.
+ * header, plus an optional dynamic URL `button` component when
+ * `buttonUrlSuffix` is supplied. The approved template's button was
+ * originally a static "Review RFQ" QUICK_REPLY (rendered automatically by
+ * WhatsApp from the template definition, no extra component needed) and has
+ * since been re-approved by Meta as a dynamic "Review RFQ" URL button (fixed
+ * prefix `https://supplier.buildohub.in/orders/{{1}}`) — see
+ * `buildRfqButtonUrlSuffix`'s doc comment above. Mirrors apps/api's
+ * WhatsappNotificationService.sendTemplateAlert / this package's other
+ * *-notification.ts `sendTemplateViaMeta` byte-for-byte (same payload shape,
+ * same WhatsAppMessageLog bookkeeping, same live/dry-run/off branching) so
+ * every app produces identical audit-trail rows and identical Meta
+ * payloads.
  */
 async function sendTemplateViaMeta(
   prisma: SupplierRfqReceivedPrismaClient,
   phone: string,
   templateName: string,
   parameters: string[],
-  log: (message: string) => void
+  log: (message: string) => void,
+  buttonUrlSuffix?: string
 ): Promise<{ success: boolean; externalId?: string; error?: string }> {
   const mode = getSupplierRfqReceivedWhatsAppMode();
 
@@ -249,6 +301,19 @@ async function sendTemplateViaMeta(
       return { success: false, error: errorDetails };
     }
 
+    // Dynamic URL button component — only added when a suffix is supplied
+    // (the approved "Review RFQ" URL CTA). Mirrors apps/api's
+    // WhatsappNotificationService.sendLive's identical button-component
+    // shape byte-for-byte.
+    const components = [
+      ...(parameters.length > 0
+        ? [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text })) }]
+        : []),
+      ...(buttonUrlSuffix
+        ? [{ type: "button", sub_type: "url", index: 0, parameters: [{ type: "text", text: buttonUrlSuffix }] }]
+        : []),
+    ];
+
     const payload = {
       messaging_product: "whatsapp",
       recipient_type: "individual",
@@ -257,9 +322,7 @@ async function sendTemplateViaMeta(
       template: {
         name: templateName,
         language: { code: getTemplateLanguage() },
-        ...(parameters.length > 0
-          ? { components: [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text })) }] }
-          : {}),
+        ...(components.length > 0 ? { components } : {}),
       },
     };
 
@@ -427,7 +490,8 @@ export async function notifySupplierRfqReceived(
       phone,
       decision.templateName,
       [material, quantity, deliveryLocation, quoteDeadline],
-      onLog
+      onLog,
+      buildRfqButtonUrlSuffix(orderItem.orderId)
     );
 
     await prisma.notificationEvent.update({ where: { id: event.id }, data: { status: sendResult.success ? "sent" : "failed" } });

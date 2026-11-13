@@ -55,6 +55,10 @@ function buildHarness(options: { policyEnabled?: boolean; globalEnabled?: boolea
       create: vi.fn().mockImplementation(async ({ data }: any) => ({ id: `log-${eventCounter}`, ...data })),
       update: vi.fn().mockImplementation(async ({ data }: any) => data),
     },
+    notification: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockImplementation(async ({ data }: any) => ({ id: "in-app-notification-1", ...data })),
+    },
   };
 
   return { prisma };
@@ -112,6 +116,58 @@ describe("notifyCustomerOrderStatusChanged — transition guard", () => {
     await expect(
       notifyCustomerOrderStatusChanged(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING })
     ).resolves.toBeUndefined();
+  });
+});
+
+// In-app Alerts bell — regression coverage for the bug where the Meta
+// WhatsApp Cloud API migration (which replaced the old
+// apps/supplier/lib/notify.ts notifyBuilderOrderStatusUpdate) dropped the
+// Notification-table write that powers apps/web's builder Alerts bell.
+describe("notifyCustomerOrderStatusChanged — in-app Alerts bell", () => {
+  it("writes a Notification row for a real, builder-facing transition", async () => {
+    const { prisma } = buildHarness();
+
+    await notifyCustomerOrderStatusChanged(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+
+    expect(prisma.notification.create).toHaveBeenCalledTimes(1);
+    expect(prisma.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: "user-1",
+          audience: "builder",
+          title: "Enquiry confirmed",
+          idempotencyKey: "builder-order-status:order-1:PROCESSING",
+        }),
+      })
+    );
+  });
+
+  it("is idempotent per (order, status) — a retried transition never creates a second row", async () => {
+    const { prisma } = buildHarness();
+    prisma.notification.findFirst.mockResolvedValueOnce({ id: "in-app-notification-1" });
+
+    await notifyCustomerOrderStatusChanged(prisma, { orderId: "order-1", previousStatus: OrderStatus.PROCESSING, newStatus: OrderStatus.DISPATCHED });
+
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+  });
+
+  it("never writes a Notification row for the initial PLACED creation", async () => {
+    const { prisma } = buildHarness();
+
+    await notifyCustomerOrderStatusChanged(prisma, { orderId: "order-1", previousStatus: null, newStatus: OrderStatus.PLACED });
+
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+  });
+
+  it("never throws, and still attempts the WhatsApp send, when the Notification write fails", async () => {
+    const { prisma } = buildHarness();
+    prisma.notification.create.mockRejectedValueOnce(new Error("DB down"));
+
+    await expect(
+      notifyCustomerOrderStatusChanged(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING })
+    ).resolves.toBeUndefined();
+
+    expect(prisma.notificationEvent.create).toHaveBeenCalled();
   });
 });
 

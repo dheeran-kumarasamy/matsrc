@@ -63,6 +63,93 @@ export * from "./lib/supplier-po-received-notification";
 // packages/db/lib/payment-required-notification.ts for full documentation.
 export * from "./lib/payment-required-notification";
 
+// Shared OTP challenge lifecycle (generation/hashing/persistence/expiry/
+// resend-cooldown/attempt-limiting/single-use) against the OtpChallenge
+// Prisma model — used directly by apps/supplier's new LOGIN_OTP routes so
+// there is exactly one OTP table/lifecycle definition shared with apps/web.
+// See packages/db/lib/otp-challenge.ts for full documentation.
+export * from "./lib/otp-challenge";
+
+// Unified Account Identity — shared identity-resolution layer (AuthIdentity)
+// used by every login method (WhatsApp OTP, Email OTP, Google) in both the
+// Buyer (apps/web) and Supplier (apps/supplier) portals so a login method
+// can never create a second account for an already-known person within the
+// same portal. See packages/db/lib/identity-resolution.ts for full
+// documentation and the identity audit this implements.
+export * from "./lib/identity-resolution";
+
+// buildohub_login_otp WhatsApp notification (LOGIN_OTP event, Meta WhatsApp
+// Cloud API via the Notification Engine tables) — the single shared,
+// framework-agnostic WhatsApp delivery used by the Buyer (apps/web) and
+// Supplier (apps/supplier) portal "Send OTP on WhatsApp" login flow. NEVER
+// generates/verifies OTPs — see packages/db/lib/login-otp-whatsapp-notification.ts
+// for the full architectural boundary documentation.
+export * from "./lib/login-otp-whatsapp-notification";
+
+// Buildohub Advance Balance (Buyer Advance Payment & Advance Balance) —
+// shared, framework-agnostic advance ledger helpers (row-lock, append
+// ledger entry + cached balance update, lazy account creation,
+// reconciliation). Used by both apps/web (buyer-facing advance/order-
+// payment routes) and apps/api (admin advance-payment approval/rejection).
+// See packages/db/lib/advance-ledger.ts for full documentation.
+export * from "./lib/advance-ledger";
+
+// Supplier RFQ Price Revision & GST-Inclusive Order Value — shared,
+// framework-agnostic GST/line-total calculation used by both the
+// NestJS RfqsService (apps/api) and the Next.js supplier portal
+// (apps/supplier/lib/supplier-data.ts) so there is exactly one place this
+// math is implemented. See packages/db/lib/gst-calculation.ts for full
+// documentation.
+export * from "./lib/gst-calculation";
+
+// Supplier Invoice Upload / Admin Verification / Buyer Invoice Generation —
+// shared, framework-agnostic reconciliation math (actual quantity/weight x
+// agreed rate, rate-discrepancy flagging, invoice-level adjustment
+// aggregation) used by apps/api's SupplierInvoicesService. See
+// packages/db/lib/supplier-invoice-reconciliation.ts for full documentation.
+export * from "./lib/supplier-invoice-reconciliation";
+
+// Admin-Configurable Product Markup — shared, framework-agnostic markup
+// resolution (PRODUCT -> CATEGORY -> GLOBAL precedence) and calculation
+// (buyerUnitPrice = supplierUnitPrice * (1 + markupPercent / 100)) used by
+// apps/api's admin markup module, the RFQ/best-price-selection pricing
+// paths, and apps/web's checkout pipeline. See
+// packages/db/lib/markup-calculation.ts for full documentation.
+export * from "./lib/markup-calculation";
+
+// Product-Level GST — shared, framework-agnostic GST (tax) rate resolution
+// (PRODUCT -> CATEGORY -> GLOBAL precedence, STRICT "never a silent
+// default" contract) used by apps/api's admin GST module (GstService). See
+// packages/db/lib/gst-rate-resolution.ts for full documentation.
+export * from "./lib/gst-rate-resolution";
+
+// Product-Level GST / GST-Inclusive Buyer Payable / Advance Configuration —
+// shared, framework-agnostic order/line payable calculation composing
+// markup-calculation.ts and gst-rate-resolution.ts. See
+// packages/db/lib/order-payable-calculation.ts for full documentation.
+export * from "./lib/order-payable-calculation";
+
+// Product-Level GST / GST-Inclusive Buyer Payable — shared, database-
+// reading orchestration layer used by BOTH supplier-confirmation paths
+// (apps/api's BestPriceSelectionService.selectAndFinalizeIfEligible and
+// apps/supplier's updateSupplierOrderStatus) to freeze the GST-inclusive
+// financial snapshot at the exact PLACED -> PROCESSING transition. See
+// packages/db/lib/order-confirmation-snapshot.ts for full documentation.
+export * from "./lib/order-confirmation-snapshot";
+
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — shared, pure derivation of the buyer-facing confirmation
+// state (NEVER persisted) and the authoritative final payable amount.
+// See packages/db/lib/order-buyer-confirmation.ts for full documentation.
+export * from "./lib/order-buyer-confirmation";
+
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — the single, shared, database-reading PROCESSING -> DISPATCHED
+// eligibility check used by BOTH apps/supplier's updateSupplierOrderStatus
+// and apps/api's OrdersService.updateStatus. See
+// packages/db/lib/order-dispatch-eligibility.ts for full documentation.
+export * from "./lib/order-dispatch-eligibility";
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

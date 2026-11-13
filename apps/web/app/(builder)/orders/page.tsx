@@ -1,7 +1,7 @@
 import Link from "next/link";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
 import OrderConfirmationBanner from "@/components/orders/OrderConfirmationBanner";
-import { resolveConfirmedReference } from "@/lib/order-confirmation";
+import { resolveConfirmedReferences } from "@/lib/order-confirmation";
 import { builderApiGet } from "@/lib/api";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 
@@ -12,6 +12,11 @@ type OrderItem = {
   // orders (see the API route's `enquiryId ?? id` fallback).
   enquiryId: string;
   status: "PLACED" | "PROCESSING" | "DISPATCHED" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
+  // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+  // Dispatch — see apps/web/app/(builder)/orders/[id]/page.tsx's identical
+  // field for the full rationale.
+  confirmationState?: "NOT_YET_CONFIRMED" | "AWAITING_FINAL_CONFIRMATION" | "CONFIRMED" | "CANCELLED";
+  confirmationStateLabel?: string;
   paymentStatus?: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
   itemCount: number;
   total: number;
@@ -83,7 +88,11 @@ export default async function OrdersPage({
   // later, unrelated visit to this same already-confirmed order's page
   // since the query param is one-time/ephemeral (dropped as soon as the
   // user navigates or refreshes without it).
-  const confirmedReference = resolveConfirmedReference(searchParams);
+  //
+  // S12 Phase 1: a multi-supplier checkout creates one Order per supplier,
+  // so this resolves EVERY confirmed reference (not just the first) —
+  // see lib/order-confirmation.ts's resolveConfirmedReferences().
+  const confirmedReferences = resolveConfirmedReferences(searchParams);
 
   const rawStatus = Array.isArray(searchParams.status) ? searchParams.status[0] : searchParams.status;
   const normalized = rawStatus?.toUpperCase() ?? "All";
@@ -124,7 +133,9 @@ export default async function OrdersPage({
         </Link>
       </header>
 
-      {confirmedReference ? <OrderConfirmationBanner enquiryId={confirmedReference} /> : null}
+      {confirmedReferences.length > 0 ? (
+        <OrderConfirmationBanner orders={confirmedReferences.map((reference) => ({ reference }))} />
+      ) : null}
 
       {/* Filters — "Dispatched" and "Active" chips removed from the UI per
           request. Both remain fully functional via direct URL
@@ -187,7 +198,14 @@ export default async function OrdersPage({
                 </p>
               </div>
               <div className="flex items-center gap-4">
-                <OrderStatusBadge status={order.status} />
+                {/* Admin-Confirmed Freight / Buyer Final Confirmation /
+                    Payment-Gated Dispatch — see the order-detail page's
+                    identical badge logic for the full rationale. */}
+                {order.confirmationState && order.confirmationState !== "NOT_YET_CONFIRMED" && order.confirmationState !== "CANCELLED" ? (
+                  <span className="posh-status">{order.confirmationStateLabel}</span>
+                ) : (
+                  <OrderStatusBadge status={order.status} />
+                )}
 
                 {order.paymentLinkAvailable && order.paymentLink ? (
                   <Link href={order.paymentLink} className="posh-status-strong">

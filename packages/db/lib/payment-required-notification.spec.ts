@@ -4,6 +4,7 @@ import {
   notifyPaymentRequired,
   getPaymentRequiredWhatsAppMode,
   buildPaymentRequiredDedupeKey,
+  buildPaymentButtonUrlSuffix,
   formatPaymentAmount,
 } from "./payment-required-notification";
 
@@ -11,11 +12,14 @@ import {
 // logic in this module (only Prisma and `fetch` are faked) — this is the one
 // shared implementation both apps/api's NestJS wrapper
 // (payment-required-notification.service.ts) and apps/supplier (directly)
-// call, so correctness here is correctness for both apps.
+// call, so correctness here is correctness for both apps. Covers the
+// `payment_required_v2` template (upgraded from the superseded
+// `payment_required` once Meta approved the dynamic "Complete Payment" URL
+// button with fixed prefix `https://buildohub.in/orders/payment/`).
 
 const PAYMENT_REQUIRED_POLICY = {
   enabled: true,
-  templateName: "payment_required",
+  templateName: "payment_required_v2",
   channel: "WHATSAPP",
   priority: "P0",
 };
@@ -27,7 +31,14 @@ function makeOrder(overrides: Partial<any> = {}) {
     enquiryId: "BH-2026-00452",
     totalAmount: 50000,
     paymentStatus: PaymentStatus.PENDING,
-    user: { id: "user-1", phone: "919876543210", whatsappNumber: null },
+    user: { id: "user-1", name: "Rahul Sharma", phone: "919876543210", whatsappNumber: null },
+    // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+    // Dispatch — this notification now ALSO requires the SupplierInvoice
+    // to already be CONFIRMED; every pre-existing test in this file
+    // exercises the "payment genuinely required" scenario, so it must
+    // default to the "already confirmed" state. See the dedicated describe
+    // block below for tests of the new gate itself.
+    supplierInvoice: { status: "CONFIRMED" },
     ...overrides,
   };
 }
@@ -193,7 +204,7 @@ describe("notifyPaymentRequired — dry-run mode", () => {
 
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(prisma.whatsAppMessageLog.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ templateName: "payment_required", mode: "dry-run" }) })
+      expect.objectContaining({ data: expect.objectContaining({ templateName: "payment_required_v2", mode: "dry-run" }) })
     );
     expect(prisma.notificationEvent.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: "sent" } })
@@ -201,8 +212,34 @@ describe("notifyPaymentRequired — dry-run mode", () => {
   });
 });
 
+describe("notifyPaymentRequired — buyer name fallback", () => {
+  it("falls back to a generic 'Customer' greeting when the buyer has no name on file", async () => {
+    const { prisma } = buildHarness({ order: makeOrder({ user: { id: "user-1", name: null, phone: "919876543210", whatsappNumber: null } }) });
+    await notifyPaymentRequired(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+
+    const params = prisma.whatsAppMessageLog.create.mock.calls[0][0].data.parameters;
+    expect(params[0]).toBe("Customer");
+  });
+});
+
+describe("buildPaymentButtonUrlSuffix", () => {
+  it("builds the bare orderId suffix (never a full URL, and never the old payment/{orderId} format)", () => {
+    expect(buildPaymentButtonUrlSuffix("order-1")).toBe("order-1");
+    expect(buildPaymentButtonUrlSuffix("order-1")).not.toMatch(/^https?:\/\//);
+    expect(buildPaymentButtonUrlSuffix("order-1")).not.toContain("buildohub.in");
+    expect(buildPaymentButtonUrlSuffix("order-1")).not.toContain("payment/");
+  });
+
+  it("resolves to the correct destination URL for a representative order id, with no duplicated 'payment/' segment", () => {
+    const suffix = buildPaymentButtonUrlSuffix("abc123");
+    const resolvedUrl = `https://buildohub.in/orders/payment/${suffix}`;
+    expect(resolvedUrl).toBe("https://buildohub.in/orders/payment/abc123");
+    expect(resolvedUrl).not.toContain("payment/payment");
+  });
+});
+
 describe("notifyPaymentRequired — live mode (Meta Cloud API)", () => {
-  it("calls Meta exactly once with the correct template name, exactly 3 body parameters, and no header/buttons", async () => {
+  it("calls Meta exactly once with the correct template name, exactly 2 body parameters, and the approved dynamic Complete Payment URL button", async () => {
     const { prisma } = buildHarness();
     process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "live";
     process.env.WHATSAPP_PHONE_NUMBER_ID = "PHONE_ID";
@@ -218,17 +255,49 @@ describe("notifyPaymentRequired — live mode (Meta Cloud API)", () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
-    expect(sentBody.template.name).toBe("payment_required");
-    expect(sentBody.template.components).toHaveLength(1);
-    expect(sentBody.template.components[0].type).toBe("body");
-    expect(sentBody.template.components[0].parameters).toHaveLength(3);
-    expect(sentBody.template.components[0].parameters[0]).toEqual({ type: "text", text: "BH-2026-00452" });
-    expect(sentBody.template.components[0].parameters[1]).toEqual({ type: "text", text: "₹50,000" });
-    expect(sentBody.template.components.some((c: any) => c.type === "button")).toBe(false);
+    expect(sentBody.template.name).toBe("payment_required_v2");
+    expect(sentBody.template.components).toHaveLength(2);
+
+    const bodyComponent = sentBody.template.components.find((c: any) => c.type === "body");
+    // Exactly 2 parameters ([buyerName, enquiryDisplayId]) — matches the
+    // approved payment_required_v2 body contract ("Hi {{1}}, ... order
+    // {{2}}. ..."). Never the old 3-param (enquiry id, amount, deadline)
+    // "payment_required" contract, which Meta rejects for this template.
+    expect(bodyComponent.parameters).toHaveLength(2);
+    expect(bodyComponent.parameters[0]).toEqual({ type: "text", text: "Rahul Sharma" });
+    expect(bodyComponent.parameters[1]).toEqual({ type: "text", text: "BH-2026-00452" });
+
+    const buttonComponent = sentBody.template.components.find((c: any) => c.type === "button");
+    expect(buttonComponent).toEqual({
+      type: "button",
+      sub_type: "url",
+      index: 0,
+      parameters: [{ type: "text", text: "order-1" }],
+    });
     expect(sentBody.template.components.some((c: any) => c.type === "header")).toBe(false);
     expect(prisma.whatsAppMessageLog.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "sent", metaMessageId: "wamid.PAYMENT-REQUIRED-1" }) })
     );
+  });
+
+  it("uses the triggering order's own id for the button suffix, never a different/invented order", async () => {
+    const { prisma } = buildHarness({ order: makeOrder({ id: "order-55", enquiryId: "BH-2026-00777" }) });
+    process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "live";
+    process.env.WHATSAPP_PHONE_NUMBER_ID = "PHONE_ID";
+    process.env.WHATSAPP_ACCESS_TOKEN = "SECRET_TOKEN";
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ messages: [{ id: "wamid.PAYMENT-REQUIRED-2" }] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await notifyPaymentRequired(prisma, { orderId: "order-55", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+
+    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    const buttonComponent = sentBody.template.components.find((c: any) => c.type === "button");
+    expect(buttonComponent.parameters[0].text).toBe("order-55");
+    expect(buttonComponent.parameters[0].text).not.toContain("payment/");
   });
 
   it("records a Meta failure as failed and never throws", async () => {
@@ -251,5 +320,84 @@ describe("notifyPaymentRequired — live mode (Meta Cloud API)", () => {
     expect(prisma.whatsAppMessageLog.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
     );
+  });
+});
+
+// Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+// Dispatch — this notification must never fire before an Admin has
+// confirmed the order's SupplierInvoice.
+describe("notifyPaymentRequired — gated on Admin-confirmed SupplierInvoice", () => {
+  it("never notifies on the PLACED -> PROCESSING transition when there is no SupplierInvoice yet", async () => {
+    const { prisma } = buildHarness({ order: makeOrder({ supplierInvoice: null }) });
+    await notifyPaymentRequired(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+    expect(prisma.notificationEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("never notifies while the SupplierInvoice is PENDING_REVIEW", async () => {
+    const { prisma } = buildHarness({ order: makeOrder({ supplierInvoice: { status: "PENDING_REVIEW" } }) });
+    await notifyPaymentRequired(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+    expect(prisma.notificationEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("never notifies while the SupplierInvoice was REJECTED", async () => {
+    const { prisma } = buildHarness({ order: makeOrder({ supplierInvoice: { status: "REJECTED" } }) });
+    await notifyPaymentRequired(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+    expect(prisma.notificationEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("notifies once the SupplierInvoice is CONFIRMED (the common case: invoice already confirmed by the time the supplier accepts)", async () => {
+    const { prisma } = buildHarness({ order: makeOrder({ supplierInvoice: { status: "CONFIRMED" } }) });
+    await notifyPaymentRequired(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+    expect(prisma.notificationEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "created" }) })
+    );
+  });
+});
+
+describe("notifyPaymentRequiredOnSupplierInvoiceConfirmed", () => {
+  it("sends the notification once an Admin confirms the SupplierInvoice for an order already PROCESSING with PENDING payment", async () => {
+    const { prisma } = buildHarness({
+      order: makeOrder({ paymentStatus: PaymentStatus.PENDING, supplierInvoice: { status: "CONFIRMED" } }),
+    });
+
+    const { notifyPaymentRequiredOnSupplierInvoiceConfirmed } = await import("./payment-required-notification");
+    await notifyPaymentRequiredOnSupplierInvoiceConfirmed(prisma, "order-1");
+
+    expect(prisma.notificationEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "created" }) })
+    );
+  });
+
+  it("is a no-op when paymentStatus is already PAID", async () => {
+    const { prisma } = buildHarness({
+      order: makeOrder({ paymentStatus: PaymentStatus.PAID, supplierInvoice: { status: "CONFIRMED" } }),
+    });
+
+    const { notifyPaymentRequiredOnSupplierInvoiceConfirmed } = await import("./payment-required-notification");
+    await notifyPaymentRequiredOnSupplierInvoiceConfirmed(prisma, "order-1");
+
+    expect(prisma.notificationEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("shares the same dedupe key as notifyPaymentRequired, so whichever trigger fires first is the only one that sends", async () => {
+    const { prisma } = buildHarness({ order: makeOrder({ supplierInvoice: { status: "CONFIRMED" } }) });
+
+    // Trigger 1: supplier accepts (invoice already confirmed by then).
+    await notifyPaymentRequired(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+
+    // Trigger 2: a later, retried/duplicate admin-confirmation call for the
+    // SAME order must be a safe no-op — never a second send.
+    const { notifyPaymentRequiredOnSupplierInvoiceConfirmed } = await import("./payment-required-notification");
+    await notifyPaymentRequiredOnSupplierInvoiceConfirmed(prisma, "order-1");
+
+    expect(prisma.whatsAppMessageLog.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("never throws even if the order cannot be found", async () => {
+    const { prisma } = buildHarness();
+    prisma.order.findUnique.mockResolvedValueOnce(null);
+
+    const { notifyPaymentRequiredOnSupplierInvoiceConfirmed } = await import("./payment-required-notification");
+    await expect(notifyPaymentRequiredOnSupplierInvoiceConfirmed(prisma, "missing")).resolves.toBeUndefined();
   });
 });

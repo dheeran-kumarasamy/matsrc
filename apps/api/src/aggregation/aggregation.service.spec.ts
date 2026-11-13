@@ -41,6 +41,10 @@ function createFakeDb() {
     users: new Map<string, any>(),
     enquirySequenceValue: 0,
     idCounter: 0,
+    // Admin-Configurable Product Markup — GLOBAL/CATEGORY/PRODUCT
+    // MarkupSetting rows, keyed by `${scope}:${scopeId}`. Seeded per-test
+    // via seedMarkup() below.
+    markupSettings: new Map<string, any>(),
   };
 
   function nextId(prefix: string) {
@@ -50,6 +54,19 @@ function createFakeDb() {
 
   const productApi = {
     findUnique: vi.fn(async ({ where }: any) => db.products.get(where.id) ?? null),
+  };
+
+  // Admin-Configurable Product Markup — mirrors
+  // packages/db/lib/markup-calculation.ts's resolveMarkupForProduct() own
+  // OR-based query shape exactly, reading from the same in-memory
+  // db.markupSettings map seedMarkup() populates.
+  const markupSettingApi = {
+    findMany: vi.fn(async ({ where }: any) => {
+      const clauses: Array<{ scope: string; scopeId: string | null }> = where?.OR ?? [];
+      return clauses
+        .map((clause) => db.markupSettings.get(`${clause.scope}:${clause.scopeId}`))
+        .filter((row): row is any => !!row);
+    }),
   };
 
   const poolApi = {
@@ -113,6 +130,15 @@ function createFakeDb() {
       if (!participant) throw new Error("participant not found in fake db");
       Object.assign(participant, data);
       return participant;
+    }),
+    // Used by getSupplierPools' participantCount — supports the same
+    // status.in filter shape findMany above uses.
+    count: vi.fn(async ({ where }: any) => {
+      return [...db.participants.values()].filter((p) => {
+        if (where.poolId && p.poolId !== where.poolId) return false;
+        if (where.status?.in && !where.status.in.includes(p.status)) return false;
+        return true;
+      }).length;
     }),
   };
 
@@ -220,6 +246,7 @@ function createFakeDb() {
     user: userApi,
     enquirySequence: enquirySequenceApi,
     businessSequence: businessSequenceApi,
+    markupSetting: markupSettingApi,
     $queryRaw,
   };
 
@@ -253,6 +280,7 @@ function seedProduct(db: ReturnType<typeof createFakeDb>["db"], overrides: Parti
   const product = {
     id: "product-1",
     supplierId: "supplier-1",
+    categoryId: "category-1",
     basePrice: 100,
     aggregationEnabled: true,
     aggregationWindowDays: 7,
@@ -265,6 +293,20 @@ function seedProduct(db: ReturnType<typeof createFakeDb>["db"], overrides: Parti
   };
   db.products.set(product.id, product);
   return product;
+}
+
+// Admin-Configurable Product Markup — seeds a MarkupSetting row at the
+// given scope (mirrors packages/db/lib/markup-calculation.ts's
+// PRODUCT->CATEGORY->GLOBAL precedence exactly, since the fake
+// markupSettingApi reads from this same map).
+function seedMarkup(
+  db: ReturnType<typeof createFakeDb>["db"],
+  scope: "GLOBAL" | "CATEGORY" | "PRODUCT",
+  scopeId: string | null,
+  percentage: number,
+  isEnabled = true
+) {
+  db.markupSettings.set(`${scope}:${scopeId}`, { scope, scopeId, percentage, isEnabled });
 }
 
 describe("AggregationService.findOrCreatePool", () => {
@@ -492,6 +534,123 @@ describe("AggregationService.addParticipant (tier recalculation)", () => {
   });
 });
 
+// Admin-Configurable Product Markup — Finding 3 regression coverage
+// ("Group & Save" bypassing markup entirely).
+describe("AggregationService — Admin-Configurable Product Markup", () => {
+  let db: ReturnType<typeof createFakeDb>["db"];
+  let prisma: ReturnType<typeof createFakeDb>["prisma"];
+  let service: AggregationService;
+
+  beforeEach(() => {
+    const fake = createFakeDb();
+    db = fake.db;
+    prisma = fake.prisma;
+    service = new AggregationService(prisma as any, makeConfig(), makeFakeNotificationService(), makeFakeCustomerOrderStatusNotificationService());
+    seedProduct(db);
+  });
+
+  async function createPool() {
+    return service.findOrCreatePool({
+      supplierId: "supplier-1",
+      productId: "product-1",
+      zoneKey: "560001",
+      requestedDeliveryDate: new Date("2026-01-10T00:00:00.000Z"),
+    });
+  }
+
+  it("applies the GLOBAL markup to the buyer-facing Order/OrderItem, after quantity-tier pricing is resolved", async () => {
+    seedMarkup(db, "GLOBAL", null, 10);
+    const pool = await createPool();
+
+    const { participant } = await service.addParticipant({ poolId: pool.id, builderId: "builder-1", quantity: 10 });
+
+    // Tier price for qty 10 = 90 (unchanged supplier-side tier resolution);
+    // marked up by 10% = 99 — never the raw supplier tier price of 90.
+    const order = db.orders.get(participant.orderId!);
+    expect(order.totalAmount).toBe(990); // 10 * 99
+    const orderItem = [...db.orderItems.values()].find((i: any) => i.orderId === order.id);
+    expect(orderItem).toMatchObject({ unitPrice: 99, supplierUnitPrice: 90, markupPercent: 10, markupAmount: 9 });
+  });
+
+  it("prefers a CATEGORY override over the GLOBAL default", async () => {
+    seedMarkup(db, "GLOBAL", null, 20);
+    seedMarkup(db, "CATEGORY", "category-1", 5);
+    const pool = await createPool();
+
+    const { participant } = await service.addParticipant({ poolId: pool.id, builderId: "builder-1", quantity: 10 });
+
+    const order = db.orders.get(participant.orderId!);
+    // Tier price 90 * 1.05 = 94.5, not 90 * 1.20 = 108.
+    expect(order.totalAmount).toBe(945);
+  });
+
+  it("prefers a PRODUCT override over both CATEGORY and GLOBAL", async () => {
+    seedMarkup(db, "GLOBAL", null, 20);
+    seedMarkup(db, "CATEGORY", "category-1", 15);
+    seedMarkup(db, "PRODUCT", "product-1", 0);
+    const pool = await createPool();
+
+    const { participant } = await service.addParticipant({ poolId: pool.id, builderId: "builder-1", quantity: 10 });
+
+    const order = db.orders.get(participant.orderId!);
+    // Explicit 0% product override wins — never the category/global rate.
+    expect(order.totalAmount).toBe(900); // 10 * 90, unmarked up
+  });
+
+  it("applies markup AFTER quantity-tier pricing is resolved (tier then markup, never markup then tier)", async () => {
+    seedMarkup(db, "GLOBAL", null, 10);
+    const pool = await createPool();
+
+    // qty 50 crosses the second tier (unitPrice 80).
+    const { participant } = await service.addParticipant({ poolId: pool.id, builderId: "builder-1", quantity: 50 });
+
+    const order = db.orders.get(participant.orderId!);
+    // 80 * 1.10 = 88; 50 * 88 = 4400.
+    expect(order.totalAmount).toBe(4400);
+  });
+
+  it("the buyer-facing PoolSummary returned by addParticipant shows the marked-up price, never the raw supplier tier price", async () => {
+    seedMarkup(db, "GLOBAL", null, 10);
+    const pool = await createPool();
+
+    const { pool: updatedPool } = await service.addParticipant({ poolId: pool.id, builderId: "builder-1", quantity: 10 });
+
+    expect(updatedPool.currentUnitPrice).toBe(99); // 90 * 1.10
+  });
+
+  it("the supplier-facing getSupplierPools summary continues to show the ORIGINAL (unmarked-up) price, never the buyer price", async () => {
+    seedMarkup(db, "GLOBAL", null, 10);
+    const pool = await createPool();
+    await service.addParticipant({ poolId: pool.id, builderId: "builder-1", quantity: 10 });
+
+    const supplierPools = await service.getSupplierPools("supplier-1");
+
+    expect(supplierPools[0].currentUnitPrice).toBe(90); // raw tier price, never 99
+  });
+
+  it("falls back to 0% markup (never blocks joining) when no markup configuration exists", async () => {
+    const pool = await createPool();
+
+    const { participant } = await service.addParticipant({ poolId: pool.id, builderId: "builder-1", quantity: 10 });
+
+    const order = db.orders.get(participant.orderId!);
+    expect(order.totalAmount).toBe(900); // unmarked-up tier price
+  });
+
+  it("does not apply markup twice when a participant's quantity is subsequently increased", async () => {
+    seedMarkup(db, "GLOBAL", null, 10);
+    const pool = await createPool();
+
+    await service.addParticipant({ poolId: pool.id, builderId: "builder-1", quantity: 5 });
+    const { participant } = await service.addParticipant({ poolId: pool.id, builderId: "builder-1", quantity: 6 });
+
+    // qty 11 crosses tier 1 (90) -> marked up once to 99 — never marked up
+    // again on top of an already-marked-up figure.
+    const order = db.orders.get(participant.orderId!);
+    expect(order.totalAmount).toBe(1089); // 11 * 99
+  });
+});
+
 describe("AggregationService.lockPool", () => {
   let db: ReturnType<typeof createFakeDb>["db"];
   let prisma: ReturnType<typeof createFakeDb>["prisma"];
@@ -564,6 +723,25 @@ describe("AggregationService.lockPool", () => {
   it("throws NotFoundException for an unknown pool id", async () => {
     await expect(service.lockPool("does-not-exist")).rejects.toThrow(NotFoundException);
   });
+
+  // Admin-Configurable Product Markup
+  it("reconciles each participant's linked Order to the MARKED-UP locked price, while the pool's own returned lockedUnitPrice/currentUnitPrice remain the ORIGINAL supplier price (lockPool is a supplier-facing call path)", async () => {
+    seedMarkup(db, "GLOBAL", null, 10);
+    const { poolId, p1 } = await createPoolWithParticipants();
+
+    const locked = await service.lockPool(poolId);
+
+    // Supplier-facing return value: unchanged, raw locked tier price.
+    expect(locked.lockedUnitPrice).toBe(80);
+    expect(locked.currentUnitPrice).toBe(80);
+
+    // Buyer-facing persisted Order: marked up (80 * 1.10 = 88).
+    const order = db.orders.get(p1.orderId!);
+    expect(order.totalAmount).toBe(30 * 88);
+    expect(order.priceAfterAggregation).toBe(30 * 88);
+    const orderItem = [...db.orderItems.values()].find((i: any) => i.orderId === order.id);
+    expect(orderItem).toMatchObject({ unitPrice: 88, supplierUnitPrice: 80, markupPercent: 10, markupAmount: 8 });
+  });
 });
 
 describe("AggregationService.cancelParticipant (opt-out)", () => {
@@ -630,6 +808,25 @@ describe("AggregationService.cancelParticipant (opt-out)", () => {
     const pool = await createPool();
 
     await expect(service.cancelParticipant(pool.id, "builder-never-joined")).rejects.toThrow(NotFoundException);
+  });
+
+  // Admin-Configurable Product Markup
+  it("recalculates remaining participants' pricing with markup applied after an opt-out drops the tier", async () => {
+    seedMarkup(db, "GLOBAL", null, 10);
+    const pool = await createPool();
+    await service.addParticipant({ poolId: pool.id, builderId: "builder-1", quantity: 5 });
+    const { participant: p2 } = await service.addParticipant({
+      poolId: pool.id,
+      builderId: "builder-2",
+      quantity: 5,
+    }); // pool now at 10 -> tier-1 (90)
+
+    // Builder-1 opts out, dropping pool back to 5 -> base price (100), marked up 10% = 110.
+    await service.cancelParticipant(pool.id, "builder-1");
+
+    const remainingOrder = db.orders.get(p2.orderId!);
+    expect(remainingOrder.totalAmount).toBe(5 * 110);
+    expect(remainingOrder.priceAfterAggregation).toBe(5 * 110);
   });
 });
 

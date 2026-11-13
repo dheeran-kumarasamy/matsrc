@@ -4,6 +4,14 @@
    editorial pairing as part of the industrial-palette redesign. */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
+/* C16 — Poppins, scoped to the BuildOHub wordmark only (see
+   components/shared/BuildOHubLogo.tsx's `.brand-wordmark` class below).
+   This is intentionally a SEPARATE font-family from the site-wide Inter
+   import above: the brand/logo text has its own distinct typeface per the
+   brand design, while every other heading/body text keeps using Inter
+   unchanged — no global typography change. */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -185,6 +193,18 @@
     font-weight: 800;
     letter-spacing: -0.02em;
     line-height: 1.05;
+  }
+
+  /* C16 — BuildOHub brand wordmark typeface. Scoped specifically to
+     components/shared/BuildOHubLogo.tsx (the single shared logo component
+     used everywhere the wordmark appears — marketing header, mobile
+     drawer, auth pages, builder nav, footer, dashboards), NOT to
+     `.posh-heading` in general (which is reused by unrelated page
+     headings elsewhere and must keep using Inter unchanged). 700 matches
+     the bold weight already used by the wordmark's "Build"/"hub" text. */
+  .brand-wordmark {
+    font-family: 'Poppins', 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
   }
 
   /* ── Posh side-panel navigation typography ──────────────────────────────
@@ -481,6 +501,36 @@
   }
   .posh-input:focus {
     border-color: var(--posh-primary);
+  }
+
+  /* ── Shared header search control ──────────────────────────────────────
+     Same `.posh-input` sizing/radius, but with a clearly visible orange
+     border at rest (not just on focus) plus a dedicated orange "Search"
+     submit button sized to match the input's height exactly, so the pair
+     reads as one cohesive pill-shaped control (HeaderSearchForm.tsx, used
+     app-wide — builder portal header + /newdashboard). */
+  .posh-search-input {
+    @apply w-full rounded-xl border-2 px-3 py-2.5 text-sm font-medium outline-none focus:ring-1;
+    border-color: var(--posh-primary);
+    background: var(--posh-bg-card);
+    color: var(--posh-fg);
+  }
+  .posh-search-input::placeholder {
+    color: var(--posh-fg-muted);
+  }
+  .posh-search-input:focus {
+    border-color: var(--posh-primary-hover);
+  }
+  .posh-search-btn {
+    @apply shrink-0 rounded-xl border-2 px-4 py-2.5 text-sm font-bold transition-colors;
+    border-color: var(--posh-primary);
+    background: var(--posh-primary);
+    color: var(--posh-primary-fg);
+  }
+  .posh-search-btn:hover,
+  .posh-search-btn:focus-visible {
+    background: var(--posh-primary-hover);
+    border-color: var(--posh-primary-hover);
   }
 
   /* Table header cell. */

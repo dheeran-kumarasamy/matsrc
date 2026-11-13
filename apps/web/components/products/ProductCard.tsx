@@ -3,6 +3,8 @@ import { getCategoryEmoji } from "@/lib/category-images";
 import WatchlistToggleIcon from "@/components/products/WatchlistToggleIcon";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { resolveStartingDisplayPrice, formatStartingPriceLabel } from "@/lib/product-price-display";
+import { DELIVERY_TIMING_BROWSING_NOTE } from "@/lib/delivery-estimate";
+import { formatGstExclusiveNote } from "@/lib/gst-display";
 
 interface Props {
   skeleton?: boolean;
@@ -37,8 +39,8 @@ interface Props {
 }
 
 // Product card — industrial redesign: off-white surface, soft depth
-// shadow, prominent charcoal price, orange "Request Quote" action that
-// reveals on hover (desktop) / stays visible (touch). All existing
+// shadow, prominent charcoal price, solid "Request Quote" action that
+// appears irrespective of hovering across screen sizes. All existing
 // functionality (intercepting routes, price range, slug) unchanged.
 export default function ProductCard({ skeleton, product }: Props) {
   if (skeleton) {
@@ -58,8 +60,7 @@ export default function ProductCard({ skeleton, product }: Props) {
   const unitSuffix = product.unit ? ` / ${product.unit}` : "";
 
   return (
-    // next/link so that Next.js intercepting-route convention
-    // (@modal/(.)products/[slug]) renders the quick-view overlay — spec 5A.
+    // Navigates directly to the product details page without overlay.
     <Link
       href={`/products/${product.slug}`}
       className="panel relative block overflow-hidden p-5 transition-shadow duration-200 hover:shadow-lg group"
@@ -117,6 +118,18 @@ export default function ProductCard({ skeleton, product }: Props) {
                 </span>
                 {formatStartingPriceLabel(displayPrice)}
                 {unitSuffix}
+                {/* C29 — compact pre-checkout GST disclosure. No rupee
+                    amount is shown here (the displayed price is a
+                    cross-supplier/cross-tier minimum — see
+                    product-price-display.ts — so a single fabricated GST
+                    rupee figure would misleadingly imply it applies to
+                    just this minimum tier/supplier). The rate itself is
+                    the same platform-wide one every order already resolves
+                    to (see lib/gst-display.ts), so disclosing it here is
+                    truthful. */}
+                <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--posh-fg-muted)" }}>
+                  {formatGstExclusiveNote()}
+                </span>
               </div>
             );
           })()}
@@ -128,11 +141,21 @@ export default function ProductCard({ skeleton, product }: Props) {
         </span>
       </div>
 
-      {/* Quick "Request Quote" action — subtle, reveals on hover on
-          pointer devices; stays visible on touch (no hover state) so it's
-          always reachable on mobile. */}
+      {/* C13 — delivery timing visibility while browsing. No reliable
+          per-listing delivery-days estimate exists in the schema at PLP
+          time (see lib/delivery-estimate.ts doc comment for the full
+          investigation), so this surfaces the same truthful framing the
+          app already uses elsewhere for this gap, kept visually secondary
+          (smaller, muted) below price/supplier-count and above the primary
+          CTA so it doesn't clutter the card. */}
+      <p className="mt-1 text-[11px]" style={{ color: "var(--posh-fg-muted)" }}>
+        {DELIVERY_TIMING_BROWSING_NOTE}
+      </p>
+
+      {/* Quick "Request Quote" action — displayed permanently across all
+          screen sizes irrespective of hovering. */}
       <span
-        className="posh-btn-solid mt-4 flex min-h-[40px] w-full items-center justify-center rounded-lg text-xs font-bold uppercase tracking-wide opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100"
+        className="posh-btn-solid mt-4 flex min-h-[40px] w-full items-center justify-center rounded-lg text-xs font-bold uppercase tracking-wide"
       >
         Request Quote
       </span>

@@ -12,6 +12,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const resolveUserCtx = vi.fn(async (..._args: unknown[]) => ({ userId: "user-1", email: "builder@example.com", name: "Builder" }));
 const getUserCtx = vi.fn((..._args: unknown[]) => ({ userId: "user-1", email: "builder@example.com", name: "Builder" }));
 const getOrCreateBuilder = vi.fn(async (..._args: unknown[]) => ({ id: "user-1", email: "builder@example.com", name: "Builder" }));
 const customerAdvanceAccountFindUnique = vi.fn();
@@ -24,6 +25,7 @@ vi.mock("@/lib/builder-db", () => ({
   },
   getOrCreateBuilder: (...args: unknown[]) => getOrCreateBuilder(...args),
   getUserCtx: (...args: unknown[]) => getUserCtx(...args),
+  resolveUserCtx: (...args: unknown[]) => resolveUserCtx(...args),
 }));
 
 function makeRequest(): Request {
@@ -32,12 +34,24 @@ function makeRequest(): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resolveUserCtx.mockResolvedValue({ userId: "user-1", email: "builder@example.com", name: "Builder" });
   getUserCtx.mockReturnValue({ userId: "user-1", email: "builder@example.com", name: "Builder" });
   getOrCreateBuilder.mockResolvedValue({ id: "user-1", email: "builder@example.com", name: "Builder" });
   customerAdvanceAccountFindUnique.mockResolvedValue({ id: "acct-1" });
 });
 
 describe("GET /api/builder/advance/transactions", () => {
+  it("returns 401 when unauthenticated", async () => {
+    resolveUserCtx.mockRejectedValue(new Error("UNAUTHENTICATED"));
+
+    const { GET } = await import("@/app/api/builder/advance/transactions/route");
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    expect(res.status).toBe(401);
+    expect(body.error).toBe("Unauthorized");
+  });
+
   it("returns an empty list when the buyer has no advance account yet", async () => {
     customerAdvanceAccountFindUnique.mockResolvedValue(null);
 

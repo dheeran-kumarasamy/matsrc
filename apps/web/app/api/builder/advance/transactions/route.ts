@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { prisma, getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // can never see another buyer's ledger.
 export async function GET(request: Request) {
   try {
-    const ctx = getUserCtx(request);
+    const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
     const account = await prisma.customerAdvanceAccount.findUnique({
@@ -58,7 +58,10 @@ export async function GET(request: Request) {
         createdAt: t.createdAt,
       })),
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     console.error("Advance transactions GET error:", error);
     return NextResponse.json({ error: "Failed to fetch advance transaction history" }, { status: 500 });
   }

@@ -67,11 +67,10 @@ function useNetBalance(enabled: boolean) {
       if (!isMountedRef.current) return;
       setBalance(Number(data.availableBalance));
       setStatus("ready");
-    } catch (err) {
+    } catch {
       if (isMountedRef.current) {
         setStatus("error");
       }
-      throw err;
     }
   }, []);
 

@@ -18,6 +18,7 @@ const cartItemFindMany = vi.fn();
 const cartItemDeleteMany = vi.fn();
 const siteFindFirst = vi.fn();
 const userFindUnique = vi.fn();
+const productFindMany = vi.fn();
 const orderCreate = vi.fn();
 const orderUpdate = vi.fn();
 const purchaseOrderUpdate = vi.fn();
@@ -32,6 +33,7 @@ vi.mock("@/lib/builder-db", () => ({
     },
     site: { findFirst: (...args: unknown[]) => siteFindFirst(...args) },
     user: { findUnique: (...args: unknown[]) => userFindUnique(...args) },
+    product: { findMany: (...args: unknown[]) => productFindMany(...args) },
     order: {
       create: (...args: unknown[]) => orderCreate(...args),
       update: (...args: unknown[]) => orderUpdate(...args),
@@ -39,7 +41,14 @@ vi.mock("@/lib/builder-db", () => ({
     purchaseOrder: { update: (...args: unknown[]) => purchaseOrderUpdate(...args) },
     purchaseOrderLineItem: { update: (...args: unknown[]) => purchaseOrderLineItemUpdate(...args) },
     priceSnapshot: { create: (...args: unknown[]) => priceSnapshotCreate(...args) },
-    $transaction: (callback: any) => callback({ order: { create: orderCreate } }),
+    $transaction: (callback: any) =>
+      callback({
+        order: { create: orderCreate },
+        cartItem: {
+          findMany: (...args: unknown[]) => cartItemFindMany(...args),
+          deleteMany: (...args: unknown[]) => cartItemDeleteMany(...args),
+        },
+      }),
   },
   resolveUnitPrice: () => 100,
 }));
@@ -69,6 +78,7 @@ beforeEach(() => {
   cartItemDeleteMany.mockReset();
   siteFindFirst.mockReset();
   userFindUnique.mockReset();
+  productFindMany.mockReset();
   orderCreate.mockReset();
   orderUpdate.mockReset();
   purchaseOrderUpdate.mockReset();
@@ -76,6 +86,20 @@ beforeEach(() => {
   priceSnapshotCreate.mockReset();
   priceSnapshotCreate.mockResolvedValue({});
   cartItemDeleteMany.mockResolvedValue({ count: 1 });
+  productFindMany.mockResolvedValue([
+    {
+      id: "product-1",
+      supplierId: "supplier-1",
+      canonicalProductId: null,
+      categoryId: "cat-1",
+      basePrice: 100,
+      stock: 2000,
+      maxServiceableQty: 2000,
+      isActive: true,
+      supplier: { companyName: "Acme Supplier" },
+      pricingTiers: [],
+    },
+  ]);
 
   // No live public listing resolves — forces the legacy per-item fallback
   // pricing path, keeping this test independent of the listings fetch.
@@ -86,6 +110,7 @@ beforeEach(() => {
 
   cartItemFindMany.mockResolvedValue([
     {
+      id: "cart-item-1",
       productId: "product-1",
       quantity: 999, // a DIFFERENT quantity from the original order — never inherited
       product: {

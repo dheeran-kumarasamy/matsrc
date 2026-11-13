@@ -6,6 +6,7 @@ import {
   resolveAndCalculateMarkup,
   resolveEffectiveMarkupPercent,
   resolveMarkupForProduct,
+  resolveMarkupForProductsBatch,
 } from "./markup-calculation";
 
 describe("calculateMarkup", () => {
@@ -234,5 +235,79 @@ describe("resolveMarkupForProduct (database-backed precedence)", () => {
       supplierUnitPrice: 1000,
     });
     expect(result).toBeNull();
+  });
+});
+
+describe("resolveMarkupForProductsBatch (batched database-backed precedence)", () => {
+  function fakeTx(rows: Array<{ scope: string; scopeId: string | null; percentage: number; isEnabled: boolean }>) {
+    let callCount = 0;
+    return {
+      getCallCount: () => callCount,
+      markupSetting: {
+        findMany: async () => {
+          callCount++;
+          return rows;
+        },
+      },
+    };
+  }
+
+  it("resolves mixed items across product override, category override, global fallback and missing config in a single query", async () => {
+    const tx = fakeTx([
+      { scope: "PRODUCT", scopeId: "prod-special", percentage: 5, isEnabled: true },
+      { scope: "CATEGORY", scopeId: "cat-cement", percentage: 12, isEnabled: true },
+      { scope: "GLOBAL", scopeId: null, percentage: 10, isEnabled: true },
+    ]);
+
+    const items = [
+      { productId: "prod-special", categoryId: "cat-cement", supplierUnitPrice: 1000 },
+      { productId: "prod-standard", categoryId: "cat-cement", supplierUnitPrice: 2000 },
+      { productId: "prod-other", categoryId: "cat-steel", supplierUnitPrice: 3000 },
+    ];
+
+    const results = await resolveMarkupForProductsBatch(tx, items);
+
+    expect(tx.getCallCount()).toBe(1);
+    expect(results).toHaveLength(3);
+
+    // Product-level override (5%): 1000 -> 1050
+    expect(results[0]?.markupPercent).toBe(5);
+    expect(results[0]?.buyerUnitPrice).toBe(1050);
+
+    // Category-level fallback (12%): 2000 -> 2240
+    expect(results[1]?.markupPercent).toBe(12);
+    expect(results[1]?.buyerUnitPrice).toBe(2240);
+
+    // Global default fallback (10%): 3000 -> 3300
+    expect(results[2]?.markupPercent).toBe(10);
+    expect(results[2]?.buyerUnitPrice).toBe(3300);
+
+    // Verify exact equivalence with calling resolveMarkupForProduct individually
+    for (let i = 0; i < items.length; i++) {
+      const single = await resolveMarkupForProduct(tx, items[i]);
+      expect(results[i]).toEqual(single);
+    }
+  });
+
+  it("returns an empty array for an empty items list without querying the database", async () => {
+    const tx = fakeTx([]);
+    const results = await resolveMarkupForProductsBatch(tx, []);
+    expect(results).toEqual([]);
+    expect(tx.getCallCount()).toBe(0);
+  });
+
+  it("handles all missing/disabled settings gracefully (returns nulls)", async () => {
+    const tx = fakeTx([
+      { scope: "PRODUCT", scopeId: "prod-1", percentage: 10, isEnabled: false },
+      { scope: "GLOBAL", scopeId: null, percentage: 5, isEnabled: false },
+    ]);
+
+    const results = await resolveMarkupForProductsBatch(tx, [
+      { productId: "prod-1", categoryId: "cat-1", supplierUnitPrice: 1000 },
+      { productId: "prod-2", categoryId: "cat-2", supplierUnitPrice: 500 },
+    ]);
+
+    expect(tx.getCallCount()).toBe(1);
+    expect(results).toEqual([null, null]);
   });
 });

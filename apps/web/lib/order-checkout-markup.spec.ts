@@ -12,6 +12,7 @@ const cartItemFindMany = vi.fn();
 const cartItemDeleteMany = vi.fn();
 const siteFindFirst = vi.fn();
 const userFindUnique = vi.fn();
+const productFindMany = vi.fn();
 const orderCreate = vi.fn();
 const priceSnapshotCreate = vi.fn();
 const markupSettingFindMany = vi.fn();
@@ -24,15 +25,24 @@ vi.mock("@/lib/builder-db", () => ({
     },
     site: { findFirst: (...args: unknown[]) => siteFindFirst(...args) },
     user: { findUnique: (...args: unknown[]) => userFindUnique(...args) },
+    product: { findMany: (...args: unknown[]) => productFindMany(...args) },
     order: { create: (...args: unknown[]) => orderCreate(...args) },
     priceSnapshot: { create: (...args: unknown[]) => priceSnapshotCreate(...args) },
     markupSetting: { findMany: (...args: unknown[]) => markupSettingFindMany(...args) },
-    $transaction: (callback: any) => callback({ order: { create: orderCreate } }),
+    $transaction: (callback: any) =>
+      callback({
+        order: { create: orderCreate },
+        cartItem: {
+          findMany: (...args: unknown[]) => cartItemFindMany(...args),
+          deleteMany: (...args: unknown[]) => cartItemDeleteMany(...args),
+        },
+      }),
   },
   resolveUnitPrice: () => -1,
 }));
 
 const notifySupplierOrderSubmitted = vi.fn();
+const notifySupplierRfqReceived = vi.fn();
 vi.mock("@/lib/notify", () => ({
   notifySupplierOrderSubmitted: (...args: unknown[]) => notifySupplierOrderSubmitted(...args),
 }));
@@ -42,6 +52,7 @@ vi.mock("@matsrc/db", async () => {
   return {
     ...actual,
     generateEnquiryId: vi.fn().mockResolvedValue("ABC-SITE01-000001"),
+    notifySupplierRfqReceived: (...args: unknown[]) => notifySupplierRfqReceived(...args),
   };
 });
 
@@ -50,27 +61,25 @@ const PRODUCT_ID = "jsw-cement";
 const SUPPLIER_ID = "supplier-1";
 const CATEGORY_ID = "cat-cement";
 
-function publicListing(overrides: Record<string, unknown> = {}) {
+function dbProduct(overrides: Record<string, unknown> = {}) {
   return {
     id: PRODUCT_ID,
     supplierId: SUPPLIER_ID,
     canonicalProductId: null,
-    headlineSupplierId: SUPPLIER_ID,
-    groupedListingIds: [PRODUCT_ID],
-    price: "₹1000 / BAG",
-    stock: "1000 BAG",
-    maxServiceableQty: "1000 BAG",
-    active: true,
-    basePriceRaw: 1000,
-    stockRaw: 1000,
-    maxServiceableQtyRaw: 1000,
-    pricingTiersRaw: [{ minQty: 1, maxQty: 1000, tierPrice: 1000 }],
+    categoryId: CATEGORY_ID,
+    basePrice: 1000,
+    stock: 1000,
+    maxServiceableQty: 1000,
+    isActive: true,
+    supplier: { companyName: "JSW Supplier" },
+    pricingTiers: [{ minQty: 1, maxQty: 1000, tierPrice: 1000 }],
     ...overrides,
   };
 }
 
-function cartRow(quantity: number, basePrice = 1000) {
+function cartRow(quantity: number, basePrice = 1000, id = "cart-item-1") {
   return {
+    id,
     productId: PRODUCT_ID,
     quantity,
     product: {
@@ -89,12 +98,15 @@ beforeEach(() => {
   cartItemDeleteMany.mockReset();
   siteFindFirst.mockReset();
   userFindUnique.mockReset();
+  productFindMany.mockReset();
   orderCreate.mockReset();
   priceSnapshotCreate.mockReset();
   markupSettingFindMany.mockReset();
   priceSnapshotCreate.mockResolvedValue({});
   notifySupplierOrderSubmitted.mockReset();
   notifySupplierOrderSubmitted.mockResolvedValue(undefined);
+  notifySupplierRfqReceived.mockReset();
+  notifySupplierRfqReceived.mockResolvedValue(undefined);
   cartItemDeleteMany.mockResolvedValue({ count: 1 });
 
   siteFindFirst.mockResolvedValue({ id: "site-1" });
@@ -105,22 +117,24 @@ beforeEach(() => {
     enquiryId: "ABC-SITE01-000001",
     status: data.status,
     totalAmount: data.totalAmount,
-    items: data.items.create.map((_: unknown, i: number) => ({ id: `item-${i}` })),
+    items: data.items.create.map((item: any, i: number) => ({
+      id: `item-${i}`,
+      productId: item.productId,
+      supplierId: item.supplierId,
+      unitPrice: item.unitPrice,
+      supplierUnitPrice: item.supplierUnitPrice,
+      markupPercent: item.markupPercent,
+      markupAmount: item.markupAmount,
+      askPrice: item.askPrice,
+    })),
   }));
 });
 
 describe("createOrdersFromCart — Admin-Configurable Product Markup", () => {
   it("applies the canonical 10% markup: buyer pays ₹1,100 per unit for a ₹1,000 supplier price", async () => {
     cartItemFindMany.mockResolvedValue([cartRow(5)]);
+    productFindMany.mockResolvedValue([dbProduct()]);
     markupSettingFindMany.mockResolvedValue([{ scope: "GLOBAL", scopeId: null, percentage: 10, isEnabled: true }]);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        headers: { get: () => "application/json" },
-        json: async () => [publicListing()],
-      })
-    );
 
     const { createOrdersFromCart } = await import("./order-checkout");
     const result = await createOrdersFromCart(USER_ID, { siteId: "site-1", requireSiteId: true });
@@ -140,18 +154,11 @@ describe("createOrdersFromCart — Admin-Configurable Product Markup", () => {
 
   it("prefers a product-level override over the global default", async () => {
     cartItemFindMany.mockResolvedValue([cartRow(1)]);
+    productFindMany.mockResolvedValue([dbProduct()]);
     markupSettingFindMany.mockResolvedValue([
       { scope: "PRODUCT", scopeId: PRODUCT_ID, percentage: 5, isEnabled: true },
       { scope: "GLOBAL", scopeId: null, percentage: 20, isEnabled: true },
     ]);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        headers: { get: () => "application/json" },
-        json: async () => [publicListing()],
-      })
-    );
 
     const { createOrdersFromCart } = await import("./order-checkout");
     const result = await createOrdersFromCart(USER_ID, { siteId: "site-1", requireSiteId: true });
@@ -163,15 +170,8 @@ describe("createOrdersFromCart — Admin-Configurable Product Markup", () => {
 
   it("honours an explicit, enabled 0% override distinctly from no configuration", async () => {
     cartItemFindMany.mockResolvedValue([cartRow(1)]);
+    productFindMany.mockResolvedValue([dbProduct()]);
     markupSettingFindMany.mockResolvedValue([{ scope: "GLOBAL", scopeId: null, percentage: 0, isEnabled: true }]);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        headers: { get: () => "application/json" },
-        json: async () => [publicListing()],
-      })
-    );
 
     const { createOrdersFromCart } = await import("./order-checkout");
     const result = await createOrdersFromCart(USER_ID, { siteId: "site-1", requireSiteId: true });
@@ -185,15 +185,8 @@ describe("createOrdersFromCart — Admin-Configurable Product Markup", () => {
 
   it("fails safe to 0% (never blocks checkout) when no markup configuration exists at all", async () => {
     cartItemFindMany.mockResolvedValue([cartRow(1)]);
+    productFindMany.mockResolvedValue([dbProduct()]);
     markupSettingFindMany.mockResolvedValue([]);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        headers: { get: () => "application/json" },
-        json: async () => [publicListing()],
-      })
-    );
 
     const { createOrdersFromCart } = await import("./order-checkout");
     const result = await createOrdersFromCart(USER_ID, { siteId: "site-1", requireSiteId: true });
@@ -205,15 +198,8 @@ describe("createOrdersFromCart — Admin-Configurable Product Markup", () => {
 
   it("never applies markup to the supplier-facing askPrice", async () => {
     cartItemFindMany.mockResolvedValue([cartRow(5)]);
+    productFindMany.mockResolvedValue([dbProduct()]);
     markupSettingFindMany.mockResolvedValue([{ scope: "GLOBAL", scopeId: null, percentage: 10, isEnabled: true }]);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        headers: { get: () => "application/json" },
-        json: async () => [publicListing()],
-      })
-    );
 
     const { createOrdersFromCart } = await import("./order-checkout");
     await createOrdersFromCart(USER_ID, { siteId: "site-1", requireSiteId: true });
@@ -232,15 +218,8 @@ describe("createOrdersFromCart — Admin-Configurable Product Markup", () => {
   // BestPriceSelectionService.
   it("records the PriceSnapshot (source: ORDER) using the ORIGINAL supplier price, never the marked-up buyer price", async () => {
     cartItemFindMany.mockResolvedValue([cartRow(5)]);
+    productFindMany.mockResolvedValue([dbProduct()]);
     markupSettingFindMany.mockResolvedValue([{ scope: "GLOBAL", scopeId: null, percentage: 10, isEnabled: true }]);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        headers: { get: () => "application/json" },
-        json: async () => [publicListing()],
-      })
-    );
 
     const { createOrdersFromCart } = await import("./order-checkout");
     await createOrdersFromCart(USER_ID, { siteId: "site-1", requireSiteId: true });

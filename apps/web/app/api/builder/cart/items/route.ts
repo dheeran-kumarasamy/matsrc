@@ -12,6 +12,7 @@ import {
   resolveProductGroupForCart,
   computeRequestFingerprint,
 } from "@/lib/cart-data";
+import { resolveLowestPriceForQuantity } from "@/lib/resolution";
 
 export const dynamic = "force-dynamic";
 
@@ -127,8 +128,15 @@ export async function POST(request: Request) {
 
     const runInTx =
       typeof prisma.$transaction === "function"
-        ? (fn: (tx: any) => Promise<any>) => prisma.$transaction(fn)
+        ? (fn: (tx: any) => Promise<any>) =>
+            prisma.$transaction(fn, { maxWait: 10000, timeout: 20000 })
         : (fn: (tx: any) => Promise<any>) => fn(prisma);
+
+    const groupResult = await resolveProductGroupForCart(productId, quantity);
+    if (!groupResult) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+    const { product, candidates } = groupResult;
 
     let result: any;
 
@@ -220,12 +228,7 @@ export async function POST(request: Request) {
             throw new Error("ITEM_CONSUMED_OR_NOT_FOUND");
           }
 
-          const groupResult = await resolveProductGroupForCart(productId, quantity);
-          if (!groupResult) {
-            throw new Error("PRODUCT_NOT_FOUND");
-          }
-
-          const { resolution } = groupResult;
+          const resolution = resolveLowestPriceForQuantity(candidates, quantity);
           const resolvedFields = resolution
             ? {
                 resolvedListingId: resolution.listingId,
@@ -293,9 +296,10 @@ export async function POST(request: Request) {
         }
         if (
           error?.code === "P2034" ||
+          error?.code === "P2028" ||
           error?.code === "40P01" ||
           error?.code === "40001" ||
-          /deadlock|conflict|serialization/i.test(error?.message ?? "")
+          /deadlock|conflict|serialization|expired transaction|timeout/i.test(error?.message ?? "")
         ) {
           const cart = await getCartForUser(user.id);
           return NextResponse.json(
@@ -428,12 +432,7 @@ export async function POST(request: Request) {
             const targetQuantity = current ? current.quantity + quantity : quantity;
 
             // Re-resolve pricing tier for the ACTUAL final quantity
-            const groupResult = await resolveProductGroupForCart(productId, targetQuantity);
-            if (!groupResult) {
-              throw new Error("PRODUCT_NOT_FOUND");
-            }
-
-            const { product, resolution } = groupResult;
+            const resolution = resolveLowestPriceForQuantity(candidates, targetQuantity);
             const resolvedFields = resolution
               ? {
                   resolvedListingId: resolution.listingId,
@@ -546,9 +545,10 @@ export async function POST(request: Request) {
 
           if (
             error?.code === "P2034" ||
+            error?.code === "P2028" ||
             error?.code === "40P01" ||
             error?.code === "40001" ||
-            /deadlock|conflict|serialization/i.test(error?.message ?? "")
+            /deadlock|conflict|serialization|expired transaction|timeout/i.test(error?.message ?? "")
           ) {
             const cart = await getCartForUser(user.id);
             return NextResponse.json(
@@ -588,9 +588,10 @@ export async function POST(request: Request) {
     }
     if (
       error?.code === "P2034" ||
+      error?.code === "P2028" ||
       error?.code === "40P01" ||
       error?.code === "40001" ||
-      /deadlock|conflict|serialization/i.test(error?.message ?? "")
+      /deadlock|conflict|serialization|expired transaction|timeout/i.test(error?.message ?? "")
     ) {
       return NextResponse.json(
         { error: "Cart was updated concurrently. Please try again." },

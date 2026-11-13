@@ -107,8 +107,9 @@ export function productToResolutionCandidate(product: {
  * and any active sibling listings in the same canonical group directly from
  * the database, avoiding the full-catalogue HTTP request.
  */
-export async function resolveProductGroupForCart(productId: string, quantity: number) {
-  const product = await prisma.product.findFirst({
+export async function resolveProductGroupForCart(productId: string, quantity: number, dbClient?: any) {
+  const client = dbClient || prisma;
+  const product = await client.product.findFirst({
     where: {
       OR: [{ id: productId }, { slug: productId }],
       isActive: true,
@@ -126,7 +127,7 @@ export async function resolveProductGroupForCart(productId: string, quantity: nu
 
   let groupProducts: typeof product[] = [];
   if (product.canonicalProductId && product.canonicalProductId.trim() !== "") {
-    groupProducts = await prisma.product.findMany({
+    const foundGroup = await client.product.findMany({
       where: {
         canonicalProductId: product.canonicalProductId,
         isActive: true,
@@ -138,6 +139,7 @@ export async function resolveProductGroupForCart(productId: string, quantity: nu
       },
       orderBy: { updatedAt: "desc" },
     });
+    groupProducts = Array.isArray(foundGroup) ? foundGroup : [];
 
     if (!groupProducts.some((p) => p.id === product.id)) {
       groupProducts.unshift(product);
@@ -149,7 +151,7 @@ export async function resolveProductGroupForCart(productId: string, quantity: nu
   const candidates = groupProducts.map(productToResolutionCandidate);
   const resolution = resolveLowestPriceForQuantity(candidates, quantity);
 
-  return { product, resolution };
+  return { product, candidates, resolution };
 }
 
 /**

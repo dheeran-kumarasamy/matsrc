@@ -15,7 +15,8 @@ export async function DELETE(
 
     const runInTx =
       typeof prisma.$transaction === "function"
-        ? (fn: (tx: any) => Promise<any>) => prisma.$transaction(fn)
+        ? (fn: (tx: any) => Promise<any>) =>
+            prisma.$transaction(fn, { maxWait: 10000, timeout: 20000 })
         : (fn: (tx: any) => Promise<any>) => fn(prisma);
 
     await runInTx(async (tx: any) => {

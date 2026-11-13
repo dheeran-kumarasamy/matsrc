@@ -234,13 +234,14 @@ export async function resolveMarkupForProductsBatch(
     new Set(items.map((i) => i.categoryId).filter((id): id is string => typeof id === "string" && id.length > 0))
   );
 
-  const orConditions: any[] = [{ scope: "GLOBAL", scopeId: null }];
+  const orConditions: any[] = [];
   if (distinctProductIds.length > 0) {
     orConditions.push({ scope: "PRODUCT", scopeId: { in: distinctProductIds } });
   }
   if (distinctCategoryIds.length > 0) {
     orConditions.push({ scope: "CATEGORY", scopeId: { in: distinctCategoryIds } });
   }
+  orConditions.push({ scope: "GLOBAL", scopeId: null });
 
   const rows = await tx.markupSetting.findMany({
     where: {

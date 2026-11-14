@@ -209,3 +209,57 @@ export async function resolveMarkupForProduct(
     global: toTier("GLOBAL", null),
   });
 }
+
+/**
+ * Fetches the applicable PRODUCT/CATEGORY/GLOBAL MarkupSetting rows for a
+ * batch of product+category pairs in a single query, and resolves + calculates
+ * the buyer-facing price for each item in memory using the documented
+ * precedence rules (PRODUCT override -> CATEGORY override -> GLOBAL default).
+ *
+ * Preserves the exact calculation semantics of resolveMarkupForProduct() while
+ * eliminating N+1 database round-trips.
+ */
+export async function resolveMarkupForProductsBatch(
+  tx: MarkupSettingTxClient,
+  items: Array<{ productId: string; categoryId: string; supplierUnitPrice: number }>
+): Promise<Array<MarkupCalculationResult | null>> {
+  if (!items || items.length === 0) {
+    return [];
+  }
+
+  const distinctProductIds = Array.from(
+    new Set(items.map((i) => i.productId).filter((id): id is string => typeof id === "string" && id.length > 0))
+  );
+  const distinctCategoryIds = Array.from(
+    new Set(items.map((i) => i.categoryId).filter((id): id is string => typeof id === "string" && id.length > 0))
+  );
+
+  const orConditions: any[] = [];
+  if (distinctProductIds.length > 0) {
+    orConditions.push({ scope: "PRODUCT", scopeId: { in: distinctProductIds } });
+  }
+  if (distinctCategoryIds.length > 0) {
+    orConditions.push({ scope: "CATEGORY", scopeId: { in: distinctCategoryIds } });
+  }
+  orConditions.push({ scope: "GLOBAL", scopeId: null });
+
+  const rows = await tx.markupSetting.findMany({
+    where: {
+      OR: orConditions,
+    },
+  });
+
+  const toTier = (scope: string, scopeId: string | null): MarkupSettingInput | null => {
+    const row = rows.find((r) => r.scope === scope && r.scopeId === scopeId);
+    return row ? { percentage: Number(row.percentage), isEnabled: row.isEnabled } : null;
+  };
+  const globalTier = toTier("GLOBAL", null);
+
+  return items.map((item) =>
+    resolveAndCalculateMarkup(item.supplierUnitPrice, {
+      product: toTier("PRODUCT", item.productId),
+      category: toTier("CATEGORY", item.categoryId),
+      global: globalTier,
+    })
+  );
+}

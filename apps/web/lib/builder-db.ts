@@ -65,33 +65,37 @@ export function getUserCtx(request: Request) {
   };
 }
 
-// Same as getUserCtx, but falls back to the NextAuth session cookie when the
-// custom X-User-* headers are absent. Needed for routes that are hit via a
-// plain browser navigation (e.g. <a href> download links, window.location
-// redirects) instead of the fetch-based builderApi* helpers in lib/api.ts —
-// those never attach the custom headers, only cookies. Mirrors lib/api.ts's
-// convention where X-User-Id is the user's email.
+// Authenticated session is the authoritative identity source. Client-supplied
+// X-User-* headers can NEVER override the active session's identity.
 export async function resolveUserCtx(request: Request) {
+  const session = await auth().catch(() => null);
   const headers = request.headers;
-  const userId = headers.get("X-User-Id");
-  const email = headers.get("X-User-Email");
-  if (userId && email) {
+  const headerUserId = headers.get("X-User-Id");
+  const headerEmail = headers.get("X-User-Email");
+
+  // If a valid server session exists, it is THE authoritative source of truth.
+  // Client headers cannot override the authenticated user's session identity.
+  if (session?.user?.email) {
+    if (headerEmail && headerEmail.toLowerCase() !== session.user.email.toLowerCase()) {
+      throw new Error("FORBIDDEN_IMPERSONATION");
+    }
+    if (
+      headerUserId &&
+      headerUserId !== session.user.id &&
+      headerUserId.toLowerCase() !== session.user.email.toLowerCase()
+    ) {
+      throw new Error("FORBIDDEN_IMPERSONATION");
+    }
     return {
-      userId,
-      email,
-      name: headers.get("X-User-Name") || "Builder",
+      userId: session.user.id || session.user.email,
+      email: session.user.email,
+      name: session.user.name || "Builder",
     };
   }
 
-  const session = await auth();
-  if (!session?.user?.email) {
-    throw new Error("UNAUTHENTICATED");
-  }
-  return {
-    userId: session.user.email,
-    email: session.user.email,
-    name: session.user.name || "Builder",
-  };
+  // Without a valid authenticated server session, client-supplied identity
+  // headers can NEVER be accepted as proof of identity.
+  throw new Error("UNAUTHENTICATED");
 }
 
 

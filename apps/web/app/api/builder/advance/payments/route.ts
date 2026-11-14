@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateAdvancePaymentNumber, getOrCreateAdvanceAccount } from "@matsrc/db";
-import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { prisma, getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
 import { validatePaymentProofFile, buildSafePaymentProofFileName } from "@/lib/payment-proof-validation";
 import { notifyAdvancePaymentSubmitted } from "@/lib/notify-advance";
 
@@ -17,7 +17,7 @@ const MAX_ADVANCE_AMOUNT = 10_000_000;
 // Buildohub Advance Balance page.
 export async function GET(request: Request) {
   try {
-    const ctx = getUserCtx(request);
+    const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
     const payments = await prisma.advancePayment.findMany({
@@ -40,7 +40,10 @@ export async function GET(request: Request) {
     return NextResponse.json({
       payments: payments.map((p) => ({ ...p, amount: Number(p.amount) })),
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     console.error("Advance payments GET error:", error);
     return NextResponse.json({ error: "Failed to fetch advance payments" }, { status: 500 });
   }
@@ -58,7 +61,7 @@ export async function GET(request: Request) {
 // apps/api/src/admin/advance-payments/advance-payments.service.ts).
 export async function POST(request: Request) {
   try {
-    const ctx = getUserCtx(request);
+    const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
     let formData: FormData;
@@ -145,7 +148,10 @@ export async function POST(request: Request) {
       },
       { status: 201 }
     );
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     console.error("Advance payment POST error:", error);
     return NextResponse.json({ error: "Failed to submit advance payment" }, { status: 500 });
   }

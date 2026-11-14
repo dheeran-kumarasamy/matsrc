@@ -8,181 +8,13 @@ import {
 } from "@/lib/builder-db";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import {
-  resolveLowestPriceForQuantity,
-  type ResolutionCandidate,
-} from "@/lib/resolution";
+  getCartForUser,
+  resolveProductGroupForCart,
+  computeRequestFingerprint,
+} from "@/lib/cart-data";
+import { resolveLowestPriceForQuantity } from "@/lib/resolution";
 
 export const dynamic = "force-dynamic";
-
-const SUPPLIER_APP_URL = process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://supplier.buildohub.in";
-
-type SupplierListing = {
-  id: string;
-  name: string;
-  category: string;
-  grade: string;
-  unit: string;
-  price: string;
-  stock: string;
-  maxServiceableQty?: string;
-  active: boolean;
-  canonicalProductId?: string | null;
-  groupedListingIds?: string[];
-  headlinePrice?: string;
-  headlineSupplierId?: string;
-  // Additive raw-numeric fields exposed by getPublicSupplierListings() —
-  // preferred source for building ResolutionCandidate objects since they
-  // avoid re-parsing formatted currency/quantity strings.
-  basePriceRaw?: number;
-  stockRaw?: number;
-  maxServiceableQtyRaw?: number;
-  pricingTiersRaw?: { minQty: number; maxQty: number; tierPrice: number }[];
-};
-
-function parseNumberLabel(value: string) {
-  const numeric = Number(value.replace(/[^\d.]/g, ""));
-  return Number.isFinite(numeric) ? numeric : 0;
-}
-
-function parseQuantityLabel(value: string) {
-  const numeric = Number(value.replace(/[^\d]/g, ""));
-  return Number.isFinite(numeric) ? numeric : 0;
-}
-
-async function fetchAllSupplierListings(): Promise<SupplierListing[]> {
-  try {
-    const response = await fetch(`${SUPPLIER_APP_URL}/api/public/listings`, { cache: "no-store" });
-    if (!response.ok) {
-      return [];
-    }
-
-    const contentType = response.headers.get("content-type") ?? "";
-    if (!contentType.includes("application/json")) {
-      return [];
-    }
-
-    return (await response.json()) as SupplierListing[];
-  } catch {
-    return [];
-  }
-}
-
-function toResolutionCandidate(listing: SupplierListing): ResolutionCandidate {
-  const pricingTiers =
-    Array.isArray(listing.pricingTiersRaw) && listing.pricingTiersRaw.length > 0
-      ? listing.pricingTiersRaw
-      : [
-          {
-            minQty: 1,
-            maxQty:
-              listing.maxServiceableQtyRaw ??
-              (listing.maxServiceableQty ? parseQuantityLabel(listing.maxServiceableQty) : parseQuantityLabel(listing.stock)),
-            tierPrice: listing.basePriceRaw ?? parseNumberLabel(listing.price),
-          },
-        ];
-
-  return {
-    listingId: listing.id,
-    supplierId: listing.headlineSupplierId ?? "",
-    basePrice: listing.basePriceRaw ?? parseNumberLabel(listing.price),
-    stock: listing.stockRaw ?? parseQuantityLabel(listing.stock),
-    maxServiceableQty:
-      listing.maxServiceableQtyRaw ??
-      (listing.maxServiceableQty ? parseQuantityLabel(listing.maxServiceableQty) : parseQuantityLabel(listing.stock)),
-    pricingTiers,
-    isActive: listing.active,
-  };
-}
-
-/**
- * Resolves, for a given listing's cross-supplier canonical group, which
- * specific listing currently offers the lowest price for `quantity` units —
- * per the "Product Discovery Duplicate Listings — Cross-Supplier Price
- * Resolution" spec's cart-add-time resolution step. Falls back to the
- * listing's own price if no canonical group / no other listings resolve.
- */
-function resolveForListing(
-  listing: SupplierListing,
-  allListings: SupplierListing[],
-  quantity: number
-) {
-  const groupIds = new Set(
-    listing.groupedListingIds && listing.groupedListingIds.length > 0
-      ? listing.groupedListingIds
-      : listing.canonicalProductId
-        ? allListings.filter((item) => item.canonicalProductId === listing.canonicalProductId).map((item) => item.id)
-        : [listing.id]
-  );
-
-  const group = allListings.filter((item) => groupIds.has(item.id));
-  const candidates = (group.length > 0 ? group : [listing]).map(toResolutionCandidate);
-
-  return resolveLowestPriceForQuantity(candidates, quantity);
-}
-
-async function ensureMarketplaceProduct(listing: SupplierListing) {
-  const supplierUser = await prisma.user.upsert({
-    where: { email: "marketplace.supplier@buildmart.local" },
-    update: { role: "SUPPLIER", name: "Verified Supplier" },
-    create: {
-      email: "marketplace.supplier@buildmart.local",
-      name: "Verified Supplier",
-      role: "SUPPLIER",
-    },
-  });
-
-  const supplierProfile = await prisma.supplierProfile.upsert({
-    where: { userId: supplierUser.id },
-    update: { companyName: "Verified Supplier" },
-    create: { userId: supplierUser.id, companyName: "Verified Supplier" },
-  });
-
-  const categoryName = listing.category || "General";
-  const categorySlug =
-    categoryName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "general";
-
-  const category = await prisma.category.upsert({
-    where: { slug: categorySlug },
-    update: { name: categoryName },
-    create: {
-      name: categoryName,
-      slug: categorySlug,
-    },
-  });
-
-  return prisma.product.upsert({
-    where: { id: listing.id },
-    update: {
-      name: listing.name,
-      categoryId: category.id,
-      grade: listing.grade,
-      unit: listing.unit,
-      basePrice: parseNumberLabel(listing.price),
-      stock: parseQuantityLabel(listing.stock),
-      maxServiceableQty: parseQuantityLabel(listing.stock) || undefined,
-      isActive: listing.active,
-      supplierId: supplierProfile.id,
-      slug: `marketplace-${listing.id}`,
-    },
-    create: {
-      id: listing.id,
-      supplierId: supplierProfile.id,
-      categoryId: category.id,
-      name: listing.name,
-      slug: `marketplace-${listing.id}`,
-      grade: listing.grade,
-      unit: listing.unit,
-      basePrice: parseNumberLabel(listing.price),
-      stock: parseQuantityLabel(listing.stock),
-      maxServiceableQty: parseQuantityLabel(listing.stock) || null,
-      images: [],
-      isActive: listing.active,
-    },
-  });
-}
 
 export async function GET(request: Request) {
   try {
@@ -261,7 +93,7 @@ export async function POST(request: Request) {
     const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
     const body = await request.json().catch(() => ({}));
-    const productId = typeof body.productId === "string" ? body.productId : "";
+    const productId = typeof body.productId === "string" ? body.productId.trim() : "";
     const quantity = Number(body.quantity);
 
     if (!productId || !Number.isInteger(quantity) || quantity < 1) {
@@ -271,73 +103,500 @@ export async function POST(request: Request) {
       );
     }
 
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-      select: { id: true, isActive: true, canonicalProductId: true },
-    });
-    let resolvedProduct = product;
+    // Operation-level idempotency key (header takes precedence, body fallback)
+    const idempotencyKey = (
+      request.headers.get("Idempotency-Key") ||
+      request.headers.get("X-Idempotency-Key") ||
+      (typeof body.idempotencyKey === "string" ? body.idempotencyKey : "")
+    )?.trim();
 
-    // Fetch the full public supplier listings once — used both to bridge a
-    // not-yet-mirrored marketplace product locally (existing behaviour) and
-    // to perform cross-supplier canonical-group price resolution for the
-    // added item (new behaviour, spec: resolve at add-to-cart time).
-    const allListings = await fetchAllSupplierListings();
+    // Distinguish additive operation (Add to Enquiry Basket) from replacement
+    // operation (quantity edit in cart drawer/page).
+    const isSetMode =
+      body.mode === "set" || (typeof body.cartItemId === "string" && body.cartItemId && body.mode !== "increment");
+    const operationMode: "increment" | "set" = isSetMode ? "set" : "increment";
+    const cartItemId = typeof body.cartItemId === "string" ? body.cartItemId.trim() : null;
 
-    if (!resolvedProduct || !resolvedProduct.isActive) {
-      const listing = allListings.find((item) => item.id === productId) ?? null;
-      if (!listing || !listing.active) {
-        return NextResponse.json({ error: "Product not found" }, { status: 404 });
-      }
+    const requestFingerprint = idempotencyKey
+      ? computeRequestFingerprint({
+          productId,
+          quantity,
+          mode: operationMode,
+          cartItemId,
+        })
+      : "";
 
-      const created = await ensureMarketplaceProduct(listing);
-      resolvedProduct = {
-        id: created.id,
-        isActive: created.isActive,
-        canonicalProductId: (created as any).canonicalProductId ?? listing.canonicalProductId ?? null,
-      };
-    }
+    const runInTx =
+      typeof prisma.$transaction === "function"
+        ? (fn: (tx: any) => Promise<any>) =>
+            prisma.$transaction(fn, { maxWait: 10000, timeout: 20000 })
+        : (fn: (tx: any) => Promise<any>) => fn(prisma);
 
-    if (!resolvedProduct.isActive) {
+    const groupResult = await resolveProductGroupForCart(productId, quantity);
+    if (!groupResult) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
+    const { product, candidates } = groupResult;
 
-    // Cross-supplier price resolution: find the matching public listing (by
-    // id) so we know its canonical group, then resolve the lowest-price
-    // listing across that group for the requested quantity.
-    const matchedListing = allListings.find((item) => item.id === productId);
-    let resolution: ReturnType<typeof resolveForListing> | null = null;
+    let result: any;
 
-    if (matchedListing) {
-      resolution = resolveForListing(matchedListing, allListings, quantity);
+    if (isSetMode) {
+      // Replacement operation (mode: "set"):
+      // Target existing item inside transaction with advisory lock.
+      // If consumed or deleted by concurrent checkout, return a clear HTTP 409 Conflict response.
+      // Never recreate an unapproved row automatically.
+      try {
+        result = await runInTx(async (tx: any) => {
+          if (typeof tx.$executeRaw === "function") {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}), hashtext(${productId}))`;
+          } else if (typeof tx.$queryRaw === "function") {
+            await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}), hashtext(${productId}))::text`;
+          }
+
+          // Durable Database-Backed Idempotency Check
+          if (idempotencyKey && typeof tx.cartIdempotency?.findUnique === "function") {
+            const existingRecord = await tx.cartIdempotency.findUnique({
+              where: { userId_key: { userId: user.id, key: idempotencyKey } },
+            });
+            if (existingRecord) {
+              // Check expiry: expired records must not be treated as valid duplicates
+              if (existingRecord.expiresAt && existingRecord.expiresAt < new Date()) {
+                return {
+                  conflict: true,
+                  status: 410,
+                  error: "Idempotency key has expired. Please submit a new request with a fresh key.",
+                };
+              }
+
+              if (existingRecord.requestFingerprint !== requestFingerprint) {
+                return {
+                  conflict: true,
+                  status: 409,
+                  error: "Idempotency key was previously used with a different request payload.",
+                };
+              }
+
+              // Latest authoritative cart state for replay (prevents restoring stale cart snapshots)
+              const currentCart = await getCartForUser(user.id, tx);
+              const currentItem = currentCart.items.find((i) => i.productId === productId);
+              return {
+                cached: true,
+                status: existingRecord.responseStatus || 200,
+                payload: {
+                  ...(existingRecord.responsePayload as any),
+                  id: currentItem?.id ?? (existingRecord.responsePayload as any)?.id,
+                  quantity: currentItem?.quantity ?? (existingRecord.responsePayload as any)?.quantity,
+                  items: currentCart.items,
+                  summary: currentCart.summary,
+                  isReplay: true,
+                },
+              };
+            }
+          }
+
+          let existing: any = null;
+          if (typeof tx.$queryRaw === "function") {
+            const rows =
+              typeof body.cartItemId === "string" && body.cartItemId
+                ? await tx.$queryRaw`
+                    SELECT "id", "quantity"
+                    FROM "CartItem"
+                    WHERE "userId" = ${user.id} AND ("id" = ${body.cartItemId} OR "productId" = ${productId})
+                    FOR UPDATE
+                  `
+                : await tx.$queryRaw`
+                    SELECT "id", "quantity"
+                    FROM "CartItem"
+                    WHERE "userId" = ${user.id} AND "productId" = ${productId}
+                    FOR UPDATE
+                  `;
+            existing = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+          }
+          if (!existing) {
+            existing = await tx.cartItem.findFirst({
+              where: {
+                userId: user.id,
+                OR: [
+                  ...(typeof body.cartItemId === "string" && body.cartItemId ? [{ id: body.cartItemId }] : []),
+                  { productId },
+                ],
+              },
+            });
+          }
+
+          if (!existing) {
+            throw new Error("ITEM_CONSUMED_OR_NOT_FOUND");
+          }
+
+          const resolution = resolveLowestPriceForQuantity(candidates, quantity);
+          const resolvedFields = resolution
+            ? {
+                resolvedListingId: resolution.listingId,
+                resolvedSupplierId: resolution.supplierId || null,
+                resolvedTierMinQty: resolution.tierMinQty,
+                resolvedTierMaxQty: resolution.tierMaxQty,
+                resolvedUnitPrice: resolution.unitPrice,
+                resolvedAt: new Date(),
+              }
+            : {};
+
+          const updatedItem = await tx.cartItem.update({
+            where: { id: existing.id },
+            data: {
+              quantity,
+              ...resolvedFields,
+            },
+          });
+
+          const cart = await getCartForUser(user.id, tx);
+          const responsePayload = {
+            id: updatedItem.id,
+            productId: updatedItem.productId,
+            quantity: updatedItem.quantity,
+            resolvedSupplierId: updatedItem.resolvedSupplierId,
+            resolvedUnitPrice: updatedItem.resolvedUnitPrice != null ? Number(updatedItem.resolvedUnitPrice) : null,
+            items: cart.items,
+            summary: cart.summary,
+          };
+
+          if (idempotencyKey && typeof tx.cartIdempotency?.create === "function") {
+            await tx.cartIdempotency.create({
+              data: {
+                userId: user.id,
+                key: idempotencyKey,
+                requestFingerprint,
+                responseStatus: 200,
+                responsePayload,
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24-hour durability
+              },
+            });
+          }
+
+          return { success: true, payload: responsePayload };
+        });
+      } catch (error: any) {
+        if (
+          error?.message === "ITEM_CONSUMED_OR_NOT_FOUND" ||
+          error?.code === "P2025" ||
+          /record.*not found/i.test(error?.message ?? "")
+        ) {
+          const cart = await getCartForUser(user.id);
+          return NextResponse.json(
+            {
+              error: "This cart item was checked out or removed. Please refresh your cart.",
+              message: "This cart item was checked out or removed. Please refresh your cart.",
+              items: cart.items,
+              summary: cart.summary,
+            },
+            { status: 409 }
+          );
+        }
+        if (error?.message === "PRODUCT_NOT_FOUND") {
+          return NextResponse.json({ error: "Product not found" }, { status: 404 });
+        }
+        if (
+          error?.code === "P2034" ||
+          error?.code === "P2028" ||
+          error?.code === "40P01" ||
+          error?.code === "40001" ||
+          /deadlock|conflict|serialization|expired transaction|timeout/i.test(error?.message ?? "")
+        ) {
+          const cart = await getCartForUser(user.id);
+          return NextResponse.json(
+            {
+              error: "Cart was updated concurrently. Please refresh your cart.",
+              message: "Cart was updated concurrently. Please refresh your cart.",
+              items: cart.items,
+              summary: cart.summary,
+            },
+            { status: 409 }
+          );
+        }
+
+        // P2002 handling: Unique constraint violation on CartIdempotency(userId, key)
+        if (
+          idempotencyKey &&
+          (error?.code === "P2002" || /unique.*constraint/i.test(error?.message ?? ""))
+        ) {
+          const existing = await prisma.cartIdempotency.findUnique({
+            where: { userId_key: { userId: user.id, key: idempotencyKey } },
+          });
+          if (existing) {
+            if (existing.requestFingerprint !== requestFingerprint) {
+              return NextResponse.json(
+                {
+                  error: "Idempotency key was previously used with a different request payload.",
+                  message: "Idempotency key was previously used with a different request payload.",
+                },
+                { status: 409 }
+              );
+            }
+            const currentCart = await getCartForUser(user.id);
+            const currentItem = currentCart.items.find((i) => i.productId === productId);
+            return NextResponse.json(
+              {
+                ...(existing.responsePayload as any),
+                id: currentItem?.id ?? (existing.responsePayload as any)?.id,
+                quantity: currentItem?.quantity ?? (existing.responsePayload as any)?.quantity,
+                items: currentCart.items,
+                summary: currentCart.summary,
+                isReplay: true,
+              },
+              { status: existing.responseStatus || 200 }
+            );
+          }
+        }
+
+        throw error;
+      }
+    } else {
+      // Additive operation (mode: "increment"):
+      // Database-level serialization:
+      // 1. Transaction-scoped advisory lock on (userId, productId) ensures strict serialization
+      //    across concurrent additions (e.g. Tab 2 +5, Tab 3 +3) without lost updates.
+      // 2. Database-backed durable idempotency check: prevents duplicate increments across
+      //    instances, restarts, and concurrent retries.
+      // 3. Row-level read with FOR UPDATE coordinates with checkout: if checkout holds the row lock,
+      //    we wait. If checkout deletes the row, we read null and create a fresh row with only the added quantity.
+      // 4. Dynamic quantity-tier pricing re-resolution for the actual committed final quantity.
+      // 5. Atomic upsert and durable idempotency record persistence inside the same transaction.
+      const MAX_ADD_ATTEMPTS = 3;
+
+      for (let attempt = 1; attempt <= MAX_ADD_ATTEMPTS; attempt++) {
+        try {
+          result = await runInTx(async (tx: any) => {
+            if (typeof tx.$executeRaw === "function") {
+              await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}), hashtext(${productId}))`;
+            } else if (typeof tx.$queryRaw === "function") {
+              await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}), hashtext(${productId}))::text`;
+            }
+
+            // Durable Database-Backed Idempotency Check
+            if (idempotencyKey && typeof tx.cartIdempotency?.findUnique === "function") {
+              const existingRecord = await tx.cartIdempotency.findUnique({
+                where: { userId_key: { userId: user.id, key: idempotencyKey } },
+              });
+              if (existingRecord) {
+                // Check expiry: expired records must not be treated as valid duplicates
+                if (existingRecord.expiresAt && existingRecord.expiresAt < new Date()) {
+                  return {
+                    conflict: true,
+                    status: 410,
+                    error: "Idempotency key has expired. Please submit a new request with a fresh key.",
+                  };
+                }
+
+                if (existingRecord.requestFingerprint !== requestFingerprint) {
+                  return {
+                    conflict: true,
+                    status: 409,
+                    error: "Idempotency key was previously used with a different request payload.",
+                  };
+                }
+
+                // Latest authoritative cart state for replay (prevents restoring stale cart snapshots)
+                const currentCart = await getCartForUser(user.id, tx);
+                const currentItem = currentCart.items.find((i) => i.productId === productId);
+                return {
+                  cached: true,
+                  status: existingRecord.responseStatus || 200,
+                  payload: {
+                    ...(existingRecord.responsePayload as any),
+                    id: currentItem?.id ?? (existingRecord.responsePayload as any)?.id,
+                    quantity: currentItem?.quantity ?? (existingRecord.responsePayload as any)?.quantity,
+                    items: currentCart.items,
+                    summary: currentCart.summary,
+                    isReplay: true,
+                  },
+                };
+              }
+            }
+
+            let current: any = null;
+            if (typeof tx.$queryRaw === "function") {
+              const rows = await tx.$queryRaw`
+                SELECT "id", "quantity"
+                FROM "CartItem"
+                WHERE "userId" = ${user.id} AND "productId" = ${productId}
+                FOR UPDATE
+              `;
+              current = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+            }
+            if (!current) {
+              current = await tx.cartItem.findUnique({
+                where: { userId_productId: { userId: user.id, productId } },
+              });
+            }
+
+            // Actual final committed quantity for this cart item
+            const targetQuantity = current ? current.quantity + quantity : quantity;
+
+            // Re-resolve pricing tier for the ACTUAL final quantity
+            const resolution = resolveLowestPriceForQuantity(candidates, targetQuantity);
+            const resolvedFields = resolution
+              ? {
+                  resolvedListingId: resolution.listingId,
+                  resolvedSupplierId: resolution.supplierId || null,
+                  resolvedTierMinQty: resolution.tierMinQty,
+                  resolvedTierMaxQty: resolution.tierMaxQty,
+                  resolvedUnitPrice: resolution.unitPrice,
+                  resolvedAt: new Date(),
+                }
+              : {};
+
+            const savedItem = await tx.cartItem.upsert({
+              where: { userId_productId: { userId: user.id, productId: product.id } },
+              update: {
+                quantity: targetQuantity,
+                ...resolvedFields,
+              },
+              create: {
+                userId: user.id,
+                productId: product.id,
+                quantity: targetQuantity,
+                ...resolvedFields,
+              },
+            });
+
+            const cart = await getCartForUser(user.id, tx);
+            const responsePayload = {
+              id: savedItem.id,
+              productId: savedItem.productId,
+              quantity: savedItem.quantity,
+              resolvedSupplierId: savedItem.resolvedSupplierId,
+              resolvedUnitPrice: savedItem.resolvedUnitPrice != null ? Number(savedItem.resolvedUnitPrice) : null,
+              items: cart.items,
+              summary: cart.summary,
+            };
+
+            // Atomically record the idempotency token inside the SAME transaction
+            if (idempotencyKey && typeof tx.cartIdempotency?.create === "function") {
+              await tx.cartIdempotency.create({
+                data: {
+                  userId: user.id,
+                  key: idempotencyKey,
+                  requestFingerprint,
+                  responseStatus: 200,
+                  responsePayload,
+                  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24-hour durability
+                },
+              });
+            }
+
+            return { success: true, payload: responsePayload };
+          });
+
+          break; // Succeeded!
+        } catch (error: any) {
+          if (error?.message === "PRODUCT_NOT_FOUND") {
+            return NextResponse.json({ error: "Product not found" }, { status: 404 });
+          }
+
+          // P2002 handling on CartIdempotency unique constraint
+          // If a competing transaction commits the same idempotency key concurrently:
+          // 1. Allow this failed transaction to roll back cleanly.
+          // 2. Resolve the existing idempotency record OUTSIDE the failed transaction.
+          // 3. Compare the request fingerprint.
+          // 4. Return the original operation outcome for matching payload; 409 for mismatch.
+          if (
+            idempotencyKey &&
+            (error?.code === "P2002" || /unique.*constraint/i.test(error?.message ?? ""))
+          ) {
+            try {
+              const existingRecord = await prisma.cartIdempotency.findUnique({
+                where: { userId_key: { userId: user.id, key: idempotencyKey } },
+              });
+              if (existingRecord) {
+                if (existingRecord.requestFingerprint !== requestFingerprint) {
+                  return NextResponse.json(
+                    {
+                      error: "Idempotency key was previously used with a different request payload.",
+                      message: "Idempotency key was previously used with a different request payload.",
+                    },
+                    { status: 409 }
+                  );
+                }
+                const currentCart = await getCartForUser(user.id);
+                const currentItem = currentCart.items.find((i) => i.productId === productId);
+                return NextResponse.json(
+                  {
+                    ...(existingRecord.responsePayload as any),
+                    id: currentItem?.id ?? (existingRecord.responsePayload as any)?.id,
+                    quantity: currentItem?.quantity ?? (existingRecord.responsePayload as any)?.quantity,
+                    items: currentCart.items,
+                    summary: currentCart.summary,
+                    isReplay: true,
+                  },
+                  { status: existingRecord.responseStatus || 200 }
+                );
+              }
+            } catch (resolveErr) {
+              console.error("Failed to resolve competing idempotency record:", resolveErr);
+            }
+          }
+
+          const isConcurrentRace =
+            error?.code === "P2025" || // Row deleted while waiting for lock (checkout consumed it)
+            /record.*not found/i.test(error?.message ?? "");
+
+          if (isConcurrentRace && attempt < MAX_ADD_ATTEMPTS) {
+            continue;
+          }
+
+          if (
+            error?.code === "P2034" ||
+            error?.code === "P2028" ||
+            error?.code === "40P01" ||
+            error?.code === "40001" ||
+            /deadlock|conflict|serialization|expired transaction|timeout/i.test(error?.message ?? "")
+          ) {
+            const cart = await getCartForUser(user.id);
+            return NextResponse.json(
+              {
+                error: "Cart was updated concurrently. Please retry adding this item.",
+                message: "Cart was updated concurrently. Please retry adding this item.",
+                items: cart.items,
+                summary: cart.summary,
+              },
+              { status: 409 }
+            );
+          }
+          throw error;
+        }
+      }
     }
 
-    const resolvedFields = resolution
-      ? {
-          resolvedListingId: resolution.listingId,
-          resolvedSupplierId: resolution.supplierId || null,
-          resolvedTierMinQty: resolution.tierMinQty,
-          resolvedTierMaxQty: resolution.tierMaxQty,
-          resolvedUnitPrice: resolution.unitPrice,
-          resolvedAt: new Date(),
-        }
-      : {};
+    if (result?.conflict) {
+      return NextResponse.json(
+        { error: result.error, message: result.error },
+        { status: result.status || 409 }
+      );
+    }
 
-    const item = await prisma.cartItem.upsert({
-      where: { userId_productId: { userId: user.id, productId } },
-      update: { quantity, ...resolvedFields },
-      create: { userId: user.id, productId, quantity, ...resolvedFields },
-    });
+    if (result?.cached) {
+      return NextResponse.json(result.payload, { status: result.status || 200 });
+    }
 
-    return NextResponse.json({
-      id: item.id,
-      productId: item.productId,
-      quantity: item.quantity,
-      resolvedSupplierId: item.resolvedSupplierId,
-      resolvedUnitPrice: item.resolvedUnitPrice != null ? Number(item.resolvedUnitPrice) : null,
-    });
+    if (result?.success) {
+      return NextResponse.json(result.payload);
+    }
+
+    throw new Error("UNEXPECTED_CART_MUTATION_OUTCOME");
   } catch (error: any) {
     if (error?.message === "UNAUTHENTICATED") {
       return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    }
+    if (
+      error?.code === "P2034" ||
+      error?.code === "P2028" ||
+      error?.code === "40P01" ||
+      error?.code === "40001" ||
+      /deadlock|conflict|serialization|expired transaction|timeout/i.test(error?.message ?? "")
+    ) {
+      return NextResponse.json(
+        { error: "Cart was updated concurrently. Please try again." },
+        { status: 409 }
+      );
     }
     console.error("Cart items POST error:", error);
     return NextResponse.json(

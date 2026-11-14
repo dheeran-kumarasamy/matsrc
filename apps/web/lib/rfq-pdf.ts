@@ -103,11 +103,10 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
 
   let y = doc.y + 14;
 
-  // ---- Requested By (always BuildOhub) ---------------------------------
-  // Identity privacy: neither party's real name/contact details are ever
-  // part of this document. "Requested By" always identifies BuildOhub
-  // itself (the platform issuing the RFQ on the builder's behalf), never
-  // the requesting builder's or site's own identity.
+  // ---- Requested By (Construction Site / Site not specified) ----------
+  // Identity privacy: builder personal name, email, and phone are NEVER
+  // exposed on this document. The requesting party is represented ONLY by
+  // the construction site name (or "Site not specified" fallback).
   const colWidth = contentWidth / 2 - 10;
   const colRightX = marginLeft + colWidth + 20;
 
@@ -116,7 +115,8 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
   y = doc.y + 4;
 
   doc.font(PDF_BASE_FONT).fontSize(10).fillColor(TEXT);
-  doc.text(BUILDOHUB_COMPANY.name, marginLeft, y, { width: colWidth });
+  const requestedBy = data.site?.name?.trim() || "Site not specified";
+  doc.text(requestedBy, marginLeft, y, { width: colWidth });
   const leftBottom = doc.y;
 
   doc.font(PDF_BASE_FONT).fontSize(10).fillColor(TEXT);

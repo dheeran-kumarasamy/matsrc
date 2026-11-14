@@ -51,6 +51,16 @@ export async function sendOtpSms(toPhoneE164: string, otp: string): Promise<SmsS
     return { ok: true };
   }
 
+  // Non-production isolation guard:
+  // In preview, dev, or test mode, NEVER dispatch real SMS messages to handsets.
+  const isPreview = process.env.VERCEL_ENV === "preview";
+  const isTestOrDev = process.env.NODE_ENV !== "production";
+
+  if (isPreview || isTestOrDev) {
+    console.log(`[contact-verification] Suppressed real SMS send to ${maskLogTarget(toPhoneE164)} in ${process.env.VERCEL_ENV || process.env.NODE_ENV} environment`);
+    return { ok: true };
+  }
+
   const from = process.env.TWILIO_SMS_FROM_NUMBER;
   const twilioClient = getClient();
   if (!twilioClient || !from) {

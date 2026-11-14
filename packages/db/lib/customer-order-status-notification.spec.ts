@@ -79,6 +79,12 @@ describe("getCustomerOrderStatusWhatsAppMode", () => {
     expect(getCustomerOrderStatusWhatsAppMode()).toBe("dry-run");
   });
 
+  it("forces dry-run in Preview environment even when live mode is requested", () => {
+    process.env.VERCEL_ENV = "preview";
+    process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "live";
+    expect(getCustomerOrderStatusWhatsAppMode()).toBe("dry-run");
+  });
+
   it("reads live/off/dry-run case-insensitively, falling back to dry-run for anything else", () => {
     process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "LIVE";
     expect(getCustomerOrderStatusWhatsAppMode()).toBe("live");

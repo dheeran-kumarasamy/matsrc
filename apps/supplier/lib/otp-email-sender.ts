@@ -30,6 +30,14 @@ export type EmailSendResult = { ok: true } | { ok: false; error: string };
 
 /** Sends the OTP code to `toEmail`. NEVER logs the OTP value itself. */
 export async function sendOtpEmail(toEmail: string, otp: string): Promise<EmailSendResult> {
+  const isPreview = process.env.VERCEL_ENV === "preview";
+  const isTestOrDev = process.env.NODE_ENV !== "production";
+
+  if (isPreview || isTestOrDev) {
+    console.log(`[supplier-otp] Non-production environment — suppressed email OTP send to ${maskLogTarget(toEmail)}`);
+    return { ok: true };
+  }
+
   const from = process.env.SES_FROM_EMAIL || "noreply@buildohub.in";
   const subject = "Your BuildOHub verification code";
   const text = `Your BuildOHub verification code is ${otp}. It expires in 5 minutes. If you didn't request this, you can safely ignore this email.`;

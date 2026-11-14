@@ -60,6 +60,11 @@ export class TwilioWhatsAppProvider implements WhatsAppProvider {
     params: WhatsAppSendTemplateParams
   ): Promise<WhatsAppSendTemplateResult> {
     try {
+      if (process.env.VERCEL_ENV === "preview") {
+        this.logger.log(`[twilio-whatsapp][preview-mock] Preview environment: suppressed WhatsApp send to ${this.maskRecipient(to)}`);
+        return { success: true, providerMessageId: `mock-preview-wa-${Date.now()}` };
+      }
+
       const contentSid = this.config.getTwilioContentSid(templateKey);
       const mode = this.config.getMode();
 
@@ -96,7 +101,7 @@ export class TwilioWhatsAppProvider implements WhatsAppProvider {
     } catch (error) {
       // Defensive catch-all: this method must never throw to callers.
       const message = error instanceof Error ? error.message : "Unknown error sending WhatsApp template message";
-      this.logger.error(`[twilio-whatsapp] Unexpected error sending to ${to}: ${message}`);
+      this.logger.error(`[twilio-whatsapp] Unexpected error sending to ${this.maskRecipient(to)}: ${message}`);
       return { success: false, error: message };
     }
   }
@@ -150,7 +155,7 @@ export class TwilioWhatsAppProvider implements WhatsAppProvider {
       if (isTransient && attempt < MAX_RETRIES) {
         const delayMs = BASE_BACKOFF_MS * Math.pow(2, attempt);
         this.logger.warn(
-          `[twilio-whatsapp] Send to ${to} failed (status=${status ?? "n/a"}, code=${errorCode ?? "n/a"}), retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`
+          `[twilio-whatsapp] Send to ${this.maskRecipient(to)} failed (status=${status ?? "n/a"}, code=${errorCode ?? "n/a"}), retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`
         );
         await this.sleep(delayMs);
         return this.sendWithRetry(to, contentSid, params, from, attempt + 1);
@@ -158,7 +163,7 @@ export class TwilioWhatsAppProvider implements WhatsAppProvider {
 
       const message = error instanceof Error ? error.message : "WhatsApp send failed";
       this.logger.error(
-        `[twilio-whatsapp] Send to ${to} failed permanently: status=${status ?? "n/a"} code=${errorCode ?? "n/a"} message=${message}`
+        `[twilio-whatsapp] Send to ${this.maskRecipient(to)} failed permanently: status=${status ?? "n/a"} code=${errorCode ?? "n/a"} message=${message}`
       );
       return { success: false, error: `${message}${errorCode ? ` (code=${errorCode})` : ""}` };
     }
@@ -195,7 +200,7 @@ export class TwilioWhatsAppProvider implements WhatsAppProvider {
       if (isTransient && attempt < MAX_RETRIES) {
         const delayMs = BASE_BACKOFF_MS * Math.pow(2, attempt);
         this.logger.warn(
-          `[twilio-whatsapp][sandbox-fallback] Freeform send to ${to} failed (status=${status ?? "n/a"}, code=${errorCode ?? "n/a"}), retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`
+          `[twilio-whatsapp][sandbox-fallback] Freeform send to ${this.maskRecipient(to)} failed (status=${status ?? "n/a"}, code=${errorCode ?? "n/a"}), retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`
         );
         await this.sleep(delayMs);
         return this.sendFreeformWithRetry(to, body, from, attempt + 1);
@@ -203,10 +208,22 @@ export class TwilioWhatsAppProvider implements WhatsAppProvider {
 
       const message = error instanceof Error ? error.message : "WhatsApp freeform send failed";
       this.logger.error(
-        `[twilio-whatsapp][sandbox-fallback] Freeform send to ${to} failed permanently: status=${status ?? "n/a"} code=${errorCode ?? "n/a"} message=${message}`
+        `[twilio-whatsapp][sandbox-fallback] Freeform send to ${this.maskRecipient(to)} failed permanently: status=${status ?? "n/a"} code=${errorCode ?? "n/a"} message=${message}`
       );
       return { success: false, error: `${message}${errorCode ? ` (code=${errorCode})` : ""}` };
     }
+  }
+
+  /**
+   * Masks recipient phone number for logs to prevent PII exposure
+   * while preserving prefix and last 4 digits for troubleshooting.
+   */
+  private maskRecipient(to: string): string {
+    if (!to || typeof to !== "string") return "***";
+    const prefix = to.startsWith("whatsapp:") ? "whatsapp:" : "";
+    const clean = to.replace(/^whatsapp:/, "");
+    if (clean.length <= 4) return `${prefix}***`;
+    return `${prefix}${clean.replace(/\d(?=\d{4})/g, "*")}`;
   }
 
   private sleep(ms: number): Promise<void> {

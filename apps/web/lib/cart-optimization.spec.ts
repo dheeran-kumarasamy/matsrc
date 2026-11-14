@@ -471,6 +471,70 @@ describe("Cart Optimization — Phase 1", () => {
       expect(data.summary).toBeDefined();
     });
 
+    it("handles Prisma P2028 transaction expiration and returns 409 Conflict with updated cart", async () => {
+      productFindFirst.mockResolvedValue(PRODUCT_A);
+      productFindMany.mockResolvedValue([PRODUCT_A]);
+      transactionFn.mockRejectedValueOnce({
+        code: "P2028",
+        message: "Transaction API error: Transaction already closed: Transaction is expired",
+      });
+
+      const request = new Request("https://buildohub.in/api/builder/cart/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: "prod-a", quantity: 5 }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(409);
+      const data = await response.json();
+      expect(data.error).toBe("Cart was updated concurrently. Please retry adding this item.");
+      expect(Array.isArray(data.items)).toBe(true);
+      expect(data.summary).toBeDefined();
+    });
+
+    it("handles transaction timeout error message regex and returns 409 Conflict with updated cart", async () => {
+      productFindFirst.mockResolvedValue(PRODUCT_A);
+      productFindMany.mockResolvedValue([PRODUCT_A]);
+      transactionFn.mockRejectedValueOnce(new Error("expired transaction: timeout after 20000ms"));
+
+      const request = new Request("https://buildohub.in/api/builder/cart/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: "prod-a", quantity: 5 }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(409);
+      const data = await response.json();
+      expect(data.error).toBe("Cart was updated concurrently. Please retry adding this item.");
+    });
+
+    it("passes extended transaction timeout configuration { maxWait: 10000, timeout: 20000 } to prisma.$transaction", async () => {
+      productFindFirst.mockResolvedValue(PRODUCT_A);
+      productFindMany.mockResolvedValue([PRODUCT_A]);
+      cartItemFindUnique.mockResolvedValue(null);
+      cartItemUpsert.mockResolvedValue({
+        id: "cart-item-1",
+        userId: "builder-user-1",
+        productId: "prod-a",
+        quantity: 5,
+        resolvedPrice: 380,
+      });
+
+      const request = new Request("https://buildohub.in/api/builder/cart/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: "prod-a", quantity: 5 }),
+      });
+
+      await POST(request);
+      expect(transactionFn).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({ maxWait: 10000, timeout: 20000 })
+      );
+    });
+
     it("Scenario C — Update existing quantity when item does not exist: returns 409 Conflict", async () => {
       productFindFirst.mockResolvedValue(PRODUCT_A);
       // Item does not exist (already deleted)

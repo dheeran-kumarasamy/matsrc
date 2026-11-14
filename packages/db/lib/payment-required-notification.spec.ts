@@ -91,6 +91,12 @@ describe("getPaymentRequiredWhatsAppMode", () => {
     expect(getPaymentRequiredWhatsAppMode()).toBe("dry-run");
   });
 
+  it("forces dry-run in Preview environment even when live mode is requested", () => {
+    process.env.VERCEL_ENV = "preview";
+    process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "live";
+    expect(getPaymentRequiredWhatsAppMode()).toBe("dry-run");
+  });
+
   it("reads live/off/dry-run case-insensitively, falling back to dry-run for anything else", () => {
     process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "LIVE";
     expect(getPaymentRequiredWhatsAppMode()).toBe("live");
@@ -98,6 +104,12 @@ describe("getPaymentRequiredWhatsAppMode", () => {
     expect(getPaymentRequiredWhatsAppMode()).toBe("off");
     process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "garbage";
     expect(getPaymentRequiredWhatsAppMode()).toBe("dry-run");
+  });
+
+  it("preserves live mode in Production environment", () => {
+    process.env.VERCEL_ENV = "production";
+    process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "live";
+    expect(getPaymentRequiredWhatsAppMode()).toBe("live");
   });
 });
 
@@ -197,6 +209,26 @@ describe("notifyPaymentRequired — dry-run mode", () => {
   it("creates the event and a WhatsAppMessageLog row, simulates success, and never calls fetch", async () => {
     const { prisma } = buildHarness();
     process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "dry-run";
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await notifyPaymentRequired(prisma, { orderId: "order-1", previousStatus: OrderStatus.PLACED, newStatus: OrderStatus.PROCESSING });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(prisma.whatsAppMessageLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ templateName: "payment_required_v2", mode: "dry-run" }) })
+    );
+    expect(prisma.notificationEvent.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "sent" } })
+    );
+  });
+
+  it("suppresses external fetch in VERCEL_ENV=preview even when NOTIFICATION_ENGINE_WHATSAPP_MODE=live", async () => {
+    const { prisma } = buildHarness();
+    process.env.VERCEL_ENV = "preview";
+    process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE = "live";
+    process.env.WHATSAPP_PHONE_NUMBER_ID = "PHONE_ID";
+    process.env.WHATSAPP_ACCESS_TOKEN = "SECRET_TOKEN";
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
 

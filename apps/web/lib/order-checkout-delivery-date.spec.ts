@@ -14,6 +14,7 @@ const cartItemFindMany = vi.fn();
 const cartItemDeleteMany = vi.fn();
 const siteFindFirst = vi.fn();
 const userFindUnique = vi.fn();
+const productFindMany = vi.fn();
 const orderCreate = vi.fn();
 const priceSnapshotCreate = vi.fn();
 
@@ -25,9 +26,17 @@ vi.mock("@/lib/builder-db", () => ({
     },
     site: { findFirst: (...args: unknown[]) => siteFindFirst(...args) },
     user: { findUnique: (...args: unknown[]) => userFindUnique(...args) },
+    product: { findMany: (...args: unknown[]) => productFindMany(...args) },
     order: { create: (...args: unknown[]) => orderCreate(...args) },
     priceSnapshot: { create: (...args: unknown[]) => priceSnapshotCreate(...args) },
-    $transaction: (callback: any) => callback({ order: { create: orderCreate } }),
+    $transaction: (callback: any) =>
+      callback({
+        order: { create: orderCreate },
+        cartItem: {
+          findMany: (...args: unknown[]) => cartItemFindMany(...args),
+          deleteMany: (...args: unknown[]) => cartItemDeleteMany(...args),
+        },
+      }),
   },
   resolveUnitPrice: () => 100,
 }));
@@ -55,10 +64,25 @@ beforeEach(() => {
   cartItemDeleteMany.mockReset();
   siteFindFirst.mockReset();
   userFindUnique.mockReset();
+  productFindMany.mockReset();
   orderCreate.mockReset();
   priceSnapshotCreate.mockReset();
   priceSnapshotCreate.mockResolvedValue({});
   cartItemDeleteMany.mockResolvedValue({ count: 1 });
+  productFindMany.mockResolvedValue([
+    {
+      id: "product-1",
+      supplierId: "supplier-1",
+      canonicalProductId: null,
+      categoryId: "cat-1",
+      basePrice: 100,
+      stock: 2000,
+      maxServiceableQty: 2000,
+      isActive: true,
+      supplier: { companyName: "Acme Supplier" },
+      pricingTiers: [],
+    },
+  ]);
   notifySupplierOrderSubmitted.mockReset();
   notifySupplierOrderSubmitted.mockResolvedValue(undefined);
   generateEnquiryId.mockReset();
@@ -75,6 +99,7 @@ beforeEach(() => {
 
   cartItemFindMany.mockResolvedValue([
     {
+      id: "cart-item-1",
       productId: "product-1",
       quantity: 2,
       product: {

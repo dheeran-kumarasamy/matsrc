@@ -124,6 +124,7 @@ model User {
   kycDocuments                KycDocument[]
   orders                      Order[]
   cart                        CartItem[]
+  cartIdempotencies           CartIdempotency[]
   watchlist                   Watchlist[]
   disputes                    Dispute[]
   supplierRatingsGiven        SupplierRating[]             @relation("BuilderSupplierRatings")
@@ -931,6 +932,24 @@ model CartItem {
 
   @@unique([userId, productId])
   @@index([userId])
+}
+
+// Durable database-backed idempotency for cart mutations (Add to Enquiry Basket)
+model CartIdempotency {
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key                String
+  requestFingerprint String
+  responseStatus     Int       @default(200)
+  responsePayload    Json?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  expiresAt          DateTime?
+
+  @@unique([userId, key])
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 enum OrderStatus {

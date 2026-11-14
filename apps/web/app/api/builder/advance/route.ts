@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getOrCreateAdvanceAccount } from "@matsrc/db";
-import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { prisma, getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
 
 export const dynamic = "force-dynamic";
 
@@ -16,12 +16,12 @@ export const dynamic = "force-dynamic";
 // brand-new buyer always sees a ₹0 balance instead of a 404/empty state.
 export async function GET(request: Request) {
   try {
-    const ctx = getUserCtx(request);
+    const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
     const account = await getOrCreateAdvanceAccount(prisma as any, user.id);
 
-    const fullAccount = await prisma.customerAdvanceAccount.findUniqueOrThrow({
+    const fullAccount = await prisma.customerAdvanceAccount.findUnique({
       where: { id: account.id },
       select: { id: true, currency: true, availableBalance: true, status: true },
     });
@@ -32,12 +32,15 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json({
-      availableBalance: Number(fullAccount.availableBalance),
+      availableBalance: fullAccount ? Number(fullAccount.availableBalance) : 0,
       pendingAdvance: Number(pendingAgg._sum.amount ?? 0),
-      currency: fullAccount.currency,
-      status: fullAccount.status,
+      currency: fullAccount?.currency ?? "INR",
+      status: fullAccount?.status ?? "ACTIVE",
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     console.error("Advance balance GET error:", error);
     return NextResponse.json({ error: "Failed to fetch advance balance" }, { status: 500 });
   }

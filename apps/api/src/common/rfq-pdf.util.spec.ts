@@ -5,7 +5,7 @@
 // first place. Mirrors invoice-pdf.util.spec.ts's convention of asserting
 // on the real PDF byte signature rather than parsing compressed PDF text.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import PDFDocument from "pdfkit";
 import { renderRfqPdf, renderRfqPdfContent, type RfqPdfData } from "./rfq-pdf.util";
 import { useRupeeCapableFont } from "./pdf-fonts";
@@ -132,5 +132,88 @@ describe("renderRfqPdf", () => {
   it("renders without throwing when no Site is tagged on the order (falls back to 'Site not specified')", async () => {
     const buffer = await renderRfqPdf(fakeRfq({ site: null }));
     expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+  });
+
+  describe("Site Name & Identity Privacy Verification (Fix 4)", () => {
+    it("1. Displays actual construction site name under Requested By when a site exists", () => {
+      const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
+      useRupeeCapableFont(doc);
+      const textCalls: string[] = [];
+      const originalText = doc.text.bind(doc);
+      vi.spyOn(doc, "text").mockImplementation((text: any, ...args: any[]) => {
+        if (typeof text === "string") textCalls.push(text);
+        return originalText(text, ...args);
+      });
+
+      renderRfqPdfContent(
+        doc,
+        fakeRfq({
+          site: {
+            name: "Skyline Tower Site",
+            addressLine: "100 Construction Rd",
+            city: "Bengaluru",
+            state: "Karnataka",
+            pincode: "560001",
+          },
+        })
+      );
+
+      const requestedByIndex = textCalls.indexOf("Requested By");
+      expect(requestedByIndex).toBeGreaterThanOrEqual(0);
+      expect(textCalls).toContain("Skyline Tower Site");
+    });
+
+    it("2. Displays 'Site not specified' under Requested By when no site exists", () => {
+      const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
+      useRupeeCapableFont(doc);
+      const textCalls: string[] = [];
+      const originalText = doc.text.bind(doc);
+      vi.spyOn(doc, "text").mockImplementation((text: any, ...args: any[]) => {
+        if (typeof text === "string") textCalls.push(text);
+        return originalText(text, ...args);
+      });
+
+      renderRfqPdfContent(doc, fakeRfq({ site: null }));
+
+      const requestedByIndex = textCalls.indexOf("Requested By");
+      expect(requestedByIndex).toBeGreaterThanOrEqual(0);
+      expect(textCalls).toContain("Site not specified");
+    });
+
+    it("3. Never renders builder personal name, email, or phone under Requested By", () => {
+      const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
+      useRupeeCapableFont(doc);
+      const textCalls: string[] = [];
+      const originalText = doc.text.bind(doc);
+      vi.spyOn(doc, "text").mockImplementation((text: any, ...args: any[]) => {
+        if (typeof text === "string") textCalls.push(text);
+        return originalText(text, ...args);
+      });
+
+      renderRfqPdfContent(doc, fakeRfq());
+
+      // Ensure no personal builder PII is rendered
+      const piiPattern = /builder@|bob@|alice@|\+91\d{10}|[Bb]uilder [Nn]ame/;
+      const hasPii = textCalls.some((t) => piiPattern.test(t));
+      expect(hasPii).toBe(false);
+    });
+
+    it("4. Does not use BuildOhub as fallback under Requested By when site is null", () => {
+      const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
+      useRupeeCapableFont(doc);
+      const textCalls: string[] = [];
+      const originalText = doc.text.bind(doc);
+      vi.spyOn(doc, "text").mockImplementation((text: any, ...args: any[]) => {
+        if (typeof text === "string") textCalls.push(text);
+        return originalText(text, ...args);
+      });
+
+      renderRfqPdfContent(doc, fakeRfq({ site: null }));
+
+      // Under Requested By, it must be "Site not specified", not "BuildOhub"
+      const requestedByIndex = textCalls.indexOf("Requested By");
+      // Right after "Requested By" and "Supplier", the next text drawn on the left is the requester
+      expect(textCalls[requestedByIndex + 2]).toBe("Site not specified");
+    });
   });
 });

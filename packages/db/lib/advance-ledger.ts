@@ -90,7 +90,15 @@ export type GetOrCreateAdvanceAccountClient = {
 export async function getOrCreateAdvanceAccount(prisma: GetOrCreateAdvanceAccountClient, buyerId: string) {
   const existing = await prisma.customerAdvanceAccount.findUnique({ where: { buyerId } });
   if (existing) return existing;
-  return prisma.customerAdvanceAccount.create({ data: { buyerId } });
+  try {
+    return await prisma.customerAdvanceAccount.create({ data: { buyerId } });
+  } catch (err: any) {
+    if (err?.code === "P2002") {
+      const recovered = await prisma.customerAdvanceAccount.findUnique({ where: { buyerId } });
+      if (recovered) return recovered;
+    }
+    throw err;
+  }
 }
 
 export type AppendLedgerEntryParams = {

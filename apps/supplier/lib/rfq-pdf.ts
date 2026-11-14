@@ -98,27 +98,16 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
 
   let y = doc.y + 14;
 
-  // ---- Requested By (always BuildOhub, with its registered address) -----
-  // A single RFQ can be sent out to more than one candidate supplier at
-  // once, so there is no single "Supplier" to name on this document — the
-  // separate Supplier column/section that used to sit beside this block
-  // has been removed entirely. "Requested By" always identifies BuildOhub
-  // itself (the platform issuing the RFQ on the builder's behalf), shown
-  // with its full registered address — never the requesting builder's own
-  // identity (see RfqPdfData's own doc comment for the full identity-
-  // privacy rationale this document follows).
-  const buildohubRequestedByBlock = [
-    BUILDOHUB_COMPANY.name,
-    BUILDOHUB_COMPANY.addressLine ? addressLines(BUILDOHUB_COMPANY) : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
-
+  // ---- Requested By (Construction Site / Site not specified) ----------
+  // Identity privacy: builder personal name, email, and phone are NEVER
+  // exposed on this document. The requesting party is represented ONLY by
+  // the construction site name (or "Site not specified" fallback).
   doc.font(PDF_BASE_FONT_BOLD).fontSize(11).fillColor(ACCENT).text("Requested By", marginLeft, y, { width: contentWidth });
   y = doc.y + 4;
 
   doc.font(PDF_BASE_FONT).fontSize(10).fillColor(TEXT);
-  doc.text(buildohubRequestedByBlock, marginLeft, y, { width: contentWidth });
+  const requestedBy = data.site?.name?.trim() || "Site not specified";
+  doc.text(requestedBy, marginLeft, y, { width: contentWidth });
   y = doc.y + 16;
 
   // ---- Site / Delivery --------------------------------------------------

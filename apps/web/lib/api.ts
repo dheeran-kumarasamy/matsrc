@@ -10,10 +10,12 @@ const API_BASE_PATH = "/api/builder";
 // race right after login) instead of retrying or showing a proper error state.
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  data?: any;
+  constructor(message: string, status: number, data?: any) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -353,18 +355,27 @@ function buildApiUrl(path: string) {
 // Reads a failed response body (if JSON) to surface the server's actual
 // error message (e.g. "This phone number is already in use by another
 // account") instead of a generic "Builder API post/patch failed: 409" —
-// routes under app/api/builder/* consistently return { message } on error
+// routes under app/api/builder/* consistently return { message } or { error } on error
 // response bodies (see e.g. app/api/builder/update-contact/route.ts).
-async function extractErrorMessage(response: Response, fallback: string): Promise<string> {
+async function extractErrorInfo(response: Response, fallback: string): Promise<{ message: string; data: any }> {
+  let data: any = null;
   try {
-    const data = await response.clone().json();
+    data = await response.clone().json();
     if (data && typeof data.message === "string" && data.message.trim()) {
-      return data.message;
+      return { message: data.message, data };
+    }
+    if (data && typeof data.error === "string" && data.error.trim()) {
+      return { message: data.error, data };
     }
   } catch {
     // Response body wasn't JSON (or was empty) — fall back below.
   }
-  return fallback;
+  return { message: fallback, data };
+}
+
+async function extractErrorMessage(response: Response, fallback: string): Promise<string> {
+  const info = await extractErrorInfo(response, fallback);
+  return info.message;
 }
 
 export async function builderApiGet<T>(path: string): Promise<T> {
@@ -379,8 +390,8 @@ export async function builderApiGet<T>(path: string): Promise<T> {
   });
 
   if (!response.ok) {
-    const message = await extractErrorMessage(response, `Builder API request failed: ${response.status}`);
-    throw new ApiError(message, response.status);
+    const { message, data } = await extractErrorInfo(response, `Builder API request failed: ${response.status}`);
+    throw new ApiError(message, response.status, data);
   }
 
   return response.json() as Promise<T>;
@@ -399,8 +410,8 @@ export async function builderApiDelete(path: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const message = await extractErrorMessage(response, `Builder API delete failed: ${response.status}`);
-    throw new ApiError(message, response.status);
+    const { message, data } = await extractErrorInfo(response, `Builder API delete failed: ${response.status}`);
+    throw new ApiError(message, response.status, data);
   }
 }
 
@@ -420,8 +431,8 @@ export async function builderApiPost<TResponse>(path: string, body: unknown): Pr
   });
 
   if (!response.ok) {
-    const message = await extractErrorMessage(response, `Builder API post failed: ${response.status}`);
-    throw new ApiError(message, response.status);
+    const { message, data } = await extractErrorInfo(response, `Builder API post failed: ${response.status}`);
+    throw new ApiError(message, response.status, data);
   }
 
   return response.json() as Promise<TResponse>;

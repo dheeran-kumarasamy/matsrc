@@ -592,6 +592,24 @@ describe("getOrCreateAdvanceAccount", () => {
     expect(account.id).toBe("acct-new");
     expect(prisma.customerAdvanceAccount.create).toHaveBeenCalledWith({ data: { buyerId: "buyer-2" } });
   });
+
+  it("recovers gracefully from concurrent creation race (P2002)", async () => {
+    const error = new Error("Unique constraint failed") as any;
+    error.code = "P2002";
+    const prisma = {
+      customerAdvanceAccount: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce({ id: "acct-concurrent", buyerId: "buyer-3", status: "ACTIVE" }),
+        create: vi.fn().mockRejectedValue(error),
+      },
+    };
+
+    const account = await getOrCreateAdvanceAccount(prisma as any, "buyer-3");
+    expect(account.id).toBe("acct-concurrent");
+    expect(prisma.customerAdvanceAccount.findUnique).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("lockAdvanceAccountRow", () => {

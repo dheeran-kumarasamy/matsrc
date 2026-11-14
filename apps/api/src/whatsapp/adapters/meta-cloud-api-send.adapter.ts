@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import { BotMessage } from "../whatsapp.types";
 import { WhatsAppSendAdapter, WhatsAppSendResult } from "./whatsapp-send.interface";
 
@@ -63,6 +64,16 @@ export class MetaCloudApiSendAdapter implements WhatsAppSendAdapter {
   }
 
   async send(to: string, message: BotMessage): Promise<WhatsAppSendResult> {
+    if (process.env.VERCEL_ENV === "preview") {
+      this.logger.warn(
+        `[meta-whatsapp][preview-mock] Preview environment detected: suppressed WhatsApp send to ${this.maskPhone(to)}`
+      );
+      return {
+        externalId: `preview-suppressed-${randomUUID()}`,
+        provider: "meta-whatsapp-preview-suppressed",
+      };
+    }
+
     const payload = this.toGraphPayload(to, message);
     return this.sendWithRetry(to, payload, message);
   }
@@ -93,7 +104,7 @@ export class MetaCloudApiSendAdapter implements WhatsAppSendAdapter {
 
     if (errorCode === ERROR_CODE_REENGAGEMENT_WINDOW_EXPIRED && originalMessage.kind !== "template") {
       this.logger.warn(
-        `[meta-whatsapp] Re-engagement window expired for ${to} — falling back to template "${this.reengagementTemplateName}"`
+        `[meta-whatsapp] Re-engagement window expired for ${this.maskPhone(to)} — falling back to template "${this.reengagementTemplateName}"`
       );
       const fallbackPayload = this.toGraphPayload(to, {
         kind: "template",
@@ -113,18 +124,29 @@ export class MetaCloudApiSendAdapter implements WhatsAppSendAdapter {
           ? BASE_BACKOFF_MS * Math.pow(2, attempt) * 4
           : BASE_BACKOFF_MS * Math.pow(2, attempt);
       this.logger.warn(
-        `[meta-whatsapp] Send to ${to} failed (status=${response.status}, code=${errorCode ?? "n/a"}), retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`
+        `[meta-whatsapp] Send to ${this.maskPhone(to)} failed (status=${response.status}, code=${errorCode ?? "n/a"}), retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`
       );
       await this.sleep(delayMs);
       return this.sendWithRetry(to, payload, originalMessage, attempt + 1);
     }
 
     this.logger.error(
-      `[meta-whatsapp] Send to ${to} failed permanently: status=${response.status} code=${errorCode ?? "n/a"} message=${errorBody.error?.message ?? "unknown"}`
+      `[meta-whatsapp] Send to ${this.maskPhone(to)} failed permanently: status=${response.status} code=${errorCode ?? "n/a"} message=${errorBody.error?.message ?? "unknown"}`
     );
     throw new Error(
       `WhatsApp Cloud API send failed: ${errorBody.error?.message ?? response.statusText} (code=${errorCode ?? "n/a"})`
     );
+  }
+
+  /**
+   * Masks recipient phone number for logs to prevent PII exposure
+   * while preserving prefix and last 2 digits for troubleshooting.
+   */
+  private maskPhone(phone: string): string {
+    if (!phone || typeof phone !== "string") return "***";
+    const clean = phone.replace(/^whatsapp:/, "");
+    if (clean.length <= 4) return "***";
+    return `${clean.slice(0, 4)}***${clean.slice(-2)}`;
   }
 
   private toGraphPayload(to: string, message: BotMessage): Record<string, unknown> {

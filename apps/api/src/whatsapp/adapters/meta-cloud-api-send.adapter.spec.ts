@@ -72,6 +72,8 @@ describe("MetaCloudApiSendAdapter", () => {
     delete process.env.WHATSAPP_PHONE_NUMBER_ID;
     delete process.env.WHATSAPP_ACCESS_TOKEN;
     delete process.env.WHATSAPP_REENGAGEMENT_TEMPLATE;
+    delete process.env.VERCEL_ENV;
+    delete process.env.WHATSAPP_ADAPTER;
   });
 
   it("sends a plain text message and returns the Graph message id", async () => {
@@ -232,5 +234,57 @@ describe("MetaCloudApiSendAdapter", () => {
     await vi.runAllTimersAsync();
     await assertion;
     vi.useRealTimers();
+  });
+
+  describe("Vercel Preview fail-closed protection", () => {
+    it("suppresses real Meta HTTP dispatch in VERCEL_ENV=preview and returns safe preview-suppressed result", async () => {
+      process.env.VERCEL_ENV = "preview";
+      process.env.WHATSAPP_ADAPTER = "meta";
+
+      const warnSpy = vi.spyOn((adapter as any).logger, "warn");
+      const message: BotMessage = { kind: "text", text: "Test message in preview" };
+      const rawRecipient = "919876543210";
+
+      const result = await adapter.send(rawRecipient, message);
+
+      // 1. Assert fetch is NEVER called
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      // 2. Assert safe suppression result convention
+      expect(result.externalId).toMatch(/^preview-suppressed-/);
+      expect(result.provider).toBe("meta-whatsapp-preview-suppressed");
+
+      // 3. Assert raw recipient number is NOT exposed in logs (masked instead)
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[meta-whatsapp][preview-mock] Preview environment detected: suppressed WhatsApp send to 9198***10")
+      );
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining(rawRecipient));
+    });
+
+    it("suppresses dispatch in preview even when Meta credentials are unset without throwing", async () => {
+      process.env.VERCEL_ENV = "preview";
+      delete process.env.WHATSAPP_PHONE_NUMBER_ID;
+      delete process.env.WHATSAPP_ACCESS_TOKEN;
+
+      const message: BotMessage = { kind: "text", text: "Test without credentials" };
+      const result = await adapter.send("919876543210", message);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(result.externalId).toMatch(/^preview-suppressed-/);
+      expect(result.provider).toBe("meta-whatsapp-preview-suppressed");
+    });
+
+    it("allows real Meta dispatch in VERCEL_ENV=production when credentials are valid", async () => {
+      process.env.VERCEL_ENV = "production";
+      process.env.WHATSAPP_ADAPTER = "meta";
+      fetchMock.mockResolvedValueOnce(jsonResponse(GRAPH_SUCCESS_FIXTURE));
+
+      const message: BotMessage = { kind: "text", text: "Production message" };
+      const result = await adapter.send("919876543210", message);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result.externalId).toBe(GRAPH_SUCCESS_FIXTURE.messages[0].id);
+      expect(result.provider).toBe("meta-whatsapp-cloud-api");
+    });
   });
 });

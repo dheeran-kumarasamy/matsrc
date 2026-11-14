@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { WHATSAPP_SEND_PROVIDER } from "../adapters/whatsapp-send.interface";
+import { WHATSAPP_SEND_PROVIDER, WhatsAppSendAdapter } from "../adapters/whatsapp-send.interface";
 import { MockWhatsAppSendAdapter } from "../adapters/mock-whatsapp-send.adapter";
 import { MetaCloudApiSendAdapter } from "../adapters/meta-cloud-api-send.adapter";
 import { WhatsAppAuditHelper } from "../whatsapp-audit.helper";
@@ -24,6 +24,21 @@ import { WhatsAppLifecycleDailyDigestSchedulerService } from "./whatsapp-lifecyc
  * `WHATSAPP_ADAPTER`) and the same `AuditLog`-backed audit trail, without either
  * module depending on the other.
  */
+export function whatsAppLifecycleSendProviderFactory(
+  mock: MockWhatsAppSendAdapter,
+  meta: MetaCloudApiSendAdapter
+): WhatsAppSendAdapter {
+  if (process.env.VERCEL_ENV === "preview") {
+    return mock;
+  }
+  switch (process.env.WHATSAPP_ADAPTER) {
+    case "meta":
+      return meta;
+    default:
+      return mock;
+  }
+}
+
 @Module({
   providers: [
     WhatsAppAuditHelper,
@@ -31,17 +46,7 @@ import { WhatsAppLifecycleDailyDigestSchedulerService } from "./whatsapp-lifecyc
     MetaCloudApiSendAdapter,
     {
       provide: WHATSAPP_SEND_PROVIDER,
-      // Twilio supplier-bot adapter removed — Meta WhatsApp Cloud API
-      // (WHATSAPP_ADAPTER=meta) is the only real send provider now; `mock`
-      // remains the safe default for local/dev/test.
-      useFactory: (mock: MockWhatsAppSendAdapter, meta: MetaCloudApiSendAdapter) => {
-        switch (process.env.WHATSAPP_ADAPTER) {
-          case "meta":
-            return meta;
-          default:
-            return mock;
-        }
-      },
+      useFactory: whatsAppLifecycleSendProviderFactory,
       inject: [MockWhatsAppSendAdapter, MetaCloudApiSendAdapter],
     },
     WhatsAppLifecycleConfigService,

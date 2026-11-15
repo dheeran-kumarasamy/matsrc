@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { builderApiGet, builderApiPost } from "@/lib/api";
+import ProfileNavOptions from "@/components/profile/ProfileNavOptions";
 
 type OrderOption = {
   id: string;
@@ -112,6 +113,7 @@ function NewDisputeForm() {
 
   return (
     <div className="posh-body mx-auto max-w-xl space-y-5">
+      <ProfileNavOptions />
       <header>
         <p className="posh-eyebrow">Resolution desk</p>
         <h1 className="posh-page-title mt-2">Raise a Dispute</h1>

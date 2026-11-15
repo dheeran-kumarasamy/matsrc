@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { MapPin, Plus, Archive, RotateCcw, Pencil } from "lucide-react";
 import { builderApiGet, builderApiPost, builderApiPatch } from "@/lib/api";
+import ProfileNavOptions from "@/components/profile/ProfileNavOptions";
 
 type Site = {
   id: string;
@@ -144,6 +145,7 @@ export default function SitesPage() {
 
   return (
     <div className="posh-body mx-auto max-w-4xl space-y-5">
+      <ProfileNavOptions />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="posh-eyebrow">Projects</p>

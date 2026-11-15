@@ -7,6 +7,7 @@
 import { describe, expect, it, vi } from "vitest";
 import PDFDocument from "pdfkit";
 import { useRupeeCapableFont } from "./pdf-fonts";
+import { BUILDOHUB_COMPANY } from "./company-info";
 import { renderRfqPdf, renderRfqPdfContent, type RfqPdfData } from "./rfq-pdf";
 
 function fakeRfq(overrides: Partial<RfqPdfData> = {}): RfqPdfData {
@@ -92,8 +93,8 @@ describe("renderRfqPdf", () => {
     expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
   });
 
-  describe("Site Name & Identity Privacy Verification (Fix 4)", () => {
-    it("1. Displays actual construction site name under Requested By when a site exists", () => {
+  describe("Requested By & Identity Privacy Verification", () => {
+    it("1. Displays BuildOhub under Requested By even when a site exists (does not display site name)", () => {
       const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
       useRupeeCapableFont(doc);
       const textCalls: string[] = [];
@@ -118,10 +119,11 @@ describe("renderRfqPdf", () => {
 
       const requestedByIndex = textCalls.indexOf("Requested By");
       expect(requestedByIndex).toBeGreaterThanOrEqual(0);
-      expect(textCalls).toContain("Skyline Tower Site");
+      expect(textCalls[requestedByIndex + 2]).toBe(BUILDOHUB_COMPANY.name);
+      expect(textCalls).not.toContain("Skyline Tower Site");
     });
 
-    it("2. Displays 'Site not specified' under Requested By when no site exists", () => {
+    it("2. Displays BuildOhub under Requested By when no site exists", () => {
       const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
       useRupeeCapableFont(doc);
       const textCalls: string[] = [];
@@ -135,7 +137,8 @@ describe("renderRfqPdf", () => {
 
       const requestedByIndex = textCalls.indexOf("Requested By");
       expect(requestedByIndex).toBeGreaterThanOrEqual(0);
-      expect(textCalls).toContain("Site not specified");
+      expect(textCalls[requestedByIndex + 2]).toBe(BUILDOHUB_COMPANY.name);
+      expect(textCalls).not.toContain("Site not specified");
     });
 
     it("3. Never renders builder personal name, email, or phone under Requested By", () => {
@@ -153,22 +156,6 @@ describe("renderRfqPdf", () => {
       const piiPattern = /builder@|bob@|alice@|\+91\d{10}|[Bb]uilder [Nn]ame/;
       const hasPii = textCalls.some((t) => piiPattern.test(t));
       expect(hasPii).toBe(false);
-    });
-
-    it("4. Does not use BuildOhub as fallback under Requested By when site is null", () => {
-      const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
-      useRupeeCapableFont(doc);
-      const textCalls: string[] = [];
-      const originalText = doc.text.bind(doc);
-      vi.spyOn(doc, "text").mockImplementation((text: any, ...args: any[]) => {
-        if (typeof text === "string") textCalls.push(text);
-        return originalText(text, ...args);
-      });
-
-      renderRfqPdfContent(doc, fakeRfq({ site: null }));
-
-      const requestedByIndex = textCalls.indexOf("Requested By");
-      expect(textCalls[requestedByIndex + 2]).toBe("Site not specified");
     });
   });
 });

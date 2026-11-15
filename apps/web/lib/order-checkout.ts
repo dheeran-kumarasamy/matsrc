@@ -792,17 +792,16 @@ export async function createOrdersFromCart(
 
   if (notificationTasks.length > 0) {
     const notifyPromise = runWithBoundedConcurrency(notificationTasks, 2);
-    // If Vercel serverless waitUntil exists, register it so the lambda does not terminate early
-    if (typeof (globalThis as any)[Symbol.for("vercel.waitUntil")] === "function") {
-      (globalThis as any)[Symbol.for("vercel.waitUntil")](notifyPromise);
-    } else if (typeof (globalThis as any).waitUntil === "function") {
-      (globalThis as any).waitUntil(notifyPromise);
-    } else {
-      // Give notifications up to 1.5s to finish cleanly within the request lifecycle without blocking indefinitely
-      await Promise.race([
-        notifyPromise,
-        new Promise((resolve) => setTimeout(resolve, 1500)),
-      ]);
+    // Use Vercel serverless waitUntil so the background task finishes cleanly
+    // without delaying the HTTP checkout response to the buyer
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { waitUntil } = require("@vercel/functions");
+      if (typeof waitUntil === "function") {
+        waitUntil(notifyPromise);
+      }
+    } catch {
+      void notifyPromise;
     }
   }
 

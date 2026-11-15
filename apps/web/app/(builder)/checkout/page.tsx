@@ -210,7 +210,8 @@ export default function CheckoutPage() {
       // Clear the idempotency key only after confirmed successful checkout
       idempotencyKeyRef.current = null;
 
-      await Promise.allSettled(listingIds.map((listingId) => recordInterestEvent(listingId, "ORDER_PLACED")));
+      // Fire-and-forget tracking; never blocks UX or slows down redirect to confirmation
+      void Promise.allSettled(listingIds.map((listingId) => recordInterestEvent(listingId, "ORDER_PLACED")));
 
       // Confirmation message is shown only after this backend call has
       // resolved successfully — never merely on button click. See

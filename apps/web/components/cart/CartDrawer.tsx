@@ -10,7 +10,7 @@
 // -> confirm (submit) -> success (mocked confirmation + payment-link
 // messaging).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
 
 import { useRouter } from "next/navigation";
@@ -171,6 +171,8 @@ export default function CartDrawer() {
   const [siteName, setSiteName] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const isSubmittingRef = useRef(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (isCartOpen && !hasLoaded) {
@@ -204,7 +206,8 @@ export default function CartDrawer() {
   }
 
   async function handleSubmitEnquiry() {
-    if (items.length === 0) return;
+    // P0: Immediate synchronous submission lock to prevent double-click race conditions
+    if (isSubmittingRef.current || submitting || items.length === 0) return;
 
     // A Site must be selected before an enquiry can be placed — see
     // components/orders/SiteSelector.tsx (checkout requirement #6).
@@ -221,13 +224,27 @@ export default function CartDrawer() {
       return;
     }
 
+    isSubmittingRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
+
+    // P0: Reuse existing key on retry, or generate a fresh UUID for a new attempt
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `chk-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    }
+    const idempotencyKey = idempotencyKeyRef.current;
+
     try {
 
       const response = await builderApiPost<{
         orders: Array<{ id: string; enquiryId?: string; supplierName?: string }>;
-      }>("/orders/checkout", { siteId });
+      }>("/orders/checkout", { siteId, idempotencyKey });
+
+      // Clear the idempotency key only after confirmed successful checkout
+      idempotencyKeyRef.current = null;
 
       // S12 Phase 1: preserve EVERY created enquiry/order reference (one
       // per supplier — see apps/web/lib/order-checkout.ts), never just the
@@ -239,8 +256,10 @@ export default function CartDrawer() {
       completeCheckout(summaries.length > 0 ? summaries : [{ reference: "submitted" }]);
       void fetchCart();
     } catch {
+      // Preserve idempotencyKeyRef.current on error so user retry reuses the same key
       setSubmitError("Unable to submit enquiry right now. Please try again.");
     } finally {
+      isSubmittingRef.current = false;
       setSubmitting(false);
     }
   }

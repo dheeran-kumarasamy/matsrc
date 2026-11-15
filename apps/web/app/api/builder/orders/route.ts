@@ -183,6 +183,13 @@ export async function POST(request: Request) {
     const ctx = getUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
     const body = await request.json().catch(() => ({}));
+    const headerIdempotencyKey = request.headers.get("x-idempotency-key") || request.headers.get("idempotency-key");
+    const idempotencyKey =
+      typeof body.idempotencyKey === "string" && body.idempotencyKey.trim()
+        ? body.idempotencyKey.trim()
+        : typeof headerIdempotencyKey === "string" && headerIdempotencyKey.trim()
+        ? headerIdempotencyKey.trim()
+        : null;
 
     // Cart -> grouped-by-supplier Order creation (UF-03 shared pipeline).
     // Also reused by the Quick Material Request nearest-match flow — see
@@ -200,6 +207,7 @@ export async function POST(request: Request) {
       // quick-request/route.ts), which calls createOrdersFromCart directly
       // without this flag.
       requireSiteId: true,
+      idempotencyKey,
     });
 
     if (!result.ok) {

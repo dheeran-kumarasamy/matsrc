@@ -20,10 +20,12 @@ import {
   PaymentStatus,
   PaymentMethod,
   generateEnquiryId,
+  allocateEnquiryNumbers,
   notifySupplierRfqReceived,
   resolveMarkupForProduct,
   resolveMarkupForProductsBatch,
 } from "@matsrc/db";
+import { createHash } from "crypto";
 import { prisma } from "@/lib/builder-db";
 import { notifySupplierOrderSubmitted } from "@/lib/notify";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
@@ -52,6 +54,9 @@ export type CreateOrdersOptions = {
   // Quick Material Request nearest-match flow, which doesn't collect a
   // site) are unaffected.
   requireSiteId?: boolean;
+  // Durable checkout idempotency: client-supplied UUID to prevent duplicate
+  // enquiry creation across retries, network blips, or rapid double clicks.
+  idempotencyKey?: string | null;
 };
 
 
@@ -400,16 +405,64 @@ export async function createOrdersFromCart(
     select: { name: true, email: true },
   });
 
+  // Pre-compute normalized fingerprint to detect distinct requests sharing an idempotency key
+  const sortedSnapshotItemIds = [...snapshotItemIds].sort();
+  const requestFingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        userId,
+        siteId,
+        itemIds: sortedSnapshotItemIds,
+        deliveryDate: deliveryDate ? deliveryDate.toISOString() : null,
+      })
+    )
+    .digest("hex");
+
+  // Durable checkout idempotency (reusing existing CartIdempotency mechanism):
+  // If an order for this exact idempotency key and fingerprint was already completed,
+  // return the cached response without creating duplicate orders or modifying the cart.
+  if (options.idempotencyKey && typeof (prisma as any).cartIdempotency?.findUnique === "function") {
+    const existingIdempotency = await (prisma as any).cartIdempotency.findUnique({
+      where: { userId_key: { userId, key: options.idempotencyKey } },
+    });
+    if (existingIdempotency) {
+      if (existingIdempotency.requestFingerprint !== requestFingerprint) {
+        return {
+          ok: false,
+          error: "Idempotency key was previously used with a different request payload.",
+          status: 409,
+        };
+      }
+      if (existingIdempotency.responsePayload && typeof existingIdempotency.responsePayload === "object") {
+        const payload = existingIdempotency.responsePayload as any;
+        return {
+          ok: true,
+          orders: Array.isArray(payload.orders) ? payload.orders : [],
+        };
+      }
+    }
+  }
+
+  // P0: Pre-allocate enquiry numbers upfront using a short, dedicated sequence transaction.
+  // This completely decouples sequence generation from the main long-running order
+  // and candidate creation transaction, eliminating global lock contention on
+  // BusinessSequence ('EQ_26') while preserving formatting and distinct numbering.
+  let allocatedEnquiryIds: string[] = [];
+  try {
+    if (typeof allocateEnquiryNumbers === "function") {
+      allocatedEnquiryIds = await allocateEnquiryNumbers(prisma, groups.size);
+    }
+  } catch {
+    allocatedEnquiryIds = [];
+  }
+
   // Wrap ALL supplier groups and cart cleanup in a single atomic transaction.
   // Guarantees all-or-nothing: if any supplier group fails, NO orders are created,
   // NO partial enquiry is left behind, and the buyer's cart is preserved.
   try {
     createdOrders = await prisma.$transaction(
       async (tx) => {
-        // 1. Sort snapshot IDs deterministically (ascending) to reduce deadlock risk (Requirement 3A)
-        const sortedSnapshotItemIds = [...snapshotItemIds].sort();
-
-        // 2. PostgreSQL Row-Level Locking & Snapshot Revalidation (Requirements 3A & 3B):
+        // 1. PostgreSQL Row-Level Locking & Snapshot Revalidation (Requirements 3A & 3B):
         // Acquire exclusive row locks on the buyer's original snapshot cart items (SELECT ... FOR UPDATE).
         // Any concurrent checkout or modification for these rows will block until this transaction commits.
         // Once unblocked/acquired, we read the authoritative committed state.
@@ -482,23 +535,33 @@ export async function createOrdersFromCart(
         }
 
         const ordersList: typeof createdOrders = [];
+        const allCandidatesToInsert: Array<{
+          orderItemId: string;
+          supplierId: string;
+          listingId: string | null;
+          unitPrice: number;
+          rank: number;
+        }> = [];
+
         let groupIdx = 0;
+        const supportsBatchCandidates =
+          typeof (tx as any).orderItemSupplierCandidate?.createMany === "function" ||
+          typeof (tx as any).orderItemSupplierCandidate?.create === "function";
+
         for (const group of groups.values()) {
           const currentGroupIdx = groupIdx++;
           const totalAmount = group.items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
           const resolvedAt = new Date();
 
-          // Consolidated Enquiry ID (Order.enquiryId): generated inside the same
-          // transaction as the Order row so the resolved builder/site/city data
-          // and the incremented global serial commit atomically with the
-          // enquiry itself — see packages/db/lib/enquiry-id.ts for the
-          // concurrency-safety guarantee (row-locked serial counter).
-          const enquiryId = await generateEnquiryId(tx, {
-            builderId: userId,
-            builderName: builderForEnquiryId?.name,
-            builderEmail: builderForEnquiryId?.email,
-            siteId,
-          });
+          // P0: Use the pre-allocated enquiry ID, falling back to generateEnquiryId(tx) if not pre-allocated
+          const enquiryId =
+            allocatedEnquiryIds[currentGroupIdx] ??
+            (await generateEnquiryId(tx, {
+              builderId: userId,
+              builderName: builderForEnquiryId?.name,
+              builderEmail: builderForEnquiryId?.email,
+              siteId,
+            }));
 
           const order = await tx.order.create({
             data: {
@@ -531,16 +594,18 @@ export async function createOrdersFromCart(
                   tierMaxQty: item.tierMaxQty ?? undefined,
                   priceAtResolution: item.resolvedListingId ? item.unitPrice : undefined,
                   resolvedAt: item.resolvedListingId ? resolvedAt : undefined,
+                  // If candidate batch insertion is not supported in the current environment (e.g. legacy test mocks),
+                  // keep nested candidate creation as a safe fallback
                   candidates:
-                    item.candidates.length > 0
+                    !supportsBatchCandidates && item.candidates.length > 0
                       ? {
-                        create: item.candidates.map((candidate, index) => ({
-                          supplierId: candidate.supplierId,
-                          listingId: candidate.listingId,
-                          unitPrice: candidate.unitPrice,
-                          rank: index,
-                        })),
-                      }
+                          create: item.candidates.map((candidate, index) => ({
+                            supplierId: candidate.supplierId,
+                            listingId: candidate.listingId,
+                            unitPrice: candidate.unitPrice,
+                            rank: index,
+                          })),
+                        }
                       : undefined,
                 })),
               },
@@ -565,6 +630,26 @@ export async function createOrdersFromCart(
             },
           });
 
+          // P0: If batch candidate insertion is supported, collect candidate records with real OrderItem IDs
+          if (supportsBatchCandidates && Array.isArray(order?.items)) {
+            for (let i = 0; i < group.items.length; i++) {
+              const lineItem = group.items[i];
+              const createdOrderItem = order.items[i];
+              if (createdOrderItem && lineItem.candidates && lineItem.candidates.length > 0) {
+                for (let cIdx = 0; cIdx < lineItem.candidates.length; cIdx++) {
+                  const candidate = lineItem.candidates[cIdx];
+                  allCandidatesToInsert.push({
+                    orderItemId: createdOrderItem.id,
+                    supplierId: candidate.supplierId,
+                    listingId: candidate.listingId ?? null,
+                    unitPrice: candidate.unitPrice,
+                    rank: cIdx,
+                  });
+                }
+              }
+            }
+          }
+
           ordersList.push({
             id: order.id,
             enquiryId: order.enquiryId ?? order.id,
@@ -573,8 +658,21 @@ export async function createOrdersFromCart(
             total: totalAmount,
             itemCount: group.items.length,
             status: order.status,
-            itemIds: order.items.map((item) => item.id),
+            itemIds: (order?.items || []).map((item: any) => item.id),
           });
+        }
+
+        // P0: Batch insert candidate suppliers across all orders in a single database operation
+        if (allCandidatesToInsert.length > 0) {
+          if (typeof (tx as any).orderItemSupplierCandidate?.createMany === "function") {
+            await (tx as any).orderItemSupplierCandidate.createMany({
+              data: allCandidatesToInsert,
+            });
+          } else if (typeof (tx as any).orderItemSupplierCandidate?.create === "function") {
+            for (const c of allCandidatesToInsert) {
+              await (tx as any).orderItemSupplierCandidate.create({ data: c });
+            }
+          }
         }
 
         // Cart deletion occurs only AFTER all required database writes succeed (Section 4).
@@ -600,11 +698,41 @@ export async function createOrdersFromCart(
           throw new Error("CART_MUTATED_DURING_CHECKOUT");
         }
 
+        // Record CartIdempotency atomically inside the checkout transaction
+        if (options.idempotencyKey && typeof (tx as any).cartIdempotency?.create === "function") {
+          await (tx as any).cartIdempotency.create({
+            data: {
+              userId,
+              key: options.idempotencyKey,
+              requestFingerprint,
+              responseStatus: 201,
+              responsePayload: { orders: ordersList },
+              expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            },
+          });
+        }
+
         return ordersList;
       },
-      { maxWait: 10000, timeout: 30000 }
+      { maxWait: 5000, timeout: 10000 }
     );
   } catch (error: any) {
+    if (
+      options.idempotencyKey &&
+      (error?.code === "P2002" || /unique.*constraint/i.test(error?.message ?? "")) &&
+      typeof (prisma as any).cartIdempotency?.findUnique === "function"
+    ) {
+      const existing = await (prisma as any).cartIdempotency.findUnique({
+        where: { userId_key: { userId, key: options.idempotencyKey } },
+      });
+      if (existing?.responsePayload && typeof existing.responsePayload === "object") {
+        const payload = existing.responsePayload as any;
+        return {
+          ok: true,
+          orders: Array.isArray(payload.orders) ? payload.orders : [],
+        };
+      }
+    }
     if (error?.message === "CART_ALREADY_SUBMITTED") {
       return { ok: false, error: "Cart is empty", status: 400 };
     }
@@ -631,65 +759,125 @@ export async function createOrdersFromCart(
     throw error;
   }
 
-  // Notify suppliers (best-effort, non-blocking) — WhatsApp notification for each new enquiry.
+  // P1: Supplier WhatsApp notification dispatch with bounded concurrency (max 2 concurrent connections)
+  // to prevent connection pool exhaustion and event-loop blocking while preserving all delivery records.
+  const notificationTasks: Array<() => Promise<void>> = [];
+
   for (const order of createdOrders) {
-    void Promise.resolve(notifySupplierOrderSubmitted(order.id)).catch((error) => {
-      console.error(`Failed to send supplier notification for order ${order.id}:`, error);
+    notificationTasks.push(async () => {
+      try {
+        await notifySupplierOrderSubmitted(order.id);
+      } catch (error) {
+        console.error(`Failed to send supplier notification for order ${order.id}:`, error);
+      }
     });
 
     // Notification Engine — supplier_quote_alert WhatsApp template
     // (SUPPLIER_RFQ_RECEIVED). Fires once per newly-created OrderItem — each
     // item is a distinct RFQ line the just-assigned (rank-0) supplier is now
     // expected to quote. Uses the shared, framework-agnostic
-    // notifySupplierRfqReceived() (packages/db/lib/supplier-rfq-received-notification.ts)
-    // since this Next.js route cannot inject apps/api's NestJS
-    // NotificationEngineService — same reasoning as notifyCustomerOrderStatusChanged.
+    // notifySupplierRfqReceived() (packages/db/lib/supplier-rfq-received-notification.ts).
     for (const itemId of order.itemIds) {
-      void Promise.resolve(
-        notifySupplierRfqReceived(prisma as any, { orderItemId: itemId }, (message) => {
-          console.log(`[supplier-rfq-received] ${message}`);
-        })
-      ).catch((error) => {
-        console.error(`Failed to send supplier_quote_alert notification for orderItem ${itemId}:`, error);
+      notificationTasks.push(async () => {
+        try {
+          await notifySupplierRfqReceived(prisma as any, { orderItemId: itemId }, (message) => {
+            console.log(`[supplier-rfq-received] ${message}`);
+          });
+        } catch (error) {
+          console.error(`Failed to send supplier_quote_alert notification for orderItem ${itemId}:`, error);
+        }
       });
     }
   }
 
-  // Price-discovery snapshot hook (additive, insert-only, non-blocking):
-  // capture one PriceSnapshot row per confirmed order line at the moment
-  // an order is placed (source: ORDER). Deliberately fire-and-forget so a
-  // snapshot-write failure never affects the checkout response above.
+  if (notificationTasks.length > 0) {
+    const notifyPromise = runWithBoundedConcurrency(notificationTasks, 2);
+    // If Vercel serverless waitUntil exists, register it so the lambda does not terminate early
+    if (typeof (globalThis as any)[Symbol.for("vercel.waitUntil")] === "function") {
+      (globalThis as any)[Symbol.for("vercel.waitUntil")](notifyPromise);
+    } else if (typeof (globalThis as any).waitUntil === "function") {
+      (globalThis as any).waitUntil(notifyPromise);
+    } else {
+      // Give notifications up to 1.5s to finish cleanly within the request lifecycle without blocking indefinitely
+      await Promise.race([
+        notifyPromise,
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]);
+    }
+  }
+
+  // P1: Price-discovery snapshot hook — batch inserted via createMany where supported
+  // (source: ORDER). Reliably persisted before returning response, but errors are safely
+  // caught so snapshot-write failures never fail an otherwise successful checkout.
   //
   // Admin-Configurable Product Markup: price-discovery/market intelligence
   // (regional price comparison, trend reports consuming PriceSnapshot) must
   // reflect the real SUPPLIER market price, never the buyer's marked-up
   // figure — using item.unitPrice (post-markup) here would silently inflate
   // every downstream market-price report by the platform's own margin.
-  // Mirrors the identical, already-correct fix in
-  // BestPriceSelectionService.recordRfqAcceptedSnapshots (source:
-  // RFQ_ACCEPTED), which this ORDER-source writer had not yet received.
-  // `item.supplierUnitPrice` is the quantity-tier-resolved ORIGINAL supplier
-  // price this line was priced from (see the markup-resolution pass above)
-  // — falls back to `item.unitPrice` only if markup resolution was
-  // unavailable (the 0%-fallback case, where the two are equal anyway).
+  const priceSnapshotsData: Array<{
+    productId: string;
+    supplierId: string;
+    canonicalProductId?: string;
+    price: number;
+    source: "ORDER";
+  }> = [];
+
   for (const group of groups.values()) {
     for (const item of group.items) {
-      void prisma.priceSnapshot
-        .create({
-          data: {
-            productId: item.productId,
-            supplierId: group.supplierId,
-            canonicalProductId: item.canonicalProductId ?? undefined,
-            price: item.supplierUnitPrice,
-            source: "ORDER",
-          },
-        })
-        .catch((error) => {
-          console.error(`Failed to record price snapshot for order item (product ${item.productId}):`, error);
-        });
+      priceSnapshotsData.push({
+        productId: item.productId,
+        supplierId: group.supplierId,
+        canonicalProductId: item.canonicalProductId ?? undefined,
+        price: item.supplierUnitPrice,
+        source: "ORDER",
+      });
+    }
+  }
+
+  if (priceSnapshotsData.length > 0) {
+    if (typeof (prisma as any).priceSnapshot?.createMany === "function") {
+      try {
+        await (prisma as any).priceSnapshot.createMany({ data: priceSnapshotsData });
+      } catch (error: any) {
+        console.error("Failed to record price snapshots batch:", error);
+      }
+    } else if (typeof (prisma as any).priceSnapshot?.create === "function") {
+      for (const snapshot of priceSnapshotsData) {
+        try {
+          await (prisma as any).priceSnapshot.create({ data: snapshot });
+        } catch (error: any) {
+          console.error(`Failed to record price snapshot for order item (product ${snapshot.productId}):`, error);
+        }
+      }
     }
   }
 
   return { ok: true, orders: createdOrders };
+}
+
+/**
+ * P1: Executes an array of asynchronous tasks with bounded concurrency.
+ * Ensures non-critical background jobs (notifications, tracking dispatches)
+ * do not saturate the shared Prisma / PostgreSQL connection pool.
+ */
+async function runWithBoundedConcurrency(
+  tasks: Array<() => Promise<void>>,
+  concurrency = 2
+): Promise<void> {
+  if (tasks.length === 0) return;
+  let nextIdx = 0;
+  async function worker() {
+    while (nextIdx < tasks.length) {
+      const currentTask = tasks[nextIdx++];
+      try {
+        await currentTask();
+      } catch {
+        // Individual error logging handled inside currentTask
+      }
+    }
+  }
+  const workerCount = Math.min(concurrency, tasks.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
 }
 

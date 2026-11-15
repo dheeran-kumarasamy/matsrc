@@ -251,6 +251,10 @@ export type CustomerOrderStatusWhatsAppMode = "live" | "dry-run" | "off";
  * name (each app's own Vercel project still needs the var set).
  */
 export function getCustomerOrderStatusWhatsAppMode(): CustomerOrderStatusWhatsAppMode {
+  // Preview deployments must NEVER send live WhatsApp messages
+  if (process.env.VERCEL_ENV === "preview") {
+    return "dry-run";
+  }
   const raw = (process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE || "dry-run").toLowerCase();
   if (raw === "live" || raw === "off") return raw;
   return "dry-run";

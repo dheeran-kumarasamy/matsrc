@@ -101,6 +101,10 @@ export type LoginOtpWhatsAppMode = "live" | "dry-run" | "off";
  * customer-order-status-notification.ts. Never a second/renamed env var.
  */
 export function getLoginOtpWhatsAppMode(): LoginOtpWhatsAppMode {
+  // Preview deployments must NEVER send live WhatsApp messages
+  if (process.env.VERCEL_ENV === "preview") {
+    return "dry-run";
+  }
   const raw = (process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE || "dry-run").toLowerCase();
   if (raw === "live" || raw === "off") return raw;
   return "dry-run";

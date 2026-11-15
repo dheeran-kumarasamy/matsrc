@@ -203,7 +203,9 @@ const NO_SITE_CODE = "UNSITED";
  * builder/site codes and the incremented sequence are all committed
  * atomically with the enquiry itself.
  */
-import { generateEnquiryNumber } from "./business-number";
+import { generateEnquiryNumber, allocateEnquiryNumbers } from "./business-number";
+
+export { allocateEnquiryNumbers };
 
 export async function generateEnquiryId(tx: any, params?: GenerateEnquiryIdParams): Promise<string> {
   return generateEnquiryNumber(tx);

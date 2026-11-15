@@ -126,6 +126,71 @@ export async function generateEnquiryNumber(
   return generateBusinessNumber(tx, "EQ", date);
 }
 
+/**
+ * Atomically allocates a batch of sequential business numbers (e.g. for multi-supplier
+ * checkout enquiries) in an isolated, short transaction.
+ *
+ * This completely decouples sequence generation from the main long-running order
+ * and candidate creation transaction, eliminating global row-lock contention
+ * on BusinessSequence ('EQ_26') while preserving the exact format, sequence monotonicity,
+ * and distinct numbering across supplier groups.
+ */
+export async function allocateBusinessNumbers(
+  db: any,
+  type: "EQ" | "OD" | "IN" | "AP" | "AR",
+  count = 1,
+  date: Date = new Date()
+): Promise<string[]> {
+  if (count <= 0) return [];
+  const { fyShort, yymm } = getFinancialYearMonth(date);
+  const key = `${type}_${fyShort}`;
+
+  const runAllocation = async (tx: TxClient) => {
+    await tx.businessSequence.upsert({
+      where: { id: key },
+      update: {},
+      create: { id: key, type, fy: fyShort, value: 0 },
+    });
+
+    await tx.$queryRaw`SELECT "value" FROM "BusinessSequence" WHERE "id" = ${key} FOR UPDATE`;
+
+    const updated = await tx.businessSequence.update({
+      where: { id: key },
+      data: { value: { increment: count } },
+      select: { value: true },
+    });
+
+    if (updated.value > 99999) {
+      throw new Error(
+        `${type} serial ${updated.value} exceeds the 5-digit serial capacity (max 99999) for FY ${fyShort}. ` +
+          "Refusing to truncate or reuse serial numbers."
+      );
+    }
+
+    const endSerial = updated.value;
+    const startSerial = endSerial - count + 1;
+    const results: string[] = [];
+    for (let s = startSerial; s <= endSerial; s++) {
+      const paddedSerial = String(s).padStart(5, "0");
+      results.push(`${type}/${yymm}/${paddedSerial}`);
+    }
+    return results;
+  };
+
+  if (typeof db.$transaction === "function") {
+    return await db.$transaction(runAllocation, { maxWait: 5000, timeout: 5000 });
+  }
+  return await runAllocation(db);
+}
+
+export async function allocateEnquiryNumbers(
+  db: any,
+  count = 1,
+  date: Date = new Date()
+): Promise<string[]> {
+  return allocateBusinessNumbers(db, "EQ", count, date);
+}
+
 export async function generateOrderNumber(
   tx: TxClient,
   date: Date = new Date()

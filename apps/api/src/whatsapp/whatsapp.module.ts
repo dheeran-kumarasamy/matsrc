@@ -9,7 +9,7 @@ import { WhatsAppRouterService } from "./whatsapp-router.service";
 import { WhatsAppSessionService } from "./whatsapp-session.service";
 import { WhatsAppAuthService } from "./whatsapp-auth.service";
 import { WhatsAppAuditHelper } from "./whatsapp-audit.helper";
-import { WHATSAPP_SEND_PROVIDER } from "./adapters/whatsapp-send.interface";
+import { WHATSAPP_SEND_PROVIDER, WhatsAppSendAdapter } from "./adapters/whatsapp-send.interface";
 import { MockWhatsAppSendAdapter } from "./adapters/mock-whatsapp-send.adapter";
 import { MetaCloudApiSendAdapter } from "./adapters/meta-cloud-api-send.adapter";
 
@@ -20,6 +20,28 @@ import { DailyReportFlow } from "./flows/daily-report.flow";
 import { SupplierDailyPriceReplyFlow } from "./flows/supplier-daily-price-reply.flow";
 import { InboundTemplateReplyFlow } from "./flows/inbound-template-reply.flow";
 import { NotificationEngineModule } from "../notification-engine/notification-engine.module";
+
+/**
+ * Factory for WHATSAPP_SEND_PROVIDER.
+ *
+ * Fail-closed preview protection:
+ * When VERCEL_ENV === "preview", always select MockWhatsAppSendAdapter regardless
+ * of WHATSAPP_ADAPTER to guarantee preview deployments never dispatch live Meta messages.
+ */
+export function whatsAppSendProviderFactory(
+  mock: MockWhatsAppSendAdapter,
+  meta: MetaCloudApiSendAdapter
+): WhatsAppSendAdapter {
+  if (process.env.VERCEL_ENV === "preview") {
+    return mock;
+  }
+  switch (process.env.WHATSAPP_ADAPTER) {
+    case "meta":
+      return meta;
+    default:
+      return mock;
+  }
+}
 
 @Module({
   imports: [SupplierModule, ListingsModule, OrdersModule, RfqsModule, SupplierReportsModule, NotificationEngineModule],
@@ -39,17 +61,7 @@ import { NotificationEngineModule } from "../notification-engine/notification-en
     MetaCloudApiSendAdapter,
     {
       provide: WHATSAPP_SEND_PROVIDER,
-      // Twilio supplier-bot adapter removed — Meta WhatsApp Cloud API
-      // (WHATSAPP_ADAPTER=meta) is the only real send provider now; `mock`
-      // remains the safe default for local/dev/test.
-      useFactory: (mock: MockWhatsAppSendAdapter, meta: MetaCloudApiSendAdapter) => {
-        switch (process.env.WHATSAPP_ADAPTER) {
-          case "meta":
-            return meta;
-          default:
-            return mock;
-        }
-      },
+      useFactory: whatsAppSendProviderFactory,
       inject: [MockWhatsAppSendAdapter, MetaCloudApiSendAdapter],
     },
   ],

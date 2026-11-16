@@ -7,7 +7,16 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { orderRows, supplierQuoteRows, orderItemUpdateCalls, orderUpdateCalls, markupByProductId } = vi.hoisted(() => ({
+const {
+  orderRows,
+  supplierQuoteRows,
+  orderItemUpdateCalls,
+  orderUpdateCalls,
+  markupByProductId,
+  notifyQuoteReceivedMock,
+  finalizeEnquiryMock,
+  orderTrackingRows,
+} = vi.hoisted(() => ({
   orderRows: new Map<string, any>(),
   supplierQuoteRows: [] as any[],
   orderItemUpdateCalls: [] as any[],
@@ -16,6 +25,9 @@ const { orderRows, supplierQuoteRows, orderItemUpdateCalls, orderUpdateCalls, ma
   // wants resolveMarkupForProduct to return for that line. Defaults to null
   // (no config -> 0% fail-safe fallback) unless a test explicitly seeds one.
   markupByProductId: new Map<string, any>(),
+  notifyQuoteReceivedMock: vi.fn(() => Promise.resolve()),
+  finalizeEnquiryMock: vi.fn(() => Promise.resolve({ finalized: true })),
+  orderTrackingRows: [] as any[],
 }));
 
 vi.mock("@matsrc/db", () => {
@@ -36,6 +48,12 @@ vi.mock("@matsrc/db", () => {
       },
       order: {
         findUnique: vi.fn((args: any) => Promise.resolve(orderRows.get(args.where.id) ?? null)),
+      },
+      orderTracking: {
+        create: vi.fn(async ({ data }: any) => {
+          orderTrackingRows.push(data);
+          return { id: "track-1", ...data };
+        }),
       },
       $transaction: vi.fn(async (callback: any) => {
         const tx = {
@@ -80,6 +98,8 @@ vi.mock("@matsrc/db", () => {
     },
     notifyCustomerOrderStatusChanged: vi.fn(() => Promise.resolve()),
     notifyPaymentRequired: vi.fn(() => Promise.resolve()),
+    notifyQuoteReceived: notifyQuoteReceivedMock,
+    finalizeEnquiryBestPriceIfEligible: finalizeEnquiryMock,
     calculateLineGst: (input: any) => {
       const gstRatePercent =
         typeof input.gstRatePercent === "number" && Number.isFinite(input.gstRatePercent) ? input.gstRatePercent : 18;
@@ -131,6 +151,9 @@ beforeEach(() => {
   orderItemUpdateCalls.length = 0;
   orderUpdateCalls.length = 0;
   markupByProductId.clear();
+  notifyQuoteReceivedMock.mockClear();
+  finalizeEnquiryMock.mockClear();
+  orderTrackingRows.length = 0;
 });
 
 function seedOrder(id: string, overrides: Partial<any> = {}) {
@@ -350,5 +373,59 @@ describe("createSupplierQuote — RFQ line-item quotation (lineQuotes path)", ()
     expect(supplierQuoteRows[0].quantity).toBe(250);
     expect(supplierQuoteRows[0].lineSubtotal).toBe(2500);
     expect(supplierQuoteRows[0].gstRatePercent).toBe(5);
+  });
+
+  it("dispatches quote_received notification to buyer upon quotation submission", async () => {
+    seedOrder("enq-notify");
+
+    await createSupplierQuote(
+      "enq-notify",
+      { price: "500", lineQuotes: [{ lineItemId: "line-1", unitPrice: "500" }] },
+      "supplier@example.com"
+    );
+
+    expect(notifyQuoteReceivedMock).toHaveBeenCalledTimes(1);
+    expect(notifyQuoteReceivedMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        enquiryId: "enq-notify",
+        supplierId: "sup-1",
+        quoteIds: ["sq-1"],
+      })
+    );
+  });
+
+  it("evaluates enquiry auto-finalization upon quotation submission", async () => {
+    seedOrder("enq-finalize");
+
+    const result = await createSupplierQuote(
+      "enq-finalize",
+      { price: "500", lineQuotes: [{ lineItemId: "line-1", unitPrice: "500" }] },
+      "supplier@example.com"
+    );
+
+    expect(finalizeEnquiryMock).toHaveBeenCalledTimes(1);
+    expect(finalizeEnquiryMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "enq-finalize",
+      expect.objectContaining({ waitUntil: expect.any(Function) })
+    );
+    expect(result).toMatchObject({ finalized: true });
+  });
+
+  it("records OrderTracking entry for quotation submission", async () => {
+    seedOrder("enq-tracking");
+
+    await createSupplierQuote(
+      "enq-tracking",
+      { price: "500", lineQuotes: [{ lineItemId: "line-1", unitPrice: "500" }] },
+      "supplier@example.com"
+    );
+
+    expect(orderTrackingRows).toHaveLength(1);
+    expect(orderTrackingRows[0]).toMatchObject({
+      orderId: "enq-tracking",
+      note: expect.stringContaining("quotation"),
+    });
   });
 });

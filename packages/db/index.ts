@@ -150,6 +150,18 @@ export * from "./lib/order-buyer-confirmation";
 // packages/db/lib/order-dispatch-eligibility.ts for full documentation.
 export * from "./lib/order-dispatch-eligibility";
 
+// quote_received WhatsApp & In-App Notification (QUOTE_RECEIVED event) —
+// shared, framework-agnostic implementation fired when a supplier submits an
+// RFQ quotation. See packages/db/lib/quote-received-notification.ts for full
+// documentation.
+export * from "./lib/quote-received-notification";
+
+// Shared Best-Price Selection & Enquiry Auto-Finalization — evaluates RFQ
+// quotes, selects lowest valid quotes, resolves markup & GST snapshot,
+// transitions Order to PROCESSING, and dispatches buyer notifications. See
+// packages/db/lib/best-price-selection.ts for full documentation.
+export * from "./lib/best-price-selection";
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

@@ -39,6 +39,7 @@ function createHarness(orderOverrides: Partial<any> = {}) {
     }),
     quickRequest: { findUnique: vi.fn() },
     quote: { create: vi.fn() },
+    orderTracking: { create: vi.fn().mockResolvedValue({}) },
   };
 
   const supplierContext = {

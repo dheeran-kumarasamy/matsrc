@@ -114,3 +114,65 @@ describe("Test 9: tracking scoping — this module only ever transforms what it 
     expect(resultB.map((e) => e.id)).toEqual(["b1", "b2"]);
   });
 });
+
+describe("Test 10: Quotation Received timeline step display", () => {
+  it("renders 'Quotation Received' as headline when supplier submits quotation for enquiry", () => {
+    const tracking: OrderTrackingEvent[] = [
+      event({
+        id: "t1",
+        status: "PLACED",
+        label: "Pending supplier confirmation",
+        note: "Pending supplier confirmation",
+        recordedAt: "2026-10-07T05:00:00.000Z",
+      }),
+      event({
+        id: "t2",
+        status: "PLACED",
+        label: "Supplier submitted quotation for enquiry",
+        note: "Supplier submitted quotation for enquiry",
+        recordedAt: "2026-10-07T06:00:00.000Z",
+      }),
+    ];
+
+    const result = buildTimelineDisplayEvents(tracking);
+    expect(result).toHaveLength(2);
+
+    // Event 1: Initial enquiry sent
+    expect(result[0].headline).toBe("Enquiry sent");
+    expect(result[0].note).toBe("Pending supplier confirmation");
+    expect(result[0].isLatest).toBe(false);
+
+    // Event 2: Quotation received
+    expect(result[1].headline).toBe("Quotation Received");
+    expect(result[1].note).toBe("Supplier submitted quotation for enquiry");
+    expect(result[1].isLatest).toBe(true);
+  });
+
+  it("handles explicit QUOTATION_SUBMITTED and QUOTED status tokens", () => {
+    const tracking: OrderTrackingEvent[] = [
+      event({ id: "t1", status: "QUOTATION_SUBMITTED", label: "QUOTATION_SUBMITTED" }),
+      event({ id: "t2", status: "QUOTED", label: "Supplier quotation submitted" }),
+    ];
+
+    const result = buildTimelineDisplayEvents(tracking);
+    expect(result[0].headline).toBe("Quotation Received");
+    expect(result[0].note).toBeNull(); // bare status token not repeated
+
+    expect(result[1].headline).toBe("Quotation Received");
+    expect(result[1].note).toBe("Supplier quotation submitted");
+  });
+
+  it("does not classify decline or cancellation as quotation even if note mentions price", () => {
+    const tracking: OrderTrackingEvent[] = [
+      event({
+        id: "t1",
+        status: "CANCELLED",
+        label: "Cancelled by builder: found better quote elsewhere",
+      }),
+    ];
+
+    const result = buildTimelineDisplayEvents(tracking);
+    expect(result[0].headline).toBe("Enquiry declined");
+    expect(result[0].note).toBe("Cancelled by builder: found better quote elsewhere");
+  });
+});

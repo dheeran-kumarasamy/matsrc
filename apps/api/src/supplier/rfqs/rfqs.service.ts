@@ -256,6 +256,21 @@ export class RfqsService {
       return rows;
     });
 
+    // Record OrderTracking that supplier submitted quotation
+    if (this.prisma.orderTracking) {
+      await this.prisma.orderTracking
+        .create({
+          data: {
+            orderId: enquiryId,
+            status: enquiry.status,
+            note: "Supplier submitted quotation for enquiry",
+          },
+        })
+        .catch((err) => {
+          this.logger.warn(`Failed to record OrderTracking for quotation on enquiry ${enquiryId}: ${err}`);
+        });
+    }
+
     // Notification Engine — quote_received WhatsApp template
     // (QUOTE_RECEIVED event, Meta template ID 1055000930652376). Fires
     // immediately after this supplier's SupplierQuote row(s) have

@@ -250,6 +250,7 @@ export async function GET(
         id: step.id,
         status: step.status,
         label: step.note || step.status,
+        note: step.note ?? null,
         recordedAt: step.recordedAt,
       })),
     });

@@ -25,6 +25,7 @@ export type OrderTrackingEvent = {
   // detail API route) — may be a free-text note (e.g. a supplier decline
   // reason, a dispatch note) or just the raw status token.
   label: string;
+  note?: string | null;
   recordedAt: string;
 };
 
@@ -45,12 +46,36 @@ export type OrderTimelineDisplayEvent = {
 // headline for each real tracking event.
 export const STATUS_HEADLINES: Record<string, string> = {
   PLACED: "Enquiry sent",
+  QUOTATION_SUBMITTED: "Quotation Received",
+  QUOTED: "Quotation Received",
+  QUOTE_RECEIVED: "Quotation Received",
+  QUOTATION_RECEIVED: "Quotation Received",
   PROCESSING: "Confirmed",
   DISPATCHED: "Dispatched",
   OUT_FOR_DELIVERY: "Out for Delivery",
   DELIVERED: "Delivered",
   CANCELLED: "Enquiry declined",
 };
+
+export function isQuotationEvent(event: OrderTrackingEvent): boolean {
+  const statusUpper = (event.status ?? "").toUpperCase();
+  if (
+    statusUpper === "QUOTATION_SUBMITTED" ||
+    statusUpper === "QUOTED" ||
+    statusUpper === "QUOTE_RECEIVED" ||
+    statusUpper === "QUOTATION_RECEIVED"
+  ) {
+    return true;
+  }
+  // When an order is in enquiry stage (PLACED), the supplier submitting a
+  // quotation records an OrderTracking event with note "Supplier submitted quotation for enquiry".
+  // Avoid matching cancellation notes or terminal states.
+  if (statusUpper === "PLACED" || !statusUpper) {
+    const text = `${event.note ?? ""} ${event.label ?? ""}`.toLowerCase();
+    return text.includes("quotation") || /\bquote\b/i.test(text);
+  }
+  return false;
+}
 
 export function humanizeStatus(status: string): string {
   return STATUS_HEADLINES[status] ?? status.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -80,11 +105,20 @@ export function formatRecordedAt(value: string): string {
 export function buildTimelineDisplayEvents(tracking: OrderTrackingEvent[] | undefined | null): OrderTimelineDisplayEvent[] {
   const events = tracking ?? [];
   return events.map((event, i) => {
-    const headline = STATUS_HEADLINES[event.status] ?? humanizeStatus(event.status);
+    const isQuote = isQuotationEvent(event);
+    const headline = isQuote
+      ? "Quotation Received"
+      : (STATUS_HEADLINES[event.status] ?? humanizeStatus(event.status));
+
     // `label` already resolves to `note || status` server-side — only
     // surface it as a separate note when it's genuinely distinct free
     // text, not a redundant repeat of the headline/status token.
-    const note = event.label && event.label !== event.status ? event.label : null;
+    const rawNote = event.note ?? (event.label && event.label !== event.status ? event.label : null);
+    const note =
+      rawNote && rawNote.trim().toLowerCase() !== headline.trim().toLowerCase()
+        ? rawNote
+        : null;
+
     return {
       id: event.id,
       headline,

@@ -45,6 +45,7 @@ type QuotationContext = {
   enquiryId: string;
   displayEnquiryId: string;
   quotable: boolean;
+  hasSubmittedQuote?: boolean;
   lines: QuotationLine[];
   subtotal: number;
   gstAmount: number;
@@ -67,6 +68,7 @@ export function RfqQuotationForm({ enquiryId }: { enquiryId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,6 +147,7 @@ export function RfqQuotationForm({ enquiryId }: { enquiryId: string }) {
       });
       setSuccess(true);
       setConfirming(false);
+      setIsEditing(false);
       router.refresh();
     } catch (err: any) {
       // Entered prices are deliberately NOT cleared here (spec §19) — the
@@ -157,8 +160,41 @@ export function RfqQuotationForm({ enquiryId }: { enquiryId: string }) {
 
   if (success) {
     return (
-      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">
-        Quotation submitted.
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-emerald-800">Quotation submitted</span>
+          <span className="rounded-full bg-emerald-200 px-2 py-0.5 text-xs font-semibold text-emerald-800">Submitted</span>
+        </div>
+        <p className="mt-1 text-sm text-emerald-700">
+          Your quotation has been successfully submitted and sent to the buyer.
+        </p>
+      </div>
+    );
+  }
+
+  if (context.hasSubmittedQuote && !isEditing) {
+    return (
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-emerald-800">Quotation submitted</span>
+              <span className="rounded-full bg-emerald-200 px-2 py-0.5 text-xs font-semibold text-emerald-800">Submitted</span>
+            </div>
+            <p className="mt-1 text-sm text-emerald-700">
+              Your quotation for Total {formatInr(context.grandTotal)} (including GST) has been submitted and sent to the buyer.
+            </p>
+          </div>
+          {context.quotable ? (
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-50"
+            >
+              Revise Quotation
+            </button>
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -230,14 +266,25 @@ export function RfqQuotationForm({ enquiryId }: { enquiryId: string }) {
       {error ? <p className="text-sm font-semibold text-rose-600">{error}</p> : null}
 
       {!confirming ? (
-        <button
-          type="button"
-          disabled={hasInvalidPrice}
-          onClick={() => setConfirming(true)}
-          className="w-full rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
-        >
-          Review & Submit Quotation
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={hasInvalidPrice}
+            onClick={() => setConfirming(true)}
+            className="flex-1 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+          >
+            Review & Submit Quotation
+          </button>
+          {context.hasSubmittedQuote ? (
+            <button
+              type="button"
+              onClick={() => setIsEditing(false)}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+          ) : null}
+        </div>
       ) : (
         <div className="rounded-lg border border-orange-200 bg-orange-50 p-4">
           <p className="text-sm font-semibold text-orange-800">

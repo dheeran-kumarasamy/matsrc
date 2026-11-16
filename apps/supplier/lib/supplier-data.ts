@@ -2,6 +2,8 @@ import {
   prisma,
   notifyCustomerOrderStatusChanged,
   notifyPaymentRequired,
+  notifyQuoteReceived,
+  finalizeEnquiryBestPriceIfEligible,
   calculateLineGst,
   parseQuotedPrice,
   lockAdvanceAccountRow,
@@ -1739,6 +1741,9 @@ export type RfqQuotationContext = {
   // the enquiry has moved to CANCELLED — the UI must not allow submission
   // and should show "This RFQ is no longer available for quotation."
   quotable: boolean;
+  // True when this supplier has already submitted a SupplierQuote for all of
+  // their line items on this enquiry.
+  hasSubmittedQuote: boolean;
   lines: RfqQuotationLine[];
   subtotal: number;
   gstAmount: number;
@@ -1993,11 +1998,14 @@ export async function getEnquiryQuotationContext(enquiryId: string, email: strin
 
   const subtotal = lines.reduce((sum, line) => sum + line.lineSubtotal, 0);
   const gstAmountTotal = lines.reduce((sum, line) => sum + line.gstAmount, 0);
+  const hasSubmittedQuote =
+    order.items.length > 0 && order.items.every((item: any) => item.supplierQuotes && item.supplierQuotes.length > 0);
 
   return {
     enquiryId,
     displayEnquiryId: order.enquiryId ?? enquiryId,
     quotable,
+    hasSubmittedQuote,
     lines,
     subtotal: Math.round(subtotal * 100) / 100,
     gstAmount: Math.round(gstAmountTotal * 100) / 100,
@@ -2882,8 +2890,49 @@ async function createEnquiryLineQuotesForSupplier(
     return rows;
   });
 
+  const quoteIds = created.map((row) => row.id);
+
+  // 1. Record OrderTracking that supplier submitted quotation
+  await prisma.orderTracking
+    .create({
+      data: {
+        orderId: enquiryId,
+        status: enquiry.status,
+        note: `Supplier submitted quotation for enquiry`,
+      },
+    })
+    .catch(() => undefined);
+
+  // 2. Dispatch quote_received notification to Buyer (WhatsApp + In-App notification)
+  waitUntil(
+    notifyQuoteReceived(prisma, {
+      enquiryId,
+      supplierId,
+      quoteIds,
+    }).catch((err) => {
+      console.warn(`Failed to send quote_received notification for enquiry ${enquiryId}:`, err);
+    })
+  );
+
+  // 3. Evaluate best-price selection & enquiry auto-finalization
+  // If minQuotes or deadline is met (default minQuotes=1), transitions order to PROCESSING,
+  // sets quoteSelectionCompletedAt, freezes financial snapshot, generates orderNumber,
+  // and dispatches customer_order_status and payment_required notifications to buyer.
+  const finalizeResult = await finalizeEnquiryBestPriceIfEligible(prisma, enquiryId, {
+    waitUntil,
+    onLog: (msg) => console.log(`[best-price-selection] ${msg}`),
+  }).catch((err) => {
+    console.warn(`Failed to auto-finalize enquiry ${enquiryId} after quote submission:`, err);
+    return null;
+  });
+
   const latest = created[created.length - 1];
-  return { id: latest?.id ?? enquiryId, rfqId: enquiryId, price: latest?.unitPrice?.toString() ?? "0" };
+  return {
+    id: latest?.id ?? enquiryId,
+    rfqId: enquiryId,
+    price: latest?.unitPrice?.toString() ?? "0",
+    finalized: finalizeResult?.finalized ?? false,
+  };
 }
 
 export async function getSupplierProfileData(email: string) {

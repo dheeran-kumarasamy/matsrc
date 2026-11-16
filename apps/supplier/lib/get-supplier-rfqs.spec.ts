@@ -125,4 +125,40 @@ describe("getSupplierRfqs", () => {
     const result = await getSupplierRfqs("supplier@example.com");
     expect(result).toEqual([]);
   });
+
+  it("queries order items for candidate suppliers and formats enquiry cards with enquiryId", async () => {
+    orderItemRows.push({
+      orderId: "order-canonical-1",
+      quantity: 25,
+      deliveryDate: null,
+      product: { name: "Vizag Steel 20mm TMT Bar Fe 500D", unit: "MT" },
+      order: {
+        id: "order-canonical-1",
+        enquiryId: "EQ/2611/00042",
+        deliveryAddress: "Site Construction Zone, Madurai",
+        deliveryDate: new Date("2026-03-01T00:00:00Z"),
+      },
+      supplierQuotes: [
+        {
+          unitPrice: 52000,
+          validUntil: new Date("2026-03-02T00:00:00Z"),
+        },
+      ],
+    });
+
+    const result = await getSupplierRfqs("supplier@example.com");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: "order-canonical-1",
+      enquiryId: "EQ/2611/00042",
+      material: "Vizag Steel 20mm TMT Bar Fe 500D",
+      quantity: "25 MT",
+      pincode: "Site Construction Zone, Madurai",
+      latestQuote: {
+        price: "52000",
+        validUntil: "2026-03-02T00:00:00.000Z",
+      },
+      source: "ENQUIRY",
+    });
+  });
 });

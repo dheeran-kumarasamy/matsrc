@@ -126,7 +126,7 @@ describe("WhatsAppController", () => {
 
   beforeEach(() => {
     process.env.WHATSAPP_APP_SECRET = APP_SECRET;
-    const VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
+    process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN = "verify-me";
 
     router = { handleInboundMessage: vi.fn().mockResolvedValue({ kind: "text", text: "ok" }) };
     sessionService = {

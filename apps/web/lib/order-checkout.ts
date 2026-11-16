@@ -91,6 +91,12 @@ export async function createOrdersFromCart(
     include: {
       product: {
         select: {
+          id: true,
+          name: true,
+          brand: true,
+          grade: true,
+          sizeLabel: true,
+          unit: true,
           supplierId: true,
           canonicalProductId: true,
           categoryId: true,
@@ -162,6 +168,13 @@ export async function createOrdersFromCart(
     )
   );
   const productIds = Array.from(new Set(cartItems.map((item) => item.productId)));
+  const productNames = Array.from(
+    new Set(
+      cartItems
+        .map((item) => (item.product as any).name)
+        .filter((name): name is string => typeof name === "string" && name.trim() !== "")
+    )
+  );
 
   // Authoritative database query: database failures propagate naturally rather than being caught and silenced into empty arrays.
   // Never synthesize synthetic product records from cart snapshots.
@@ -171,6 +184,7 @@ export async function createOrdersFromCart(
       OR: [
         { id: { in: productIds } },
         ...(canonicalProductIds.length > 0 ? [{ canonicalProductId: { in: canonicalProductIds } }] : []),
+        ...(productNames.length > 0 ? [{ name: { in: productNames } }] : []),
       ],
     },
     include: {
@@ -220,6 +234,13 @@ export async function createOrdersFromCart(
   for (const item of cartItems) {
     const group = dbProducts.filter((p) => {
       if (item.product.canonicalProductId && p.canonicalProductId === item.product.canonicalProductId) {
+        return true;
+      }
+      if (
+        p.name &&
+        (item.product as any).name &&
+        p.name.trim().toLowerCase() === (item.product as any).name.trim().toLowerCase()
+      ) {
         return true;
       }
       return p.id === item.productId;

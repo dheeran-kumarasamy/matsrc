@@ -46,8 +46,11 @@ export class RfqsService {
       }),
       this.prisma.orderItem.findMany({
         where: {
-          supplierId: supplierProfile.id,
           order: { status: "PLACED" },
+          OR: [
+            { supplierId: supplierProfile.id },
+            { candidates: { some: { supplierId: supplierProfile.id } } },
+          ],
         },
         include: { product: true, order: true },
         orderBy: { order: { createdAt: "desc" } },
@@ -156,7 +159,13 @@ export class RfqsService {
     const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
     const enquiry = await this.prisma.order.findUnique({
       where: { id: enquiryId },
-      include: { items: true },
+      include: {
+        items: {
+          include: {
+            candidates: { select: { supplierId: true } },
+          },
+        },
+      },
     });
 
     if (!enquiry) {
@@ -192,11 +201,11 @@ export class RfqsService {
       }
 
       // Authorization (spec §11/§23): only the supplier currently assigned
-      // to this line item (OrderItem.supplierId — the active PENDING
-      // candidate in the multi-supplier fan-out, see
-      // packages/db/prisma/schema.prisma's OrderItemSupplierCandidate doc
-      // comment) may submit a quotation for it.
-      if (item.supplierId !== supplierProfile.id) {
+      // to this line item or listed as an eligible candidate may submit a quotation for it.
+      const isCandidate =
+        Array.isArray((item as any).candidates) &&
+        (item as any).candidates.some((c: any) => c.supplierId === supplierProfile.id);
+      if (item.supplierId !== supplierProfile.id && !isCandidate) {
         throw new BadRequestException(`You are not authorized to quote line item ${lineQuote.lineItemId}.`);
       }
 

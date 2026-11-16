@@ -423,6 +423,11 @@ export async function notifySupplierRfqReceived(
         product: true,
         order: true,
         supplier: { include: { user: true } },
+        candidates: {
+          include: {
+            supplier: { include: { user: true } },
+          },
+        },
       },
     });
 
@@ -431,14 +436,27 @@ export async function notifySupplierRfqReceived(
       return;
     }
 
-    const supplierId: string = orderItem.supplierId;
-    const supplierUser = orderItem.supplier?.user;
-    if (!supplierUser) {
-      onLog(`SUPPLIER_RFQ_RECEIVED: no supplier/user found for orderItem=${orderItemId} supplier=${supplierId} — skipping notification`);
-      return;
+    const targets: Array<{ supplierId: string; user: any }> = [];
+    const seenSupplierIds = new Set<string>();
+
+    if (orderItem.supplier?.user && orderItem.supplierId) {
+      targets.push({ supplierId: orderItem.supplierId, user: orderItem.supplier.user });
+      seenSupplierIds.add(orderItem.supplierId);
     }
 
-    const phone = supplierUser.whatsappNumber?.trim() || supplierUser.phone?.trim() || null;
+    if (Array.isArray(orderItem.candidates)) {
+      for (const candidate of orderItem.candidates) {
+        if (candidate.supplierId && candidate.supplier?.user && !seenSupplierIds.has(candidate.supplierId)) {
+          targets.push({ supplierId: candidate.supplierId, user: candidate.supplier.user });
+          seenSupplierIds.add(candidate.supplierId);
+        }
+      }
+    }
+
+    if (targets.length === 0) {
+      onLog(`SUPPLIER_RFQ_RECEIVED: no supplier/user found for orderItem=${orderItemId} — skipping notification`);
+      return;
+    }
 
     const material = orderItem.product?.name ?? "your requested material";
     const quantity = `${orderItem.quantity}${orderItem.product?.unit ? ` ${orderItem.product.unit}` : ""}`;
@@ -447,12 +465,34 @@ export async function notifySupplierRfqReceived(
       resolveSupplierQuoteDeadline(orderItem.order?.createdAt ?? new Date())
     );
 
-    const dedupeKey = buildSupplierRfqReceivedDedupeKey(orderItemId, supplierId);
+    for (const target of targets) {
+      const supplierId = target.supplierId;
+      const supplierUser = target.user;
+      const phone = supplierUser.whatsappNumber?.trim() || supplierUser.phone?.trim() || null;
 
-    const decision = await evaluatePolicy(prisma, supplierUser.id, dedupeKey);
+      const dedupeKey = buildSupplierRfqReceivedDedupeKey(orderItemId, supplierId);
 
-    if (!decision.allowed) {
-      await prisma.notificationEvent.create({
+      const decision = await evaluatePolicy(prisma, supplierUser.id, dedupeKey);
+
+      if (!decision.allowed) {
+        await prisma.notificationEvent.create({
+          data: {
+            eventType: EVENT_TYPE,
+            recipientId: supplierUser.id,
+            recipientType: "supplier",
+            entityType: "OrderItem",
+            entityId: orderItemId,
+            channel: CHANNEL,
+            payload: { orderItemId, orderId: orderItem.orderId, supplierId, material, quantity, deliveryLocation, quoteDeadline },
+            status: "suppressed",
+            suppressReason: decision.reason,
+          },
+        });
+        onLog(`SUPPLIER_RFQ_RECEIVED suppressed for orderItem=${orderItemId} supplier=${supplierId}: reason=${decision.reason}`);
+        continue;
+      }
+
+      const event = await prisma.notificationEvent.create({
         data: {
           eventType: EVENT_TYPE,
           recipientId: supplierUser.id,
@@ -460,48 +500,32 @@ export async function notifySupplierRfqReceived(
           entityType: "OrderItem",
           entityId: orderItemId,
           channel: CHANNEL,
+          dedupeKey,
           payload: { orderItemId, orderId: orderItem.orderId, supplierId, material, quantity, deliveryLocation, quoteDeadline },
-          status: "suppressed",
-          suppressReason: decision.reason,
+          status: "created",
         },
       });
-      onLog(`SUPPLIER_RFQ_RECEIVED suppressed for orderItem=${orderItemId} supplier=${supplierId}: reason=${decision.reason}`);
-      return;
-    }
 
-    const event = await prisma.notificationEvent.create({
-      data: {
-        eventType: EVENT_TYPE,
-        recipientId: supplierUser.id,
-        recipientType: "supplier",
-        entityType: "OrderItem",
-        entityId: orderItemId,
-        channel: CHANNEL,
-        dedupeKey,
-        payload: { orderItemId, orderId: orderItem.orderId, supplierId, material, quantity, deliveryLocation, quoteDeadline },
-        status: "created",
-      },
-    });
+      if (!phone) {
+        await prisma.notificationEvent.update({ where: { id: event.id }, data: { status: "failed" } });
+        onLog(`SUPPLIER_RFQ_RECEIVED: no phone/whatsappNumber on file for orderItem=${orderItemId}, supplier=${supplierId} — skipping send`);
+        continue;
+      }
 
-    if (!phone) {
-      await prisma.notificationEvent.update({ where: { id: event.id }, data: { status: "failed" } });
-      onLog(`SUPPLIER_RFQ_RECEIVED: no phone/whatsappNumber on file for orderItem=${orderItemId}, supplier=${supplierId} — skipping send`);
-      return;
-    }
+      const sendResult = await sendTemplateViaMeta(
+        prisma,
+        phone,
+        decision.templateName,
+        [material, quantity, deliveryLocation, quoteDeadline],
+        onLog,
+        buildRfqButtonUrlSuffix(orderItem.orderId)
+      );
 
-    const sendResult = await sendTemplateViaMeta(
-      prisma,
-      phone,
-      decision.templateName,
-      [material, quantity, deliveryLocation, quoteDeadline],
-      onLog,
-      buildRfqButtonUrlSuffix(orderItem.orderId)
-    );
+      await prisma.notificationEvent.update({ where: { id: event.id }, data: { status: sendResult.success ? "sent" : "failed" } });
 
-    await prisma.notificationEvent.update({ where: { id: event.id }, data: { status: sendResult.success ? "sent" : "failed" } });
-
-    if (!sendResult.success) {
-      onLog(`SUPPLIER_RFQ_RECEIVED WhatsApp send failed for orderItem=${orderItemId} supplier=${supplierId}: ${sendResult.error ?? "unknown error"}`);
+      if (!sendResult.success) {
+        onLog(`SUPPLIER_RFQ_RECEIVED WhatsApp send failed for orderItem=${orderItemId} supplier=${supplierId}: ${sendResult.error ?? "unknown error"}`);
+      }
     }
   } catch (error) {
     onLog(`SUPPLIER_RFQ_RECEIVED notification failed for orderItem=${orderItemId}: ${error instanceof Error ? error.message : String(error)}`);

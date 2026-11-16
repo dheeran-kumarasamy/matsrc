@@ -1304,7 +1304,10 @@ async function resolveCanonicalAssignment(
 
   let brandId: string | null = null;
   if (brandName && brandName.trim()) {
-    const trimmed = brandName.trim();
+    let trimmed = brandName.trim();
+    if (trimmed.toLowerCase() === "vizag" || (title && title.toLowerCase().includes("vizag steel"))) {
+      trimmed = "Vizag Steel";
+    }
     const brand = await transaction.brand.findFirst({ where: { name: { equals: trimmed, mode: "insensitive" } } });
     if (brand) {
       brandId = brand.id;

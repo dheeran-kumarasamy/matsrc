@@ -181,7 +181,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
       startingPrice: listing.startingPrice ?? undefined,
       unit: listing.unit,
       supplier: "Verified Supplier",
-      supplierCount: listing.groupedListingIds?.length || 1,
+      supplierCount: listing.supplierCount ?? listing.groupedListingIds?.length ?? 1,
       image: cardImage,
       category: listing.category,
     };

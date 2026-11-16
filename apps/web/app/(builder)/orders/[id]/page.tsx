@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { builderApiGet, ApiError } from "@/lib/api";
@@ -10,6 +12,7 @@ import OrderRatingForm from "@/components/orders/OrderRatingForm";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
 import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
+import { AutoRefresh } from "@/components/shared/AutoRefresh";
 
 
 type OrderDetail = {
@@ -118,6 +121,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
 
   return (
     <div className="posh-body mx-auto max-w-4xl space-y-5">
+      <AutoRefresh intervalMs={5000} />
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="posh-eyebrow">My Orders</p>

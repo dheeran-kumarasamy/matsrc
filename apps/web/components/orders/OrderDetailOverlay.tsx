@@ -18,6 +18,7 @@ import OrderRatingForm from "@/components/orders/OrderRatingForm";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
 import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
+import { AutoRefresh } from "@/components/shared/AutoRefresh";
 
 
 export type OverlayOrderDetail = {
@@ -151,6 +152,7 @@ export default function OrderDetailOverlay({ order }: Props) {
   return (
     <Dialog defaultOpen onOpenChange={handleOpenChange}>
       <DialogContent className="p-0 sm:max-w-4xl">
+        <AutoRefresh intervalMs={5000} />
         {/* C19 fix: DialogContent's Close button (components/ui/dialog.tsx)
             is `absolute right-4 top-4`, floating on top of whatever this
             header renders — it was never given its own reserved layout

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getSupplierPurchaseOrders } from "@/lib/purchase-order-data";
+import { AutoRefresh } from "@/components/supplier/AutoRefresh";
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: "bg-slate-100 text-slate-600 border-slate-200",
@@ -21,6 +22,7 @@ export default async function SupplierPurchaseOrdersPage() {
 
   return (
     <section className="panel overflow-hidden">
+      <AutoRefresh intervalMs={5000} />
       <div className="border-b border-slate-200 px-4 py-3">
         <h3 className="text-xl font-extrabold text-slate-900">Purchase Orders</h3>
         <p className="text-sm text-slate-600">

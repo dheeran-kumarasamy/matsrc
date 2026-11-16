@@ -5,6 +5,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { getSupplierOrders } from "@/lib/supplier-data";
 import { OrderDetailButton } from "@/components/supplier/OrderDetailButton";
+import { AutoRefresh } from "@/components/supplier/AutoRefresh";
 
 export default async function SupplierOrdersPage() {
   const session = await auth();
@@ -13,6 +14,7 @@ export default async function SupplierOrdersPage() {
 
   return (
     <section className="panel overflow-hidden">
+      <AutoRefresh intervalMs={5000} />
       <div className="border-b border-slate-200 px-4 py-3">
         <h3 className="text-xl font-extrabold text-slate-900">Order Fulfilment</h3>
         <p className="text-sm text-slate-600">Accept orders, plan dispatch, and update status in real time.</p>

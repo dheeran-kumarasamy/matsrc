@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { builderApiGet } from "@/lib/api";
 import { useCartStore } from "@/lib/store/cart-store";
 import { useOverlayStore } from "@/lib/store/overlay-store";
+import { usePolling } from "@/lib/use-polling";
 import AppHeader from "@/components/shared/AppHeader";
 import { getFirstName } from "@/lib/user-display";
 
@@ -98,22 +99,30 @@ export default function NewDashboardPage() {
   const fetchCart = useCartStore((s) => s.fetchCart);
   const openCart  = useOverlayStore((s) => s.openCart);
 
-  // ── Boot: fetch cart + orders + watchlist in parallel ──────────────────────
-  // Notifications/alerts and the profile menu are no longer fetched/managed
-  // here — both now live in the shared AppHeader (NotificationBell.tsx /
-  // ProfileMenu.tsx), the same components every other page uses, so there is
-  // a single implementation instead of a /newdashboard-only duplicate.
+  // ── Live data polling: fetch cart once, poll orders + watchlist every 5s ───
   useEffect(() => {
     if (!hasLoaded) void fetchCart();
-
-    builderApiGet<Order[]>("/orders")
-      .then((d) => { setOrders(d); setOrdersReady(true); })
-      .catch(() => setOrdersReady(true));
-
-    builderApiGet<WatchlistItem[]>("/watchlist")
-      .then((d) => { setWatchlistItems(d); setWatchlistReady(true); })
-      .catch(() => setWatchlistReady(true));
   }, [hasLoaded, fetchCart]);
+
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const [newOrders, newWatchlist] = await Promise.all([
+        builderApiGet<Order[]>("/orders").catch(() => null),
+        builderApiGet<WatchlistItem[]>("/watchlist").catch(() => null),
+      ]);
+      if (newOrders) {
+        setOrders(newOrders);
+      }
+      if (newWatchlist) {
+        setWatchlistItems(newWatchlist);
+      }
+    } finally {
+      setOrdersReady(true);
+      setWatchlistReady(true);
+    }
+  }, []);
+
+  usePolling(fetchDashboardData, { intervalMs: 5000, enabled: true });
 
   // Derived data — reused by both the segmented panel and the stat cards
   // below (no duplicate fetch/calculation: same `orders`/`watchlistItems`/

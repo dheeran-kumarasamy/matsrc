@@ -71,8 +71,8 @@ function CartQuantityInput({
   }, [quantity]);
 
   function commit(raw: string) {
-    const parsed = parseInt(raw, 10);
-    const safe = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+    const parsed = parseFloat(raw);
+    const safe = Number.isFinite(parsed) && parsed >= 0.0001 ? Math.round(parsed * 10000) / 10000 : 0.0001;
     setValue(String(safe));
     if (safe !== quantity) {
       onCommit(safe);
@@ -82,9 +82,9 @@ function CartQuantityInput({
   return (
     <input
       type="number"
-      min={1}
-      step={1}
-      inputMode="numeric"
+      min={0.0001}
+      step="any"
+      inputMode="decimal"
       value={value}
       disabled={disabled}
       onChange={(event: ChangeEvent<HTMLInputElement>) => setValue(event.target.value)}
@@ -94,7 +94,7 @@ function CartQuantityInput({
           commit((event.target as HTMLInputElement).value);
         }
       }}
-      className="h-7 w-10 border-x bg-transparent text-center text-xs focus:outline-none disabled:opacity-40"
+      className="h-7 w-16 border-x bg-transparent text-center text-xs focus:outline-none disabled:opacity-40"
       style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)" }}
       aria-label={label}
     />
@@ -357,8 +357,12 @@ export default function CartDrawer() {
                       <div className="mt-1.5 flex items-center gap-2">
                         <div className="flex items-center rounded-lg border" style={{ borderColor: "var(--posh-border)" }}>
                           <button type="button"
-                            disabled={isMutating || item.quantity <= 1}
-                            onClick={() => void updateQuantity(item.productId, item.id, item.quantity - 1)}
+                            disabled={isMutating || item.quantity <= 0.0001}
+                            onClick={() => {
+                              const step = item.quantity > 1 ? 1 : 0.1;
+                              const next = Math.max(0.0001, Math.round((item.quantity - step) * 10000) / 10000);
+                              void updateQuantity(item.productId, item.id, next);
+                            }}
                             aria-label={`Decrease quantity for ${item.name}`}
                             className="flex h-7 w-7 items-center justify-center transition disabled:opacity-40"
                             style={{ color: "var(--posh-fg-muted)" }}>
@@ -368,7 +372,11 @@ export default function CartDrawer() {
                             label={`Quantity for ${item.name}`}
                             onCommit={(nextQuantity) => void updateQuantity(item.productId, item.id, nextQuantity)} />
                           <button type="button" disabled={isMutating}
-                            onClick={() => void updateQuantity(item.productId, item.id, item.quantity + 1)}
+                            onClick={() => {
+                              const step = item.quantity >= 1 ? 1 : 0.1;
+                              const next = Math.round((item.quantity + step) * 10000) / 10000;
+                              void updateQuantity(item.productId, item.id, next);
+                            }}
                             aria-label={`Increase quantity for ${item.name}`}
                             className="flex h-7 w-7 items-center justify-center transition disabled:opacity-40"
                             style={{ color: "var(--posh-fg-muted)" }}>

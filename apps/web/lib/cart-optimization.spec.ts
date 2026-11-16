@@ -333,6 +333,14 @@ describe("Cart Optimization — Phase 1", () => {
       expect(response.status).toBe(400);
       const data = await response.json();
       expect(data.error).toBe("Valid productId and quantity are required");
+
+      const subMinRequest = new Request("https://buildohub.in/api/builder/cart/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: "prod-a", quantity: 0.00005 }),
+      });
+      const subMinResponse = await POST(subMinRequest);
+      expect(subMinResponse.status).toBe(400);
     });
 
     it("Scenario A — Add a different product during checkout: new product remains in cart", async () => {

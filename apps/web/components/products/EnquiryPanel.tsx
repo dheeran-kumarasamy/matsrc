@@ -68,10 +68,10 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
 
   function commitQuantity(rawValue: string) {
     const parsed = Number(rawValue);
-    if (!rawValue.trim() || !Number.isFinite(parsed) || parsed < 1) {
-      setQuantityError(`Enter a quantity of at least 1 ${unit}.`);
-      setQuantity(1);
-      setQuantityInput("1");
+    if (!rawValue.trim() || !Number.isFinite(parsed) || parsed < 0.0001) {
+      setQuantityError(`Enter a quantity of at least 0.0001 ${unit}.`);
+      setQuantity(0.0001);
+      setQuantityInput("0.0001");
       return;
     }
     if (parsed > maxServiceableQty) {
@@ -81,9 +81,9 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
       return;
     }
     setQuantityError(null);
-    const clamped = Math.floor(parsed);
-    setQuantity(clamped);
-    setQuantityInput(String(clamped));
+    const rounded = Math.round(parsed * 10000) / 10000;
+    setQuantity(rounded);
+    setQuantityInput(String(rounded));
   }
 
   async function handleAddToEnquiry() {
@@ -138,7 +138,8 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
           <span className="mb-1 block text-xs font-medium text-slate-500">Quantity ({unit})</span>
           <input
             type="number"
-            min={1}
+            min={0.0001}
+            step="any"
             max={maxServiceableQty}
             value={quantityInput}
             onChange={(event) => {

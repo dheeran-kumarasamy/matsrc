@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { resolveMinimumDisplayPrice, type ResolutionCandidate } from "./resolution";
+import {
+  effectiveTierForQuantity,
+  resolveLowestPriceForQuantity,
+  resolveMinimumDisplayPrice,
+  type ResolutionCandidate,
+} from "./resolution";
 
 // Regression coverage for the /products PLP "Starting from ₹Xxx" display
 // price requirement: the displayed price must be the minimum VALID price
@@ -129,5 +134,59 @@ describe("resolveMinimumDisplayPrice", () => {
       candidate({ pricingTiers: [{ minQty: 1, maxQty: 10, tierPrice: 0 }] }),
     ];
     expect(resolveMinimumDisplayPrice(candidates)).toBeNull();
+  });
+});
+
+describe("effectiveTierForQuantity with decimal quantities", () => {
+  it("resolves fractional quantity 0.0001 to base tier when tiers start at minQty 1", () => {
+    const c = candidate({
+      basePrice: 500,
+      pricingTiers: [
+        { minQty: 1, maxQty: 10, tierPrice: 500 },
+        { minQty: 11, maxQty: 100, tierPrice: 450 },
+      ],
+    });
+
+    const tier = effectiveTierForQuantity(c, 0.0001);
+    expect(tier.tierPrice).toBe(500);
+    expect(tier.minQty).toBe(1);
+  });
+
+  it("resolves quantity 0.0001 when tier explicitly starts at 0.0001", () => {
+    const c = candidate({
+      basePrice: 500,
+      pricingTiers: [
+        { minQty: 0.0001, maxQty: 10, tierPrice: 490 },
+        { minQty: 10.0001, maxQty: 100, tierPrice: 450 },
+      ],
+    });
+
+    const tier = effectiveTierForQuantity(c, 0.0001);
+    expect(tier.tierPrice).toBe(490);
+  });
+
+  it("resolves decimal quantity in gap between integer tiers (e.g. 10.5)", () => {
+    const c = candidate({
+      basePrice: 500,
+      pricingTiers: [
+        { minQty: 1, maxQty: 10, tierPrice: 500 },
+        { minQty: 11, maxQty: 100, tierPrice: 450 },
+      ],
+    });
+
+    const tier = effectiveTierForQuantity(c, 10.5);
+    expect(tier.tierPrice).toBe(500);
+  });
+
+  it("resolves lowest price across multiple suppliers for 0.0001 quantity", () => {
+    const candidates = [
+      candidate({ listingId: "c1", supplierId: "s1", basePrice: 600, pricingTiers: [{ minQty: 1, maxQty: 10, tierPrice: 600 }] }),
+      candidate({ listingId: "c2", supplierId: "s2", basePrice: 550, pricingTiers: [{ minQty: 1, maxQty: 10, tierPrice: 550 }] }),
+    ];
+
+    const winner = resolveLowestPriceForQuantity(candidates, 0.0001);
+    expect(winner).not.toBeNull();
+    expect(winner?.supplierId).toBe("s2");
+    expect(winner?.unitPrice).toBe(550);
   });
 });

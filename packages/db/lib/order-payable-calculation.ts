@@ -66,12 +66,10 @@ export type OrderPayableLineResult = {
 
 /**
  * Validates and normalizes a line-item quantity: strictly positive,
- * finite integers only — a quantity of 0 or a fractional unit count would
- * indicate malformed caller input (unlike price/percentage fields, which
- * legitimately support 0).
+ * finite numbers (integers or decimals) >= 0.0001.
  */
 export function isValidQuantity(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 && Number.isInteger(value);
+  return typeof value === "number" && Number.isFinite(value) && value >= 0.0001;
 }
 
 /**

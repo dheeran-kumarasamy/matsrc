@@ -6,6 +6,7 @@ import { RfqCard } from "@/components/supplier/RfqCard";
 import { QuoteResponseForm } from "@/components/supplier/QuoteResponseForm";
 import { getSupplierRfqs, type SupplierRfqCard } from "@/lib/supplier-data";
 import { getRfqMarketGuidance } from "@/lib/market-intelligence-data";
+import { AutoRefresh } from "@/components/supplier/AutoRefresh";
 
 export default async function SupplierRfqsPage({ searchParams }: { searchParams?: { respond?: string } }) {
   const session = await auth();
@@ -30,6 +31,7 @@ export default async function SupplierRfqsPage({ searchParams }: { searchParams?
 
   return (
     <section className="space-y-3">
+      <AutoRefresh intervalMs={5000} />
       <div className="panel p-5">
         <h3 className="text-xl font-extrabold text-slate-900">Open RFQs & Enquiries</h3>
         <p className="text-sm text-slate-600">Respond quickly to improve ranking in builder procurement decisions.</p>

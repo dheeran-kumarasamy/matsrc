@@ -1,9 +1,12 @@
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
 import OrderConfirmationBanner from "@/components/orders/OrderConfirmationBanner";
 import { resolveConfirmedReferences } from "@/lib/order-confirmation";
 import { builderApiGet } from "@/lib/api";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
+import { AutoRefresh } from "@/components/shared/AutoRefresh";
 
 type OrderItem = {
   id: string;
@@ -120,6 +123,7 @@ export default async function OrdersPage({
 
   return (
     <div className="posh-body space-y-5">
+      <AutoRefresh intervalMs={5000} />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="posh-eyebrow">Procurement desk</p>

@@ -6,6 +6,7 @@ import { OrderStatusActions } from "@/components/supplier/OrderStatusActions";
 import { RfqQuotationForm } from "@/components/supplier/RfqQuotationForm";
 import { SupplierInvoiceUpload } from "@/components/supplier/SupplierInvoiceUpload";
 import { getSupplierOrderDetail } from "@/lib/supplier-data";
+import { AutoRefresh } from "@/components/supplier/AutoRefresh";
 
 type Props = {
   params: { id: string };
@@ -43,6 +44,7 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+      <AutoRefresh intervalMs={5000} />
       <section className="panel p-5">
         <h3 className="text-xl font-extrabold text-slate-900">Order {order.displayOrderNumber}</h3>
         <p className="mt-1 text-sm text-slate-600">

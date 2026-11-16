@@ -91,7 +91,6 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const ctx = await resolveUserCtx(request);
-    const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
     const body = await request.json().catch(() => ({}));
     const productId = typeof body.productId === "string" ? body.productId.trim() : "";
     const quantity = Number(body.quantity);
@@ -102,6 +101,17 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // Parallelize pre-transaction database operations (getOrCreateBuilder & resolveProductGroupForCart)
+    const [user, groupResult] = await Promise.all([
+      getOrCreateBuilder(ctx.userId, ctx.email, ctx.name),
+      resolveProductGroupForCart(productId, quantity),
+    ]);
+
+    if (!groupResult) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+    const { product, candidates } = groupResult;
 
     // Operation-level idempotency key (header takes precedence, body fallback)
     const idempotencyKey = (
@@ -131,12 +141,6 @@ export async function POST(request: Request) {
         ? (fn: (tx: any) => Promise<any>) =>
             prisma.$transaction(fn, { maxWait: 10000, timeout: 20000 })
         : (fn: (tx: any) => Promise<any>) => fn(prisma);
-
-    const groupResult = await resolveProductGroupForCart(productId, quantity);
-    if (!groupResult) {
-      return NextResponse.json({ error: "Product not found" }, { status: 404 });
-    }
-    const { product, candidates } = groupResult;
 
     let result: any;
 

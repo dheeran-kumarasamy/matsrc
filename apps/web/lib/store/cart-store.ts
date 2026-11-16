@@ -87,25 +87,77 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   async addItem(productId, quantity, idempotencyKey?: string) {
-    set({ isMutating: true, error: null });
+    const addQuantity = Math.max(0.0001, Math.round(Number(quantity) * 10000) / 10000 || 0.0001);
+    const previousItems = get().items;
+    const previousSummary = get().summary;
+
+    // Optimistic cart addition:
+    // If item already exists, increment its quantity and recompute lineTotal using existing unitPrice.
+    // If it does not exist, optimistically append a provisional item with ID temp_${productId}.
+    const existingIndex = previousItems.findIndex((item) => item.productId === productId);
+    let optimisticItems: CartItem[];
+
+    if (existingIndex >= 0) {
+      const existing = previousItems[existingIndex];
+      const newQuantity = Math.round((existing.quantity + addQuantity) * 10000) / 10000;
+      optimisticItems = previousItems.map((item, idx) =>
+        idx === existingIndex
+          ? {
+              ...item,
+              quantity: newQuantity,
+              lineTotal: item.unitPrice * newQuantity,
+            }
+          : item
+      );
+    } else {
+      const provisionalItem: CartItem = {
+        id: `temp_${productId}`,
+        productId,
+        name: "Loading...",
+        unit: "unit",
+        supplierId: "",
+        supplierName: "BuildOhub Verified",
+        quantity: addQuantity,
+        unitPrice: 0,
+        lineTotal: 0,
+        image: null,
+      };
+      optimisticItems = [...previousItems, provisionalItem];
+    }
+
+    set({
+      items: optimisticItems,
+      summary: recomputeSummary(optimisticItems),
+      isMutating: true,
+      error: null,
+    });
+
     // Stable operation-level key: reused on retry, fresh on new user action
     const key =
       idempotencyKey ||
       `idem_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+
     try {
       // POST /cart/items returns the authoritative { items, summary } payload,
       // completely eliminating any redundant sequential GET /cart round-trip.
       // Mode "increment" ensures concurrent additions are additive and never overwrite.
       const response = await builderApiPost<CartResponse & { id: string }>("/cart/items", {
         productId,
-        quantity,
+        quantity: addQuantity,
         mode: "increment",
         idempotencyKey: key,
       });
+
       if (!response || !Array.isArray(response.items) || !response.summary) {
         throw new Error("malformed-cart-response");
       }
-      set({ items: response.items, summary: response.summary, isMutating: false, hasLoaded: true });
+
+      set({
+        items: response.items,
+        summary: response.summary,
+        isMutating: false,
+        hasLoaded: true,
+      });
     } catch (err: any) {
       const isConflict = err?.status === 409;
       const message =
@@ -117,16 +169,43 @@ export const useCartStore = create<CartState>((set, get) => ({
           ? err.message
           : "Unable to add this item to your enquiry basket.";
 
-      if (isConflict && err?.data && Array.isArray(err.data.items) && err.data.summary) {
+      if (isConflict) {
+        // Sync with authoritative server cart on 409 conflict
+        if (err?.data && Array.isArray(err.data.items) && err.data.summary) {
+          set({
+            items: err.data.items,
+            summary: err.data.summary,
+            isMutating: false,
+            hasLoaded: true,
+            error: message,
+          });
+        } else {
+          try {
+            const authoritative = await builderApiGet<CartResponse>("/cart");
+            set({
+              items: authoritative.items,
+              summary: authoritative.summary,
+              isMutating: false,
+              hasLoaded: true,
+              error: message,
+            });
+          } catch {
+            set({
+              items: previousItems,
+              summary: previousSummary,
+              isMutating: false,
+              error: message,
+            });
+          }
+        }
+      } else {
+        // Clean rollback to previousItems and previousSummary on failure
         set({
-          items: err.data.items,
-          summary: err.data.summary,
+          items: previousItems,
+          summary: previousSummary,
           isMutating: false,
-          hasLoaded: true,
           error: message,
         });
-      } else {
-        set({ isMutating: false, error: message });
       }
       throw new Error("add-item-failed");
     }

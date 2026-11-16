@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { builderApiGet, builderApiPatch } from "@/lib/api";
+import { formatCurrency } from "@/lib/currency";
 
 type LedgerMapping = {
   id: string;
@@ -21,10 +22,6 @@ type DryRunResult = {
   totalValue: number;
   blockers: { orderId: string; reason: string }[];
 };
-
-function formatCurrency(n: number) {
-  return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-}
 
 export default function TallySettingsPage() {
   const [mapping, setMapping] = useState<LedgerMapping | null>(null);

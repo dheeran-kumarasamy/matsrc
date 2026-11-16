@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatProductPrice } from "@/lib/currency";
 import { RfqQuoteAssistPanel, type RfqMarketGuidanceView } from "./RfqQuoteAssistPanel";
 
 type Rfq = {
@@ -34,7 +35,7 @@ export function RfqCard({ rfq, marketGuidance }: { rfq: Rfq; marketGuidance?: Rf
       <p className="mt-1 text-sm text-slate-700">Qty: {rfq.quantity}</p>
       <p className="text-sm text-slate-700">Delivery: {rfq.pincode}</p>
       <p className="text-sm text-slate-500">{isEnquiry ? "Delivery due" : "Bid due"}: {rfq.dueBy}</p>
-      {rfq.latestQuote ? <p className="mt-2 text-sm font-semibold text-emerald-700">Quoted: ₹{rfq.latestQuote.price}</p> : null}
+      {rfq.latestQuote ? <p className="mt-2 text-sm font-semibold text-emerald-700">Quoted: {formatProductPrice(rfq.latestQuote.price)}</p> : null}
       {isEnquiry ? (
         <Link href={`/orders/${rfq.id}`} className="mt-4 inline-flex rounded-lg bg-orange-500 px-3 py-2 text-sm font-bold text-white">
           Confirm or Decline

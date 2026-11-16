@@ -9,6 +9,7 @@ import SiteSelector from "@/components/orders/SiteSelector";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { buildConfirmedOrdersUrl } from "@/lib/order-confirmation";
 import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel, formatFreightExclusivityNote } from "@/lib/gst-display";
+import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 
 async function builderAggregationPost<T>(path: string, body: unknown): Promise<T> {
@@ -78,7 +79,7 @@ export default function CheckoutPage() {
   const [pincode, setPincode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [cart, setCart] = useState<CartResponse>({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: "₹0" } });
+  const [cart, setCart] = useState<CartResponse>({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: formatCurrency(0) } });
   const [poolingItemIds, setPoolingItemIds] = useState<Set<string>>(new Set());
   const [optInLoadingId, setOptInLoadingId] = useState<string | null>(null);
   const [optInError, setOptInError] = useState<string | null>(null);
@@ -97,7 +98,7 @@ export default function CheckoutPage() {
         setCart(payload);
       } catch {
         if (!active) return;
-        setCart({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: "₹0" } });
+        setCart({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: formatCurrency(0) } });
       }
     }
 
@@ -253,7 +254,7 @@ export default function CheckoutPage() {
                     </p>
                     <p className="text-xs text-slate-400">{group.items.length} line item(s) will be sent as one enquiry</p>
                   </div>
-                  <p className="text-sm font-bold text-slate-900">₹{group.total.toLocaleString("en-IN")}</p>
+                  <p className="text-sm font-bold text-slate-900">{formatCurrency(group.total)}</p>
                 </div>
                 <div className="mt-3 space-y-3">
                   {group.items.map((item) => {
@@ -268,7 +269,7 @@ export default function CheckoutPage() {
                           <span>
                             {item.name} ({item.quantity} {item.unit})
                           </span>
-                          <span className="font-semibold">₹{item.lineTotal.toLocaleString("en-IN")}</span>
+                          <span className="font-semibold">{formatCurrency(item.lineTotal)}</span>
                         </div>
 
                         {eligible ? (
@@ -279,7 +280,7 @@ export default function CheckoutPage() {
                               </p>
                               {savingsPerUnit > 0 ? (
                                 <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-[color:var(--posh-primary-fg)]">
-                                  Save up to ₹{savingsPerUnit.toLocaleString("en-IN")}/unit
+                                  Save up to {formatProductPrice(savingsPerUnit)}/unit
                                 </span>
                               ) : null}
                             </div>
@@ -299,7 +300,7 @@ export default function CheckoutPage() {
                                       <tr key={tier.minQty}>
                                         <td className="px-2 py-1 text-slate-700">{tier.minQty}+</td>
                                         <td className="px-2 py-1 text-slate-700">
-                                          ₹{tier.unitPrice.toLocaleString("en-IN")}
+                                          {formatProductPrice(tier.unitPrice)}
                                         </td>
                                       </tr>
                                     ))}
@@ -308,8 +309,8 @@ export default function CheckoutPage() {
                             </div>
                             {next ? (
                               <p className="mt-2 text-[11px] text-emerald-700">
-                                Only {Math.max(0, next.minQty - item.quantity)} more unit(s) from other builders needed to unlock
-                                ₹{next.unitPrice.toLocaleString("en-IN")}/unit.
+                                Only {Math.max(0, next.minQty - item.quantity)} more unit(s) from other builders needed to unlock{" "}
+                                {formatProductPrice(next.unitPrice)}/unit.
                               </p>
                             ) : (
                               <p className="mt-2 text-[11px] text-emerald-700">
@@ -381,15 +382,15 @@ export default function CheckoutPage() {
       <div className="panel p-5 space-y-3">
         <div className="flex justify-between text-sm text-slate-500">
           <span>Subtotal</span>
-          <span>₹{cart.summary.subtotal.toLocaleString("en-IN")}</span>
+          <span>{formatCurrency(cart.summary.subtotal)}</span>
         </div>
         <div className="flex justify-between text-sm text-slate-500">
           <span>{formatGstLineLabel()}</span>
-          <span>₹{gst.toLocaleString("en-IN")}</span>
+          <span>{formatCurrency(gst)}</span>
         </div>
         <div className="flex justify-between border-t border-slate-100 pt-3 font-bold text-slate-800">
           <span>Estimated enquiry value</span>
-          <span>₹{total.toLocaleString("en-IN")}</span>
+          <span>{formatCurrency(total)}</span>
         </div>
         <p className="text-[11px] leading-snug text-slate-400">{formatFreightExclusivityNote()}</p>
         <button

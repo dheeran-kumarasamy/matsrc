@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { adminApiPatch, adminApiPost } from "@/lib/api-client";
 import type { PricingAdminSource } from "@/lib/pricing-admin-types";
+import { formatCurrency } from "@/lib/currency";
 
 function formatDateTime(value: string | null) {
   if (!value) return "—";
@@ -22,7 +23,7 @@ function pct(value: number | null) {
 }
 
 function money(value: number) {
-  return `₹${value.toFixed(2)}`;
+  return formatCurrency(value);
 }
 
 export function SourceManagementPanel({ sources }: { sources: PricingAdminSource[] }) {

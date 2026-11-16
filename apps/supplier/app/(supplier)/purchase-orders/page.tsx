@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getSupplierPurchaseOrders } from "@/lib/purchase-order-data";
 import { AutoRefresh } from "@/components/supplier/AutoRefresh";
+import { formatCurrency } from "@/lib/currency";
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: "bg-slate-100 text-slate-600 border-slate-200",
@@ -50,7 +51,7 @@ export default async function SupplierPurchaseOrdersPage() {
                 </td>
                 <td className="px-4 py-3 text-slate-700">{po.buyerName}</td>
                 <td className="px-4 py-3 text-slate-700">{po.itemCount}</td>
-                <td className="px-4 py-3 text-slate-700">₹{po.total.toLocaleString("en-IN")}</td>
+                <td className="px-4 py-3 text-slate-700">{formatCurrency(po.total)}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[po.status] ?? ""}`}>
                     {po.status}

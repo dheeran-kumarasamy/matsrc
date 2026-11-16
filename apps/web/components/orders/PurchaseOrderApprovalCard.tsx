@@ -13,6 +13,7 @@ import {
   type CancellationReasonKey,
   type OrderStatus,
 } from "@/lib/order-cancellation";
+import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 type PurchaseOrderLineItem = {
   id: string;
@@ -277,7 +278,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                       {li.quantity} {li.unit}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-slate-700">₹{li.unitPrice.toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-2 text-slate-700">{formatProductPrice(li.unitPrice)}</td>
                   <td className="px-4 py-2 text-slate-700">
                     {typeof li.taxRatePercent === "number" ? `${li.taxRatePercent}%` : "—"}
                   </td>
@@ -298,7 +299,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                     )}
                   </td>
                   <td className="px-4 py-2 font-semibold text-slate-800">
-                    ₹{(li.unitPrice * li.quantity + li.tax).toLocaleString("en-IN")}
+                    {formatCurrency(li.unitPrice * li.quantity + li.tax)}
                   </td>
                 </tr>
               ))}
@@ -314,7 +315,7 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
               directly. */}
           <div className="flex items-center justify-between text-sm text-slate-600">
             <span>Subtotal (Taxable Value)</span>
-            <span>₹{(po.subtotal ?? po.total - (po.taxAmount ?? 0)).toLocaleString("en-IN")}</span>
+            <span>{formatCurrency(po.subtotal ?? po.total - (po.taxAmount ?? 0))}</span>
           </div>
           <div className="flex items-center justify-between text-sm text-slate-600">
             <span>
@@ -323,11 +324,11 @@ export default function PurchaseOrderApprovalCard({ po: initialPo }: { po: Purch
                 return rates.length === 1 ? `GST @ ${rates[0]}%` : "GST";
               })()}
             </span>
-            <span>₹{(po.taxAmount ?? 0).toLocaleString("en-IN")}</span>
+            <span>{formatCurrency(po.taxAmount ?? 0)}</span>
           </div>
           <div className="flex items-center justify-between pt-1">
             <span className="text-sm text-slate-500">Total</span>
-            <span className="text-lg font-extrabold text-slate-900">₹{po.total.toLocaleString("en-IN")}</span>
+            <span className="text-lg font-extrabold text-slate-900">{formatCurrency(po.total)}</span>
           </div>
         </div>
       </div>

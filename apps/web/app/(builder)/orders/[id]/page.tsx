@@ -13,6 +13,7 @@ import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
 import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
 import { AutoRefresh } from "@/components/shared/AutoRefresh";
+import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 
 type OrderDetail = {
@@ -228,10 +229,10 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                 <div>
                   <p className="font-bold" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
                   <p className="posh-label mt-1">
-                    {item.quantity} {item.unit} · ₹{item.unitPrice.toLocaleString("en-IN")}/unit
+                    {item.quantity} {item.unit} · {formatProductPrice(item.unitPrice)}/unit
                   </p>
                 </div>
-                <p className="font-bold" style={{ color: "var(--posh-fg)" }}>₹{(item.quantity * item.unitPrice).toLocaleString("en-IN")}</p>
+                <p className="font-bold" style={{ color: "var(--posh-fg)" }}>{formatCurrency(item.quantity * item.unitPrice)}</p>
               </div>
             ))}
           </div>
@@ -248,7 +249,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                 legitimately differ. */}
             <span className="posh-label">{order.invoice ? "Total (Final Invoiced Amount)" : "Total"}</span>
             <span className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>
-              ₹{(order.invoice ? order.invoice.totalAmount : order.total).toLocaleString("en-IN")}
+              {formatCurrency(order.invoice ? order.invoice.totalAmount : order.total)}
             </span>
           </div>
         </section>

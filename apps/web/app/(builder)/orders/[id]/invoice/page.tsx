@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { builderApiGet, ApiError } from "@/lib/api";
+import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 type InvoiceDetail = {
   id: string;
@@ -83,34 +84,34 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
               <div>
                 <p className="font-bold" style={{ color: "var(--posh-fg)" }}>{li.productName}</p>
                 <p className="posh-label mt-1">
-                  {li.quantity} × ₹{li.unitPrice.toLocaleString("en-IN")}
+                  {li.quantity} × {formatProductPrice(li.unitPrice)}
                   {/* typeof check (not a truthy check) so a genuine 0% GST
                       line still shows its explicit rate/amount rather than
                       silently disappearing — only a null taxRate
                       (pre-migration row) omits this entirely. */}
-                  {typeof li.taxRate === "number" ? ` · GST ${li.taxRate}% (₹${li.taxAmount.toLocaleString("en-IN")})` : ""}
+                  {typeof li.taxRate === "number" ? ` · GST ${li.taxRate}% (${formatCurrency(li.taxAmount)})` : ""}
                 </p>
               </div>
-              <p className="font-bold" style={{ color: "var(--posh-fg)" }}>₹{li.total.toLocaleString("en-IN")}</p>
+              <p className="font-bold" style={{ color: "var(--posh-fg)" }}>{formatCurrency(li.total)}</p>
             </div>
           ))}
         </div>
         <div className="text-right text-sm">
-          <p className="posh-subtitle">Subtotal: ₹{invoice.subtotal.toLocaleString("en-IN")}</p>
+          <p className="posh-subtitle">Subtotal: {formatCurrency(invoice.subtotal)}</p>
           {/* Invoice-level adjustments (audit fix): shown ONLY when
               non-zero, so an invoice with no freight/other charges/
               discount/rounding renders exactly as before this fix. */}
           {invoice.freightChargeAmount !== 0 ? (
-            <p className="posh-subtitle">Freight: ₹{invoice.freightChargeAmount.toLocaleString("en-IN")}</p>
+            <p className="posh-subtitle">Freight: {formatCurrency(invoice.freightChargeAmount)}</p>
           ) : null}
           {invoice.otherChargesAmount !== 0 ? (
-            <p className="posh-subtitle">Other Charges: ₹{invoice.otherChargesAmount.toLocaleString("en-IN")}</p>
+            <p className="posh-subtitle">Other Charges: {formatCurrency(invoice.otherChargesAmount)}</p>
           ) : null}
           {invoice.discountAmount !== 0 ? (
-            <p className="posh-subtitle">Discount: -₹{invoice.discountAmount.toLocaleString("en-IN")}</p>
+            <p className="posh-subtitle">Discount: -{formatCurrency(invoice.discountAmount)}</p>
           ) : null}
           {invoice.freightChargeAmount !== 0 || invoice.otherChargesAmount !== 0 || invoice.discountAmount !== 0 ? (
-            <p className="posh-subtitle">Taxable Value: ₹{invoice.taxableValue.toLocaleString("en-IN")}</p>
+            <p className="posh-subtitle">Taxable Value: {formatCurrency(invoice.taxableValue)}</p>
           ) : null}
           <p className="posh-subtitle">
             {(() => {
@@ -118,17 +119,16 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
                 new Set(invoice.lineItems.map((li) => li.taxRate).filter((r): r is number => typeof r === "number"))
               );
               const label = rates.length === 1 ? `GST @ ${rates[0]}%` : "Tax";
-              return `${label}: ₹${invoice.taxAmount.toLocaleString("en-IN")}`;
+              return `${label}: ${formatCurrency(invoice.taxAmount)}`;
             })()}
           </p>
           {invoice.roundingAdjustment !== 0 ? (
             <p className="posh-subtitle">
-              Rounding: {invoice.roundingAdjustment > 0 ? "+" : "-"}₹
-              {Math.abs(invoice.roundingAdjustment).toLocaleString("en-IN")}
+              Rounding: {invoice.roundingAdjustment > 0 ? "+" : "-"}{formatCurrency(Math.abs(invoice.roundingAdjustment))}
             </p>
           ) : null}
           <p className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>
-            Total: ₹{invoice.totalAmount.toLocaleString("en-IN")}
+            Total: {formatCurrency(invoice.totalAmount)}
           </p>
         </div>
       </section>
@@ -136,8 +136,8 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
       <section className="posh-card space-y-2 p-6">
         <h2 className="posh-card-title">Payment</h2>
         <p className="posh-subtitle">Status: {invoice.paymentStatus}</p>
-        {invoice.amountPaid !== null ? <p className="posh-subtitle">Paid: ₹{invoice.amountPaid.toLocaleString("en-IN")}</p> : null}
-        {invoice.amountDue !== null ? <p className="posh-subtitle">Due: ₹{invoice.amountDue.toLocaleString("en-IN")}</p> : null}
+        {invoice.amountPaid !== null ? <p className="posh-subtitle">Paid: {formatCurrency(invoice.amountPaid)}</p> : null}
+        {invoice.amountDue !== null ? <p className="posh-subtitle">Due: {formatCurrency(invoice.amountDue)}</p> : null}
       </section>
 
       <Link href={`/orders/${params.id}`} className="posh-btn-ghost inline-block">

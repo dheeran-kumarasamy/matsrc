@@ -12,6 +12,8 @@
 // (no duplicate pricing logic) so ProductCard.tsx stays a dumb renderer and
 // the min-price decision itself stays unit-testable without React.
 
+import { formatProductPrice } from "@/lib/currency";
+
 /**
  * Decides the exact "Starting from ₹Xxx" price to display for a PLP product
  * card, given the listing's already-computed `startingPrice` (the
@@ -38,7 +40,7 @@ export function resolveStartingDisplayPrice(input: {
   return null;
 }
 
-/** Formats a validated display price as "₹Xxx" using en-IN grouping. */
+/** Formats a validated display price as "₹Xxx" using en-IN grouping (2 decimals if non-zero, ignored if 0). */
 export function formatStartingPriceLabel(price: number): string {
-  return `₹${price.toLocaleString("en-IN")}`;
+  return formatProductPrice(price);
 }

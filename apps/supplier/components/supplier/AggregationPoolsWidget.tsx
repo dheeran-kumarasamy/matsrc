@@ -4,14 +4,7 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { SupplierAggregationPool } from "@/lib/supplier-data";
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+import { formatCurrency } from "@/lib/currency";
 
 function statusBadgeClasses(status: SupplierAggregationPool["status"]) {
   switch (status) {

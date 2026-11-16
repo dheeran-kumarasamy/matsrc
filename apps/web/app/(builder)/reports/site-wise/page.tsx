@@ -16,12 +16,9 @@ import {
 import { builderApiGet } from "@/lib/api";
 import type { SiteWiseReportResponse } from "@/lib/reports-types";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
+import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 const STATUS_OPTIONS = ["PLACED", "PROCESSING", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
-
-function formatCurrency(n: number) {
-  return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-}
 
 export default function SiteWiseReportPage() {
   const [data, setData] = useState<SiteWiseReportResponse | null>(null);
@@ -387,7 +384,7 @@ export default function SiteWiseReportPage() {
                         {row.quantity} {row.unit}
                       </td>
                       <td className="py-3 pr-3 text-right font-medium text-slate-600">
-                        {formatCurrency(row.unitPrice)}
+                        {formatProductPrice(row.unitPrice)}
                       </td>
                       <td className="py-3 pr-3 text-right font-medium text-slate-600">
                         {formatCurrency(row.taxableValue)}

@@ -30,8 +30,13 @@ describe("resolveStartingDisplayPrice", () => {
 });
 
 describe("formatStartingPriceLabel", () => {
-  it("formats a price with en-IN thousands grouping and a ₹ prefix", () => {
+  it("formats a price with en-IN thousands grouping and a ₹ prefix, ignoring 0 decimals", () => {
     expect(formatStartingPriceLabel(495)).toBe("₹495");
     expect(formatStartingPriceLabel(150000)).toBe("₹1,50,000");
+  });
+
+  it("formats prices with non-zero decimals with exactly two decimal places", () => {
+    expect(formatStartingPriceLabel(495.5)).toBe("₹495.50");
+    expect(formatStartingPriceLabel(495.25)).toBe("₹495.25");
   });
 });

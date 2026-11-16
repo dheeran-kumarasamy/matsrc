@@ -36,6 +36,7 @@ import { getSupplierDisplayName } from "@/lib/supplier-display";
 import OrderConfirmationBanner from "@/components/orders/OrderConfirmationBanner";
 import { buildConfirmedOrderSummaries } from "@/lib/order-confirmation";
 import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel, formatFreightExclusivityNote } from "@/lib/gst-display";
+import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 
 
@@ -353,7 +354,7 @@ export default function CartDrawer() {
                       <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>
                         {getSupplierDisplayName(item.supplierName, item.supplierId)}
                       </p>
-                      <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>₹{item.unitPrice.toLocaleString("en-IN")}/unit</p>
+                      <p className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>{formatProductPrice(item.unitPrice)}/unit</p>
                       <div className="mt-1.5 flex items-center gap-2">
                         <div className="flex items-center rounded-lg border" style={{ borderColor: "var(--posh-border)" }}>
                           <button type="button"
@@ -386,7 +387,7 @@ export default function CartDrawer() {
                         <span className="text-xs" style={{ color: "var(--posh-fg-muted)" }}>{item.unit}</span>
                       </div>
                       <p className="posh-heading mt-1 text-base" style={{ color: "var(--posh-fg)" }}>
-                        ₹{item.lineTotal.toLocaleString("en-IN")}
+                        {formatCurrency(item.lineTotal)}
                       </p>
                     </div>
                     <button onClick={() => void removeItem(item.productId, item.id)} disabled={isMutating}
@@ -413,13 +414,13 @@ export default function CartDrawer() {
               {items.length > 0 ? (
                 <div className="rounded-xl border p-3 text-xs" style={{ borderColor: "var(--posh-border)" }}>
                   <div className="flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
-                    <span>Subtotal</span><span>₹{summary.subtotal.toLocaleString("en-IN")}</span>
+                    <span>Subtotal</span><span>{formatCurrency(summary.subtotal)}</span>
                   </div>
                   <div className="mt-1 flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
-                    <span>{formatGstLineLabel()}</span><span>₹{gst.toLocaleString("en-IN")}</span>
+                    <span>{formatGstLineLabel()}</span><span>{formatCurrency(gst)}</span>
                   </div>
                   <div className="mt-1 flex justify-between font-bold" style={{ color: "var(--posh-fg)" }}>
-                    <span>Estimated total</span><span>₹{total.toLocaleString("en-IN")}</span>
+                    <span>Estimated total</span><span>{formatCurrency(total)}</span>
                   </div>
                   <p className="mt-2 text-[11px] leading-snug" style={{ color: "var(--posh-fg-muted)" }}>
                     {formatFreightExclusivityNote()}
@@ -451,14 +452,14 @@ export default function CartDrawer() {
                 <h3 className="text-sm font-semibold" style={{ color: "var(--posh-fg)" }}>Order summary</h3>
                 <div className="mt-3 space-y-2 text-sm">
                   <div className="flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
-                    <span>Subtotal</span><span>₹{summary.subtotal.toLocaleString("en-IN")}</span>
+                    <span>Subtotal</span><span>{formatCurrency(summary.subtotal)}</span>
                   </div>
                   <div className="flex justify-between" style={{ color: "var(--posh-fg-muted)" }}>
-                    <span>{formatGstLineLabel()}</span><span>₹{gst.toLocaleString("en-IN")}</span>
+                    <span>{formatGstLineLabel()}</span><span>{formatCurrency(gst)}</span>
                   </div>
                   <div className="flex justify-between border-t pt-2" style={{ borderColor: "var(--posh-border)" }}>
                     <span className="font-bold" style={{ color: "var(--posh-fg)" }}>Estimated total</span>
-                    <span className="posh-heading text-lg" style={{ color: "var(--posh-primary)" }}>₹{total.toLocaleString("en-IN")}</span>
+                    <span className="posh-heading text-lg" style={{ color: "var(--posh-primary)" }}>{formatCurrency(total)}</span>
                   </div>
                 </div>
                 <p className="mt-3 text-[11px] leading-snug" style={{ color: "var(--posh-fg-muted)" }}>

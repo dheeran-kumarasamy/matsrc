@@ -10,6 +10,7 @@ import { getSupplierDisplayName } from "@/lib/supplier-display";
 import SiteSelector from "@/components/orders/SiteSelector";
 import { buildConfirmedOrdersUrl } from "@/lib/order-confirmation";
 import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel, formatFreightExclusivityNote } from "@/lib/gst-display";
+import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 // BUG-06 fix: this input keeps its own local editable string state, synced
 // from the `quantity` prop via useEffect (so +/- button clicks and cart
@@ -90,7 +91,7 @@ type CartResponse = {
 // UF-02 Step 8–9, UF-03 Step 1 — FR-09
 export default function CartPage() {
   const router = useRouter();
-  const [data, setData] = useState<CartResponse>({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: "₹0" } });
+  const [data, setData] = useState<CartResponse>({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: formatCurrency(0) } });
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -110,7 +111,7 @@ export default function CartPage() {
         setData(payload);
       } catch {
         if (!active) return;
-        setData({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: "₹0" } });
+        setData({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: formatCurrency(0) } });
       }
     }
 
@@ -138,7 +139,7 @@ export default function CartPage() {
           summary: {
             itemCount: items.length,
             subtotal,
-            subtotalLabel: `₹${subtotal.toLocaleString("en-IN")}`,
+            subtotalLabel: formatCurrency(subtotal),
           },
         };
       });
@@ -162,7 +163,7 @@ export default function CartPage() {
       const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
       return {
         items,
-        summary: { itemCount: items.length, subtotal, subtotalLabel: `₹${subtotal.toLocaleString("en-IN")}` },
+        summary: { itemCount: items.length, subtotal, subtotalLabel: formatCurrency(subtotal) },
       };
     });
     try {
@@ -255,7 +256,7 @@ export default function CartPage() {
                 <div className="flex-1">
                   <p className="text-base font-bold tracking-tight" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
                   <p className="posh-label mt-1">Supplier: {getSupplierDisplayName(item.supplierName, item.supplierId)}</p>
-                  <p className="posh-label mt-0.5">Unit price: ₹{item.unitPrice.toLocaleString("en-IN")}</p>
+                  <p className="posh-label mt-0.5">Unit price: {formatProductPrice(item.unitPrice)}</p>
                   <div className="mt-3 flex items-center gap-3">
                     <div className="flex items-center rounded-full border" style={{ borderColor: "var(--posh-border)" }}>
                       <button
@@ -299,7 +300,7 @@ export default function CartPage() {
                       </button>
                     </div>
                     <span className="posh-label">{item.unit}</span>
-                    <span className="text-sm font-bold" style={{ color: "var(--posh-fg)" }}>₹{item.lineTotal.toLocaleString("en-IN")}</span>
+                    <span className="text-sm font-bold" style={{ color: "var(--posh-fg)" }}>{formatCurrency(item.lineTotal)}</span>
                   </div>
 
                 </div>
@@ -324,16 +325,16 @@ export default function CartPage() {
             <h2 className="posh-card-title">Order Summary</h2>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
-                <span>Subtotal</span><span>₹{data.summary.subtotal.toLocaleString("en-IN")}</span>
+                <span>Subtotal</span><span>{formatCurrency(data.summary.subtotal)}</span>
               </div>
               <div className="flex justify-between font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
-                <span>{formatGstLineLabel()}</span><span>₹{gst.toLocaleString("en-IN")}</span>
+                <span>{formatGstLineLabel()}</span><span>{formatCurrency(gst)}</span>
               </div>
               <div className="flex justify-between font-semibold" style={{ color: "var(--posh-fg-muted)" }}>
                 <span>Freight</span><span>—</span>
               </div>
               <div className="flex justify-between border-t pt-3 text-base font-bold" style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)" }}>
-                <span>Total</span><span>₹{total.toLocaleString("en-IN")}</span>
+                <span>Total</span><span>{formatCurrency(total)}</span>
               </div>
             </div>
             <p className="text-[11px] leading-snug" style={{ color: "var(--posh-fg-muted)" }}>

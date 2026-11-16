@@ -7,12 +7,37 @@ export function slugify(value: string) {
     .slice(0, 50);
 }
 
-export function formatCurrency(value: number | string) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(Number(value));
+// Product price formatting rule:
+// 2 decimal places if fractional value is non-zero, decimals ignored if 0.
+export function formatProductPrice(value: number | string | { toNumber?: () => number } | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "";
+  const num = typeof value === "object" && typeof value.toNumber === "function" ? value.toNumber() : Number(value);
+  if (!Number.isFinite(num)) return String(value);
+
+  const sign = num < 0 ? "-" : "";
+  const abs = Math.abs(num);
+  const hasFraction = Math.abs(Math.round(abs * 100) % 100) !== 0;
+
+  return `${sign}₹${abs.toLocaleString("en-IN", {
+    minimumFractionDigits: hasFraction ? 2 : 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+// Totals and currency calculations formatting rule:
+// Always displayed with 2 decimal places even when zero.
+export function formatCurrency(value: number | string | { toNumber?: () => number } | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "";
+  const num = typeof value === "object" && typeof value.toNumber === "function" ? value.toNumber() : Number(value);
+  if (!Number.isFinite(num)) return String(value);
+
+  const sign = num < 0 ? "-" : "";
+  const abs = Math.abs(num);
+
+  return `${sign}₹${abs.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export function formatDate(value: Date | null | undefined) {

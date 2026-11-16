@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminApiPatch } from "@/lib/api-client";
+import { formatCurrency } from "@/lib/currency";
 
 type AdvancePaymentItem = {
   id: string;
@@ -81,7 +82,7 @@ export function AdvancePaymentQueue({ items }: { items: AdvancePaymentItem[] }) 
                     {item.buyer?.phone ? ` · ${item.buyer.phone}` : ""}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    Amount ₹{item.amount.toLocaleString("en-IN")} · {item.paymentMethod}
+                    Amount {formatCurrency(item.amount)} · {item.paymentMethod}
                     {item.paymentReference ? ` · UTR ${item.paymentReference}` : ""}
                   </p>
                 </div>

@@ -21,6 +21,8 @@ const MARKET_POSITION_BADGE_CLASSES: Record<string, string> = {
   MUCH_ABOVE_MARKET: "bg-amber-100 text-amber-800",
 };
 
+import { formatProductPrice } from "@/lib/currency";
+
 const OPPORTUNITY_BADGE_CLASSES: Record<string, string> = {
   HIGH: "bg-emerald-100 text-emerald-700",
   MEDIUM: "bg-amber-100 text-amber-700",
@@ -28,11 +30,7 @@ const OPPORTUNITY_BADGE_CLASSES: Record<string, string> = {
 };
 
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(value);
+  return formatProductPrice(value);
 }
 
 function trackAnalyticsEvent(event: string, payload: Record<string, unknown> = {}) {

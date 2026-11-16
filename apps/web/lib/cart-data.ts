@@ -9,7 +9,7 @@ import {
   resolveLowestPriceForQuantity,
   type ResolutionCandidate,
 } from "@/lib/resolution";
-import { resolveMarkupForProductsBatch } from "@matsrc/db";
+import { resolveAndCalculateMarkup, resolveMarkupForProductsBatch } from "@matsrc/db";
 
 export type CartItemData = {
   id: string;
@@ -154,16 +154,110 @@ export async function resolveProductGroupForCart(productId: string, quantity: nu
   return { product, candidates, resolution };
 }
 
+interface CachedMarkupSetting {
+  scope: string;
+  scopeId: string | null;
+  percentage: number;
+  isEnabled: boolean;
+}
+
+interface MarkupCacheEntry {
+  rows: CachedMarkupSetting[];
+  timestamp: number;
+}
+
+let markupCache: MarkupCacheEntry | null = null;
+const MARKUP_CACHE_TTL_MS = 60 * 1000; // 60-second TTL
+
+export function clearMarkupCache(): void {
+  markupCache = null;
+}
+
+export function getMarkupCacheStats(): { isCached: boolean; ageMs: number; rowCount: number } {
+  if (!markupCache) {
+    return { isCached: false, ageMs: 0, rowCount: 0 };
+  }
+  const age = Date.now() - markupCache.timestamp;
+  return {
+    isCached: age < MARKUP_CACHE_TTL_MS,
+    ageMs: age,
+    rowCount: markupCache.rows.length,
+  };
+}
+
+async function resolveMarkupsWithCache(
+  client: any,
+  batchParams: Array<{ productId: string; categoryId: string; supplierUnitPrice: number }>
+): Promise<Array<any>> {
+  if (batchParams.length === 0) return [];
+
+  const now = Date.now();
+  let rows: CachedMarkupSetting[] | null = null;
+
+  // If cached markup settings are younger than 60 seconds, use them directly
+  if (markupCache && now - markupCache.timestamp < MARKUP_CACHE_TTL_MS) {
+    rows = markupCache.rows;
+  } else {
+    try {
+      if (typeof client?.markupSetting?.findMany === "function") {
+        const rawRows = await client.markupSetting.findMany();
+        const parsedRows: CachedMarkupSetting[] = (rawRows || []).map((r: any) => ({
+          scope: r.scope,
+          scopeId: r.scopeId ?? null,
+          percentage: Number(r.percentage),
+          isEnabled: Boolean(r.isEnabled),
+        }));
+        rows = parsedRows;
+        markupCache = {
+          rows: parsedRows,
+          timestamp: now,
+        };
+      }
+    } catch {
+      // Stale-while-revalidate: use existing cached settings if db refresh fails
+      if (markupCache) {
+        rows = markupCache.rows;
+      }
+    }
+  }
+
+  if (rows) {
+    const toTier = (scope: string, scopeId: string | null) => {
+      const row = rows!.find((r) => r.scope === scope && r.scopeId === scopeId);
+      return row ? { percentage: row.percentage, isEnabled: row.isEnabled } : null;
+    };
+    const globalTier = toTier("GLOBAL", null);
+
+    return batchParams.map((item) =>
+      resolveAndCalculateMarkup(item.supplierUnitPrice, {
+        product: toTier("PRODUCT", item.productId),
+        category: toTier("CATEGORY", item.categoryId),
+        global: globalTier,
+      })
+    );
+  }
+
+  // Fallback to direct resolution
+  return resolveMarkupForProductsBatch(client as any, batchParams).catch(
+    () => batchParams.map(() => null)
+  );
+}
+
 /**
  * Returns the full, authoritative cart representation for a user with
- * admin-configured markups applied via batched database lookup.
+ * admin-configured markups applied via in-memory cached or batched database lookup.
  * Shared between GET /api/builder/cart and POST /api/builder/cart/items.
  */
 export async function getCartForUser(userId: string, dbClient?: any): Promise<CartPayload> {
   const client = dbClient || prisma;
   const rawItems = await client.cartItem.findMany({
     where: { userId },
-    include: {
+    select: {
+      id: true,
+      productId: true,
+      quantity: true,
+      resolvedUnitPrice: true,
+      resolvedSupplierId: true,
       product: {
         select: {
           name: true,
@@ -200,9 +294,7 @@ export async function getCartForUser(userId: string, dbClient?: any): Promise<Ca
     };
   });
 
-  const markups = await resolveMarkupForProductsBatch(client as any, batchParams).catch(
-    () => items.map(() => null)
-  );
+  const markups = await resolveMarkupsWithCache(client, batchParams);
 
   const itemsWithBuyerPrice = items.map((item: any, idx: number) => {
     const supplierUnitPrice = batchParams[idx].supplierUnitPrice;

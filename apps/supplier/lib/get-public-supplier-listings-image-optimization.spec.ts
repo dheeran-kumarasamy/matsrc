@@ -81,7 +81,7 @@ beforeEach(() => {
 });
 
 describe("Public catalogue image optimization (Phase 1)", () => {
-  it("replaces large base64 data URIs with lightweight fallback URLs for catalogue browsing", async () => {
+  it("preserves supplier uploaded images including base64 data URIs for catalogue browsing", async () => {
     const hugeBase64 = "data:image/jpeg;base64," + "A".repeat(10000);
     productRows.push(
       makeProductWithImages({
@@ -96,10 +96,8 @@ describe("Public catalogue image optimization (Phase 1)", () => {
     const images = listings[0].images;
     expect(images).toBeDefined();
     expect(images.length).toBeGreaterThan(0);
-    // The image must NOT contain the huge base64 data URI
-    expect(images[0]).not.toContain("data:image/jpeg;base64,");
-    // It should be a lightweight external URL (e.g. Unsplash brand/category match)
-    expect(images[0]).toMatch(/^https?:\/\//);
+    // Detail and catalogue views both preserve the supplier's actual uploaded image intact
+    expect(images[0]).toBe(hugeBase64);
   });
 
   it("preserves external HTTPS image URLs without alteration", async () => {
@@ -138,21 +136,21 @@ describe("Public catalogue image optimization (Phase 1)", () => {
         name: "Supreme PVC Pipe 4 inch",
         category: { name: "Pipes & Fittings" },
         brand: "Supreme",
-        images: ["data:image/jpeg;base64,AAAA"],
+        images: [],
       }),
       makeProductWithImages({
         id: "prod-agg",
         name: "Blue Metal Aggregate 20mm",
         category: { name: "Aggregate" },
         brand: null,
-        images: ["data:image/jpeg;base64,BBBB"],
+        images: [],
       }),
       makeProductWithImages({
         id: "prod-brick",
         name: "Red Clay Wire Cut Bricks",
         category: { name: "Bricks" },
         brand: null,
-        images: ["data:image/jpeg;base64,CCCC"],
+        images: [],
       })
     );
 

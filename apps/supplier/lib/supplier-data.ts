@@ -895,7 +895,7 @@ async function transformRawListingsToPublic(
 function resolveGroupImages(
   group: any[],
   fallback: { category?: string | null; brand?: string | null; name?: string | null },
-  options?: { fullImages?: boolean }
+  _options?: { fullImages?: boolean }
 ): string[] {
   const withImages = group.filter((item) => Array.isArray(item.images) && item.images.length > 0);
 
@@ -909,21 +909,11 @@ function resolveGroupImages(
     return candidateTime >= latestTime ? candidate : latest;
   });
 
-  if (options?.fullImages) {
-    return mostRecentlyUploaded.images;
-  }
+  const validImages = Array.isArray(mostRecentlyUploaded.images)
+    ? mostRecentlyUploaded.images.filter((img: any) => typeof img === "string" && img.trim().length > 0)
+    : [];
 
-  // Lightweight representation for catalogue browsing:
-  // Preserves external URLs; replaces raw base64 data URIs with the brand/category fallback
-  // to avoid sending multi-megabyte image payloads in the public listings feed.
-  const lightweightImages = mostRecentlyUploaded.images.map((img: string) => {
-    if (typeof img === "string" && (img.startsWith("http://") || img.startsWith("https://"))) {
-      return img;
-    }
-    return getProductImage(fallback);
-  });
-
-  return lightweightImages.length > 0 ? lightweightImages : [getProductImage(fallback)];
+  return validImages.length > 0 ? validImages : [getProductImage(fallback)];
 }
 
 export async function getPublicSupplierProductById(id: string): Promise<{

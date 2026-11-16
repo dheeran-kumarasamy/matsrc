@@ -1,5 +1,7 @@
 "use client";
 
+import { formatCurrency } from "@/lib/currency";
+
 type SupplierInvoiceSummary = {
   id: string;
   orderId: string;
@@ -68,7 +70,7 @@ export function SupplierInvoiceQueue({ items }: { items: SupplierInvoiceSummary[
               </div>
               <p className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-500">
                 Uploaded {new Date(item.uploadedAt).toLocaleString("en-IN")}
-                {item.confirmedTotalAmount !== null ? ` · Confirmed total ₹${item.confirmedTotalAmount.toLocaleString("en-IN")}` : ""}
+                {item.confirmedTotalAmount !== null ? ` · Confirmed total ${formatCurrency(item.confirmedTotalAmount)}` : ""}
               </p>
             </a>
           ))}

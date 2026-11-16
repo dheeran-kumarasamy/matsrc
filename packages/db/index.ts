@@ -162,6 +162,11 @@ export * from "./lib/quote-received-notification";
 // packages/db/lib/best-price-selection.ts for full documentation.
 export * from "./lib/best-price-selection";
 
+// Currency & Product Price Formatting — single source of truth for
+// product prices (2 decimals if non-zero, ignored if 0) and totals/currency
+// calculations (always 2 decimals). See packages/db/lib/currency-formatting.ts.
+export * from "./lib/currency-formatting";
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

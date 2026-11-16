@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminApiPatch } from "@/lib/api-client";
+import { formatCurrency } from "@/lib/currency";
 
 type PendingPayment = {
   id: string;
@@ -87,8 +88,7 @@ export function PaymentVerificationQueue({ items }: { items: PendingPayment[] })
                     {item.customer.phone ? ` · ${item.customer.phone}` : ""}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    Order total ₹{item.orderTotal.toLocaleString("en-IN")} · Payment amount ₹
-                    {item.paymentAmount.toLocaleString("en-IN")} · {item.paymentMethod}
+                    Order total {formatCurrency(item.orderTotal)} · Payment amount {formatCurrency(item.paymentAmount)} · {item.paymentMethod}
                   </p>
                 </div>
                 <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">{item.status}</span>
@@ -100,7 +100,7 @@ export function PaymentVerificationQueue({ items }: { items: PendingPayment[] })
 
               {item.advanceReservationStatus === "ACTIVE" && item.advanceReserved ? (
                 <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
-                  Advance Reserved: ₹{item.advanceReserved.toLocaleString("en-IN")} (ACTIVE — will be consumed on approval,
+                  Advance Reserved: {formatCurrency(item.advanceReserved)} (ACTIVE — will be consumed on approval,
                   released on rejection)
                 </p>
               ) : null}

@@ -1,6 +1,7 @@
 "use client";
 
 import type { SupplierDistrictPriceRow } from "@/lib/supplier-data";
+import { formatProductPrice } from "@/lib/currency";
 
 const CONFIDENCE_BADGE_CLASSES: Record<string, string> = {
   HIGH: "bg-emerald-100 text-emerald-700",
@@ -9,11 +10,7 @@ const CONFIDENCE_BADGE_CLASSES: Record<string, string> = {
 };
 
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(value);
+  return formatProductPrice(value);
 }
 
 type Props = {

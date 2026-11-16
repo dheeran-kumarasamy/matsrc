@@ -1,5 +1,6 @@
 import { PrismaClient, OrderStatus, PaymentStatus } from "@matsrc/db";
 import { auth } from "@/auth";
+import { formatCurrency, formatProductPrice } from "./currency";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 export const prisma =
@@ -14,10 +15,7 @@ export function resolveUnitPrice(product: any, quantity: number): number {
   return Number(matched?.tierPrice ?? product.basePrice);
 }
 
-export function formatCurrency(amount: { toNumber?: () => number } | number | string): string {
-  const n = Number(amount);
-  return `₹${n.toLocaleString("en-IN")}`;
-}
+export { formatCurrency, formatProductPrice };
 
 export function formatDate(date: Date | null | undefined): string | null {
   if (!date) return null;

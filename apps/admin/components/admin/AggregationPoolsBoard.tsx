@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { adminApiPost } from "@/lib/api-client";
+import { formatProductPrice } from "@/lib/currency";
 
 export type AdminAggregationPool = {
   id: string;
@@ -21,14 +22,6 @@ export type AdminAggregationPool = {
   windowCloseAt: string;
   lockedAt: string | null;
 };
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -125,7 +118,7 @@ export function AggregationPoolsBoard({ pools }: { pools: AdminAggregationPool[]
                 <div>
                   <p className="text-xs uppercase text-slate-400">Price</p>
                   <p className="font-semibold text-slate-800">
-                    {formatCurrency(pool.lockedUnitPrice ?? pool.currentUnitPrice)}
+                    {formatProductPrice(pool.lockedUnitPrice ?? pool.currentUnitPrice)}
                     {pool.lockedUnitPrice ? " (locked)" : ""}
                   </p>
                 </div>

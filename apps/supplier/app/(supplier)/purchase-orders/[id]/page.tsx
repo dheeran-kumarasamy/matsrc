@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getSupplierPurchaseOrderDetail } from "@/lib/purchase-order-data";
 import { PurchaseOrderAcknowledgeButton } from "@/components/supplier/PurchaseOrderAcknowledgeButton";
+import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: "bg-slate-100 text-slate-600 border-slate-200",
@@ -73,11 +74,11 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
                   <td className="px-4 py-2 text-slate-700">
                     {li.quantity} {li.unit}
                   </td>
-                  <td className="px-4 py-2 text-slate-700">₹{li.unitPrice.toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-2 text-slate-700">{formatProductPrice(li.unitPrice)}</td>
                   <td className="px-4 py-2 text-slate-700">
                     {typeof li.taxRatePercent === "number" ? `${li.taxRatePercent}%` : "—"}
                   </td>
-                  <td className="px-4 py-2 text-slate-700">₹{li.tax.toLocaleString("en-IN")}</td>
+                  <td className="px-4 py-2 text-slate-700">{formatCurrency(li.tax)}</td>
                   <td className="px-4 py-2 text-slate-700">
                     {li.deliveryDate ? new Date(li.deliveryDate).toLocaleDateString() : "—"}
                   </td>
@@ -85,7 +86,7 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
                     {li.fulfilledQuantity}/{li.quantity}
                   </td>
                   <td className="px-4 py-2 font-semibold text-slate-800">
-                    ₹{li.lineTotal.toLocaleString("en-IN")}
+                    {formatCurrency(li.lineTotal)}
                   </td>
                 </tr>
               ))}
@@ -98,7 +99,7 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
               folding tax silently into a single Total figure. */}
           <div className="flex items-center justify-between text-sm text-slate-600">
             <span>Subtotal (Taxable Value)</span>
-            <span>₹{po.subtotal.toLocaleString("en-IN")}</span>
+            <span>{formatCurrency(po.subtotal)}</span>
           </div>
           <div className="flex items-center justify-between text-sm text-slate-600">
             <span>
@@ -109,11 +110,11 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
                 return rates.length === 1 ? `GST @ ${rates[0]}%` : "GST";
               })()}
             </span>
-            <span>₹{po.taxAmount.toLocaleString("en-IN")}</span>
+            <span>{formatCurrency(po.taxAmount)}</span>
           </div>
           <div className="flex items-center justify-between pt-1">
             <span className="text-sm text-slate-500">Total</span>
-            <span className="text-lg font-extrabold text-slate-900">₹{po.total.toLocaleString("en-IN")}</span>
+            <span className="text-lg font-extrabold text-slate-900">{formatCurrency(po.total)}</span>
           </div>
         </div>
       </div>

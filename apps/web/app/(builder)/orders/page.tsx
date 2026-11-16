@@ -7,6 +7,7 @@ import { resolveConfirmedReferences } from "@/lib/order-confirmation";
 import { builderApiGet } from "@/lib/api";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { AutoRefresh } from "@/components/shared/AutoRefresh";
+import { formatCurrency } from "@/lib/currency";
 
 type OrderItem = {
   id: string;
@@ -198,7 +199,7 @@ export default async function OrdersPage({
                   {order.isAggregated ? <span className="posh-status">Group Order</span> : null}
                 </div>
                 <p className="mt-1 text-xs font-semibold text-[color:var(--posh-fg-muted)] transition-colors group-hover:text-[color:var(--posh-olive)]">
-                  {order.supplierName ? `${getSupplierDisplayName(order.supplierName)} · ` : ""}{order.itemCount} items · ₹{order.total.toLocaleString("en-IN")}
+                  {order.supplierName ? `${getSupplierDisplayName(order.supplierName)} · ` : ""}{order.itemCount} items · {formatCurrency(order.total)}
                 </p>
               </div>
               <div className="flex items-center gap-4">

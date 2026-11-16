@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { getSupplierListingById } from "@/lib/supplier-data";
+import { formatProductPrice } from "@/lib/currency";
 
 type Props = {
   params: { id: string };
@@ -69,7 +70,7 @@ export default async function ListingDetailPage({ params }: Props) {
           </div>
           <div>
             <p className="text-xs font-semibold uppercase text-slate-400">Base Price</p>
-            <p className="text-slate-800">₹{Number(listing.price).toLocaleString("en-IN")}</p>
+            <p className="text-slate-800">{formatProductPrice(listing.price)}</p>
           </div>
           <div>
             <p className="text-xs font-semibold uppercase text-slate-400">Max Serviceable Qty</p>
@@ -104,7 +105,7 @@ export default async function ListingDetailPage({ params }: Props) {
                   <tr key={index} className="border-t border-slate-100">
                     <td className="px-3 py-2 text-slate-700">{tier.minQty}</td>
                     <td className="px-3 py-2 text-slate-700">{tier.maxQty}</td>
-                    <td className="px-3 py-2 text-slate-700">₹{Number(tier.price).toLocaleString("en-IN")}</td>
+                    <td className="px-3 py-2 text-slate-700">{formatProductPrice(tier.price)}</td>
                   </tr>
                 ))}
               </tbody>

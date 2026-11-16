@@ -83,7 +83,10 @@ vi.mock("@/lib/builder-db", () => ({
     const matched = tiers.find((t: any) => quantity >= t.minQty && quantity <= t.maxQty);
     return Number(matched?.tierPrice ?? product.basePrice);
   },
-  formatCurrency: (amount: number | string) => `₹${Number(amount).toLocaleString("en-IN")}`,
+  formatCurrency: (amount: number | string) => {
+    const n = Number(amount);
+    return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  },
   getOrCreateBuilder: async (userId: string, email: string, name: string) => ({
     id: userId,
     email,
@@ -177,7 +180,7 @@ describe("Cart Optimization — Phase 1", () => {
     });
     useCartStore.setState({
       items: [],
-      summary: { itemCount: 0, subtotal: 0, subtotalLabel: "₹0" },
+      summary: { itemCount: 0, subtotal: 0, subtotalLabel: "₹0.00" },
       hasLoaded: false,
       isLoading: false,
       isMutating: false,
@@ -304,7 +307,7 @@ describe("Cart Optimization — Phase 1", () => {
       expect(data.items[0].lineTotal).toBe(4180);
       expect(data.summary.itemCount).toBe(1);
       expect(data.summary.subtotal).toBe(4180);
-      expect(data.summary.subtotalLabel).toBe("₹4,180");
+      expect(data.summary.subtotalLabel).toBe("₹4,180.00");
     });
 
     it("returns 404 when adding an invalid or nonexistent product", async () => {
@@ -806,7 +809,7 @@ describe("Cart Optimization — Phase 1", () => {
         summary: {
           itemCount: 1,
           subtotal: 4180,
-          subtotalLabel: "₹4,180",
+          subtotalLabel: "₹4,180.00",
         },
       });
 
@@ -906,7 +909,7 @@ describe("Cart Optimization — Phase 1", () => {
         summary: {
           itemCount: 2,
           subtotal: 5180,
-          subtotalLabel: "₹5,180",
+          subtotalLabel: "₹5,180.00",
         },
         hasLoaded: true,
         isLoading: false,
@@ -935,7 +938,7 @@ describe("Cart Optimization — Phase 1", () => {
         summary: {
           itemCount: 1,
           subtotal: 1000,
-          subtotalLabel: "₹1,000",
+          subtotalLabel: "₹1,000.00",
         },
       };
 
@@ -982,7 +985,7 @@ describe("Cart Optimization — Phase 1", () => {
         summary: {
           itemCount: 1,
           subtotal: 4000,
-          subtotalLabel: "₹4,000",
+          subtotalLabel: "₹4,000.00",
         },
         hasLoaded: true,
         isLoading: false,
@@ -1000,7 +1003,7 @@ describe("Cart Optimization — Phase 1", () => {
         summary: {
           itemCount: 0,
           subtotal: 0,
-          subtotalLabel: "₹0",
+          subtotalLabel: "₹0.00",
         },
       });
 
@@ -1512,7 +1515,7 @@ describe("Cart Optimization — Phase 1", () => {
         summary: {
           itemCount: 1,
           subtotal: 1900,
-          subtotalLabel: "₹1,900",
+          subtotalLabel: "₹1,900.00",
         },
       });
 

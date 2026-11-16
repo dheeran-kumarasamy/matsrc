@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PricingScrapedPricesResponse } from "@/lib/pricing-admin-types";
+import { formatProductPrice } from "@/lib/currency";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(
@@ -12,7 +13,7 @@ function formatDate(value: string) {
 
 function inr(value: number | null) {
   if (value === null) return "—";
-  return `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  return formatProductPrice(value);
 }
 
 function confidenceBadgeClasses(confidence: string) {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatCurrency } from "@/lib/currency";
 
 type VerifiedPayment = {
   id: string;
@@ -69,8 +70,7 @@ export function InvoiceGenerationQueue({ items }: { items: VerifiedPayment[] }) 
                     {item.customer.phone ? ` · ${item.customer.phone}` : ""}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    Order total ₹{item.orderTotal.toLocaleString("en-IN")} · Payment amount ₹
-                    {item.paymentAmount.toLocaleString("en-IN")} · {item.paymentMethod}
+                    Order total {formatCurrency(item.orderTotal)} · Payment amount {formatCurrency(item.paymentAmount)} · {item.paymentMethod}
                   </p>
                 </div>
                 <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">

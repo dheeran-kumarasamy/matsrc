@@ -8,6 +8,7 @@ import { useCartStore } from "@/lib/store/cart-store";
 import { useOverlayStore } from "@/lib/store/overlay-store";
 import { recordInterestEvent } from "@/lib/interest-events";
 import { estimateGstAmount, estimateGstInclusiveTotal, formatGstLineLabel } from "@/lib/gst-display";
+import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 
 type PricingTier = {
@@ -129,7 +130,7 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
         </div>
         <div className="text-right">
           <p className="text-xs text-slate-400">Tier price</p>
-          <p className="text-lg font-bold text-slate-900">₹{unitPrice.toLocaleString("en-IN")}</p>
+          <p className="text-lg font-bold text-slate-900">{formatProductPrice(unitPrice)}</p>
         </div>
       </div>
 
@@ -173,15 +174,15 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
       <div className="rounded-xl border border-dashed border-slate-200 p-3 space-y-1">
         <div className="flex items-center justify-between text-sm text-slate-500">
           <span>Subtotal ({quantity} {unit})</span>
-          <span className="font-semibold text-slate-900">₹{lineTotal.toLocaleString("en-IN")}</span>
+          <span className="font-semibold text-slate-900">{formatCurrency(lineTotal)}</span>
         </div>
         <div className="flex items-center justify-between text-xs text-slate-500">
           <span>{formatGstLineLabel()}</span>
-          <span>₹{gstAmount.toLocaleString("en-IN")}</span>
+          <span>{formatCurrency(gstAmount)}</span>
         </div>
         <div className="flex items-center justify-between border-t border-slate-100 pt-1 text-sm">
           <span className="font-semibold text-slate-700">Estimated enquiry value</span>
-          <span className="font-bold text-slate-900">₹{gstInclusiveTotal.toLocaleString("en-IN")}</span>
+          <span className="font-bold text-slate-900">{formatCurrency(gstInclusiveTotal)}</span>
         </div>
       </div>
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { builderApiGet } from "@/lib/api";
 import AddAdvanceForm from "@/components/advance/AddAdvanceForm";
 import AdvanceTransactionHistory from "@/components/advance/AdvanceTransactionHistory";
+import { formatCurrency } from "@/lib/currency";
 
 type AdvanceBalance = {
   availableBalance: number;
@@ -51,14 +52,14 @@ export default function AdvanceBalancePage() {
         <div>
           <p className="posh-label">Available Balance</p>
           <p className="mt-1 text-3xl font-extrabold text-[color:var(--posh-fg)]">
-            ₹{(balance?.availableBalance ?? 0).toLocaleString("en-IN")}
+            {formatCurrency(balance?.availableBalance ?? 0)}
           </p>
         </div>
 
         {balance && balance.pendingAdvance > 0 ? (
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             <p className="posh-label text-amber-700">Pending Advance</p>
-            <p className="mt-1 text-lg font-bold">₹{balance.pendingAdvance.toLocaleString("en-IN")}</p>
+            <p className="mt-1 text-lg font-bold">{formatCurrency(balance.pendingAdvance)}</p>
             <p className="mt-1 text-xs">Awaiting admin verification — not yet available to spend.</p>
           </div>
         ) : null}

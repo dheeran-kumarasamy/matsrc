@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { adminApiGet, adminApiPost } from "@/lib/api-client";
+import { formatCurrency } from "@/lib/currency";
 
 type SupplierPayment = {
   id: string;
@@ -124,17 +125,17 @@ export function SupplierPaymentPanel({ supplierInvoiceId }: { supplierInvoiceId:
         <div>
           <p className="text-xs font-semibold text-slate-500">Confirmed Total</p>
           <p className="text-sm font-bold text-slate-900">
-            {summary.confirmedTotalAmount !== null ? `₹${summary.confirmedTotalAmount.toLocaleString("en-IN")}` : "—"}
+            {summary.confirmedTotalAmount !== null ? formatCurrency(summary.confirmedTotalAmount) : "—"}
           </p>
         </div>
         <div>
           <p className="text-xs font-semibold text-slate-500">Amount Paid</p>
-          <p className="text-sm font-bold text-slate-900">₹{summary.amountPaid.toLocaleString("en-IN")}</p>
+          <p className="text-sm font-bold text-slate-900">{formatCurrency(summary.amountPaid)}</p>
         </div>
         <div>
           <p className="text-xs font-semibold text-slate-500">Outstanding Balance</p>
           <p className="text-sm font-bold text-slate-900">
-            {summary.outstandingBalance !== null ? `₹${summary.outstandingBalance.toLocaleString("en-IN")}` : "—"}
+            {summary.outstandingBalance !== null ? formatCurrency(summary.outstandingBalance) : "—"}
           </p>
         </div>
         <div>
@@ -161,7 +162,7 @@ export function SupplierPaymentPanel({ supplierInvoiceId }: { supplierInvoiceId:
               type="number"
               min="0"
               step="0.01"
-              placeholder={`Max ₹${remainingBalance.toLocaleString("en-IN")}`}
+              placeholder={`Max ${formatCurrency(remainingBalance)}`}
               className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
             />
           </label>
@@ -231,7 +232,7 @@ export function SupplierPaymentPanel({ supplierInvoiceId }: { supplierInvoiceId:
             {summary.payments.map((p) => (
               <li key={p.id} className="rounded-lg border border-slate-200 p-2 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-bold text-slate-900">₹{p.amount.toLocaleString("en-IN")}</span>
+                  <span className="font-bold text-slate-900">{formatCurrency(p.amount)}</span>
                   <span className="text-xs text-slate-500">{new Date(p.paymentDate).toLocaleDateString("en-IN")}</span>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">

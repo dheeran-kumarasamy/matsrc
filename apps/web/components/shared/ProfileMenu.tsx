@@ -22,6 +22,7 @@ import { LogIn, LogOut, User } from "lucide-react";
 import { getFirstName, getInitials } from "@/lib/user-display";
 import { builderApiGet } from "@/lib/api";
 import { usePolling } from "@/lib/use-polling";
+import { formatCurrency } from "@/lib/currency";
 
 // Net account balance indicator — reuses the EXACT SAME authoritative
 // source as the Advance Balance page (app/(builder)/advance/page.tsx):
@@ -43,10 +44,7 @@ type AdvanceBalanceSummary = {
 const BALANCE_POLL_INTERVAL_MS = 30_000;
 
 function formatInr(amount: number): string {
-  // Matches the existing Indian-currency convention used by the Advance
-  // Balance page and /newdashboard (₹ prefix + "en-IN" grouping).
-  const sign = amount < 0 ? "-" : "";
-  return `${sign}₹${Math.abs(amount).toLocaleString("en-IN")}`;
+  return formatCurrency(amount);
 }
 
 function useNetBalance(enabled: boolean) {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
+import { formatProductPrice } from "@/lib/currency";
 
 type PriceTier = { minQty: number; unitPrice: number };
 
@@ -161,13 +162,13 @@ export default function GroupOrdersPage() {
                   <div>
                     <p className="text-xs text-slate-400">Current price</p>
                     <p className="font-semibold text-slate-800">
-                      ₹{(pool.lockedUnitPrice ?? pool.currentUnitPrice).toLocaleString("en-IN")}
+                      {formatProductPrice(pool.lockedUnitPrice ?? pool.currentUnitPrice)}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-slate-400">Savings/unit</p>
                     <p className="font-semibold text-emerald-700">
-                      {savingsPerUnit > 0 ? `₹${savingsPerUnit.toLocaleString("en-IN")}` : "—"}
+                      {savingsPerUnit > 0 ? formatProductPrice(savingsPerUnit) : "—"}
                     </p>
                   </div>
                   <div>
@@ -185,7 +186,7 @@ export default function GroupOrdersPage() {
                 {pool.nextTier && !isLocked ? (
                   <p className="text-xs text-emerald-700">
                     {Math.max(0, pool.nextTier.minQty - pool.currentQuantity)} more unit(s) needed to unlock INR{" "}
-                    {pool.nextTier.unitPrice.toLocaleString("en-IN")}/unit.
+                    {formatProductPrice(pool.nextTier.unitPrice)}/unit.
                   </p>
                 ) : null}
 

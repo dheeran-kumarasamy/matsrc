@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { adminApiGet } from "@/lib/api";
 import { requireAdminAccess } from "@/lib/rbac";
 import { BUILDOHUB_COMPANY } from "@/lib/company-info";
+import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 type InvoiceDetail = {
   id: string;
@@ -140,10 +141,30 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
           <p className="text-sm font-extrabold text-amber-900">⚠ Reconciliation discrepancy flagged for review</p>
           <p className="mt-1 text-xs text-amber-800">{invoice.reconciliationDiscrepancy.reason}</p>
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-amber-900">
-            <p>Expected (frozen) payable: ₹{invoice.reconciliationDiscrepancy.expectedPayable?.toLocaleString("en-IN") ?? "—"}</p>
-            <p>Calculated invoice total: ₹{invoice.reconciliationDiscrepancy.calculatedPayable?.toLocaleString("en-IN") ?? "—"}</p>
-            <p>Expected (frozen) GST: ₹{invoice.reconciliationDiscrepancy.expectedTax?.toLocaleString("en-IN") ?? "—"}</p>
-            <p>Calculated GST: ₹{invoice.reconciliationDiscrepancy.calculatedTax?.toLocaleString("en-IN") ?? "—"}</p>
+            <p>
+              Expected (frozen) payable:{" "}
+              {invoice.reconciliationDiscrepancy.expectedPayable !== null && invoice.reconciliationDiscrepancy.expectedPayable !== undefined
+                ? formatCurrency(invoice.reconciliationDiscrepancy.expectedPayable)
+                : "—"}
+            </p>
+            <p>
+              Calculated invoice total:{" "}
+              {invoice.reconciliationDiscrepancy.calculatedPayable !== null && invoice.reconciliationDiscrepancy.calculatedPayable !== undefined
+                ? formatCurrency(invoice.reconciliationDiscrepancy.calculatedPayable)
+                : "—"}
+            </p>
+            <p>
+              Expected (frozen) GST:{" "}
+              {invoice.reconciliationDiscrepancy.expectedTax !== null && invoice.reconciliationDiscrepancy.expectedTax !== undefined
+                ? formatCurrency(invoice.reconciliationDiscrepancy.expectedTax)
+                : "—"}
+            </p>
+            <p>
+              Calculated GST:{" "}
+              {invoice.reconciliationDiscrepancy.calculatedTax !== null && invoice.reconciliationDiscrepancy.calculatedTax !== undefined
+                ? formatCurrency(invoice.reconciliationDiscrepancy.calculatedTax)
+                : "—"}
+            </p>
           </div>
           <p className="mt-2 text-xs text-amber-700">
             Flagged {new Date(invoice.reconciliationDiscrepancy.flaggedAt).toLocaleString("en-IN")}. The frozen order
@@ -176,8 +197,8 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Payment</p>
           <p className="mt-1 font-semibold text-slate-900">{invoice.paymentStatus}</p>
-          {invoice.amountPaid !== null ? <p className="text-sm text-slate-600">Paid: ₹{invoice.amountPaid.toLocaleString("en-IN")}</p> : null}
-          {invoice.amountDue !== null ? <p className="text-sm text-slate-600">Due: ₹{invoice.amountDue.toLocaleString("en-IN")}</p> : null}
+          {invoice.amountPaid !== null ? <p className="text-sm text-slate-600">Paid: {formatCurrency(invoice.amountPaid)}</p> : null}
+          {invoice.amountDue !== null ? <p className="text-sm text-slate-600">Due: {formatCurrency(invoice.amountDue)}</p> : null}
         </div>
       </section>
 
@@ -189,33 +210,33 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
               <div>
                 <p className="font-bold text-slate-900">{li.productName}</p>
                 <p className="text-xs text-slate-500">
-                  {li.quantity} × ₹{li.unitPrice.toLocaleString("en-IN")}
+                  {li.quantity} × {formatProductPrice(li.unitPrice)}
                   {/* typeof check (not a truthy check) so a genuine 0% GST
                       line still shows its explicit rate/amount rather than
                       silently disappearing — only a null taxRate
                       (pre-migration row) omits this entirely. */}
                   {typeof li.taxRate === "number"
-                    ? ` · GST ${li.taxRate}% (₹${li.taxAmount.toLocaleString("en-IN")})`
+                    ? ` · GST ${li.taxRate}% (${formatCurrency(li.taxAmount)})`
                     : ""}
                 </p>
               </div>
-              <p className="font-bold text-slate-900">₹{li.total.toLocaleString("en-IN")}</p>
+              <p className="font-bold text-slate-900">{formatCurrency(li.total)}</p>
             </div>
           ))}
         </div>
 
         <div className="mt-4 space-y-1 text-right text-sm">
-          <p className="text-slate-600">Subtotal: ₹{invoice.subtotal.toLocaleString("en-IN")}</p>
+          <p className="text-slate-600">Subtotal: {formatCurrency(invoice.subtotal)}</p>
           <p className="text-slate-600">
             {(() => {
               const rates = Array.from(
                 new Set(invoice.lineItems.map((li) => li.taxRate).filter((r): r is number => typeof r === "number"))
               );
               const label = rates.length === 1 ? `GST @ ${rates[0]}%` : "Tax";
-              return `${label}: ₹${invoice.taxAmount.toLocaleString("en-IN")}`;
+              return `${label}: ${formatCurrency(invoice.taxAmount)}`;
             })()}
           </p>
-          <p className="text-base font-bold text-slate-950">Total: ₹{invoice.totalAmount.toLocaleString("en-IN")}</p>
+          <p className="text-base font-bold text-slate-950">Total: {formatCurrency(invoice.totalAmount)}</p>
         </div>
       </section>
 

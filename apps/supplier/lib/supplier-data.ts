@@ -18,6 +18,7 @@ import {
   ConcurrentConfirmationLostError,
   checkOrderDispatchEligibility,
 } from "@matsrc/db";
+import { formatCurrency, formatProductPrice } from "./currency";
 import { waitUntil } from "@vercel/functions";
 import { parsePhoneNumber } from "libphonenumber-js";
 import { getProductImage } from "./category-images";
@@ -96,13 +97,7 @@ function slugify(value: string) {
     .slice(0, 50);
 }
 
-function formatCurrency(value: number | string) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(Number(value));
-}
+export { formatCurrency, formatProductPrice };
 
 function formatDate(value: Date | null | undefined) {
   if (!value) return "TBD";
@@ -573,7 +568,7 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
     category: product.category.name,
     grade: product.grade ?? "NA",
     unit: product.unit,
-    price: `${formatCurrency(product.basePrice.toString())} / ${product.unit}`,
+    price: `${formatProductPrice(product.basePrice.toString())} / ${product.unit}`,
     stock: `${product.stock} ${product.unit}`,
     maxServiceableQty: `${product.maxServiceableQty ?? product.stock} ${product.unit}`,
     active: product.isActive,
@@ -696,7 +691,7 @@ async function transformRawListingsToPublic(
       // Buyer-facing display price — marked up (see resolveBuyerPrice
       // above). `_basePriceRaw` below (feeding cart-add/checkout
       // resolution) deliberately stays the untouched supplier price.
-      price: `${formatCurrency(buyerBasePrice.toString())} / ${product.unit}`,
+      price: `${formatProductPrice(buyerBasePrice.toString())} / ${product.unit}`,
       stock: `${product.stock} ${product.unit}`,
       maxServiceableQty: `${fallbackMaxQty} ${product.unit}`,
       active: product.isActive,
@@ -857,7 +852,7 @@ async function transformRawListingsToPublic(
       images,
       groupedListingIds: group.map((item: any) => item.id),
       headlinePrice: headline
-        ? `${formatCurrency(headline.unitPrice)} / ${listing.unit}`
+        ? `${formatProductPrice(headline.unitPrice)} / ${listing.unit}`
         : publicFields.price,
       headlineSupplierId: headline?.supplierId ?? listing.supplierId,
       // Min–max price range across the canonical group's active listings
@@ -1884,7 +1879,7 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     material: item.product.name,
     status: item.order.status,
     paymentStatus: item.order.paymentStatus,
-    askPrice: `${formatCurrency((item as any).candidates?.[0]?.unitPrice ?? (item as any).askPrice ?? item.unitPrice)} / ${item.product.unit}`,
+    askPrice: `${formatProductPrice((item as any).candidates?.[0]?.unitPrice ?? (item as any).askPrice ?? item.unitPrice)} / ${item.product.unit}`,
     isReadyForDispatch,
     sitePincode,
     // Identity privacy: until RFQ is confirmed and order is ready for dispatch,

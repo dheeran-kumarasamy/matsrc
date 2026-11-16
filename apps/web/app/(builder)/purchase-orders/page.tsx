@@ -3,6 +3,7 @@ import { builderApiGet } from "@/lib/api";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
 import ProfileNavOptions from "@/components/profile/ProfileNavOptions";
+import { formatCurrency } from "@/lib/currency";
 
 type PurchaseOrderListItem = {
   id: string;
@@ -123,7 +124,7 @@ export default async function PurchaseOrdersPage({
                   ) : null}
                 </p>
                 <p className="mt-1 text-xs font-semibold text-[color:var(--posh-fg-muted)]">
-                  {getSupplierDisplayName(po.supplier.companyName, po.supplier.id, idx)} · {po.lineItems.length} items · ₹{po.total.toLocaleString("en-IN")}
+                  {getSupplierDisplayName(po.supplier.companyName, po.supplier.id, idx)} · {po.lineItems.length} items · {formatCurrency(po.total)}
                 </p>
               </div>
               <div className="flex items-center gap-4">

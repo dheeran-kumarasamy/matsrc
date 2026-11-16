@@ -9,6 +9,8 @@ import { builderApiDelete, builderApiGet, builderApiPost } from "@/lib/api";
 
 export type PriceTier = { minQty: number; unitPrice: number };
 
+import { formatCurrency } from "@/lib/currency";
+
 export type CartItem = {
   id: string;
   productId: string;
@@ -40,7 +42,7 @@ type CartResponse = {
 
 const EMPTY_CART: CartResponse = {
   items: [],
-  summary: { itemCount: 0, subtotal: 0, subtotalLabel: "₹0" },
+  summary: { itemCount: 0, subtotal: 0, subtotalLabel: formatCurrency(0) },
 };
 
 function recomputeSummary(items: CartItem[]): CartSummary {
@@ -48,7 +50,7 @@ function recomputeSummary(items: CartItem[]): CartSummary {
   return {
     itemCount: items.length,
     subtotal,
-    subtotalLabel: `₹${subtotal.toLocaleString("en-IN")}`,
+    subtotalLabel: formatCurrency(subtotal),
   };
 }
 

@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
-import { formatCurrency, slugify } from "src/supplier/utils";
+import { formatCurrency, formatProductPrice, slugify } from "src/supplier/utils";
 import { CreateListingDto } from "./dto/create-listing.dto";
 import { UpdateListingDto } from "./dto/update-listing.dto";
 import { UpdateAggregationSettingsDto } from "./dto/update-aggregation-settings.dto";
@@ -34,7 +34,7 @@ export class ListingsService {
       category: product.category.name,
       grade: product.grade ?? "NA",
       unit: product.unit,
-      price: `${formatCurrency(product.basePrice.toString())} / ${product.unit}`,
+      price: `${formatProductPrice(product.basePrice.toString())} / ${product.unit}`,
       stock: `${product.stock} ${product.unit}`,
       active: product.isActive,
     }));

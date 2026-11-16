@@ -15,6 +15,7 @@ import { getCategoryEmoji } from "@/lib/category-images";
 
 import { getSupplierProduct, getSupplierProductGroup, parseNumericLabel, type SupplierListing } from "@/lib/listings";
 import { formatGstExclusiveNote } from "@/lib/gst-display";
+import { formatProductPrice } from "@/lib/currency";
 
 export const revalidate = 300;
 
@@ -162,7 +163,7 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
                     </p>
                     <p className="posh-label mt-1">Applicable quantity band</p>
                   </div>
-                  <p className="font-bold text-[color:var(--posh-fg)]">₹{parseNumericLabel(tier.price).toLocaleString("en-IN")}</p>
+                  <p className="font-bold text-[color:var(--posh-fg)]">{formatProductPrice(parseNumericLabel(tier.price))}</p>
                 </div>
               ))}
             </div>

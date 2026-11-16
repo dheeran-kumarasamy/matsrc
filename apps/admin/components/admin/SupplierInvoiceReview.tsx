@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminApiPatch, adminApiPost } from "@/lib/api-client";
 import { SupplierPaymentPanel } from "./SupplierPaymentPanel";
+import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 type LineItem = {
   id: string;
@@ -257,8 +258,8 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
             <div key={d.orderItemId} className="rounded-xl border border-slate-200 p-3">
               <p className="text-sm font-bold text-slate-900">{d.productName ?? "Product"}</p>
               <p className="text-xs text-slate-500">
-                Ordered: {d.originalQuantity} {d.unitLabel ?? "(unit not recorded)"} × ₹
-                {d.originalUnitPrice.toLocaleString("en-IN")}
+                Ordered: {d.originalQuantity} {d.unitLabel ?? "(unit not recorded)"} ×{" "}
+                {formatProductPrice(d.originalUnitPrice)}
               </p>
               <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <label className="text-xs font-semibold text-slate-600">
@@ -289,7 +290,7 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
                     disabled={readOnly}
                     value={d.approvedUnitPriceOverride}
                     onChange={(e) => updateDraft(i, { approvedUnitPriceOverride: e.target.value })}
-                    placeholder={`Default: ₹${d.originalUnitPrice}`}
+                    placeholder={`Default: ${formatProductPrice(d.originalUnitPrice)}`}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
                     type="number"
                     step="0.01"
@@ -382,7 +383,7 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
 
         {invoice.confirmedTotalAmount !== null ? (
           <p className="mt-3 text-sm font-bold text-slate-900">
-            Confirmed total: ₹{invoice.confirmedTotalAmount.toLocaleString("en-IN")}
+            Confirmed total: {formatCurrency(invoice.confirmedTotalAmount)}
           </p>
         ) : null}
 

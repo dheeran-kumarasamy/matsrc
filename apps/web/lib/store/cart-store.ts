@@ -137,7 +137,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     // quantity for a snappy UI, then reconcile unitPrice/lineTotal against
     // the authoritative server response.
     // Mode "set" targets the existing item and fails with 409 Conflict if checked out.
-    const safeQuantity = Math.max(1, Math.floor(quantity) || 1);
+    const safeQuantity = Math.max(0.0001, Math.round(Number(quantity) * 10000) / 10000 || 0.0001);
     const previousItems = get().items;
     const optimisticItems = previousItems.map((item) =>
       item.id === cartItemId

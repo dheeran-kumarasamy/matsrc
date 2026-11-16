@@ -77,13 +77,26 @@ describe("calculateOrderPayableLine", () => {
     expect(result.taxAmount).toBeCloseTo(47.24, 2);
   });
 
-  it("throws on zero or fractional quantity", () => {
+  it("throws on zero, negative, or below-minimum quantity (< 0.0001)", () => {
     expect(() =>
       calculateOrderPayableLine({ supplierUnitPrice: 100, markupPercent: 10, taxRatePercent: 18, quantity: 0 })
     ).toThrow();
     expect(() =>
-      calculateOrderPayableLine({ supplierUnitPrice: 100, markupPercent: 10, taxRatePercent: 18, quantity: 1.5 })
+      calculateOrderPayableLine({ supplierUnitPrice: 100, markupPercent: 10, taxRatePercent: 18, quantity: 0.00005 })
     ).toThrow();
+  });
+
+  it("calculates payable accurately for decimal quantities down to 0.0001", () => {
+    const result = calculateOrderPayableLine({
+      supplierUnitPrice: 1000,
+      markupPercent: 10,
+      taxRatePercent: 18,
+      quantity: 0.0001,
+    });
+    // buyerUnitPrice = 1100; lineTaxableValue = 1100 * 0.0001 = 0.11
+    expect(result.buyerUnitPrice).toBe(1100);
+    expect(result.lineTaxableValue).toBe(0.11);
+    expect(result.quantity).toBe(0.0001);
   });
 
   it("throws on negative/NaN/Infinity tax rate", () => {
@@ -217,16 +230,19 @@ describe("calculateRemainingBalance", () => {
 });
 
 describe("isValidQuantity / isValidAdvancePercent", () => {
-  it("isValidQuantity rejects zero, negative, fractional, NaN, and Infinity", () => {
+  it("isValidQuantity rejects zero, negative, below 0.0001, NaN, and Infinity", () => {
     expect(isValidQuantity(0)).toBe(false);
     expect(isValidQuantity(-1)).toBe(false);
-    expect(isValidQuantity(1.5)).toBe(false);
+    expect(isValidQuantity(0.00009)).toBe(false);
     expect(isValidQuantity(NaN)).toBe(false);
     expect(isValidQuantity(Infinity)).toBe(false);
   });
 
-  it("isValidQuantity accepts positive integers", () => {
+  it("isValidQuantity accepts positive numbers starting from 0.0001 (integers and decimals)", () => {
+    expect(isValidQuantity(0.0001)).toBe(true);
+    expect(isValidQuantity(0.5)).toBe(true);
     expect(isValidQuantity(1)).toBe(true);
+    expect(isValidQuantity(1.5)).toBe(true);
     expect(isValidQuantity(100)).toBe(true);
   });
 

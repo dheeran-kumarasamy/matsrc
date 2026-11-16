@@ -1,12 +1,12 @@
 import { Type } from "class-transformer";
-import { IsArray, IsBoolean, IsInt, IsOptional, Min, ValidateNested } from "class-validator";
+import { IsArray, IsBoolean, IsInt, IsNumber, IsOptional, Min, ValidateNested } from "class-validator";
 
 export class PriceTierDto {
-  @IsInt()
-  @Min(1)
+  @IsNumber()
+  @Min(0.0001)
   minQty!: number;
 
-  @IsInt()
+  @IsNumber()
   @Min(0)
   unitPrice!: number;
 }

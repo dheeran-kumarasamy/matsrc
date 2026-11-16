@@ -96,7 +96,7 @@ export async function POST(request: Request) {
     const productId = typeof body.productId === "string" ? body.productId.trim() : "";
     const quantity = Number(body.quantity);
 
-    if (!productId || !Number.isInteger(quantity) || quantity < 1) {
+    if (!productId || !Number.isFinite(quantity) || quantity < 0.0001) {
       return NextResponse.json(
         { error: "Valid productId and quantity are required" },
         { status: 400 }
@@ -429,7 +429,9 @@ export async function POST(request: Request) {
             }
 
             // Actual final committed quantity for this cart item
-            const targetQuantity = current ? current.quantity + quantity : quantity;
+            const targetQuantity = current
+              ? Math.round((current.quantity + quantity) * 10000) / 10000
+              : Math.round(quantity * 10000) / 10000;
 
             // Re-resolve pricing tier for the ACTUAL final quantity
             const resolution = resolveLowestPriceForQuantity(candidates, targetQuantity);

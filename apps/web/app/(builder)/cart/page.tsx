@@ -36,8 +36,8 @@ function CartPageQuantityInput({
   }, [quantity]);
 
   function commit(raw: string) {
-    const parsed = parseInt(raw, 10);
-    const safe = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+    const parsed = parseFloat(raw);
+    const safe = Number.isFinite(parsed) && parsed >= 0.0001 ? Math.round(parsed * 10000) / 10000 : 0.0001;
     setValue(String(safe));
     if (safe !== quantity) {
       onCommit(safe);
@@ -47,9 +47,9 @@ function CartPageQuantityInput({
   return (
     <input
       type="number"
-      min={1}
-      step={1}
-      inputMode="numeric"
+      min={0.0001}
+      step="any"
+      inputMode="decimal"
       value={value}
       disabled={disabled}
       onChange={(event: ChangeEvent<HTMLInputElement>) => setValue(event.target.value)}
@@ -59,7 +59,7 @@ function CartPageQuantityInput({
           commit((event.target as HTMLInputElement).value);
         }
       }}
-      className="h-8 w-12 border-x text-center text-sm font-bold focus:outline-none disabled:opacity-40"
+      className="h-8 w-16 border-x text-center text-sm font-bold focus:outline-none disabled:opacity-40"
       style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)" }}
       aria-label={label}
     />
@@ -147,12 +147,12 @@ export default function CartPage() {
     }
   }
 
-  // REQ-01: editable cart quantity. Enforces min 1 / integer bounds, then
+  // REQ-01: editable cart quantity. Enforces min 0.0001 bounds, then
   // persists via the existing cart upsert endpoint (CartService.upsert),
   // and re-fetches the cart so unitPrice/lineTotal reflect any tiered
   // pricing recomputed server-side.
   async function handleUpdateQuantity(productId: string, id: string, nextQuantity: number) {
-    const safeQuantity = Math.max(1, Math.floor(nextQuantity) || 1);
+    const safeQuantity = Math.max(0.0001, Math.round(Number(nextQuantity) * 10000) / 10000 || 0.0001);
     const previous = data;
     setUpdatingId(id);
     setData((prev) => {
@@ -260,8 +260,12 @@ export default function CartPage() {
                     <div className="flex items-center rounded-full border" style={{ borderColor: "var(--posh-border)" }}>
                       <button
                         type="button"
-                        disabled={updatingId === item.id || item.quantity <= 1}
-                        onClick={() => void handleUpdateQuantity(item.productId, item.id, item.quantity - 1)}
+                        disabled={updatingId === item.id || item.quantity <= 0.0001}
+                        onClick={() => {
+                          const step = item.quantity > 1 ? 1 : 0.1;
+                          const next = Math.max(0.0001, Math.round((item.quantity - step) * 10000) / 10000);
+                          void handleUpdateQuantity(item.productId, item.id, next);
+                        }}
                         aria-label={`Decrease quantity for ${item.name}`}
                         className="flex h-8 w-8 items-center justify-center transition disabled:opacity-40"
                         style={{ color: "var(--posh-fg-muted)" }}
@@ -280,7 +284,11 @@ export default function CartPage() {
                       <button
                         type="button"
                         disabled={updatingId === item.id}
-                        onClick={() => void handleUpdateQuantity(item.productId, item.id, item.quantity + 1)}
+                        onClick={() => {
+                          const step = item.quantity >= 1 ? 1 : 0.1;
+                          const next = Math.round((item.quantity + step) * 10000) / 10000;
+                          void handleUpdateQuantity(item.productId, item.id, next);
+                        }}
                         aria-label={`Increase quantity for ${item.name}`}
                         className="flex h-8 w-8 items-center justify-center transition disabled:opacity-40"
                         style={{ color: "var(--posh-fg-muted)" }}

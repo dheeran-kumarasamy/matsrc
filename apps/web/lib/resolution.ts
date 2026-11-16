@@ -250,18 +250,105 @@ export function resolveMinimumDisplayPrice(candidates: ResolutionCandidate[]): n
 
 export type GroupKeyedListing<T> = T & { canonicalProductId: string | null; id: string };
 
+function normalizeResText(val?: string | null): string {
+  return (val || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeResUnit(unit?: string | null): string {
+  return normalizeResText(unit).replace(/s$/, "");
+}
+
+function normalizeResBrand(brand?: string | null, name?: string | null): string {
+  const b = normalizeResText(brand);
+  const n = normalizeResText(name);
+  if (b === "vizag" || b === "vizag steel" || n.includes("vizag steel")) {
+    return "vizag steel";
+  }
+  return b;
+}
+
+export function getResolutionProductDetailKey(item: any): string | null {
+  if (!item || typeof item !== "object") return null;
+  const name = normalizeResText(item.name);
+  if (!name) return null;
+  const category = normalizeResText(item.category?.name ?? item.category);
+  const unit = normalizeResUnit(item.unit);
+  const brand = normalizeResBrand(item.brandRef?.name ?? item.brand, item.name);
+  const grade = normalizeResText(item.grade).replace(/[-_\s]/g, "");
+  const size = normalizeResText(item.sizeLabel).replace(/[-_\s]/g, "");
+
+  return `${category}::${brand}::${name}::${unit}::${grade}::${size}`;
+}
+
 export function groupByCanonicalProduct<T>(
   listings: GroupKeyedListing<T>[]
 ): Map<string, GroupKeyedListing<T>[]> {
-  const groups = new Map<string, GroupKeyedListing<T>[]>();
+  if (!listings || listings.length === 0) return new Map();
 
-  for (const listing of listings) {
-    const key = listing.canonicalProductId ?? listing.id;
-    const existing = groups.get(key);
+  const parent: number[] = listings.map((_, i) => i);
+
+  function find(i: number): number {
+    if (parent[i] === i) return i;
+    parent[i] = find(parent[i]);
+    return parent[i];
+  }
+
+  function union(i: number, j: number) {
+    const rootI = find(i);
+    const rootJ = find(j);
+    if (rootI !== rootJ) {
+      parent[rootI] = rootJ;
+    }
+  }
+
+  const keyToFirstIndex = new Map<string, number>();
+
+  for (let i = 0; i < listings.length; i++) {
+    const listing = listings[i];
+    const keys: string[] = [];
+
+    if (listing.canonicalProductId && listing.canonicalProductId.trim() !== "") {
+      keys.push(`canon:${listing.canonicalProductId.trim()}`);
+    }
+
+    const detailKey = getResolutionProductDetailKey(listing);
+    if (detailKey) {
+      keys.push(`detail:${detailKey}`);
+    }
+
+    for (const k of keys) {
+      if (keyToFirstIndex.has(k)) {
+        union(i, keyToFirstIndex.get(k)!);
+      } else {
+        keyToFirstIndex.set(k, i);
+      }
+    }
+  }
+
+  const groups = new Map<string, GroupKeyedListing<T>[]>();
+  for (let i = 0; i < listings.length; i++) {
+    const root = find(i);
+    const primaryKey =
+      listings[root].canonicalProductId ??
+      listings[i].canonicalProductId ??
+      listings[root].id;
+
+    const existing = groups.get(primaryKey);
     if (existing) {
-      existing.push(listing);
+      existing.push(listings[i]);
     } else {
-      groups.set(key, [listing]);
+      groups.set(primaryKey, [listings[i]]);
+    }
+  }
+
+  for (const group of Array.from(groups.values())) {
+    for (const item of group) {
+      if (item.canonicalProductId && !groups.has(item.canonicalProductId)) {
+        groups.set(item.canonicalProductId, group);
+      }
+      if (!groups.has(item.id)) {
+        groups.set(item.id, group);
+      }
     }
   }
 

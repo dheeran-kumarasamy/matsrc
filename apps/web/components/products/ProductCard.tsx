@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { getCategoryEmoji } from "@/lib/category-images";
 import WatchlistToggleIcon from "@/components/products/WatchlistToggleIcon";
-import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { resolveStartingDisplayPrice, formatStartingPriceLabel } from "@/lib/product-price-display";
 import { DELIVERY_TIMING_BROWSING_NOTE } from "@/lib/delivery-estimate";
 import { formatGstExclusiveNote } from "@/lib/gst-display";
@@ -90,11 +89,6 @@ export default function ProductCard({ skeleton, product }: Props) {
       <h3 className="font-semibold text-sm leading-snug line-clamp-2" style={{ color: "var(--posh-fg)" }}>
         {product.name}
       </h3>
-
-      {/* Supplier */}
-      <p className="mt-1 text-[11px] uppercase tracking-wide" style={{ color: "var(--posh-fg-muted)" }}>
-        {getSupplierDisplayName(product.supplier)}
-      </p>
 
       {/* Price row — "Starting from ₹Xxx" (the minimum valid price across
           ALL suppliers and ALL price tiers), high-contrast charcoal price,

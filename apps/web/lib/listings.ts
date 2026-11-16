@@ -68,6 +68,7 @@ export type SupplierListing = {
   // `resolveMinimumDisplayPrice()`. Null when unresolvable (no active
   // candidates with a valid price).
   startingPrice?: number | null;
+  supplierCount?: number;
 };
 
 export type ProductGroupResult = {
@@ -165,44 +166,180 @@ export function parseListingPrice(value: string) {
   return parseNumericLabel(value);
 }
 
+function normalizeListingText(val?: string | null): string {
+  return (val || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeListingUnit(unit?: string | null): string {
+  return normalizeListingText(unit).replace(/s$/, "");
+}
+
+function normalizeListingBrand(brand?: string | null, name?: string | null): string {
+  const b = normalizeListingText(brand);
+  const n = normalizeListingText(name);
+  if (b === "vizag" || b === "vizag steel" || n.includes("vizag steel")) {
+    return "vizag steel";
+  }
+  return b;
+}
+
+export function getProductDetailKey(listing: {
+  name?: string;
+  category?: string;
+  unit?: string;
+  grade?: string;
+  sizeLabel?: string | null;
+  brand?: string;
+}): string {
+  const name = normalizeListingText(listing.name);
+  const category = normalizeListingText(listing.category);
+  const unit = normalizeListingUnit(listing.unit);
+  const brand = normalizeListingBrand(listing.brand, listing.name);
+  const grade = normalizeListingText(listing.grade).replace(/[-_\s]/g, "");
+  const size = normalizeListingText(listing.sizeLabel).replace(/[-_\s]/g, "");
+
+  return `${category}::${brand}::${name}::${unit}::${grade}::${size}`;
+}
+
 // Collapses a full listings array down to one representative "headline" card
-// per canonical product group — fixes the Display bug from the cross-supplier
-// price resolution spec (duplicate cards for the same product from different
-// suppliers). Groups are keyed by canonicalProductId when present (exact
-// admin-configured Category/Brand/Grade/Unit match); listings without a
-// canonicalProductId (legacy / ungrouped data) fall back to being their own
-// singleton group keyed by their own id, preserving backward compatibility.
+// per canonical product group — combines SKUs based on canonicalProductId
+// as well as matching product details (name, category, unit, grade, size, brand),
+// even if prices or supplier pricing tiers are different.
 //
-// The representative listing shown is the one matching headlineSupplierId
-// (the lowest-priced supplier for the group), with its own `price` field
-// overridden to the group's `headlinePrice` for display. All sibling listing
-// ids are preserved on `groupedListingIds` so PDP/quick-view can still surface
-// per-supplier tier detail if needed.
+// The representative listing shown is the one offering the lowest valid price
+// across the group, with its headline/starting price reflecting the group's
+// minimum. All sibling listing IDs and unique suppliers are preserved.
 export function dedupeByCanonicalGroup(listings: SupplierListing[]): SupplierListing[] {
-  const seenGroupKeys = new Set<string>();
+  if (!listings || listings.length === 0) return [];
+
+  const parent: number[] = listings.map((_, i) => i);
+
+  function find(i: number): number {
+    if (parent[i] === i) return i;
+    parent[i] = find(parent[i]);
+    return parent[i];
+  }
+
+  function union(i: number, j: number) {
+    const rootI = find(i);
+    const rootJ = find(j);
+    if (rootI !== rootJ) {
+      parent[rootI] = rootJ;
+    }
+  }
+
+  const keyToFirstIndex = new Map<string, number>();
+
+  for (let i = 0; i < listings.length; i++) {
+    const listing = listings[i];
+    const keys: string[] = [];
+
+    if (listing.canonicalProductId && listing.canonicalProductId.trim() !== "") {
+      keys.push(`canon:${listing.canonicalProductId.trim()}`);
+    }
+
+    const detailKey = getProductDetailKey(listing);
+    if (detailKey) {
+      keys.push(`detail:${detailKey}`);
+    }
+
+    for (const k of keys) {
+      if (keyToFirstIndex.has(k)) {
+        union(i, keyToFirstIndex.get(k)!);
+      } else {
+        keyToFirstIndex.set(k, i);
+      }
+    }
+  }
+
+  const clusters = new Map<number, SupplierListing[]>();
+  for (let i = 0; i < listings.length; i++) {
+    const root = find(i);
+    const existing = clusters.get(root);
+    if (existing) {
+      existing.push(listings[i]);
+    } else {
+      clusters.set(root, [listings[i]]);
+    }
+  }
+
   const result: SupplierListing[] = [];
 
-  for (const listing of listings) {
-    const groupKey = listing.canonicalProductId || listing.id;
-    if (seenGroupKeys.has(groupKey)) continue;
-    seenGroupKeys.add(groupKey);
+  for (const group of clusters.values()) {
+    if (group.length === 0) continue;
 
-    const groupedIds = listing.groupedListingIds && listing.groupedListingIds.length > 0
-      ? listing.groupedListingIds
-      : [listing.id];
+    // Collect all unique grouped IDs across the group
+    const groupedIds = Array.from(
+      new Set(
+        group.flatMap((l) =>
+          l.groupedListingIds && l.groupedListingIds.length > 0 ? l.groupedListingIds : [l.id]
+        )
+      )
+    );
 
-    let representative = listing;
-    if (listing.headlineSupplierId && listing.headlineSupplierId !== listing.supplierId) {
-      const headlineListing = listings.find(
-        (candidate) => candidate.supplierId === listing.headlineSupplierId && groupedIds.includes(candidate.id)
-      );
-      if (headlineListing) representative = headlineListing;
-    }
+    // Collect all valid starting prices and prices to find the lowest display price
+    const validStartingPrices = group
+      .map((l) => l.startingPrice)
+      .filter((p): p is number => typeof p === "number" && !isNaN(p) && p > 0);
+    const minStartingPrice = validStartingPrices.length > 0 ? Math.min(...validStartingPrices) : undefined;
+
+    const validMinPrices = group
+      .map((l) =>
+        typeof l.minPrice === "number" && !isNaN(l.minPrice) && l.minPrice > 0
+          ? l.minPrice
+          : parseListingPrice(l.price)
+      )
+      .filter((p): p is number => typeof p === "number" && !isNaN(p) && p > 0);
+    const minPrice = validMinPrices.length > 0 ? Math.min(...validMinPrices) : undefined;
+
+    const validMaxPrices = group
+      .map((l) =>
+        typeof l.maxPrice === "number" && !isNaN(l.maxPrice) && l.maxPrice > 0
+          ? l.maxPrice
+          : parseListingPrice(l.price)
+      )
+      .filter((p): p is number => typeof p === "number" && !isNaN(p) && p > 0);
+    const maxPrice = validMaxPrices.length > 0 ? Math.max(...validMaxPrices) : undefined;
+
+    // Find the best representative listing: lowest effective price, has images, newest
+    const sortedCandidates = [...group].sort((a, b) => {
+      const priceA = a.startingPrice ?? a.minPrice ?? parseListingPrice(a.price);
+      const priceB = b.startingPrice ?? b.minPrice ?? parseListingPrice(b.price);
+      if (priceA !== priceB) return priceA - priceB;
+      const imgA = a.images && a.images.length > 0 ? 0 : 1;
+      const imgB = b.images && b.images.length > 0 ? 0 : 1;
+      if (imgA !== imgB) return imgA - imgB;
+      const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    const representative = sortedCandidates[0];
+
+    // Effective headline price string
+    const lowestPrice = minStartingPrice ?? minPrice ?? parseListingPrice(representative.price);
+    const headlinePrice =
+      representative.unit && lowestPrice > 0
+        ? `₹${lowestPrice} / ${representative.unit}`
+        : representative.headlinePrice || representative.price;
+
+    // Images: prefer representative's images, fallback to any group member with images
+    const images =
+      representative.images && representative.images.length > 0
+        ? representative.images
+        : group.find((l) => l.images && l.images.length > 0)?.images || [];
+
+    const uniqueSuppliers = new Set(group.map((l) => l.supplierId));
 
     result.push({
       ...representative,
-      price: listing.headlinePrice || representative.price,
+      price: headlinePrice,
+      startingPrice: minStartingPrice ?? representative.startingPrice,
+      minPrice: minPrice ?? representative.minPrice,
+      maxPrice: maxPrice ?? representative.maxPrice,
+      images,
       groupedListingIds: groupedIds,
+      supplierCount: uniqueSuppliers.size,
     });
   }
 

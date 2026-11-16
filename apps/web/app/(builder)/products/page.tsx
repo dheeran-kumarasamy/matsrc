@@ -167,7 +167,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
   // cross-supplier resolution in apps/supplier/lib/supplier-data.ts).
   const cardProducts = filtered.map((listing) => {
     let cardImage = listing.images && listing.images.length > 0 ? listing.images[0] : undefined;
-    if (cardImage && typeof cardImage === "string" && (cardImage.startsWith("data:") || cardImage.length > 1024)) {
+    if (!cardImage) {
       cardImage = getProductImage({ category: listing.category, brand: listing.brand, name: listing.name });
     }
     return {

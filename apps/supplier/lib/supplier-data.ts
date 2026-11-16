@@ -469,10 +469,13 @@ export async function getSupplierDashboardData(email: string) {
     }),
     prisma.orderItem.findMany({
       where: {
-        supplierId: supplierProfile.id,
         order: {
           status: "PLACED",
         },
+        OR: [
+          { supplierId: supplierProfile.id },
+          { candidates: { some: { supplierId: supplierProfile.id } } },
+        ],
       },
       include: { product: { include: { brandRef: true } }, order: true },
       orderBy: { order: { createdAt: "desc" } },
@@ -1796,7 +1799,13 @@ export type SupplierRfqCard = {
 // are never offered together for the same enquiry.
 async function hasMultipleEligibleCandidates(orderId: string, supplierId: string): Promise<boolean> {
   const items = await prisma.orderItem.findMany({
-    where: { orderId, supplierId },
+    where: {
+      orderId,
+      OR: [
+        { supplierId },
+        { candidates: { some: { supplierId } } },
+      ],
+    },
     select: { candidates: { select: { id: true } } },
   });
   return items.some((item: any) => item.candidates.length > 1);
@@ -1806,7 +1815,13 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
   const { supplierProfile } = await ensureSupplierContext(email);
 
   const item = await prisma.orderItem.findFirst({
-    where: { orderId, supplierId: supplierProfile.id },
+    where: {
+      orderId,
+      OR: [
+        { supplierId: supplierProfile.id },
+        { candidates: { some: { supplierId: supplierProfile.id } } },
+      ],
+    },
     include: {
       order: {
         include: {
@@ -1816,6 +1831,10 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
         },
       },
       product: { include: { brandRef: true } },
+      candidates: {
+        where: { supplierId: supplierProfile.id },
+        select: { unitPrice: true },
+      },
     },
   });
 
@@ -1865,7 +1884,7 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     material: item.product.name,
     status: item.order.status,
     paymentStatus: item.order.paymentStatus,
-    askPrice: `${formatCurrency((item as any).askPrice ?? item.unitPrice)} / ${item.product.unit}`,
+    askPrice: `${formatCurrency((item as any).candidates?.[0]?.unitPrice ?? (item as any).askPrice ?? item.unitPrice)} / ${item.product.unit}`,
     isReadyForDispatch,
     sitePincode,
     // Identity privacy: until RFQ is confirmed and order is ready for dispatch,
@@ -1936,13 +1955,22 @@ export async function getEnquiryQuotationContext(enquiryId: string, email: strin
     where: { id: enquiryId },
     include: {
       items: {
-        where: { supplierId: supplierProfile.id },
+        where: {
+          OR: [
+            { supplierId: supplierProfile.id },
+            { candidates: { some: { supplierId: supplierProfile.id } } },
+          ],
+        },
         include: {
           product: {
             include: {
               brandRef: true,
               pricingTiers: { select: { minQty: true, maxQty: true, tierPrice: true } },
             },
+          },
+          candidates: {
+            where: { supplierId: supplierProfile.id },
+            select: { unitPrice: true },
           },
           supplierQuotes: {
             where: { supplierId: supplierProfile.id },
@@ -1964,6 +1992,8 @@ export async function getEnquiryQuotationContext(enquiryId: string, email: strin
     let initialUnitPrice: number;
     if (priorQuote) {
       initialUnitPrice = Number(priorQuote.unitPrice);
+    } else if (item.candidates && item.candidates.length > 0 && item.candidates[0].unitPrice != null) {
+      initialUnitPrice = Number(item.candidates[0].unitPrice);
     } else {
       const candidate: ResolutionCandidate = {
         listingId: item.productId,
@@ -2669,10 +2699,21 @@ export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]>
     }),
     prisma.orderItem.findMany({
       where: {
-        supplierId: supplierProfile.id,
         order: { status: "PLACED" },
+        OR: [
+          { supplierId: supplierProfile.id },
+          { candidates: { some: { supplierId: supplierProfile.id } } },
+        ],
       },
-      include: { product: true, order: { select: { id: true, enquiryId: true, deliveryAddress: true, deliveryDate: true } } },
+      include: {
+        product: true,
+        order: { select: { id: true, enquiryId: true, deliveryAddress: true, deliveryDate: true } },
+        supplierQuotes: {
+          where: { supplierId: supplierProfile.id },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
       orderBy: { order: { createdAt: "desc" } },
       take: 12,
     }),
@@ -2704,7 +2745,12 @@ export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]>
     // formatted delivery address rather than fabricating a pincode value.
     pincode: item.order.deliveryAddress ?? "See order for delivery details",
     dueBy: formatDate(item.deliveryDate ?? item.order.deliveryDate),
-    latestQuote: null,
+    latestQuote: item.supplierQuotes?.[0]
+      ? {
+          price: item.supplierQuotes[0].unitPrice.toString(),
+          validUntil: item.supplierQuotes[0].validUntil?.toISOString() ?? null,
+        }
+      : null,
     source: "ENQUIRY",
   }));
 
@@ -2760,7 +2806,14 @@ async function createEnquiryLineQuotesForSupplier(
     // items, not just the ones being quoted here) is also needed so
     // Order.totalAmount can be correctly resynced from the FULL set of
     // lines after this submission, not just the submitted subset.
-    include: { items: { include: { product: { select: { categoryId: true } } } } },
+    include: {
+      items: {
+        include: {
+          product: { select: { categoryId: true } },
+          candidates: { select: { supplierId: true } },
+        },
+      },
+    },
   });
 
   if (!enquiry) {
@@ -2782,9 +2835,12 @@ async function createEnquiryLineQuotesForSupplier(
         throw new Error(`Line item ${lineQuote.lineItemId} not found for enquiry`);
       }
 
-      // Authorization: only the supplier currently assigned to this line
-      // item may submit a quotation for it.
-      if ((item as any).supplierId !== supplierId) {
+      // Authorization: only the supplier currently assigned or listed as an eligible candidate
+      // to this line item may submit a quotation for it.
+      const isCandidate =
+        Array.isArray((item as any).candidates) &&
+        (item as any).candidates.some((c: any) => c.supplierId === supplierId);
+      if ((item as any).supplierId !== supplierId && !isCandidate) {
         throw new Error(`You are not authorized to quote line item ${lineQuote.lineItemId}.`);
       }
 
@@ -2821,13 +2877,13 @@ async function createEnquiryLineQuotesForSupplier(
 
       const resolved = markup ?? { supplierUnitPrice, buyerUnitPrice: supplierUnitPrice, markupPercent: 0, markupAmount: 0 };
 
-      return { lineItemId: lineQuote.lineItemId, gst, resolved };
+      return { lineItemId: lineQuote.lineItemId, gst, resolved, item };
     })
   );
 
   const created = await prisma.$transaction(async (tx) => {
     const rows: Array<{ id: string; unitPrice: any }> = [];
-    for (const { lineItemId, gst, resolved } of resolvedLines) {
+    for (const { lineItemId, gst, resolved, item } of resolvedLines) {
       const row = await tx.supplierQuote.create({
         data: {
           enquiryId,
@@ -2861,15 +2917,17 @@ async function createEnquiryLineQuotesForSupplier(
       // (`gst.unitPrice`) — with the original supplier price + applied
       // markup frozen alongside it, mirroring OrderItem's documented
       // snapshot lifecycle.
-      await tx.orderItem.update({
-        where: { id: lineItemId },
-        data: {
-          unitPrice: resolved.buyerUnitPrice,
-          supplierUnitPrice: resolved.supplierUnitPrice,
-          markupPercent: resolved.markupPercent,
-          markupAmount: resolved.markupAmount,
-        },
-      });
+      if ((item as any).supplierId === supplierId) {
+        await tx.orderItem.update({
+          where: { id: lineItemId },
+          data: {
+            unitPrice: resolved.buyerUnitPrice,
+            supplierUnitPrice: resolved.supplierUnitPrice,
+            markupPercent: resolved.markupPercent,
+            markupAmount: resolved.markupAmount,
+          },
+        });
+      }
     }
 
     // Order-Total Synchronization (mirrors

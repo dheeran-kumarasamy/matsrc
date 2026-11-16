@@ -65,8 +65,8 @@ vi.mock("@matsrc/db", () => {
       findFirst: vi.fn(() => Promise.resolve(orderItemFindFirstRow.current)),
       findMany: vi.fn((args: any) => {
         // getSupplierOrderDetail's hasMultipleEligibleCandidates call shape:
-        // { where: { orderId, supplierId }, select: { candidates: ... } }.
-        if (args?.where?.orderId && args?.where?.supplierId) {
+        // { where: { orderId, OR: [{ supplierId }, { candidates: ... }] }, select: { candidates: ... } }.
+        if (args?.where?.orderId && (args?.where?.supplierId || args?.where?.OR)) {
           return Promise.resolve(orderItemFindManyRows);
         }
         return Promise.resolve([]);

@@ -483,3 +483,35 @@ describe("buildRfqButtonUrlSuffix", () => {
     expect(buildRfqButtonUrlSuffix("order-xyz")).not.toMatch(/^https?:\/\//);
   });
 });
+
+describe("notifySupplierRfqReceived — multi-supplier candidate fan-out", () => {
+  it("dispatches notifications to both primary supplier and all eligible candidates under the same order", async () => {
+    const multiSupplierItem = makeOrderItem({
+      candidates: [
+        { supplierId: "sup-1", supplier: { id: "sup-1", user: { id: "user-sup-1", phone: "919876543210" } } },
+        { supplierId: "sup-2", supplier: { id: "sup-2", user: { id: "user-sup-2", phone: "919876543211" } } },
+        { supplierId: "sup-3", supplier: { id: "sup-3", user: { id: "user-sup-3", phone: "919876543212" } } },
+      ],
+    });
+    const { prisma } = buildHarness({ orderItem: multiSupplierItem });
+
+    await notifySupplierRfqReceived(prisma, { orderItemId: "item-1" });
+
+    // Verify 3 distinct NotificationEvent rows were created (one per candidate supplier)
+    expect(prisma.notificationEvent.create).toHaveBeenCalledTimes(3);
+
+    const calls = prisma.notificationEvent.create.mock.calls;
+    const recipientIds = calls.map((call: any) => call[0].data.recipientId);
+    expect(recipientIds).toEqual(["user-sup-1", "user-sup-2", "user-sup-3"]);
+
+    const dedupeKeys = calls.map((call: any) => call[0].data.dedupeKey);
+    expect(dedupeKeys).toEqual([
+      "SUPPLIER_RFQ_RECEIVED:item-1:sup-1",
+      "SUPPLIER_RFQ_RECEIVED:item-1:sup-2",
+      "SUPPLIER_RFQ_RECEIVED:item-1:sup-3",
+    ]);
+
+    // Verify WhatsApp message log rows created for all 3 suppliers
+    expect(prisma.whatsAppMessageLog.create).toHaveBeenCalledTimes(3);
+  });
+});

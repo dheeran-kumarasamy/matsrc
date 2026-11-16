@@ -17,27 +17,38 @@ export async function notifySupplierOrderSubmitted(orderId: string): Promise<voi
           include: {
             product: true,
             supplier: { include: { user: true } },
+            candidates: {
+              include: {
+                supplier: { include: { user: true } },
+              },
+            },
           },
         },
       },
     });
 
-    if (!order) return;
+    if (!order || !order.items.length) return;
 
-    const supplierUser = order.items[0]?.supplier.user;
-    if (!supplierUser) return;
+    const supplierUsersMap = new Map<string, any>();
+    for (const item of order.items) {
+      if (item.supplier?.user) {
+        supplierUsersMap.set(item.supplier.user.id, item.supplier.user);
+      }
+      if (Array.isArray(item.candidates)) {
+        for (const candidate of item.candidates) {
+          if (candidate.supplier?.user) {
+            supplierUsersMap.set(candidate.supplier.user.id, candidate.supplier.user);
+          }
+        }
+      }
+    }
+
+    if (supplierUsersMap.size === 0) return;
 
     // Meaningful Enquiry ID (e.g. "ABC-SITE01-000123") — see
     // packages/db/lib/enquiry-id.ts. Falls back to the raw order id for
     // pre-migration orders.
     const enquiryDisplayId = order.enquiryId ?? order.id;
-
-    const idempotencyKey = `supplier-enquiry:${order.id}:${supplierUser.id}`;
-    const existing = await prisma.notification.findFirst({
-      where: { idempotencyKey },
-      select: { id: true },
-    });
-    if (existing) return;
 
     const baseUrl =
       process.env.SUPPLIER_PORTAL_URL ||
@@ -56,54 +67,63 @@ export async function notifySupplierOrderSubmitted(orderId: string): Promise<voi
     const title = "New order received";
     const body = `Enquiry ${enquiryDisplayId} from ${order.user.name ?? order.user.phone ?? "a builder"}. Items: ${lineItemSummary}. Quote here: ${deepLink}`;
 
-    const notification = await prisma.notification.create({
-      data: {
-        userId: supplierUser.id,
-        audience: "supplier",
-        channel: "WHATSAPP",
-        title,
-        body,
-        status: "queued",
-        idempotencyKey,
-        templateType: "ENQUIRY_SUBMITTED_TO_SUPPLIER",
-        variables: JSON.stringify({
-          orderId: order.id,
-          orderNumber: enquiryDisplayId,
-          deepLink,
-          builderName: order.user.name ?? order.user.phone,
-          itemCount: order.items.length,
-          lineItemSummary,
-          totalAmount: Number(order.totalAmount),
-        }),
-        retryCount: 0,
-      },
-    });
+    for (const supplierUser of supplierUsersMap.values()) {
+      const idempotencyKey = `supplier-enquiry:${order.id}:${supplierUser.id}`;
+      const existing = await prisma.notification.findFirst({
+        where: { idempotencyKey },
+        select: { id: true },
+      });
+      if (existing) continue;
 
-    // Send via Twilio WhatsApp (real send; falls back to a "failed" status if
-    // WhatsApp isn't enabled/configured, or the recipient has no number).
-    const recipient = supplierUser.whatsappNumber?.trim() || supplierUser.phone?.trim();
-    const result = recipient
-      ? await sendWhatsAppMessage(recipient, body)
-      : { error: "Supplier has no WhatsApp/phone number on file" };
+      const notification = await prisma.notification.create({
+        data: {
+          userId: supplierUser.id,
+          audience: "supplier",
+          channel: "WHATSAPP",
+          title,
+          body,
+          status: "queued",
+          idempotencyKey,
+          templateType: "ENQUIRY_SUBMITTED_TO_SUPPLIER",
+          variables: JSON.stringify({
+            orderId: order.id,
+            orderNumber: enquiryDisplayId,
+            deepLink,
+            builderName: order.user.name ?? order.user.phone,
+            itemCount: order.items.length,
+            lineItemSummary,
+            totalAmount: Number(order.totalAmount),
+          }),
+          retryCount: 0,
+        },
+      });
 
-    const success = "externalId" in result;
-    await prisma.notification.update({
-      where: { id: notification.id },
-      data: success
-        ? { status: "sent", externalId: result.externalId, deliveredAt: new Date() }
-        : { status: "failed", failureReason: result.error, failedAt: new Date() },
-    });
+      // Send via Twilio WhatsApp (real send; falls back to a "failed" status if
+      // WhatsApp isn't enabled/configured, or the recipient has no number).
+      const recipient = supplierUser.whatsappNumber?.trim() || supplierUser.phone?.trim();
+      const result = recipient
+        ? await sendWhatsAppMessage(recipient, body)
+        : { error: "Supplier has no WhatsApp/phone number on file" };
 
-    await prisma.notificationDeliveryLog.create({
-      data: {
-        notificationId: notification.id,
-        previousStatus: "queued",
-        newStatus: success ? "sent" : "failed",
-        provider: "twilio-whatsapp",
-        errorMessage: success ? null : result.error,
-        metadata: JSON.stringify({ recipient }),
-      },
-    });
+      const success = "externalId" in result;
+      await prisma.notification.update({
+        where: { id: notification.id },
+        data: success
+          ? { status: "sent", externalId: result.externalId, deliveredAt: new Date() }
+          : { status: "failed", failureReason: result.error, failedAt: new Date() },
+      });
+
+      await prisma.notificationDeliveryLog.create({
+        data: {
+          notificationId: notification.id,
+          previousStatus: "queued",
+          newStatus: success ? "sent" : "failed",
+          provider: "twilio-whatsapp",
+          errorMessage: success ? null : result.error,
+          metadata: JSON.stringify({ recipient }),
+        },
+      });
+    }
   } catch (error) {
     console.error("notifySupplierOrderSubmitted error:", error);
   }

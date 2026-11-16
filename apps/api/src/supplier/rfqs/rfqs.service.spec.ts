@@ -202,12 +202,42 @@ describe("RfqsService.createQuote", () => {
 
   it("rejects quoting a line item the supplier is not assigned to", async () => {
     const { service } = createHarness({
-      items: [{ id: "line-1", supplierId: "some-other-supplier", quantity: 10, taxRatePercent: null }],
+      items: [{ id: "line-1", supplierId: "some-other-supplier", quantity: 10, taxRatePercent: null, candidates: [] }],
     });
 
     await expect(
       service.createQuote("enq-1", { price: "100", lineQuotes: [{ lineItemId: "line-1", unitPrice: "100" }] } as any, USER)
     ).rejects.toThrow(/not authorized/);
+  });
+
+  it("allows quoting a line item when the supplier is listed as an eligible candidate", async () => {
+    const { service, createdRows } = createHarness({
+      items: [
+        {
+          id: "line-1",
+          supplierId: "primary-winner-supplier",
+          quantity: 10,
+          taxRatePercent: 18,
+          candidates: [{ supplierId: "sup-1" }],
+        },
+      ],
+    });
+
+    const result = await service.createQuote(
+      "enq-1",
+      { price: "400", lineQuotes: [{ lineItemId: "line-1", unitPrice: "400" }] } as any,
+      USER
+    );
+
+    expect(result).toBeDefined();
+    expect(createdRows).toHaveLength(1);
+    expect(createdRows[0]).toMatchObject({
+      supplierId: "sup-1",
+      lineItemId: "line-1",
+      quantity: 10,
+      unitPrice: 400,
+      lineSubtotal: 4000,
+    });
   });
 
   it("rejects submission once the RFQ has already been finalized (quoteSelectionCompletedAt set)", async () => {

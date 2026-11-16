@@ -338,10 +338,33 @@ describe("createSupplierQuote — RFQ line-item quotation (lineQuotes path)", ()
   });
 
   it("rejects quoting a line item the supplier is not assigned to", async () => {
-    seedOrder("enq-5", { items: [{ id: "line-1", supplierId: "someone-else", quantity: 10, taxRatePercent: null }] });
+    seedOrder("enq-5", { items: [{ id: "line-1", supplierId: "someone-else", quantity: 10, taxRatePercent: null, candidates: [] }] });
     await expect(
       createSupplierQuote("enq-5", { price: "100", lineQuotes: [{ lineItemId: "line-1", unitPrice: "100" }] }, "supplier@example.com")
     ).rejects.toThrow(/not authorized/);
+  });
+
+  it("allows quoting a line item when the supplier is listed as an eligible candidate", async () => {
+    seedOrder("enq-candidate-quote", {
+      items: [
+        {
+          id: "line-1",
+          supplierId: "primary-winner-supplier",
+          quantity: 10,
+          taxRatePercent: null,
+          candidates: [{ supplierId: "sup-1" }],
+        },
+      ],
+    });
+
+    const result = await createSupplierQuote(
+      "enq-candidate-quote",
+      { price: "450", lineQuotes: [{ lineItemId: "line-1", unitPrice: "450" }] },
+      "supplier@example.com"
+    );
+
+    expect(result).toBeDefined();
+    expect(supplierQuoteRows.some((q) => q.supplierId === "sup-1" && q.unitPrice === 450)).toBe(true);
   });
 
   it("rejects submission once the RFQ has already been finalized", async () => {

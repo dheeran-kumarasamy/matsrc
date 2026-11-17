@@ -18,6 +18,15 @@ export const dynamic = "force-dynamic";
 const BUILD_TIME = new Date().toISOString();
 
 export async function GET() {
+  let dbStatus = "unchecked";
+  try {
+    const { prisma } = await import("@/lib/prisma");
+    const count = await prisma.user.count();
+    dbStatus = `connected (users: ${count})`;
+  } catch (e: any) {
+    dbStatus = `error: ${e?.message || String(e)}`;
+  }
+
   return NextResponse.json(
     {
       commit: process.env.VERCEL_GIT_COMMIT_SHA || null,
@@ -29,6 +38,15 @@ export async function GET() {
       // of the same deployment).
       buildTime: BUILD_TIME,
       environment: process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown",
+      authDiagnostics: {
+        hasGoogleClientId: !!process.env.GOOGLE_CLIENT_ID,
+        googleClientIdPrefix: process.env.GOOGLE_CLIENT_ID ? process.env.GOOGLE_CLIENT_ID.slice(0, 8) + "..." : null,
+        hasGoogleClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
+        hasAuthSecret: !!process.env.AUTH_SECRET,
+        hasNextAuthSecret: !!process.env.NEXTAUTH_SECRET,
+        hasDatabaseUrl: !!process.env.DATABASE_URL,
+        database: dbStatus,
+      },
     },
     { headers: { "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate" } }
   );

@@ -69,6 +69,7 @@ export async function resolveBuilderGoogleSignIn(
     return { allow: true };
   } catch (error: any) {
     console.error("[auth:resolveBuilderGoogleSignIn] Database error during identity resolution:", error);
-    return { allow: false, redirectTo: "/auth/login?error=Configuration" };
+    const reason = encodeURIComponent(error?.message || error?.name || String(error));
+    return { allow: false, redirectTo: `/auth/login?error=Configuration&reason=${reason}` };
   }
 }

@@ -207,7 +207,8 @@ describe("Phase 5 — Google Sign-in End-to-End Scenarios", () => {
       { providerAccountId: "sub-timeout" }
     );
 
-    expect(result).toEqual({ allow: false, redirectTo: "/auth/login?error=Configuration" });
+    expect(result.allow).toBe(false);
+    expect(result.redirectTo).toContain("/auth/login?error=Configuration");
   });
 
   // Scenario 7: Buyer account attempting Supplier authentication

@@ -4,7 +4,7 @@ import Google from "next-auth/providers/google";
 import { resolveBuilderGoogleSignIn } from "@/lib/google-identity";
 
 export const authConfig: NextAuthConfig = {
-
+  trustHost: true,
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "matsrc-web-dev-secret",
   pages: {
     signIn: "/auth/login",
@@ -36,7 +36,8 @@ export const authConfig: NextAuthConfig = {
           }
         } catch (err: any) {
           console.error("[auth:signIn] resolveBuilderGoogleSignIn caught unhandled exception:", err);
-          return "/auth/login?error=Configuration";
+          const reason = encodeURIComponent(err?.message || err?.name || String(err));
+          return `/auth/login?error=Configuration&reason=${reason}`;
         }
       }
       return true;

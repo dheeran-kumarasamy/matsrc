@@ -55,7 +55,9 @@ function LoginPageInner() {
   // Google sign-in) as a real message instead of silently dropping it —
   // previously the page never read this param at all, so a failed Google
   // login looked identical to the page just doing nothing.
-  const [error, setError] = useState(() => authErrorMessage(searchParams.get("error")) || "");
+  const [error, setError] = useState(
+    () => authErrorMessage(searchParams.get("error"), searchParams.get("reason")) || ""
+  );
 
   async function sendOtp(requestChannel: "whatsapp" | "email") {
     setError("");

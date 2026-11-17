@@ -148,6 +148,7 @@ describe("resolveBuilderGoogleSignIn — Unified Account Identity", () => {
       googleAccount("sub-db-error")
     );
 
-    expect(result).toEqual({ allow: false, redirectTo: "/auth/login?error=Configuration" });
+    expect(result.allow).toBe(false);
+    expect(result.redirectTo).toContain("/auth/login?error=Configuration");
   });
 });

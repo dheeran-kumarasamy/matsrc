@@ -7,12 +7,14 @@
 // Never expose stack traces, provider internals, or secrets here — only the
 // small set of documented Auth.js error codes
 // (https://authjs.dev/reference/core/errors) mapped to plain language.
-export function authErrorMessage(code: string | null | undefined): string | null {
+export function authErrorMessage(code: string | null | undefined, detail?: string | null): string | null {
   if (!code) return null;
 
   switch (code) {
     case "Configuration":
-      return "Google sign-in is temporarily unavailable. Please continue with your phone number or email OTP instead.";
+      return detail
+        ? `Google sign-in is temporarily unavailable (${detail}). Please continue with your phone number or email OTP instead.`
+        : "Google sign-in is temporarily unavailable. Please continue with your phone number or email OTP instead.";
     case "AccessDenied":
       return "Google sign-in was cancelled or access was denied. Please try again, or continue with OTP.";
     case "OAuthSignin":

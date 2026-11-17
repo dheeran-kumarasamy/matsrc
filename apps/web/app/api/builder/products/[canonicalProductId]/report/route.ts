@@ -15,6 +15,7 @@ import {
 } from "@/lib/sourcing/sourcing-intelligence-data";
 import { loadFreightObservations } from "@/lib/sourcing/sourcing-data";
 import { getMarketReferencePrice, resolveFreight } from "@/lib/sourcing/price-lookup";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 export const dynamic = "force-dynamic";
 
@@ -124,13 +125,13 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
     // has no real freight observation for that product.
     const freightByProduct = await loadFreightObservations(offers.map((o) => o.id));
     const bestPrice = offers
-      .map((offer) => {
+      .map((offer, idx) => {
         const { freight } = resolveFreight(freightByProduct.get(offer.id) ?? [], builderRegion);
         const breakdown = computeReportLandedCost(Number(offer.basePrice), freight);
         return {
           productId: offer.id,
           supplierId: offer.supplierId,
-          supplierName: offer.supplier.companyName,
+          supplierName: getSupplierDisplayName(offer.supplier.companyName, offer.supplierId, idx),
           brand: offer.brandRef?.name ?? offer.brand ?? null,
           unit: offer.unit,
           basePrice: Number(offer.basePrice),

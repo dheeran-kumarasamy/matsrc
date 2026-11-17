@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma, checkOrderDispatchEligibility } from "@matsrc/db";
 import { ensureSupplierContext } from "@/lib/supplier-data";
 import { resolveSupplierOrderReference } from "@/lib/order-display";
+import { getBuyerDisplayName } from "@/lib/buyer-display";
 import { useRupeeCapableFont } from "@/lib/pdf-fonts";
 import { renderPoPdfContent, type PoDocumentMode } from "@/lib/purchase-order-pdf";
 
@@ -169,7 +170,7 @@ function serializeForExport(po: any, isReadyForDispatch = false) {
     version: po.version,
     notes: po.notes,
     approvedAt: po.approvedAt,
-    approvedBy: po.approvedBy,
+    approvedBy: po.approvedBy ? "Customer" : null,
     createdAt: po.createdAt,
     orderId: po.orderId,
     enquiryId: resolveSupplierOrderReference(po.order ?? {}),
@@ -187,7 +188,7 @@ function serializeForExport(po: any, isReadyForDispatch = false) {
       email: po.supplier.user?.email ?? null,
       phone: po.supplier.user?.phone ?? null,
     },
-    builder: { id: po.builder.id, name: po.builder.name, email: po.builder.email },
+    builder: { id: po.builder.id, name: getBuyerDisplayName(po.builder.name, po.builder.id), email: null },
     deliverTo,
     lineItems,
     // Explicit subtotal/GST breakdown — mirrors the Invoice's own

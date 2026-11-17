@@ -77,31 +77,31 @@ const CHANNEL = "WHATSAPP";
 // this only ever inserts a row into the pre-existing `Notification` table,
 // it never sends any message itself.
 const IN_APP_STATUS_COPY: Partial<
-  Record<OrderStatus, { title: string; body: (supplierLabel: string, deepLink: string) => string; templateType: NotificationTemplateType }>
+  Record<OrderStatus, { title: string; body: (deepLink: string) => string; templateType: NotificationTemplateType }>
 > = {
   [OrderStatus.PROCESSING]: {
     title: "Enquiry confirmed",
-    body: (supplierLabel, deepLink) => `Good news! ${supplierLabel} has confirmed your enquiry and is preparing your order. View details: ${deepLink}`,
+    body: (deepLink) => `Good news! Your enquiry has been confirmed and order preparation has begun. View details: ${deepLink}`,
     templateType: NotificationTemplateType.ORDER_ACCEPTED,
   },
   [OrderStatus.DISPATCHED]: {
     title: "Order dispatched",
-    body: (supplierLabel, deepLink) => `${supplierLabel} has dispatched your order. It's on its way. View details: ${deepLink}`,
+    body: (deepLink) => `Your order has been dispatched and is on its way. View details: ${deepLink}`,
     templateType: NotificationTemplateType.ORDER_DISPATCHED,
   },
   [OrderStatus.OUT_FOR_DELIVERY]: {
     title: "Out for delivery",
-    body: (supplierLabel, deepLink) => `Your order from ${supplierLabel} is out for delivery. View details: ${deepLink}`,
+    body: (deepLink) => `Your order is out for delivery. View details: ${deepLink}`,
     templateType: NotificationTemplateType.ORDER_OUT_FOR_DELIVERY,
   },
   [OrderStatus.DELIVERED]: {
     title: "Order delivered",
-    body: (supplierLabel, deepLink) => `Your order from ${supplierLabel} has been delivered. Thank you for using Buildohub. View details: ${deepLink}`,
+    body: (deepLink) => `Your order has been delivered. Thank you for using Buildohub. View details: ${deepLink}`,
     templateType: NotificationTemplateType.ORDER_DELIVERED,
   },
   [OrderStatus.CANCELLED]: {
     title: "Order cancelled",
-    body: (supplierLabel, deepLink) => `${supplierLabel} has cancelled your order. Please contact support if you have questions. View details: ${deepLink}`,
+    body: (deepLink) => `Your order has been cancelled. Please contact support if you have questions. View details: ${deepLink}`,
     templateType: NotificationTemplateType.ORDER_DECLINED,
   },
 };
@@ -160,7 +160,6 @@ export async function writeInAppOrderStatusAlert(
     }
 
     const enquiryDisplayId = order.enquiryId ?? order.id;
-    const supplierLabel = order.items?.[0]?.supplier?.companyName ?? "your supplier";
     const deepLink = `${getBuilderPortalBaseUrl().replace(/\/$/, "")}/orders/${order.id}`;
 
     await prisma.notification.create({
@@ -169,7 +168,7 @@ export async function writeInAppOrderStatusAlert(
         audience: "builder",
         channel: NotificationChannel.WHATSAPP,
         title: copy.title,
-        body: copy.body(supplierLabel, deepLink),
+        body: copy.body(deepLink),
         status: "sent",
         idempotencyKey,
         templateType: copy.templateType,
@@ -177,7 +176,6 @@ export async function writeInAppOrderStatusAlert(
           orderId: order.id,
           orderNumber: enquiryDisplayId,
           deepLink,
-          supplierName: supplierLabel,
           status: newStatus,
         }),
         retryCount: 0,

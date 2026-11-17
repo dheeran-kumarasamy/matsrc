@@ -10,6 +10,7 @@ import {
 } from "@/lib/sourcing/session-store";
 import { isSiteLocationMatch } from "@/lib/sourcing/site-location-matcher";
 import { classifyLocality } from "@/lib/sourcing/supplier-search";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 export const dynamic = "force-dynamic";
 
@@ -115,7 +116,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
         id: row.id,
         rank: row.rank,
         supplierId: row.supplierId,
-        supplierName: row.supplier.companyName,
+        supplierName: getSupplierDisplayName(row.supplier.companyName, row.supplierId, row.rank - 1),
         supplierRegion: row.supplier.region,
         // Disclosure only (never re-filters the already-persisted ranking) —
         // derived at read time from the persisted supplier region plus the

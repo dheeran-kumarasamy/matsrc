@@ -1,4 +1,5 @@
 import { OrderStatus, PurchaseOrderStatus, calculateLineGst } from "@matsrc/db";
+import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 export function toNumber(value: unknown): number {
   return value === null || value === undefined ? 0 : Number(value);
@@ -150,11 +151,11 @@ export function serializePurchaseOrder(po: any) {
     orderSiteId: po.order?.siteId ?? null,
     supplier: {
       id: po.supplier.id,
-      companyName: po.supplier.companyName,
-      gstin: po.supplier.gstin ?? null,
+      companyName: getSupplierDisplayName(po.supplier.companyName, po.supplier.id),
+      gstin: null,
       region: po.supplier.region ?? null,
-      email: po.supplier.user?.email ?? null,
-      phone: po.supplier.user?.phone ?? null,
+      email: null,
+      phone: null,
     },
     builder: {
       id: po.builder.id,

@@ -539,7 +539,7 @@ export class NotificationService {
 
     const content = {
       title: "New order received",
-      body: `Enquiry ${enquiryDisplayId} from ${order.user.name ?? order.user.phone ?? "a builder"}. Items: ${lineItemSummary}. Quote here: ${deepLink}`,
+      body: `Enquiry ${enquiryDisplayId} has been received. Items: ${lineItemSummary}. Quote here: ${deepLink}`,
     };
 
     return {
@@ -553,7 +553,6 @@ export class NotificationService {
         enquiryId: order.id,
         enquiryNumber: enquiryDisplayId,
         deepLink,
-        builderName: order.user.name ?? order.user.phone,
         itemCount: order.items.length,
         lineItemSummary,
         totalAmount: Number(order.totalAmount),
@@ -600,7 +599,6 @@ export class NotificationService {
         orderNumber: enquiryDisplayId,
         enquiryId: order.id,
         enquiryNumber: enquiryDisplayId,
-        supplierName: params.selectedSupplierName ?? null,
         bestPriceTotal: params.bestPriceTotal,
         tentativeDeliveryDate,
         deepLink,
@@ -638,7 +636,7 @@ export class NotificationService {
     const statusConfig = this.getDecisionStatusConfig(status);
     const content = {
       title: statusConfig.title,
-      body: statusConfig.body(order.user.name ?? order.user.phone ?? "your order", order.items[0]?.supplier.companyName ?? "Supplier"),
+      body: statusConfig.body(),
     };
 
     return {
@@ -652,8 +650,6 @@ export class NotificationService {
         // packages/db/lib/enquiry-id.ts. Falls back to the raw order id for
         // pre-migration orders.
         orderNumber: order.enquiryId ?? order.id,
-        supplierName: order.items[0]?.supplier.companyName,
-        builderName: order.user.name ?? order.user.phone,
         status,
         itemCount: order.items.length,
         totalAmount: Number(order.totalAmount),
@@ -665,13 +661,13 @@ export class NotificationService {
   private getDecisionStatusConfig(status: OrderStatus): {
     templateType: NotificationTemplateType;
     title: string;
-    body: (builderLabel: string, supplierLabel: string) => string;
+    body: () => string;
   } {
     if (status === OrderStatus.PROCESSING) {
       return {
         templateType: NotificationTemplateType.ORDER_ACCEPTED,
         title: "Order accepted",
-        body: (builderLabel, supplierLabel) => `${supplierLabel} has accepted ${builderLabel}'s order and is preparing the shipment.`,
+        body: () => `Your order has been accepted and shipment preparation has begun.`,
       };
     }
 
@@ -679,7 +675,7 @@ export class NotificationService {
       return {
         templateType: NotificationTemplateType.ORDER_DECLINED,
         title: "Order declined",
-        body: (builderLabel, supplierLabel) => `${supplierLabel} has declined ${builderLabel}'s order.`,
+        body: () => `Your order has been declined. Please contact support if you have questions.`,
       };
     }
 
@@ -687,7 +683,7 @@ export class NotificationService {
       return {
         templateType: NotificationTemplateType.ORDER_DISPATCHED,
         title: "Order dispatched",
-        body: (builderLabel, supplierLabel) => `${supplierLabel} marked ${builderLabel}'s order as dispatched.`,
+        body: () => `Your order has been marked as dispatched and is on its way.`,
       };
     }
 
@@ -695,15 +691,15 @@ export class NotificationService {
       return {
         templateType: NotificationTemplateType.ORDER_OUT_FOR_DELIVERY,
         title: "Order out for delivery",
-        body: (builderLabel, supplierLabel) => `${supplierLabel} marked ${builderLabel}'s order as out for delivery.`,
+        body: () => `Your order has been marked as out for delivery.`,
       };
     }
 
     return {
       templateType: NotificationTemplateType.ORDER_DELIVERED,
       title: "Order delivered",
-      body: (builderLabel, supplierLabel) =>
-        `${supplierLabel} marked ${builderLabel}'s order as delivered. Rate your delivery and product quality experience in My Orders to help other builders.`,
+      body: () =>
+        `Your order has been marked as delivered. Rate your delivery and product quality experience in My Orders to help other builders.`,
     };
   }
 

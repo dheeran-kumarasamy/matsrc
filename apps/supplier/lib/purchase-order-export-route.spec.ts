@@ -128,8 +128,8 @@ describe("GET /api/supplier/purchase-orders/[id]/export", () => {
     expect(buf.subarray(0, 5).toString("ascii")).toBe("%PDF-");
   });
 
-  it("returns the JSON export when no format is requested", async () => {
-    purchaseOrderFindFirst.mockResolvedValue(fakePo());
+  it("returns the JSON export when no format is requested with buyer identity masked", async () => {
+    purchaseOrderFindFirst.mockResolvedValue(fakePo({ approvedBy: "john.doe@builder.com" }));
 
     const { GET } = await import("@/app/api/supplier/purchase-orders/[id]/export/route");
     const res = await GET(makeRequest("https://supplier.example.com/api/supplier/purchase-orders/po-1/export"), {
@@ -140,6 +140,9 @@ describe("GET /api/supplier/purchase-orders/[id]/export", () => {
     const data = await res.json();
     expect(data.documentType).toBe("PURCHASE_ORDER");
     expect(data.poNumber).toBe("PO-2026-00001");
+    expect(data.approvedBy).toBe("Customer");
+    expect(data.builder.name).toBe("Buyer 1");
+    expect(data.builder.email).toBeNull();
   });
 
   // Buyer-Facing/Supplier-Facing PO Identity fix regression guard: this

@@ -128,7 +128,7 @@ export async function getSupplierPurchaseOrderDetail(
     taxAmount: lineItems.reduce((acc, li) => acc + li.tax, 0),
     itemCount: lineItems.length,
     approvedAt: po.approvedAt ? po.approvedAt.toISOString() : null,
-    approvedBy: po.approvedBy,
+    approvedBy: po.approvedBy ? "Customer" : null,
     notes: po.notes,
     createdAt: po.createdAt.toISOString(),
     lineItems,

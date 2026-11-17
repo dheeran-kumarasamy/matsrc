@@ -367,4 +367,12 @@ describe("serializePurchaseOrder — Uniform GST on Marked-Up Buyer Price", () =
     expect(result.lineItems[0].tax).toBe(180);
     expect(result.lineItems[0].markupPercent).toBe(0);
   });
+
+  it("anonymizes supplier company name and strips contact/tax identifiers", () => {
+    const result = serializePurchaseOrder(fakePo());
+    expect(result.supplier.companyName).toMatch(/^Supplier \d+$/);
+    expect(result.supplier.gstin).toBeNull();
+    expect(result.supplier.email).toBeNull();
+    expect(result.supplier.phone).toBeNull();
+  });
 });

@@ -44,7 +44,7 @@ export default async function SupplierPurchaseOrderDetailPage({ params }: { para
 
       {po.status === "ISSUED" && po.approvedAt ? (
         <div className="panel border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-          Digitally approved by {po.approvedBy ?? "builder"} on {new Date(po.approvedAt).toLocaleString()}. This
+          Digitally approved by Customer on {new Date(po.approvedAt).toLocaleString()}. This
           e-signature equivalent replaces the need for a physical signature or stamp.
         </div>
       ) : null}

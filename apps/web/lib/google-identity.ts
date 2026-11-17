@@ -16,43 +16,59 @@ export type GoogleSignInResult =
 
 export async function resolveBuilderGoogleSignIn(
   googleUser: { email?: string | null; name?: string | null },
-  googleAccount: { providerAccountId?: string | null } | null | undefined
+  googleAccount: { providerAccountId?: string | null } | null | undefined,
+  googleProfile?: { sub?: string | null; email?: string | null; name?: string | null } | null | undefined
 ): Promise<GoogleSignInResult> {
-  if (!googleAccount?.providerAccountId || !googleUser.email) {
+  const providerAccountId = googleAccount?.providerAccountId || googleProfile?.sub;
+  const rawEmail = googleUser.email || googleProfile?.email;
+  const email = rawEmail ? rawEmail.trim().toLowerCase() : null;
+
+  if (!providerAccountId || !email) {
+    console.error("[auth:resolveBuilderGoogleSignIn] Missing providerAccountId or email:", {
+      hasAccount: !!googleAccount,
+      providerAccountId,
+      email,
+    });
     return { allow: false };
   }
 
   const scope = {
     provider: "GOOGLE" as const,
-    providerIdentifier: googleAccount.providerAccountId,
+    providerIdentifier: providerAccountId,
     role: "BUILDER" as const,
   };
 
-  // CRITICAL: `User.email` is globally unique across BOTH portals/roles —
-  // an email match might actually belong to a SUPPLIER, not a BUILDER
-  // (portal/role isolation).
-  const emailMatch = await prisma.user.findUnique({ where: { email: googleUser.email } });
-  const emailCandidate = emailMatch?.role === "BUILDER" ? emailMatch : null;
+  try {
+    // CRITICAL: `User.email` is globally unique across BOTH portals/roles —
+    // an email match might actually belong to a SUPPLIER, not a BUILDER
+    // (portal/role isolation).
+    const emailMatch = await prisma.user.findUnique({ where: { email } });
+    const emailCandidate = emailMatch?.role === "BUILDER" ? emailMatch : null;
 
-  const conflict = await detectCrossIdentityConflict(prisma as any, scope, emailCandidate?.id ?? null);
-  if (conflict) {
-    return { allow: false, redirectTo: `/auth/login?error=${conflict.code}` };
+    const conflict = await detectCrossIdentityConflict(prisma as any, scope, emailCandidate?.id ?? null);
+    if (conflict) {
+      console.warn("[auth:resolveBuilderGoogleSignIn] Cross identity conflict:", conflict);
+      return { allow: false, redirectTo: `/auth/login?error=${conflict.code}` };
+    }
+
+    await resolveOrLinkIdentity(prisma as any, scope, {
+      candidateUserId: emailCandidate?.id ?? null,
+      createUser: async () => {
+        const safeEmail = await resolveCrossRoleSafeEmail(prisma as any, email, "BUILDER");
+        const created = await prisma.user.create({
+          data: {
+            email: safeEmail,
+            name: googleUser.name || googleProfile?.name || null,
+            role: "BUILDER",
+          },
+        });
+        return { id: created.id };
+      },
+    });
+
+    return { allow: true };
+  } catch (error: any) {
+    console.error("[auth:resolveBuilderGoogleSignIn] Database error during identity resolution:", error);
+    return { allow: false, redirectTo: "/auth/login?error=Configuration" };
   }
-
-  await resolveOrLinkIdentity(prisma as any, scope, {
-    candidateUserId: emailCandidate?.id ?? null,
-    createUser: async () => {
-      const safeEmail = await resolveCrossRoleSafeEmail(prisma as any, googleUser.email as string, "BUILDER");
-      const created = await prisma.user.create({
-        data: {
-          email: safeEmail,
-          name: googleUser.name ?? null,
-          role: "BUILDER",
-        },
-      });
-      return { id: created.id };
-    },
-  });
-
-  return { allow: true };
 }

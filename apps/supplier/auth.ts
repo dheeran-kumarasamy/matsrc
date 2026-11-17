@@ -19,28 +19,28 @@ export const authConfig: NextAuthConfig = {
     error: "/sign-in",
   },
   callbacks: {
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }) {
       // Only the Google OAuth path reaches this branch with a populated
       // `account` of type "oauth" — the Credentials provider (OTP login,
       // below) never triggers this callback with an `account.provider`
       // other than "credentials", so this block only ever runs for real
       // Google sign-ins.
       if (account?.provider === "google") {
-        // Unified Account Identity (critical security fix from the audit):
-        // the Google identity key is the STABLE Google OAuth subject
-        // (account.providerAccountId / "sub"), NEVER the Google email —
-        // the previous implementation upserted purely on `user.email`,
-        // which meant ANY Google account whose email happened to match an
-        // existing User's email was silently treated as that same User,
-        // with no verification that the Google-account holder actually
-        // owned that account. That unsafe email-only linking path is
-        // removed entirely; `allowDangerousEmailAccountLinking` below is
-        // now inert for identity-resolution purposes because the extracted
-        // resolveSupplierGoogleSignIn() (lib/google-identity.ts) never
-        // relies on email-based matching to decide ownership.
-        const result = await resolveSupplierGoogleSignIn(user, account);
-        if (!result.allow) {
-          return result.redirectTo ?? false;
+        try {
+          console.log("[supplier:auth:signIn] Google sign-in attempt:", {
+            email: user?.email,
+            profileEmail: (profile as any)?.email,
+            providerAccountId: account?.providerAccountId,
+            profileSub: (profile as any)?.sub,
+          });
+          const result = await resolveSupplierGoogleSignIn(user, account, profile as any);
+          if (!result.allow) {
+            console.warn("[supplier:auth:signIn] resolveSupplierGoogleSignIn disallowed sign-in:", result);
+            return result.redirectTo ?? false;
+          }
+        } catch (err: any) {
+          console.error("[supplier:auth:signIn] resolveSupplierGoogleSignIn caught unhandled exception:", err);
+          return "/sign-in?error=Configuration";
         }
       }
       return true;

@@ -16,47 +16,63 @@ export type GoogleSignInResult =
 
 export async function resolveSupplierGoogleSignIn(
   googleUser: { email?: string | null; name?: string | null },
-  googleAccount: { providerAccountId?: string | null } | null | undefined
+  googleAccount: { providerAccountId?: string | null } | null | undefined,
+  googleProfile?: { sub?: string | null; email?: string | null; name?: string | null } | null | undefined
 ): Promise<GoogleSignInResult> {
-  if (!googleAccount?.providerAccountId || !googleUser.email) {
+  const providerAccountId = googleAccount?.providerAccountId || googleProfile?.sub;
+  const rawEmail = googleUser.email || googleProfile?.email;
+  const email = rawEmail ? rawEmail.trim().toLowerCase() : null;
+
+  if (!providerAccountId || !email) {
+    console.error("[auth:resolveSupplierGoogleSignIn] Missing providerAccountId or email:", {
+      hasAccount: !!googleAccount,
+      providerAccountId,
+      email,
+    });
     return { allow: false };
   }
 
   const scope = {
     provider: "GOOGLE" as const,
-    providerIdentifier: googleAccount.providerAccountId,
+    providerIdentifier: providerAccountId,
     role: "SUPPLIER" as const,
   };
 
-  // CRITICAL: `User.email` is globally unique across ALL roles, so a
-  // matching User might actually be a Buyer (role=BUILDER), not a Supplier
-  // — this role check is what prevents a Supplier Google login from ever
-  // resolving to a Buyer's User (portal/role isolation).
-  const emailMatch = await prisma.user.findUnique({ where: { email: googleUser.email } });
-  const emailCandidate = emailMatch?.role === "SUPPLIER" ? emailMatch : null;
+  try {
+    // CRITICAL: `User.email` is globally unique across ALL roles, so a
+    // matching User might actually be a Buyer (role=BUILDER), not a Supplier
+    // — this role check is what prevents a Supplier Google login from ever
+    // resolving to a Buyer's User (portal/role isolation).
+    const emailMatch = await prisma.user.findUnique({ where: { email } });
+    const emailCandidate = emailMatch?.role === "SUPPLIER" ? emailMatch : null;
 
-  const conflict = await detectCrossIdentityConflict(prisma as any, scope, emailCandidate?.id ?? null);
-  if (conflict) {
-    return { allow: false, redirectTo: `/sign-in?error=${conflict.code}` };
-  }
+    const conflict = await detectCrossIdentityConflict(prisma as any, scope, emailCandidate?.id ?? null);
+    if (conflict) {
+      console.warn("[auth:resolveSupplierGoogleSignIn] Cross identity conflict:", conflict);
+      return { allow: false, redirectTo: `/sign-in?error=${conflict.code}` };
+    }
 
-  await resolveOrLinkIdentity(prisma as any, scope, {
-    candidateUserId: emailCandidate?.id ?? null,
-    createUser: async () => {
-      const safeEmail = await resolveCrossRoleSafeEmail(prisma as any, googleUser.email as string, "SUPPLIER");
-      const created = await prisma.user.create({
-        data: {
-          email: safeEmail,
-          name: googleUser.name ?? null,
-          role: "SUPPLIER",
-          supplierProfile: {
-            create: { companyName: googleUser.name ?? "New Supplier" },
+    await resolveOrLinkIdentity(prisma as any, scope, {
+      candidateUserId: emailCandidate?.id ?? null,
+      createUser: async () => {
+        const safeEmail = await resolveCrossRoleSafeEmail(prisma as any, email, "SUPPLIER");
+        const created = await prisma.user.create({
+          data: {
+            email: safeEmail,
+            name: googleUser.name || googleProfile?.name || null,
+            role: "SUPPLIER",
+            supplierProfile: {
+              create: { companyName: googleUser.name || googleProfile?.name || "New Supplier" },
+            },
           },
-        },
-      });
-      return { id: created.id };
-    },
-  });
+        });
+        return { id: created.id };
+      },
+    });
 
-  return { allow: true };
+    return { allow: true };
+  } catch (error: any) {
+    console.error("[auth:resolveSupplierGoogleSignIn] Database error during identity resolution:", error);
+    return { allow: false, redirectTo: "/sign-in?error=Configuration" };
+  }
 }

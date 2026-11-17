@@ -20,11 +20,23 @@ export const authConfig: NextAuthConfig = {
     // never the Google email, and a real email that happens to match an
     // existing User is used ONLY as a link candidate — never to silently
     // merge with a different, already-linked User.
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }) {
       if (account?.provider === "google") {
-        const result = await resolveBuilderGoogleSignIn(user, account);
-        if (!result.allow) {
-          return result.redirectTo ?? false;
+        try {
+          console.log("[auth:signIn] Google sign-in attempt:", {
+            email: user?.email,
+            profileEmail: (profile as any)?.email,
+            providerAccountId: account?.providerAccountId,
+            profileSub: (profile as any)?.sub,
+          });
+          const result = await resolveBuilderGoogleSignIn(user, account, profile as any);
+          if (!result.allow) {
+            console.warn("[auth:signIn] resolveBuilderGoogleSignIn disallowed sign-in:", result);
+            return result.redirectTo ?? false;
+          }
+        } catch (err: any) {
+          console.error("[auth:signIn] resolveBuilderGoogleSignIn caught unhandled exception:", err);
+          return "/auth/login?error=Configuration";
         }
       }
       return true;

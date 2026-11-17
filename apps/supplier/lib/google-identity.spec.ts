@@ -118,4 +118,35 @@ describe("resolveSupplierGoogleSignIn — Unified Account Identity", () => {
     expect(result).toEqual({ allow: false });
     expect(resolveOrLinkIdentity).not.toHaveBeenCalled();
   });
+
+  it("falls back to googleProfile.email and googleProfile.sub when account/user fields are omitted", async () => {
+    const { resolveSupplierGoogleSignIn } = await import("./google-identity");
+    userFindUnique.mockResolvedValue(null);
+    userCreate.mockResolvedValue({ id: "supplier-user-fallback" });
+
+    const result = await resolveSupplierGoogleSignIn(
+      { email: null, name: "Fallback Supplier" },
+      { providerAccountId: null },
+      { email: "FALLBACK.supplier@example.com", sub: "sub-from-profile" }
+    );
+
+    expect(result).toEqual({ allow: true });
+    expect(resolveOrLinkIdentity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ provider: "GOOGLE", providerIdentifier: "sub-from-profile", role: "SUPPLIER" }),
+      expect.anything()
+    );
+  });
+
+  it("catches unhandled database errors and redirects gracefully to Configuration error", async () => {
+    const { resolveSupplierGoogleSignIn } = await import("./google-identity");
+    userFindUnique.mockRejectedValue(new Error("Database connection timeout"));
+
+    const result = await resolveSupplierGoogleSignIn(
+      { email: "db.error@example.com", name: "DB Error" },
+      googleAccount("sub-db-error")
+    );
+
+    expect(result).toEqual({ allow: false, redirectTo: "/sign-in?error=Configuration" });
+  });
 });

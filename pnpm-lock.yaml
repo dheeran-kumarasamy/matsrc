@@ -287,6 +287,9 @@ importers:
       '@types/nodemailer':
         specifier: ^8.0.1
         version: 8.0.1
+      '@vercel/functions':
+        specifier: ^3.9.9
+        version: 3.9.9(ws@8.18.3)
       axios:
         specifier: ^1.7.2
         version: 1.16.0

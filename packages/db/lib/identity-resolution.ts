@@ -261,3 +261,50 @@ export async function detectCrossIdentityConflict(
   }
   return null;
 }
+
+/**
+ * Idempotently provisions the AuthIdentity table, enum, and indexes if they do
+ * not exist in the database (e.g. on newly provisioned Neon preview branches
+ * where migrate deploy has not yet been executed).
+ */
+export async function ensureAuthIdentityTable(prisma: any): Promise<boolean> {
+  if (typeof prisma?.$executeRawUnsafe !== "function") return false;
+  try {
+    await prisma.$executeRawUnsafe(`
+      DO $$ BEGIN
+        CREATE TYPE "AuthIdentityProvider" AS ENUM ('WHATSAPP', 'EMAIL', 'GOOGLE');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "AuthIdentity" (
+        "id" TEXT NOT NULL,
+        "userId" TEXT NOT NULL,
+        "provider" "AuthIdentityProvider" NOT NULL,
+        "providerIdentifier" TEXT NOT NULL,
+        "role" "Role" NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL,
+        CONSTRAINT "AuthIdentity_pkey" PRIMARY KEY ("id")
+      );
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS "AuthIdentity_userId_idx" ON "AuthIdentity"("userId");
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "AuthIdentity_provider_providerIdentifier_role_key" ON "AuthIdentity"("provider", "providerIdentifier", "role");
+    `);
+    await prisma.$executeRawUnsafe(`
+      DO $$ BEGIN
+        ALTER TABLE "AuthIdentity" ADD CONSTRAINT "AuthIdentity_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+    return true;
+  } catch (err) {
+    console.warn("[identity:ensureAuthIdentityTable] Could not auto-create AuthIdentity table:", err);
+    return false;
+  }
+}

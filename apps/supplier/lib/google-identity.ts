@@ -1,4 +1,10 @@
-import { prisma, resolveOrLinkIdentity, detectCrossIdentityConflict, resolveCrossRoleSafeEmail } from "@matsrc/db";
+import {
+  prisma,
+  resolveOrLinkIdentity,
+  detectCrossIdentityConflict,
+  resolveCrossRoleSafeEmail,
+  ensureAuthIdentityTable,
+} from "@matsrc/db";
 
 // Unified Account Identity — Supplier Google sign-in resolution, extracted
 // out of apps/supplier/auth.ts's `signIn` callback into a plain,
@@ -46,33 +52,84 @@ export async function resolveSupplierGoogleSignIn(
     const emailMatch = await prisma.user.findUnique({ where: { email } });
     const emailCandidate = emailMatch?.role === "SUPPLIER" ? emailMatch : null;
 
-    const conflict = await detectCrossIdentityConflict(prisma as any, scope, emailCandidate?.id ?? null);
-    if (conflict) {
-      console.warn("[auth:resolveSupplierGoogleSignIn] Cross identity conflict:", conflict);
-      return { allow: false, redirectTo: `/sign-in?error=${conflict.code}` };
-    }
+    try {
+      const conflict = await detectCrossIdentityConflict(prisma as any, scope, emailCandidate?.id ?? null);
+      if (conflict) {
+        console.warn("[auth:resolveSupplierGoogleSignIn] Cross identity conflict:", conflict);
+        return { allow: false, redirectTo: `/sign-in?error=${conflict.code}` };
+      }
 
-    await resolveOrLinkIdentity(prisma as any, scope, {
-      candidateUserId: emailCandidate?.id ?? null,
-      createUser: async () => {
-        const safeEmail = await resolveCrossRoleSafeEmail(prisma as any, email, "SUPPLIER");
-        const created = await prisma.user.create({
-          data: {
-            email: safeEmail,
-            name: googleUser.name || googleProfile?.name || null,
-            role: "SUPPLIER",
-            supplierProfile: {
-              create: { companyName: googleUser.name || googleProfile?.name || "New Supplier" },
+      await resolveOrLinkIdentity(prisma as any, scope, {
+        candidateUserId: emailCandidate?.id ?? null,
+        createUser: async () => {
+          const safeEmail = await resolveCrossRoleSafeEmail(prisma as any, email, "SUPPLIER");
+          const created = await prisma.user.create({
+            data: {
+              email: safeEmail,
+              name: googleUser.name || googleProfile?.name || null,
+              role: "SUPPLIER",
+              supplierProfile: {
+                create: { companyName: googleUser.name || googleProfile?.name || "New Supplier" },
+              },
             },
-          },
-        });
-        return { id: created.id };
-      },
-    });
+          });
+          return { id: created.id };
+        },
+      });
 
-    return { allow: true };
+      return { allow: true };
+    } catch (identityError: any) {
+      const isMissingTable =
+        identityError?.code === "P2021" ||
+        String(identityError?.message).includes("AuthIdentity") ||
+        String(identityError?.message).includes("does not exist");
+
+      if (isMissingTable) {
+        console.warn("[auth:resolveSupplierGoogleSignIn] AuthIdentity table missing. Attempting self-healing DDL...");
+        const tableCreated = await ensureAuthIdentityTable(prisma);
+        if (tableCreated) {
+          await resolveOrLinkIdentity(prisma as any, scope, {
+            candidateUserId: emailCandidate?.id ?? null,
+            createUser: async () => {
+              const safeEmail = await resolveCrossRoleSafeEmail(prisma as any, email, "SUPPLIER");
+              const created = await prisma.user.create({
+                data: {
+                  email: safeEmail,
+                  name: googleUser.name || googleProfile?.name || null,
+                  role: "SUPPLIER",
+                  supplierProfile: {
+                    create: { companyName: googleUser.name || googleProfile?.name || "New Supplier" },
+                  },
+                },
+              });
+              return { id: created.id };
+            },
+          });
+          return { allow: true };
+        }
+
+        console.warn("[auth:resolveSupplierGoogleSignIn] Falling back to direct User resolution");
+        if (!emailCandidate) {
+          const safeEmail = await resolveCrossRoleSafeEmail(prisma as any, email, "SUPPLIER");
+          await prisma.user.create({
+            data: {
+              email: safeEmail,
+              name: googleUser.name || googleProfile?.name || null,
+              role: "SUPPLIER",
+              supplierProfile: {
+                create: { companyName: googleUser.name || googleProfile?.name || "New Supplier" },
+              },
+            },
+          });
+        }
+        return { allow: true };
+      }
+
+      throw identityError;
+    }
   } catch (error: any) {
     console.error("[auth:resolveSupplierGoogleSignIn] Database error during identity resolution:", error);
-    return { allow: false, redirectTo: "/sign-in?error=Configuration" };
+    const reason = encodeURIComponent(error?.message || error?.name || String(error));
+    return { allow: false, redirectTo: `/sign-in?error=Configuration&reason=${reason}` };
   }
 }

@@ -19,10 +19,22 @@ const BUILD_TIME = new Date().toISOString();
 
 export async function GET() {
   let dbStatus = "unchecked";
+  let dbHost: string | null = null;
+  let hasAuthIdentity = false;
   try {
+    if (process.env.DATABASE_URL) {
+      try {
+        const u = new URL(process.env.DATABASE_URL.replace(/^postgresql:\/\//, "http://"));
+        dbHost = u.host;
+      } catch {}
+    }
     const { prisma } = await import("@/lib/prisma");
     const count = await prisma.user.count();
-    dbStatus = `connected (users: ${count})`;
+    const rows: any = await prisma.$queryRawUnsafe(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AuthIdentity'"
+    );
+    hasAuthIdentity = Array.isArray(rows) && rows.length > 0;
+    dbStatus = `connected (users: ${count}, hasAuthIdentity: ${hasAuthIdentity})`;
   } catch (e: any) {
     dbStatus = `error: ${e?.message || String(e)}`;
   }
@@ -45,6 +57,8 @@ export async function GET() {
         hasAuthSecret: !!process.env.AUTH_SECRET,
         hasNextAuthSecret: !!process.env.NEXTAUTH_SECRET,
         hasDatabaseUrl: !!process.env.DATABASE_URL,
+        databaseHost: dbHost,
+        hasAuthIdentityTable: hasAuthIdentity,
         database: dbStatus,
       },
     },

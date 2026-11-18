@@ -85,18 +85,60 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   async addItem(productId, quantity, idempotencyKey?: string) {
-    set({ isMutating: true, error: null });
+    const safeQuantity = Math.max(0.0001, Math.round(Number(quantity) * 10000) / 10000 || 0.0001);
+    const previousItems = get().items;
+    const previousSummary = get().summary;
+
     // Stable operation-level key: reused on retry, fresh on new user action
     const key =
       idempotencyKey ||
       `idem_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+
+    // Optimistic cart state update for 0ms perceived latency
+    const existingIndex = previousItems.findIndex((item) => item.productId === productId);
+    let optimisticItems: CartItem[];
+
+    if (existingIndex >= 0) {
+      const existing = previousItems[existingIndex];
+      const newQty = Math.round((existing.quantity + safeQuantity) * 10000) / 10000;
+      optimisticItems = previousItems.map((item, idx) =>
+        idx === existingIndex
+          ? {
+              ...item,
+              quantity: newQty,
+              lineTotal: item.unitPrice * newQty,
+            }
+          : item
+      );
+    } else {
+      const provisionalItem: CartItem = {
+        id: `optimistic_${productId}`,
+        productId,
+        name: "Item added to basket",
+        unit: "UNIT",
+        supplierId: "",
+        supplierName: "Verified Supplier",
+        quantity: safeQuantity,
+        unitPrice: 0,
+        lineTotal: 0,
+      };
+      optimisticItems = [provisionalItem, ...previousItems];
+    }
+
+    set({
+      items: optimisticItems,
+      summary: recomputeSummary(optimisticItems),
+      isMutating: true,
+      error: null,
+    });
+
     try {
       // POST /cart/items returns the authoritative { items, summary } payload,
       // completely eliminating any redundant sequential GET /cart round-trip.
       // Mode "increment" ensures concurrent additions are additive and never overwrite.
       const response = await builderApiPost<CartResponse & { id: string }>("/cart/items", {
         productId,
-        quantity,
+        quantity: safeQuantity,
         mode: "increment",
         idempotencyKey: key,
       });
@@ -124,7 +166,12 @@ export const useCartStore = create<CartState>((set, get) => ({
           error: message,
         });
       } else {
-        set({ isMutating: false, error: message });
+        set({
+          items: previousItems,
+          summary: previousSummary,
+          isMutating: false,
+          error: message,
+        });
       }
       throw new Error("add-item-failed");
     }
@@ -137,7 +184,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     // quantity for a snappy UI, then reconcile unitPrice/lineTotal against
     // the authoritative server response.
     // Mode "set" targets the existing item and fails with 409 Conflict if checked out.
-    const safeQuantity = Math.max(1, Math.floor(quantity) || 1);
+    const safeQuantity = Math.max(0.0001, Math.round(Number(quantity) * 10000) / 10000 || 0.0001);
     const previousItems = get().items;
     const optimisticItems = previousItems.map((item) =>
       item.id === cartItemId

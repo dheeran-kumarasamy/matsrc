@@ -111,7 +111,11 @@ export async function resolveProductGroupForCart(productId: string, quantity: nu
   const client = dbClient || prisma;
   const product = await client.product.findFirst({
     where: {
-      OR: [{ id: productId }, { slug: productId }],
+      OR: [
+        { id: productId },
+        { slug: productId },
+        { canonicalProductId: productId },
+      ],
       isActive: true,
     },
     include: {
@@ -152,6 +156,65 @@ export async function resolveProductGroupForCart(productId: string, quantity: nu
   const resolution = resolveLowestPriceForQuantity(candidates, quantity);
 
   return { product, candidates, resolution };
+}
+
+interface CachedMarkupStore {
+  rows: Array<{ scope: string; scopeId: string | null; percentage: unknown; isEnabled: boolean }> | null;
+  expiresAt: number;
+}
+
+let markupCache: CachedMarkupStore = { rows: null, expiresAt: 0 };
+
+export async function getCachedMarkupRows(client: any): Promise<Array<{ scope: string; scopeId: string | null; percentage: unknown; isEnabled: boolean }>> {
+  const isTest = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+  const now = Date.now();
+  if (!isTest && markupCache.rows && markupCache.expiresAt > now) {
+    return markupCache.rows;
+  }
+  const dbClient = client || prisma;
+  if (!dbClient?.markupSetting?.findMany) {
+    return [];
+  }
+  const rows = await dbClient.markupSetting.findMany({
+    where: { isEnabled: true },
+  });
+  const validRows = Array.isArray(rows) ? rows : [];
+  if (!isTest) {
+    markupCache = {
+      rows: validRows,
+      expiresAt: now + 60_000,
+    };
+  }
+  return validRows;
+}
+
+export function createCachedMarkupClient(rows: any[]) {
+  return {
+    markupSetting: {
+      findMany: async (args?: any) => {
+        if (!args?.where?.OR || !Array.isArray(args.where.OR)) {
+          return rows;
+        }
+        return rows.filter((row: any) => {
+          return args.where.OR.some((cond: any) => {
+            if (cond.scope && cond.scope !== row.scope) return false;
+            if (cond.scopeId !== undefined) {
+              if (cond.scopeId === null) return row.scopeId === null;
+              if (typeof cond.scopeId === "object" && cond.scopeId !== null && Array.isArray(cond.scopeId.in)) {
+                return cond.scopeId.in.includes(row.scopeId);
+              }
+              if (typeof cond.scopeId === "string") return cond.scopeId === row.scopeId;
+            }
+            return true;
+          });
+        });
+      },
+    },
+  };
+}
+
+export function invalidateMarkupCache(): void {
+  markupCache = { rows: null, expiresAt: 0 };
 }
 
 /**
@@ -200,7 +263,10 @@ export async function getCartForUser(userId: string, dbClient?: any): Promise<Ca
     };
   });
 
-  const markups = await resolveMarkupForProductsBatch(client as any, batchParams).catch(
+  const cachedRows = await getCachedMarkupRows(client).catch(() => null);
+  const markupClient = cachedRows && cachedRows.length >= 0 ? createCachedMarkupClient(cachedRows) : (client as any);
+
+  const markups = await resolveMarkupForProductsBatch(markupClient, batchParams).catch(
     () => items.map(() => null)
   );
 

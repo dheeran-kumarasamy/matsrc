@@ -102,6 +102,9 @@ import {
   getCartForUser,
   cleanupExpiredCartIdempotencies,
   computeRequestFingerprint,
+  getCachedMarkupRows,
+  createCachedMarkupClient,
+  invalidateMarkupCache,
 } from "./cart-data";
 import { POST } from "../app/api/builder/cart/items/route";
 import { DELETE } from "../app/api/builder/cart/items/[productId]/route";
@@ -194,7 +197,14 @@ describe("Cart Optimization — Phase 1", () => {
 
       expect(result).not.toBeNull();
       expect(productFindFirst).toHaveBeenCalledWith({
-        where: { OR: [{ id: "prod-a" }, { slug: "prod-a" }], isActive: true },
+        where: {
+          OR: [
+            { id: "prod-a" },
+            { slug: "prod-a" },
+            { canonicalProductId: "prod-a" },
+          ],
+          isActive: true,
+        },
         include: expect.any(Object),
       });
       expect(productFindMany).toHaveBeenCalledWith({
@@ -333,6 +343,14 @@ describe("Cart Optimization — Phase 1", () => {
       expect(response.status).toBe(400);
       const data = await response.json();
       expect(data.error).toBe("Valid productId and quantity are required");
+
+      const subMinRequest = new Request("https://buildohub.in/api/builder/cart/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: "prod-a", quantity: 0.00005 }),
+      });
+      const subMinResponse = await POST(subMinRequest);
+      expect(subMinResponse.status).toBe(400);
     });
 
     it("Scenario A — Add a different product during checkout: new product remains in cart", async () => {
@@ -469,6 +487,70 @@ describe("Cart Optimization — Phase 1", () => {
       expect(data.error).toBe("This cart item was checked out or removed. Please refresh your cart.");
       expect(Array.isArray(data.items)).toBe(true);
       expect(data.summary).toBeDefined();
+    });
+
+    it("handles Prisma P2028 transaction expiration and returns 409 Conflict with updated cart", async () => {
+      productFindFirst.mockResolvedValue(PRODUCT_A);
+      productFindMany.mockResolvedValue([PRODUCT_A]);
+      transactionFn.mockRejectedValueOnce({
+        code: "P2028",
+        message: "Transaction API error: Transaction already closed: Transaction is expired",
+      });
+
+      const request = new Request("https://buildohub.in/api/builder/cart/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: "prod-a", quantity: 5 }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(409);
+      const data = await response.json();
+      expect(data.error).toBe("Cart was updated concurrently. Please retry adding this item.");
+      expect(Array.isArray(data.items)).toBe(true);
+      expect(data.summary).toBeDefined();
+    });
+
+    it("handles transaction timeout error message regex and returns 409 Conflict with updated cart", async () => {
+      productFindFirst.mockResolvedValue(PRODUCT_A);
+      productFindMany.mockResolvedValue([PRODUCT_A]);
+      transactionFn.mockRejectedValueOnce(new Error("expired transaction: timeout after 20000ms"));
+
+      const request = new Request("https://buildohub.in/api/builder/cart/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: "prod-a", quantity: 5 }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(409);
+      const data = await response.json();
+      expect(data.error).toBe("Cart was updated concurrently. Please retry adding this item.");
+    });
+
+    it("passes extended transaction timeout configuration { maxWait: 10000, timeout: 20000 } to prisma.$transaction", async () => {
+      productFindFirst.mockResolvedValue(PRODUCT_A);
+      productFindMany.mockResolvedValue([PRODUCT_A]);
+      cartItemFindUnique.mockResolvedValue(null);
+      cartItemUpsert.mockResolvedValue({
+        id: "cart-item-1",
+        userId: "builder-user-1",
+        productId: "prod-a",
+        quantity: 5,
+        resolvedPrice: 380,
+      });
+
+      const request = new Request("https://buildohub.in/api/builder/cart/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: "prod-a", quantity: 5 }),
+      });
+
+      await POST(request);
+      expect(transactionFn).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({ maxWait: 10000, timeout: 20000 })
+      );
     });
 
     it("Scenario C — Update existing quantity when item does not exist: returns 409 Conflict", async () => {
@@ -763,6 +845,87 @@ describe("Cart Optimization — Phase 1", () => {
       expect(state.isMutating).toBe(false);
       expect(state.hasLoaded).toBe(true);
       expect(state.error).toBeNull();
+    });
+
+    it("addItem() optimistically updates store items and summary while in-flight before response resolves", async () => {
+      let resolvePost: (value: any) => void;
+      const deferred = new Promise((resolve) => {
+        resolvePost = resolve;
+      });
+      vi.spyOn(apiModule, "builderApiPost").mockReturnValue(deferred as any);
+
+      // Clean store state
+      useCartStore.setState({ items: [], summary: { itemCount: 0, subtotal: 0, subtotalLabel: "₹0" } });
+
+      const promise = useCartStore.getState().addItem("prod-optimistic", 5);
+
+      // Check immediate in-flight state (0ms perceived latency)
+      const inFlightState = useCartStore.getState();
+      expect(inFlightState.isMutating).toBe(true);
+      expect(inFlightState.items).toHaveLength(1);
+      expect(inFlightState.items[0].productId).toBe("prod-optimistic");
+      expect(inFlightState.items[0].quantity).toBe(5);
+
+      // Complete request
+      resolvePost!({
+        id: "cart-item-opt",
+        items: [
+          {
+            id: "cart-item-opt",
+            productId: "prod-optimistic",
+            name: "Optimistic Item Confirmed",
+            unit: "BAG",
+            supplierId: "supp-1",
+            supplierName: "Supplier Alpha",
+            quantity: 5,
+            unitPrice: 200,
+            lineTotal: 1000,
+          },
+        ],
+        summary: {
+          itemCount: 1,
+          subtotal: 1000,
+          subtotalLabel: "₹1,000",
+        },
+      });
+
+      await promise;
+
+      const finalState = useCartStore.getState();
+      expect(finalState.isMutating).toBe(false);
+      expect(finalState.items[0].name).toBe("Optimistic Item Confirmed");
+      expect(finalState.items[0].lineTotal).toBe(1000);
+      expect(finalState.summary.subtotal).toBe(1000);
+    });
+
+    it("getCachedMarkupRows and createCachedMarkupClient resolve markups from memory without querying database", async () => {
+      const mockRows = [
+        { scope: "GLOBAL", scopeId: null, percentage: 10, isEnabled: true },
+        { scope: "CATEGORY", scopeId: "cat-cement", percentage: 5, isEnabled: true },
+      ];
+      const mockDb = {
+        markupSetting: {
+          findMany: vi.fn().mockResolvedValue(mockRows),
+        },
+      };
+
+      invalidateMarkupCache();
+      const rows = await getCachedMarkupRows(mockDb);
+      expect(rows).toEqual(mockRows);
+
+      const cachedClient = createCachedMarkupClient(rows);
+      // Query with matching CATEGORY and GLOBAL conditions
+      const filtered = await cachedClient.markupSetting.findMany({
+        where: {
+          OR: [
+            { scope: "CATEGORY", scopeId: { in: ["cat-cement"] } },
+            { scope: "GLOBAL", scopeId: null },
+          ],
+        },
+      });
+      expect(filtered).toHaveLength(2);
+      expect(filtered.map((r: any) => r.scope)).toContain("CATEGORY");
+      expect(filtered.map((r: any) => r.scope)).toContain("GLOBAL");
     });
 
     it("addItem() does not update state and throws error on POST failure", async () => {

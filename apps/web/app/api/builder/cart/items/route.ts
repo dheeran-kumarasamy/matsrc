@@ -91,17 +91,22 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const ctx = await resolveUserCtx(request);
-    const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
     const body = await request.json().catch(() => ({}));
     const productId = typeof body.productId === "string" ? body.productId.trim() : "";
     const quantity = Number(body.quantity);
 
-    if (!productId || !Number.isInteger(quantity) || quantity < 1) {
+    if (!productId || !Number.isFinite(quantity) || quantity < 0.0001) {
       return NextResponse.json(
         { error: "Valid productId and quantity are required" },
         { status: 400 }
       );
     }
+
+    // Parallel execution of builder profile resolution and product group lookup
+    const [user, groupResult] = await Promise.all([
+      getOrCreateBuilder(ctx.userId, ctx.email, ctx.name),
+      resolveProductGroupForCart(productId, quantity),
+    ]);
 
     // Operation-level idempotency key (header takes precedence, body fallback)
     const idempotencyKey = (
@@ -132,9 +137,9 @@ export async function POST(request: Request) {
             prisma.$transaction(fn, { maxWait: 10000, timeout: 20000 })
         : (fn: (tx: any) => Promise<any>) => fn(prisma);
 
-    const groupResult = await resolveProductGroupForCart(productId, quantity);
     if (!groupResult) {
-      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+      console.warn("[cart/items] Product not found in database:", { productId, quantity });
+      return NextResponse.json({ error: "Product not found", productId }, { status: 404 });
     }
     const { product, candidates } = groupResult;
 
@@ -429,7 +434,9 @@ export async function POST(request: Request) {
             }
 
             // Actual final committed quantity for this cart item
-            const targetQuantity = current ? current.quantity + quantity : quantity;
+            const targetQuantity = current
+              ? Math.round((current.quantity + quantity) * 10000) / 10000
+              : Math.round(quantity * 10000) / 10000;
 
             // Re-resolve pricing tier for the ACTUAL final quantity
             const resolution = resolveLowestPriceForQuantity(candidates, targetQuantity);

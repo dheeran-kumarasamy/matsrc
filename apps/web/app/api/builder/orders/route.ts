@@ -13,6 +13,7 @@ import {
   formatCurrency,
   getOrCreateBuilder,
   getUserCtx,
+  resolveUserCtx,
 } from "@/lib/builder-db";
 import { createOrdersFromCart } from "@/lib/order-checkout";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
@@ -58,7 +59,7 @@ function resolveStatusWhere(rawStatus: string | null): Prisma.OrderWhereInput["s
 
 export async function GET(request: Request) {
   try {
-    const ctx = getUserCtx(request);
+    const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
     const url = new URL(request.url);
@@ -172,17 +173,27 @@ export async function GET(request: Request) {
         };
       })
     );
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     console.error("Orders GET error:", error);
-    return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch orders", details: error?.message }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const ctx = getUserCtx(request);
+    const ctx = await resolveUserCtx(request);
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
     const body = await request.json().catch(() => ({}));
+    const headerIdempotencyKey = request.headers.get("x-idempotency-key") || request.headers.get("idempotency-key");
+    const idempotencyKey =
+      typeof body.idempotencyKey === "string" && body.idempotencyKey.trim()
+        ? body.idempotencyKey.trim()
+        : typeof headerIdempotencyKey === "string" && headerIdempotencyKey.trim()
+        ? headerIdempotencyKey.trim()
+        : null;
 
     // Cart -> grouped-by-supplier Order creation (UF-03 shared pipeline).
     // Also reused by the Quick Material Request nearest-match flow — see
@@ -200,6 +211,7 @@ export async function POST(request: Request) {
       // quick-request/route.ts), which calls createOrdersFromCart directly
       // without this flag.
       requireSiteId: true,
+      idempotencyKey,
     });
 
     if (!result.ok) {
@@ -207,8 +219,11 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ orders: result.orders }, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     console.error("Orders POST error:", error);
-    return NextResponse.json({ error: "Failed to create order" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create order", details: error?.message }, { status: 500 });
   }
 }

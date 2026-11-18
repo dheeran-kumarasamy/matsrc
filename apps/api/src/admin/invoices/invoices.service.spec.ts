@@ -235,12 +235,11 @@ describe("InvoicesService.generate", () => {
           roundingAdjustment: "-0.50",
           // taxableValue = 1000 (line subtotal) + 50 + 10 - 20 = 1040
           confirmedTaxableValue: "1040.00",
-          // tax is computed on the line items only (180), unaffected by
-          // the adjustments above, consistent with
-          // aggregateSupplierInvoiceTotals's documented behaviour.
-          confirmedTaxAmount: "180.00",
-          // total = 1040 + 180 - 0.50 = 1219.50
-          confirmedTotalAmount: "1219.50",
+          // Net adjustment = 50 + 10 - 20 = 40. GST on adjustments @ 18% = 7.20.
+          // tax = line tax (180) + adjustment tax (7.20) = 187.20.
+          confirmedTaxAmount: "187.20",
+          // total = 1040 + 187.20 - 0.50 = 1226.70
+          confirmedTotalAmount: "1226.70",
           supplier: { region: "Tamil Nadu" },
           lineItems: [
             {
@@ -282,8 +281,8 @@ describe("InvoicesService.generate", () => {
     expect(createData.discountAmount.toString()).toBe("20");
     expect(createData.roundingAdjustment.toString()).toBe("-0.5");
     expect(createData.taxableValue.toString()).toBe("1040");
-    expect(createData.taxAmount.toString()).toBe("180");
-    expect(createData.totalAmount.toString()).toBe("1219.5");
+    expect(createData.taxAmount.toString()).toBe("187.2");
+    expect(createData.totalAmount.toString()).toBe("1226.7");
 
     // Reconciliation check: subtotal + freight + other - discount === taxableValue
     const reconciledTaxable = createData.subtotal
@@ -475,7 +474,8 @@ describe("InvoicesService.generate — Frozen Order Snapshot Reconciliation", ()
 
   it("flags a discrepancy when freight/other-charges/discount/rounding adjustments make the invoice total diverge from the frozen payable", async () => {
     // Same line items as RECONCILED_SNAPSHOT (buyer total = 1180, tax =
-    // 180), but a freight charge pushes the invoice's own total to 1230 —
+    // 180), but a freight charge of 50 pushes the taxable value to 1050 and
+    // its 18% GST (9) pushes total tax to 189 and total payable to 1239 —
     // the frozen snapshot (1180) never anticipated this operational
     // adjustment, so it must be flagged, not silently absorbed.
     const { service, prisma } = buildService({
@@ -489,8 +489,8 @@ describe("InvoicesService.generate — Frozen Order Snapshot Reconciliation", ()
           discountAmount: "0",
           roundingAdjustment: "0",
           confirmedTaxableValue: "1050.00",
-          confirmedTaxAmount: "180.00",
-          confirmedTotalAmount: "1230.00",
+          confirmedTaxAmount: "189.00",
+          confirmedTotalAmount: "1239.00",
           supplier: { region: "Tamil Nadu" },
           lineItems: [
             {
@@ -520,10 +520,9 @@ describe("InvoicesService.generate — Frozen Order Snapshot Reconciliation", ()
 
     const discrepancyCall = auditCreateSpy.mock.calls.find((call: any) => call[0].data.action === "INVOICE_RECONCILIATION_DISCREPANCY");
     expect(discrepancyCall).toBeDefined();
-    expect(discrepancyCall![0].data.metadata.calculatedPayable).toBe(1230);
+    expect(discrepancyCall![0].data.metadata.calculatedPayable).toBe(1239);
     expect(discrepancyCall![0].data.metadata.expectedPayable).toBe(1180);
-    // Tax itself still reconciles — only the payable differs.
-    expect(discrepancyCall![0].data.metadata.calculatedTax).toBe(180);
+    expect(discrepancyCall![0].data.metadata.calculatedTax).toBe(189);
     expect(discrepancyCall![0].data.metadata.expectedTax).toBe(180);
   });
 

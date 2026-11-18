@@ -54,8 +54,8 @@ describe("renderInvoicePdf", () => {
         discountAmount: 20,
         roundingAdjustment: -0.5,
         taxableValue: 1040,
-        taxAmount: 180,
-        totalAmount: 1219.5,
+        taxAmount: 187.2,
+        totalAmount: 1226.7,
       })
     );
     expect(buffer.length).toBeGreaterThan(0);
@@ -73,6 +73,65 @@ describe("renderInvoicePdf", () => {
         taxableValue: 900,
         taxAmount: 162,
         totalAmount: 1062,
+      })
+    );
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+  });
+
+  it("renders a valid Form GST INV-01 compliant PDF with Bill-To, HSN, UQC, tax splits and bank details", async () => {
+    const buffer = await renderInvoicePdf(
+      fakeInvoice({
+        documentType: "INV",
+        supplyType: "B2B",
+        reverseCharge: false,
+        placeOfSupplyStateCode: "33",
+        placeOfSupplyStateName: "Tamil Nadu",
+        sellerStateCode: "33",
+        cgstAmount: 90,
+        sgstAmount: 90,
+        igstAmount: 0,
+        totalInWords: "Rupees One Thousand One Hundred Eighty Only",
+        buyer: {
+          legalName: "Rahul Sharma Infra Works",
+          tradeName: "Sharma Constructions",
+          gstin: "33AABCS1429B1ZB",
+          addressLine: "12 Gandhi Road",
+          city: "Chennai",
+          state: "Tamil Nadu",
+          pincode: "600001",
+          stateCode: "33",
+        },
+        lineItems: [
+          {
+            slNo: 1,
+            productName: "OPC 53 Cement",
+            description: "50kg bag",
+            hsnCode: "2523",
+            uqc: "BAG",
+            unit: "Bag",
+            quantity: 10,
+            unitPrice: 100,
+            taxableAmount: 1000,
+            taxRate: 18,
+            cgstRate: 9,
+            cgstAmount: 90,
+            sgstRate: 9,
+            sgstAmount: 90,
+            igstRate: null,
+            igstAmount: 0,
+            taxAmount: 180,
+            subtotal: 1000,
+            total: 1180,
+          },
+        ],
+        bankDetails: {
+          bankName: "ICICI Bank Ltd",
+          accountName: "Triad Build Tech Private Limited",
+          accountNumber: "777705678978",
+          ifscCode: "ICIC0004179",
+          branch: "Ganapathy branch, Coimbatore",
+        },
       })
     );
     expect(buffer.length).toBeGreaterThan(0);

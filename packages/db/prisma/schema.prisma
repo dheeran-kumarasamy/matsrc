@@ -1704,6 +1704,36 @@ model Invoice {
   shipToState         String?
   shipToPincode       String?
 
+  // Form GST INV-01 / E-Invoice & GST Compliance Fields (Phase 1)
+  documentType           String   @default("INV")
+  supplyType             String   @default("B2B")
+  reverseCharge          Boolean  @default(false)
+  placeOfSupplyStateCode String?
+  placeOfSupplyStateName String?
+  sellerStateCode        String   @default("33")
+
+  // Tax bifurcation (CGST + SGST for intra-state, IGST for inter-state)
+  cgstAmount Decimal @default(0) @db.Decimal(12, 2)
+  sgstAmount Decimal @default(0) @db.Decimal(12, 2)
+  igstAmount Decimal @default(0) @db.Decimal(12, 2)
+  cessAmount Decimal @default(0) @db.Decimal(12, 2)
+
+  // Buyer / Recipient Details snapshot frozen at generation time
+  buyerLegalName   String?
+  buyerTradeName   String?
+  buyerGstin       String?
+  buyerAddressLine String?
+  buyerCity        String?
+  buyerState       String?
+  buyerPincode     String?
+  buyerStateCode   String?
+
+  // Additional Reference & Commercial Fields
+  buyerPoNumber   String?
+  ewayBillNumber  String?
+  vehicleNumber   String?
+  transporterName String?
+
   @@index([orderId])
   @@index([builderId])
   @@index([siteId])
@@ -1738,6 +1768,22 @@ model InvoiceLineItem {
   taxAmount   Decimal  @db.Decimal(12, 2)
   subtotal    Decimal  @db.Decimal(12, 2)
   total       Decimal  @db.Decimal(12, 2)
+
+  // Form GST INV-01 / E-Invoice Item Compliance Fields (Phase 1)
+  slNo          Int?
+  hsnCode       String?
+  uqc           String?
+  unit          String?
+  isService     Boolean  @default(false)
+  taxableAmount Decimal? @db.Decimal(12, 2)
+  cgstRate      Decimal? @db.Decimal(5, 2)
+  cgstAmount    Decimal  @default(0) @db.Decimal(12, 2)
+  sgstRate      Decimal? @db.Decimal(5, 2)
+  sgstAmount    Decimal  @default(0) @db.Decimal(12, 2)
+  igstRate      Decimal? @db.Decimal(5, 2)
+  igstAmount    Decimal  @default(0) @db.Decimal(12, 2)
+  cessRate      Decimal? @db.Decimal(5, 2)
+  cessAmount    Decimal  @default(0) @db.Decimal(12, 2)
 
   // Admin-Configurable Product Markup — platform gross-markup reconciliation
   // traceability, frozen at invoice-generation time from the underlying

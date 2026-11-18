@@ -5,10 +5,16 @@ import {
   Prisma,
   generateInvoiceNumber,
   calculateLineGst,
+  calculateLineTaxSplit,
+  getStateCode,
+  getStateName,
+  normalizeUqc,
+  numberToIndianWords,
   roundCurrency,
   assertFullOrderSnapshotIntegrity,
   InconsistentOrderSnapshotError,
 } from "@matsrc/db";
+import { BUILDOHUB_COMPANY } from "src/common/company-info";
 import { PrismaService } from "src/prisma/prisma.service";
 
 // Buyer Invoice / Frozen Order Snapshot Reconciliation (Phase 5B) —
@@ -107,7 +113,7 @@ export class InvoicesService {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
-        items: { include: { product: { include: { supplier: true } } } },
+        items: { include: { product: { include: { supplier: true, unitRef: true } } } },
         site: true,
         user: true,
         invoice: true,
@@ -233,7 +239,13 @@ export class InvoicesService {
     // separate agent/commission invoice) is a distinct, UNRESOLVED
     // tax/accounting question this implementation does not decide — see the
     // Final Report's "tax/accounting decisions still requiring approval".
-    const lineItems = supplierInvoice.lineItems.map((sli: any) => {
+    const site = (order as any).site;
+    const user = (order as any).user;
+    const sellerStateCode = "33"; // BUILDOHUB_COMPANY (Tamil Nadu)
+    const placeOfSupplyStateCode = getStateCode(site?.state, site?.gstin) ?? "33";
+    const placeOfSupplyStateName = site?.state ?? getStateName(placeOfSupplyStateCode) ?? "Tamil Nadu";
+
+    const lineItems = supplierInvoice.lineItems.map((sli: any, index: number) => {
       const item = orderItemById.get(sli.orderItemId);
       const approvedUnitPrice = Number(sli.approvedUnitPrice);
       const markupPercent =
@@ -241,22 +253,49 @@ export class InvoicesService {
       const buyerUnitPrice = Math.round((approvedUnitPrice * (1 + markupPercent / 100) + Number.EPSILON) * 100) / 100;
       const markupAmount = Math.round((buyerUnitPrice - approvedUnitPrice + Number.EPSILON) * 100) / 100;
 
-      const gst = calculateLineGst({
+      const taxSplit = calculateLineTaxSplit({
         quantity: Number(sli.actualQuantity),
         unitPrice: buyerUnitPrice,
         gstRatePercent: sli.taxRatePercent !== null && sli.taxRatePercent !== undefined ? Number(sli.taxRatePercent) : null,
+        sellerStateCode,
+        placeOfSupplyStateCode,
       });
 
+      const rawUnit = item?.product?.unitRef?.code || item?.product?.unit || null;
+      const uqc = normalizeUqc(rawUnit);
+      const hsnCode =
+        item?.product?.hsnCode ??
+        (item?.product?.name?.toLowerCase().includes("cement")
+          ? "2523"
+          : item?.product?.name?.toLowerCase().includes("steel") || item?.product?.name?.toLowerCase().includes("tmt")
+            ? "7214"
+            : "6810");
+
       return {
+        slNo: index + 1,
         productId: (item?.productId as string) ?? null,
         productName: (item?.product?.name as string) ?? "Product",
         description: (item?.product?.description as string | null) ?? null,
         quantity: Number(sli.actualQuantity),
-        unitPrice: new Prisma.Decimal(gst.unitPrice.toString()),
-        taxRate: gst.gstRatePercent !== null ? new Prisma.Decimal(gst.gstRatePercent.toString()) : null,
-        taxAmount: new Prisma.Decimal(gst.gstAmount.toString()),
-        subtotal: new Prisma.Decimal(gst.lineSubtotal.toString()),
-        total: new Prisma.Decimal(gst.lineTotal.toString()),
+        unitPrice: new Prisma.Decimal(taxSplit.unitPrice.toString()),
+        taxRate: taxSplit.gstRatePercent !== null ? new Prisma.Decimal(taxSplit.gstRatePercent.toString()) : null,
+        taxAmount: new Prisma.Decimal(taxSplit.totalTaxAmount.toString()),
+        subtotal: new Prisma.Decimal(taxSplit.taxableAmount.toString()),
+        total: new Prisma.Decimal(taxSplit.lineTotal.toString()),
+        // Form GST INV-01 / E-Invoice Item Compliance Fields (Phase 1 & 2)
+        hsnCode,
+        uqc,
+        unit: rawUnit ?? "Unit",
+        isService: false,
+        taxableAmount: new Prisma.Decimal(taxSplit.taxableAmount.toString()),
+        cgstRate: taxSplit.cgstRate > 0 ? new Prisma.Decimal(taxSplit.cgstRate.toString()) : null,
+        cgstAmount: new Prisma.Decimal(taxSplit.cgstAmount.toString()),
+        sgstRate: taxSplit.sgstRate > 0 ? new Prisma.Decimal(taxSplit.sgstRate.toString()) : null,
+        sgstAmount: new Prisma.Decimal(taxSplit.sgstAmount.toString()),
+        igstRate: taxSplit.igstRate > 0 ? new Prisma.Decimal(taxSplit.igstRate.toString()) : null,
+        igstAmount: new Prisma.Decimal(taxSplit.igstAmount.toString()),
+        cessRate: null,
+        cessAmount: new Prisma.Decimal("0"),
         // Admin-Configurable Product Markup — reconciliation traceability.
         supplierUnitPrice: new Prisma.Decimal(approvedUnitPrice.toString()),
         markupPercent: new Prisma.Decimal(markupPercent.toString()),
@@ -264,27 +303,42 @@ export class InvoicesService {
       };
     });
 
-    // Audit fix (financial transparency): `subtotal` is the PURE sum of
-    // this invoice's own line items — exactly what a reader gets by adding
-    // up the line items shown on the document.
-    //
-    // Admin-Configurable Product Markup — IMPORTANT: taxableValue/taxAmount/
-    // totalAmount are now computed from the BUYER-facing (marked-up) line
-    // items above, NOT copied from supplierInvoice.confirmedTaxableValue/
-    // confirmedTaxAmount/confirmedTotalAmount — those remain the SUPPLIER
-    // settlement figures (admin-verified rate x actual quantity, before
-    // markup) and are intentionally never asserted to equal the buyer
-    // invoice's totals once a non-zero markup applies; the two are
-    // DIFFERENT by design (the gap IS the platform's gross markup, per the
-    // confirmed business model). Freight/other charges/discount/rounding
-    // are operational pass-through adjustments (never themselves marked
-    // up) and are added/subtracted identically to the previous behaviour.
     const subtotal = lineItems.reduce((acc: Prisma.Decimal, li: (typeof lineItems)[number]) => acc.plus(li.subtotal), new Prisma.Decimal(0));
     const freightChargeAmount = new Prisma.Decimal(supplierInvoice.freightChargeAmount.toString());
     const otherChargesAmount = new Prisma.Decimal(supplierInvoice.otherChargesAmount.toString());
     const discountAmount = new Prisma.Decimal(supplierInvoice.discountAmount.toString());
     const roundingAdjustment = new Prisma.Decimal(supplierInvoice.roundingAdjustment.toString());
-    const taxAmount = lineItems.reduce((acc: Prisma.Decimal, li: (typeof lineItems)[number]) => acc.plus(li.taxAmount), new Prisma.Decimal(0));
+
+    // Freight and other charges entered by Admin are exclusive of GST and attract 18% GST (Rule 46 & Form GST INV-01)
+    const netAdjustment = freightChargeAmount.plus(otherChargesAmount).minus(discountAmount);
+    const isIntraState = sellerStateCode === placeOfSupplyStateCode;
+    let adjustmentCgst = new Prisma.Decimal(0);
+    let adjustmentSgst = new Prisma.Decimal(0);
+    let adjustmentIgst = new Prisma.Decimal(0);
+
+    if (netAdjustment.greaterThan(0)) {
+      if (isIntraState) {
+        // 9% CGST + 9% SGST
+        const halfTax = Math.round((netAdjustment.toNumber() * 0.09 + Number.EPSILON) * 100) / 100;
+        adjustmentCgst = new Prisma.Decimal(halfTax.toString());
+        adjustmentSgst = new Prisma.Decimal(halfTax.toString());
+      } else {
+        // 18% IGST
+        const fullTax = Math.round((netAdjustment.toNumber() * 0.18 + Number.EPSILON) * 100) / 100;
+        adjustmentIgst = new Prisma.Decimal(fullTax.toString());
+      }
+    }
+
+    const linesTaxAmount = lineItems.reduce((acc: Prisma.Decimal, li: (typeof lineItems)[number]) => acc.plus(li.taxAmount), new Prisma.Decimal(0));
+    const linesCgstAmount = lineItems.reduce((acc: Prisma.Decimal, li: (typeof lineItems)[number]) => acc.plus(li.cgstAmount), new Prisma.Decimal(0));
+    const linesSgstAmount = lineItems.reduce((acc: Prisma.Decimal, li: (typeof lineItems)[number]) => acc.plus(li.sgstAmount), new Prisma.Decimal(0));
+    const linesIgstAmount = lineItems.reduce((acc: Prisma.Decimal, li: (typeof lineItems)[number]) => acc.plus(li.igstAmount), new Prisma.Decimal(0));
+
+    const cgstAmount = linesCgstAmount.plus(adjustmentCgst);
+    const sgstAmount = linesSgstAmount.plus(adjustmentSgst);
+    const igstAmount = linesIgstAmount.plus(adjustmentIgst);
+    const taxAmount = linesTaxAmount.plus(adjustmentCgst).plus(adjustmentSgst).plus(adjustmentIgst);
+
     const taxableValue = subtotal.plus(freightChargeAmount).plus(otherChargesAmount).minus(discountAmount);
     const totalAmount = taxableValue.plus(taxAmount).plus(roundingAdjustment);
 
@@ -402,6 +456,25 @@ export class InvoicesService {
             siteId: order.siteId,
             supplierId,
             supplierInvoiceId: supplierInvoice.id,
+            // Form GST INV-01 / E-Invoice & GST Compliance Fields (Phase 1 & 2)
+            documentType: "INV",
+            supplyType: "B2B",
+            reverseCharge: false,
+            placeOfSupplyStateCode,
+            placeOfSupplyStateName,
+            sellerStateCode,
+            cgstAmount,
+            sgstAmount,
+            igstAmount,
+            cessAmount: new Prisma.Decimal(0),
+            buyerLegalName: user?.name ?? site?.name ?? "Contractor/Client",
+            buyerTradeName: site?.name ?? null,
+            buyerGstin: site?.gstin ?? "URP",
+            buyerAddressLine: site?.addressLine ?? null,
+            buyerCity: site?.city ?? null,
+            buyerState: site?.state ?? null,
+            buyerPincode: site?.pincode ?? null,
+            buyerStateCode: placeOfSupplyStateCode,
             shipFromState: supplierInvoice.supplier?.region ?? null,
             shipToAddressLine: site?.addressLine ?? null,
             shipToCity: site?.city ?? null,
@@ -423,6 +496,7 @@ export class InvoicesService {
             generatedAt: now,
             lineItems: {
               create: lineItems.map((li: (typeof lineItems)[number]) => ({
+                slNo: li.slNo,
                 productId: li.productId,
                 productName: li.productName,
                 description: li.description,
@@ -432,6 +506,19 @@ export class InvoicesService {
                 taxAmount: li.taxAmount,
                 subtotal: li.subtotal,
                 total: li.total,
+                hsnCode: li.hsnCode,
+                uqc: li.uqc,
+                unit: li.unit,
+                isService: li.isService,
+                taxableAmount: li.taxableAmount,
+                cgstRate: li.cgstRate,
+                cgstAmount: li.cgstAmount,
+                sgstRate: li.sgstRate,
+                sgstAmount: li.sgstAmount,
+                igstRate: li.igstRate,
+                igstAmount: li.igstAmount,
+                cessRate: li.cessRate,
+                cessAmount: li.cessAmount,
                 // Admin-Configurable Product Markup — reconciliation
                 // traceability (see this method's doc comment above).
                 supplierUnitPrice: li.supplierUnitPrice,
@@ -618,16 +705,63 @@ export class InvoicesService {
   // defense in depth.
   private serialize(invoice: any, options: { includeMarkupDetail?: boolean } = {}) {
     const includeMarkupDetail = options.includeMarkupDetail ?? false;
+
+    const sellerStateCode = invoice.sellerStateCode ?? "33";
+    const placeOfSupplyStateCode =
+      invoice.placeOfSupplyStateCode ??
+      invoice.buyerStateCode ??
+      getStateCode(invoice.site?.state, invoice.site?.gstin) ??
+      "33";
+    const placeOfSupplyStateName =
+      invoice.placeOfSupplyStateName ??
+      invoice.site?.state ??
+      getStateName(placeOfSupplyStateCode) ??
+      "Tamil Nadu";
+    const isIntraState = sellerStateCode === placeOfSupplyStateCode;
+
+    const totalTaxAmount = Number(invoice.taxAmount);
+
+    let cgstTotal = Number(invoice.cgstAmount ?? 0);
+    let sgstTotal = Number(invoice.sgstAmount ?? 0);
+    let igstTotal = Number(invoice.igstAmount ?? 0);
+
+    if (cgstTotal === 0 && sgstTotal === 0 && igstTotal === 0 && totalTaxAmount > 0) {
+      if (isIntraState) {
+        cgstTotal = Math.round((totalTaxAmount / 2 + Number.EPSILON) * 100) / 100;
+        sgstTotal = Math.round((totalTaxAmount - cgstTotal + Number.EPSILON) * 100) / 100;
+      } else {
+        igstTotal = totalTaxAmount;
+      }
+    }
+
+    const buyer = {
+      legalName: invoice.buyerLegalName ?? invoice.builder?.name ?? "Contractor/Client",
+      tradeName: invoice.buyerTradeName ?? invoice.site?.name ?? null,
+      gstin: invoice.buyerGstin ?? invoice.site?.gstin ?? "URP",
+      addressLine: invoice.buyerAddressLine ?? invoice.site?.addressLine ?? null,
+      city: invoice.buyerCity ?? invoice.site?.city ?? null,
+      state: invoice.buyerState ?? invoice.site?.state ?? null,
+      pincode: invoice.buyerPincode ?? invoice.site?.pincode ?? null,
+      stateCode: invoice.buyerStateCode ?? placeOfSupplyStateCode,
+    };
+
     return {
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       invoiceDate: invoice.invoiceDate,
       status: invoice.status,
+      documentType: invoice.documentType ?? "INV",
+      supplyType: invoice.supplyType ?? "B2B",
+      reverseCharge: Boolean(invoice.reverseCharge),
+      placeOfSupplyStateCode,
+      placeOfSupplyStateName,
+      sellerStateCode,
       orderId: invoice.orderId,
       enquiryId: invoice.enquiryId ?? invoice.order?.enquiryId ?? invoice.orderId,
       builder: invoice.builder
         ? { id: invoice.builder.id, name: invoice.builder.name, email: invoice.builder.email, phone: invoice.builder.phone }
         : null,
+      buyer,
       site: invoice.site
         ? {
             id: invoice.site.id,
@@ -660,30 +794,90 @@ export class InvoicesService {
               pincode: invoice.shipToPincode ?? null,
             }
           : null,
-      lineItems: (invoice.lineItems ?? []).map((li: any) => ({
-        id: li.id,
-        productId: li.productId,
-        productName: li.productName,
-        description: li.description,
-        quantity: Number(li.quantity),
-        unitPrice: Number(li.unitPrice),
-        taxRate: li.taxRate !== null && li.taxRate !== undefined ? Number(li.taxRate) : null,
-        taxAmount: Number(li.taxAmount),
-        subtotal: Number(li.subtotal),
-        total: Number(li.total),
-        // Admin-Configurable Product Markup — platform gross-markup
-        // reconciliation traceability, admin-only (see includeMarkupDetail
-        // above). Null for invoices generated before this feature existed
-        // (see InvoiceLineItem's schema doc comment) or when the caller is
-        // not authorized to see it.
-        ...(includeMarkupDetail
-          ? {
-              supplierUnitPrice: li.supplierUnitPrice !== null && li.supplierUnitPrice !== undefined ? Number(li.supplierUnitPrice) : null,
-              markupPercent: li.markupPercent !== null && li.markupPercent !== undefined ? Number(li.markupPercent) : null,
-              markupAmount: li.markupAmount !== null && li.markupAmount !== undefined ? Number(li.markupAmount) : null,
-            }
-          : {}),
-      })),
+      lineItems: (invoice.lineItems ?? []).map((li: any, index: number) => {
+        const lineTaxRate = li.taxRate !== null && li.taxRate !== undefined ? Number(li.taxRate) : null;
+        const lineTaxAmount = Number(li.taxAmount);
+        let lineCgst = Number(li.cgstAmount ?? 0);
+        let lineSgst = Number(li.sgstAmount ?? 0);
+        let lineIgst = Number(li.igstAmount ?? 0);
+
+        if (lineCgst === 0 && lineSgst === 0 && lineIgst === 0 && lineTaxAmount > 0) {
+          if (isIntraState) {
+            lineCgst = Math.round((lineTaxAmount / 2 + Number.EPSILON) * 100) / 100;
+            lineSgst = Math.round((lineTaxAmount - lineCgst + Number.EPSILON) * 100) / 100;
+          } else {
+            lineIgst = lineTaxAmount;
+          }
+        }
+
+        const hsnCode =
+          li.hsnCode ??
+          (li.productName?.toLowerCase().includes("cement")
+            ? "2523"
+            : li.productName?.toLowerCase().includes("steel") || li.productName?.toLowerCase().includes("tmt")
+              ? "7214"
+              : "6810");
+
+        return {
+          id: li.id,
+          slNo: li.slNo ?? index + 1,
+          productId: li.productId,
+          productName: li.productName,
+          description: li.description,
+          hsnCode,
+          uqc: li.uqc ?? "OTH",
+          unit: li.unit ?? "Unit",
+          isService: Boolean(li.isService),
+          quantity: Number(li.quantity),
+          unitPrice: Number(li.unitPrice),
+          taxableAmount:
+            li.taxableAmount !== null && li.taxableAmount !== undefined
+              ? Number(li.taxableAmount)
+              : Number(li.subtotal),
+          taxRate: lineTaxRate,
+          cgstRate:
+            li.cgstRate !== null && li.cgstRate !== undefined
+              ? Number(li.cgstRate)
+              : isIntraState && lineTaxRate !== null
+                ? lineTaxRate / 2
+                : null,
+          cgstAmount: lineCgst,
+          sgstRate:
+            li.sgstRate !== null && li.sgstRate !== undefined
+              ? Number(li.sgstRate)
+              : isIntraState && lineTaxRate !== null
+                ? lineTaxRate / 2
+                : null,
+          sgstAmount: lineSgst,
+          igstRate:
+            li.igstRate !== null && li.igstRate !== undefined
+              ? Number(li.igstRate)
+              : !isIntraState && lineTaxRate !== null
+                ? lineTaxRate
+                : null,
+          igstAmount: lineIgst,
+          taxAmount: lineTaxAmount,
+          subtotal: Number(li.subtotal),
+          total: Number(li.total),
+          // Admin-Configurable Product Markup — platform gross-markup
+          // reconciliation traceability, admin-only (see includeMarkupDetail
+          // above). Null for invoices generated before this feature existed
+          // (see InvoiceLineItem's schema doc comment) or when the caller is
+          // not authorized to see it.
+          ...(includeMarkupDetail
+            ? {
+                supplierUnitPrice:
+                  li.supplierUnitPrice !== null && li.supplierUnitPrice !== undefined
+                    ? Number(li.supplierUnitPrice)
+                    : null,
+                markupPercent:
+                  li.markupPercent !== null && li.markupPercent !== undefined ? Number(li.markupPercent) : null,
+                markupAmount:
+                  li.markupAmount !== null && li.markupAmount !== undefined ? Number(li.markupAmount) : null,
+              }
+            : {}),
+        };
+      }),
       subtotal: Number(invoice.subtotal),
       // Invoice-level adjustments — surfaced explicitly (audit fix) so the
       // displayed line items + adjustments + tax visibly reconcile to
@@ -700,12 +894,22 @@ export class InvoicesService {
         invoice.taxableValue !== null && invoice.taxableValue !== undefined
           ? Number(invoice.taxableValue)
           : Number(invoice.subtotal),
-      taxAmount: Number(invoice.taxAmount),
+      cgstAmount: cgstTotal,
+      sgstAmount: sgstTotal,
+      igstAmount: igstTotal,
+      cessAmount: Number(invoice.cessAmount ?? 0),
+      taxAmount: totalTaxAmount,
       totalAmount: Number(invoice.totalAmount),
+      totalInWords: numberToIndianWords(Number(invoice.totalAmount)),
       currency: invoice.currency,
       paymentStatus: invoice.paymentStatus,
       amountPaid: invoice.amountPaid !== null && invoice.amountPaid !== undefined ? Number(invoice.amountPaid) : null,
       amountDue: invoice.amountDue !== null && invoice.amountDue !== undefined ? Number(invoice.amountDue) : null,
+      bankDetails: BUILDOHUB_COMPANY.bankDetails,
+      buyerPoNumber: invoice.buyerPoNumber ?? null,
+      ewayBillNumber: invoice.ewayBillNumber ?? null,
+      vehicleNumber: invoice.vehicleNumber ?? null,
+      transporterName: invoice.transporterName ?? null,
       generatedBy: invoice.generatedBy
         ? { id: invoice.generatedBy.id, name: invoice.generatedBy.name, email: invoice.generatedBy.email }
         : null,

@@ -90,6 +90,9 @@ export async function GET(request: Request) {
         // below for each order in the list, exactly like the order-detail
         // route. See packages/db/lib/order-buyer-confirmation.ts.
         supplierInvoice: { select: { status: true, confirmedTotalAmount: true } },
+        invoice: {
+          select: { id: true, invoiceNumber: true },
+        },
         items: {
 
           select: {
@@ -157,6 +160,7 @@ export async function GET(request: Request) {
         ),
         siteId: order.siteId,
         siteName: order.site?.name ?? "Unassigned",
+        invoice: order.invoice ? { id: order.invoice.id, invoiceNumber: order.invoice.invoiceNumber } : null,
 
         // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
         // Dispatch — a payment link is never offered before

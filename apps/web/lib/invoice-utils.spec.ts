@@ -106,4 +106,49 @@ describe("serializeInvoice financial-transparency fields", () => {
     const serialized = serializeInvoice(fakeInvoiceRow());
     expect((serialized as any).supplier).toBeUndefined();
   });
+
+  it("surfaces Form GST INV-01 compliant fields including intra-state CGST/SGST split and words", () => {
+    const serialized = serializeInvoice(
+      fakeInvoiceRow({
+        placeOfSupplyStateCode: "33",
+        sellerStateCode: "33",
+        buyerGstin: "33AABCT1234D1Z5",
+      })
+    );
+
+    expect(serialized.documentType).toBe("INV");
+    expect(serialized.supplyType).toBe("B2B");
+    expect(serialized.reverseCharge).toBe(false);
+    expect(serialized.placeOfSupplyStateCode).toBe("33");
+    expect(serialized.sellerStateCode).toBe("33");
+    expect(serialized.buyer.legalName).toBe("Rahul");
+    expect(serialized.buyer.gstin).toBe("33AABCT1234D1Z5");
+    expect(serialized.cgstAmount).toBe(90);
+    expect(serialized.sgstAmount).toBe(90);
+    expect(serialized.igstAmount).toBe(0);
+    expect(serialized.totalInWords).toContain("One Thousand One Hundred Eighty Only");
+    expect(serialized.bankDetails).toBeDefined();
+
+    expect(serialized.lineItems[0].hsnCode).toBe("2523");
+    expect(serialized.lineItems[0].cgstRate).toBe(9);
+    expect(serialized.lineItems[0].cgstAmount).toBe(90);
+    expect(serialized.lineItems[0].sgstRate).toBe(9);
+    expect(serialized.lineItems[0].sgstAmount).toBe(90);
+  });
+
+  it("surfaces inter-state IGST split when place of supply is outside seller state", () => {
+    const serialized = serializeInvoice(
+      fakeInvoiceRow({
+        placeOfSupplyStateCode: "29",
+        sellerStateCode: "33",
+      })
+    );
+
+    expect(serialized.placeOfSupplyStateCode).toBe("29");
+    expect(serialized.cgstAmount).toBe(0);
+    expect(serialized.sgstAmount).toBe(0);
+    expect(serialized.igstAmount).toBe(180);
+    expect(serialized.lineItems[0].igstRate).toBe(18);
+    expect(serialized.lineItems[0].igstAmount).toBe(180);
+  });
 });

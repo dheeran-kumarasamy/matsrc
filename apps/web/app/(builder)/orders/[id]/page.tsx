@@ -1,5 +1,3 @@
-export const dynamic = "force-dynamic";
-
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { builderApiGet, ApiError } from "@/lib/api";
@@ -12,8 +10,6 @@ import OrderRatingForm from "@/components/orders/OrderRatingForm";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
 import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
-import { AutoRefresh } from "@/components/shared/AutoRefresh";
-import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 
 type OrderDetail = {
@@ -122,7 +118,6 @@ export default async function OrderDetailPage({ params }: { params: { id: string
 
   return (
     <div className="posh-body mx-auto max-w-4xl space-y-5">
-      <AutoRefresh intervalMs={5000} />
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="posh-eyebrow">My Orders</p>
@@ -167,6 +162,9 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         >
           The supplier has accepted your enquiry. Our team is now reviewing the final freight/other charges — you'll be
           able to pay once this is confirmed.
+          {order.paymentLinkAvailable
+            ? "The supplier has confirmed your enquiry. You can now proceed with payment using the payment link."
+            : "The supplier has accepted your enquiry. Our team is now reviewing the final freight/other charges — you'll be able to pay once this is confirmed."}
         </div>
       ) : order.confirmationState === "CONFIRMED" ? (
         <div
@@ -184,6 +182,37 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           supplierId={order.supplierId}
           acceptedContext
         />
+      ) : null}
+
+      {order.status === "DELIVERED" ? (
+        <div
+          className="rounded-2xl border p-4 text-sm font-medium flex flex-wrap items-center justify-between gap-3"
+          style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.06)", color: "var(--posh-fg)" }}
+        >
+          <div>
+            <p className="font-bold text-emerald-700 dark:text-emerald-400">Order Completed & Delivered</p>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+              {order.invoice
+                ? `Official Form GST INV-01 Tax Invoice (${order.invoice.invoiceNumber}) is available.`
+                : "Your order has been completed. The Tax Invoice is being prepared."}
+            </p>
+          </div>
+          {order.invoice ? (
+            <div className="flex items-center gap-2">
+              <Link href={`/orders/${order.id}/invoice`} className="posh-btn-ghost text-xs">
+                View Tax Invoice
+              </Link>
+              <a
+                href={`/api/builder/orders/${order.id}/invoice/pdf`}
+                target="_blank"
+                rel="noreferrer"
+                className="posh-btn text-xs"
+              >
+                Download PDF
+              </a>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {order.status === "CANCELLED" ? (
@@ -229,10 +258,10 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                 <div>
                   <p className="font-bold" style={{ color: "var(--posh-fg)" }}>{item.name}</p>
                   <p className="posh-label mt-1">
-                    {item.quantity} {item.unit} · {formatProductPrice(item.unitPrice)}/unit
+                    {item.quantity} {item.unit} · ₹{item.unitPrice.toLocaleString("en-IN")}/unit
                   </p>
                 </div>
-                <p className="font-bold" style={{ color: "var(--posh-fg)" }}>{formatCurrency(item.quantity * item.unitPrice)}</p>
+                <p className="font-bold" style={{ color: "var(--posh-fg)" }}>₹{(item.quantity * item.unitPrice).toLocaleString("en-IN")}</p>
               </div>
             ))}
           </div>
@@ -249,7 +278,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                 legitimately differ. */}
             <span className="posh-label">{order.invoice ? "Total (Final Invoiced Amount)" : "Total"}</span>
             <span className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>
-              {formatCurrency(order.invoice ? order.invoice.totalAmount : order.total)}
+              ₹{(order.invoice ? order.invoice.totalAmount : order.total).toLocaleString("en-IN")}
             </span>
           </div>
         </section>

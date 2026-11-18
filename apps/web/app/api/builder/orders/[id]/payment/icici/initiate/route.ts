@@ -132,7 +132,14 @@ export async function POST(request: Request, { params }: { params: { id: string 
       );
     }
 
-    const redirectUrl = result.data?.redirectUrl || result.data?.redirectURL || null;
+    let redirectUrl: string | null = null;
+    if (result.data?.redirectURI && result.data?.tranCtx) {
+      const baseUri = String(result.data.redirectURI);
+      const sep = baseUri.includes("?") ? "&" : "?";
+      redirectUrl = `${baseUri}${sep}tranCtx=${encodeURIComponent(result.data.tranCtx)}`;
+    } else if (result.data?.redirectUrl || result.data?.redirectURL || result.data?.redirectURI) {
+      redirectUrl = result.data.redirectUrl || result.data.redirectURL || result.data.redirectURI;
+    }
 
     await prisma.paymentTransaction.update({
       where: { id: transaction.id },
@@ -146,12 +153,26 @@ export async function POST(request: Request, { params }: { params: { id: string 
       },
     });
 
+    if (!redirectUrl) {
+      return NextResponse.json(
+        {
+          error: result.data?.responseDescription || "Payment initiation was rejected by ICICI gateway",
+          paymentReference,
+          merchantTxnNo,
+          amount: Number(payableAmount),
+          redirectUrl: null,
+          status: "PENDING",
+        },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json({
       paymentReference,
       merchantTxnNo,
       amount: Number(payableAmount),
       redirectUrl,
-      status: redirectUrl ? "REDIRECTED" : "PENDING",
+      status: "REDIRECTED",
     });
   } catch (error) {
     console.error("ICICI initiate POST error:", error);

@@ -76,7 +76,7 @@ export async function initiateSale(
     merchantTxnNo: params.merchantTxnNo,
     amount: params.amount,
     aggregatorID: config.aggregatorId,
-    currencyCode: "INR",
+    currencyCode: "356", // Numeric ISO 4217 for INR — ICICI validates against regex [0-9]+
     payType: "0", // ICICI UAT sample value for a standard sale transaction
     customerEmailID: params.customerEmailId,
     transactionType: "SALE",

@@ -23,10 +23,10 @@ export type IciciUatConfig = {
 const DEFAULT_UAT_BASE_URL = "https://pgpayuat.icicibank.com";
 const DEFAULT_UAT_RETURN_URL = "https://uat.buildohub.in/api/payment/callback";
 
-// Standard ICICI UAT sandbox credentials provided for testing
+// Standard ICICI UAT sandbox credentials provided for testing (from ICICI UAT pack)
 const DEFAULT_UAT_MERCHANT_ID = "100000000007164";
-const DEFAULT_UAT_AGGREGATOR_ID = "db06cca0-838b-4e01-8b20-6ac446ffb6bd";
-const DEFAULT_UAT_SECRET_KEY = "A100000000007164";
+const DEFAULT_UAT_AGGREGATOR_ID = "A100000000007164";
+const DEFAULT_UAT_SECRET_KEY = "db06cca0-838b-4e01-8b20-6ac446ffb6bd";
 
 export function getIciciConfig(env: NodeJS.ProcessEnv = process.env): IciciUatConfig | null {
   if (!isIciciUatAvailable(env)) return null;

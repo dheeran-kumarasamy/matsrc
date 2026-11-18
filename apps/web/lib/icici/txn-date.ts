@@ -3,12 +3,9 @@
 // ICICI Bank Payment Gateway — UAT ONLY. Formats a Date as the txnDate
 // string ICICI's Initiate Sale API expects.
 //
-// Format/timezone confirmed empirically against the live ICICI UAT sandbox:
-// sending a full ISO-8601 UTC timestamp (e.g. "2026-10-03T18:59:24.826Z")
-// was rejected with responseCode "P1006" / responseDescription "Invalid
-// Transaction Date". ICICI's documented format is "yyyy-MM-dd HH:mm:ss"
-// (space-separated, no milliseconds, no timezone designator), in IST
-// (Asia/Kolkata, UTC+5:30) — ICICI being an Indian bank.
+// Format/timezone confirmed against the live ICICI UAT sandbox and integration pack:
+// ICICI's Initiate Sale API expects "YYYYMMDDHHMMSS" (14 digits, no hyphens, colons, or spaces),
+// in IST (Asia/Kolkata, UTC+5:30) — ICICI being an Indian bank.
 //
 // Explicitly converts to IST rather than using the server's local
 // time/Date.getHours(), since Vercel serverless functions always execute in
@@ -28,5 +25,5 @@ export function formatIciciTxnDate(date: Date): string {
   }).formatToParts(date);
 
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
-  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`;
+  return `${get("year")}${get("month")}${get("day")}${get("hour")}${get("minute")}${get("second")}`;
 }

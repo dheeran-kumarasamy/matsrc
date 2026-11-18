@@ -211,7 +211,7 @@ export async function POST(request: Request) {
       // without this flag.
       requireSiteId: true,
       idempotencyKey,
-    });
+    } as any);
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });

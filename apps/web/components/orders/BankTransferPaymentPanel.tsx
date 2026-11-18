@@ -141,6 +141,7 @@ export default function BankTransferPaymentPanel({ orderId, amount, bank }: Prop
           <CopyField label="Account Holder" value={bank.accountHolderName} />
           <CopyField label="Bank" value={bank.bankName} />
           <CopyField label="Account Number" value={bank.accountNumber} />
+          {bank.accountType ? <CopyField label="Account Type" value={bank.accountType} /> : null}
           <CopyField label="IFSC" value={bank.ifscCode} />
           <CopyField label="Branch" value={bank.branch} />
           {bank.upiId ? <CopyField label="UPI ID" value={bank.upiId} /> : null}

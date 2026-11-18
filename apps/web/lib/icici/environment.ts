@@ -1,29 +1,24 @@
-// apps/web/lib/icici/environment.ts
-//
-// ICICI Bank Payment Gateway — UAT ONLY.
-//
-// This is THE single production-safety gate for the entire ICICI
-// integration. Every initiation / callback / status-verification / refund
-// code path MUST call isIciciUatAvailable() (or rely on getIciciConfig(),
-// which internally enforces the same gate) before doing anything gateway-
-// related. No other file should re-implement this check.
-//
-// FAIL-CLOSED ENVIRONMENT POLICY:
-// 1. Production deployments (VERCEL_ENV=production, BUILDOHUB_ENV=production,
-//    or NODE_ENV=production without an authorized UAT runtime) must NEVER
-//    activate UAT payment operations.
-// 2. Database environment variables (DATABASE_ENV=production) must strictly
-//    fail closed.
-// 3. Generic preview deployments (e.g. feature PR branches) default to disabled.
-// 4. Authorized UAT runtime is identified by:
-//    - Branch is "uat" (VERCEL_GIT_COMMIT_REF === "uat"), OR
-//    - BUILDOHUB_ENV is "uat", OR
-//    - ICICI_PG_ENV is "uat", OR
-//    - NEXT_PUBLIC_SITE_URL includes "uat.buildohub.in"
-// 5. Explicit master switch (ICICI_PG_ENABLED):
-//    - If set to "false", ICICI is disabled.
-//    - If set to "true", ICICI is enabled on UAT.
-//    - If unset on authorized UAT deployment (e.g. VERCEL_GIT_COMMIT_REF === "uat" or NEXT_PUBLIC_SITE_URL includes "uat.buildohub.in"), defaults to enabled.
+/**
+ * Environment resolution for ICICI Payment Gateway operations.
+ *
+ * Strict fail-closed policy:
+ * 1. Production deployments must NEVER enable ICICI operations.
+ *    Any environment claiming "production" anywhere (VERCEL_ENV, BUILDOHUB_ENV, DATABASE_ENV)
+ *    strictly disables ICICI operations (returns false).
+ * 2. Conflicting configurations (e.g. BUILDOHUB_ENV=uat but DATABASE_ENV=production)
+ *    fail closed to false.
+ * 3. Generic Vercel preview environments (not on the uat branch and not on the uat site)
+ *    are categorized as "staging" and fail closed.
+ * 4. UAT environment is detected if:
+ *    - VERCEL_GIT_COMMIT_REF is "uat", OR
+ *    - BUILDOHUB_ENV is "uat", OR
+ *    - ICICI_PG_ENV is "uat", OR
+ *    - NEXT_PUBLIC_SITE_URL includes "uat.buildohub.in"
+ * 5. Explicit master switch (ICICI_PG_ENABLED):
+ *    - If set to "false", ICICI is disabled.
+ *    - If set to "true", ICICI is enabled on UAT.
+ *    - If unset on authorized UAT deployment (e.g. VERCEL_GIT_COMMIT_REF === "uat" or NEXT_PUBLIC_SITE_URL includes "uat.buildohub.in"), defaults to enabled.
+ */
 
 export type BuildohubEnvironment = "production" | "staging" | "uat" | "development" | "test";
 
@@ -37,23 +32,23 @@ function detectEnvironment(env: NodeJS.ProcessEnv = process.env): BuildohubEnvir
     return "production";
   }
 
-  // Guard 2: Explicit UAT runtime detection
   const isUatBranch = env.VERCEL_GIT_COMMIT_REF === "uat";
+  const isUatSite = Boolean(env.NEXT_PUBLIC_SITE_URL && env.NEXT_PUBLIC_SITE_URL.includes("uat.buildohub.in"));
   const buildohubEnv = (env.BUILDOHUB_ENV || "").toLowerCase();
   const iciciPgEnv = (env.ICICI_PG_ENV || "").toLowerCase();
-  const isUatSite = Boolean(env.NEXT_PUBLIC_SITE_URL && env.NEXT_PUBLIC_SITE_URL.includes("uat.buildohub.in"));
 
+  // Guard 2: Generic Vercel preview deployments (not on uat branch or uat site) are strictly staging
+  if (env.VERCEL_ENV === "preview" && !isUatBranch && !isUatSite) {
+    return "staging";
+  }
+
+  // Guard 3: Explicit UAT runtime detection
   if (isUatBranch || buildohubEnv === "uat" || iciciPgEnv === "uat" || isUatSite) {
     // Conflicting configuration check: if DATABASE_ENV is explicitly set to production or something conflicting, fail closed
     if (env.DATABASE_ENV && env.DATABASE_ENV.toLowerCase() !== "uat" && env.DATABASE_ENV.toLowerCase() !== "development") {
       return "development";
     }
     return "uat";
-  }
-
-  // Guard 3: Vercel preview deployments (not on uat branch) are staging
-  if (env.VERCEL_ENV === "preview") {
-    return "staging";
   }
 
   if (buildohubEnv === "staging") return "staging";
@@ -108,7 +103,8 @@ export function isIciciUatAvailable(env: NodeJS.ProcessEnv = process.env): boole
   const isAuthorizedUat =
     env.VERCEL_GIT_COMMIT_REF === "uat" ||
     Boolean(env.NEXT_PUBLIC_SITE_URL && env.NEXT_PUBLIC_SITE_URL.includes("uat.buildohub.in")) ||
-    (env.ICICI_PG_ENV || "").toLowerCase() === "uat";
+    env.ICICI_PG_ENV === "uat" ||
+    env.BUILDOHUB_ENV === "uat";
 
   return isAuthorizedUat;
 }
@@ -117,5 +113,5 @@ export function getBuildohubEnvironment(env: NodeJS.ProcessEnv = process.env): B
   return detectEnvironment(env);
 }
 
-// Exported for tests only.
-export { detectEnvironment as __detectEnvironmentForTests };
+// For testing only
+export const __detectEnvironmentForTests = detectEnvironment;

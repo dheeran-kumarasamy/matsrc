@@ -149,6 +149,6 @@ describe("resolveBuilderGoogleSignIn — Unified Account Identity", () => {
     );
 
     expect(result.allow).toBe(false);
-    expect(result.redirectTo).toContain("/auth/login?error=Configuration");
+    expect((result as any).redirectTo).toContain("/auth/login?error=Configuration");
   });
 });

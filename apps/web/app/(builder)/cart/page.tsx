@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -29,15 +29,17 @@ function CartPageQuantityInput({
   label: string;
   onCommit: (nextQuantity: number) => void;
 }) {
-  const [value, setValue] = useState(String(quantity));
+  const safeProp = Number.isFinite(quantity) && quantity >= 0.0001 ? Math.round(quantity * 10000) / 10000 : 1;
+  const [value, setValue] = useState(String(safeProp));
 
   useEffect(() => {
-    setValue(String(quantity));
+    const safe = Number.isFinite(quantity) && quantity >= 0.0001 ? Math.round(quantity * 10000) / 10000 : 1;
+    setValue(String(safe));
   }, [quantity]);
 
   function commit(raw: string) {
-    const parsed = parseInt(raw, 10);
-    const safe = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+    const parsed = parseFloat(raw);
+    const safe = Number.isFinite(parsed) && parsed >= 0.0001 ? Math.round(parsed * 10000) / 10000 : 1;
     setValue(String(safe));
     if (safe !== quantity) {
       onCommit(safe);
@@ -47,9 +49,9 @@ function CartPageQuantityInput({
   return (
     <input
       type="number"
-      min={1}
-      step={1}
-      inputMode="numeric"
+      min={0.0001}
+      step="any"
+      inputMode="decimal"
       value={value}
       disabled={disabled}
       onChange={(event: ChangeEvent<HTMLInputElement>) => setValue(event.target.value)}
@@ -59,7 +61,7 @@ function CartPageQuantityInput({
           commit((event.target as HTMLInputElement).value);
         }
       }}
-      className="h-8 w-12 border-x text-center text-sm font-bold focus:outline-none disabled:opacity-40"
+      className="h-8 w-16 border-x text-center text-sm font-bold focus:outline-none disabled:opacity-40"
       style={{ borderColor: "var(--posh-border)", color: "var(--posh-fg)" }}
       aria-label={label}
     />
@@ -96,6 +98,8 @@ export default function CartPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [siteId, setSiteId] = useState<string>("");
+  const isSubmittingRef = useRef(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
 
 
   useEffect(() => {
@@ -145,12 +149,12 @@ export default function CartPage() {
     }
   }
 
-  // REQ-01: editable cart quantity. Enforces min 1 / integer bounds, then
+  // REQ-01: editable cart quantity. Enforces min 0.0001 bounds, then
   // persists via the existing cart upsert endpoint (CartService.upsert),
   // and re-fetches the cart so unitPrice/lineTotal reflect any tiered
   // pricing recomputed server-side.
   async function handleUpdateQuantity(productId: string, id: string, nextQuantity: number) {
-    const safeQuantity = Math.max(1, Math.floor(nextQuantity) || 1);
+    const safeQuantity = Math.max(0.0001, Math.round(Number(nextQuantity) * 10000) / 10000 || 0.0001);
     const previous = data;
     setUpdatingId(id);
     setData((prev) => {
@@ -187,20 +191,41 @@ export default function CartPage() {
       return;
     }
 
+    // P0: Synchronous submission lock to block rapid duplicate clicks
+    if (isSubmittingRef.current) {
+      return;
+    }
+    isSubmittingRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
 
+    // P0: Reuse existing key on retry, or generate a fresh UUID for a new attempt
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `chk-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    }
+    const idempotencyKey = idempotencyKeyRef.current;
+
     try {
-      const response = await builderApiPost<{ orders: Array<{ enquiryId?: string; id: string }> }>("/orders/checkout", { siteId });
+      const response = await builderApiPost<{ orders: Array<{ enquiryId?: string; id: string }> }>("/orders/checkout", {
+        siteId,
+        idempotencyKey,
+      });
+
+      // Clear the idempotency key only after confirmed successful checkout
+      idempotencyKeyRef.current = null;
 
       // Confirmation message is shown only after this backend call has
       // resolved successfully — never merely on button click. See
       // lib/order-confirmation.ts buildConfirmedOrdersUrl().
       router.push(buildConfirmedOrdersUrl(response));
-      router.refresh();
     } catch {
-      setSubmitError("Unable to submit enquiry right now.");
+      // Preserve idempotencyKeyRef.current on error so user retry reuses the same key
+      setSubmitError("Unable to submit enquiry right now. Please try again.");
     } finally {
+      isSubmittingRef.current = false;
       setSubmitting(false);
     }
   }
@@ -237,8 +262,12 @@ export default function CartPage() {
                     <div className="flex items-center rounded-full border" style={{ borderColor: "var(--posh-border)" }}>
                       <button
                         type="button"
-                        disabled={updatingId === item.id || item.quantity <= 1}
-                        onClick={() => void handleUpdateQuantity(item.productId, item.id, item.quantity - 1)}
+                        disabled={updatingId === item.id || item.quantity <= 0.0001}
+                        onClick={() => {
+                          const step = item.quantity > 1 ? 1 : 0.1;
+                          const next = Math.max(0.0001, Math.round((item.quantity - step) * 10000) / 10000);
+                          void handleUpdateQuantity(item.productId, item.id, next);
+                        }}
                         aria-label={`Decrease quantity for ${item.name}`}
                         className="flex h-8 w-8 items-center justify-center transition disabled:opacity-40"
                         style={{ color: "var(--posh-fg-muted)" }}
@@ -257,7 +286,11 @@ export default function CartPage() {
                       <button
                         type="button"
                         disabled={updatingId === item.id}
-                        onClick={() => void handleUpdateQuantity(item.productId, item.id, item.quantity + 1)}
+                        onClick={() => {
+                          const step = item.quantity >= 1 ? 1 : 0.1;
+                          const next = Math.round((item.quantity + step) * 10000) / 10000;
+                          void handleUpdateQuantity(item.productId, item.id, next);
+                        }}
                         aria-label={`Increase quantity for ${item.name}`}
                         className="flex h-8 w-8 items-center justify-center transition disabled:opacity-40"
                         style={{ color: "var(--posh-fg-muted)" }}

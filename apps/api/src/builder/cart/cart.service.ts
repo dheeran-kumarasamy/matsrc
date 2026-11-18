@@ -8,7 +8,9 @@ import { UpsertCartItemDto } from "./dto/upsert-cart-item.dto";
 function resolveUnitPrice(product: any, quantity: number) {
   const tiers = Array.isArray(product.pricingTiers) ? product.pricingTiers : [];
   const matchedTier = tiers.find((tier: any) => quantity >= tier.minQty && quantity <= tier.maxQty);
-  return Number(matchedTier?.tierPrice ?? product.basePrice);
+  if (matchedTier) return Number(matchedTier.tierPrice);
+  if (tiers.length > 0 && quantity < tiers[0].minQty) return Number(tiers[0].tierPrice);
+  return Number(product.basePrice);
 }
 
 @Injectable()

@@ -45,14 +45,26 @@ export function effectiveTierForQuantity(candidate: ResolutionCandidate, quantit
       ? candidate.pricingTiers
       : [
           {
-            minQty: 1,
+            minQty: 0.0001,
             maxQty: candidate.maxServiceableQty || candidate.stock || quantity,
             tierPrice: candidate.basePrice,
           },
         ];
 
+  if (quantity < tiers[0].minQty) {
+    return tiers[0];
+  }
+
   const matched = tiers.find((tier) => quantity >= tier.minQty && quantity <= tier.maxQty);
   if (matched) return matched;
+
+  // For decimal quantities between tier boundaries (e.g. 10.5 when tiers are 1..10 and 11..50),
+  // match the highest tier whose minQty the order has met:
+  for (let i = tiers.length - 1; i >= 0; i--) {
+    if (quantity >= tiers[i].minQty) {
+      return tiers[i];
+    }
+  }
 
   return tiers[tiers.length - 1];
 }

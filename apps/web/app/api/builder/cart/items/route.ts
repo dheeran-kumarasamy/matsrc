@@ -41,22 +41,28 @@ export async function GET(request: Request) {
       orderBy: { updatedAt: "desc" },
     });
 
-    const subtotal = items.reduce(
-      (acc, item) =>
-        acc +
-        (item.resolvedUnitPrice != null
+    const subtotal = items.reduce((acc, item) => {
+      const safeQty =
+        Number.isFinite(item.quantity) && item.quantity >= 0.0001
+          ? Math.round(item.quantity * 10000) / 10000
+          : 1;
+      const unitPrice =
+        item.resolvedUnitPrice != null
           ? Number(item.resolvedUnitPrice)
-          : resolveUnitPrice(item.product, item.quantity)) *
-          item.quantity,
-      0
-    );
+          : resolveUnitPrice(item.product, safeQty);
+      return acc + unitPrice * safeQty;
+    }, 0);
 
     return NextResponse.json({
       items: items.map((item) => {
+        const safeQty =
+          Number.isFinite(item.quantity) && item.quantity >= 0.0001
+            ? Math.round(item.quantity * 10000) / 10000
+            : 1;
         const unitPrice =
           item.resolvedUnitPrice != null
             ? Number(item.resolvedUnitPrice)
-            : resolveUnitPrice(item.product, item.quantity);
+            : resolveUnitPrice(item.product, safeQty);
 
         return {
           id: item.id,
@@ -68,9 +74,9 @@ export async function GET(request: Request) {
             item.product.supplier.companyName,
             item.resolvedSupplierId ?? item.product.supplierId
           ),
-          quantity: item.quantity,
+          quantity: safeQty,
           unitPrice,
-          lineTotal: unitPrice * item.quantity,
+          lineTotal: unitPrice * safeQty,
         };
       }),
       summary: {
@@ -433,9 +439,13 @@ export async function POST(request: Request) {
               });
             }
 
-            // Actual final committed quantity for this cart item
+            // Actual final committed quantity for this cart item (defensively ignore corrupt subnormal quantities)
+            const currentQty =
+              current && Number.isFinite(current.quantity) && current.quantity >= 0.0001
+                ? current.quantity
+                : 0;
             const targetQuantity = current
-              ? Math.round((current.quantity + quantity) * 10000) / 10000
+              ? Math.round((currentQty + quantity) * 10000) / 10000
               : Math.round(quantity * 10000) / 10000;
 
             // Re-resolve pricing tier for the ACTUAL final quantity

@@ -162,8 +162,8 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
     for (let index = 0; index < filled.length; index += 1) {
       const minQty = Number(filled[index].minQty);
       const unitPrice = Number(filled[index].unitPrice);
-      if (!Number.isInteger(minQty) || minQty < 1) {
-        return `Group pricing tier ${index + 1}: minimum quantity must be a positive whole number.`;
+      if (!Number.isFinite(minQty) || minQty < 0.0001) {
+        return `Group pricing tier ${index + 1}: minimum quantity must be at least 0.0001.`;
       }
       if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
         return `Group pricing tier ${index + 1}: unit price must be a positive number.`;
@@ -241,16 +241,17 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
         // Truncate all tiers after the edited one so ranges stay consistent
         const truncated = updated.slice(0, index + 1);
 
-        // Auto-append a new tier if the entered maxQty is a valid integer less than maxServiceableQty
+        // Auto-append a new tier if the entered maxQty is a valid number less than maxServiceableQty
         if (
           value !== "" &&
-          Number.isInteger(maxQtyNum) &&
-          maxQtyNum >= 1 &&
-          Number.isInteger(serviceableQty) &&
-          serviceableQty >= 1 &&
+          Number.isFinite(maxQtyNum) &&
+          maxQtyNum >= 0.0001 &&
+          Number.isFinite(serviceableQty) &&
+          serviceableQty >= 0.0001 &&
           maxQtyNum < serviceableQty
         ) {
-          return [...truncated, { minQty: String(maxQtyNum + 1), maxQty: "", price: form.price }];
+          const nextMin = Number.isInteger(maxQtyNum) ? maxQtyNum + 1 : Math.round((maxQtyNum + 0.0001) * 10000) / 10000;
+          return [...truncated, { minQty: String(nextMin), maxQty: "", price: form.price }];
         }
 
         return truncated;
@@ -267,8 +268,8 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
 
   function validateTiers() {
     const serviceableQty = Number(form.maxServiceableQty);
-    if (!Number.isInteger(serviceableQty) || serviceableQty < 1) {
-      return "Maximum Serviceable Quantity must be a positive whole number.";
+    if (!Number.isFinite(serviceableQty) || serviceableQty < 0.0001) {
+      return "Maximum Serviceable Quantity must be at least 0.0001.";
     }
 
     if (tiers.length === 0) {
@@ -280,8 +281,8 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
       const maxQty = Number(tier.maxQty);
       const price = Number(tier.price);
 
-      if (!Number.isInteger(minQty) || minQty < 1) return `Tier ${index + 1} minimum quantity must be a positive whole number.`;
-      if (!Number.isInteger(maxQty) || maxQty < 1) return `Tier ${index + 1} maximum quantity must be a positive whole number.`;
+      if (!Number.isFinite(minQty) || minQty < 0.0001) return `Tier ${index + 1} minimum quantity must be at least 0.0001.`;
+      if (!Number.isFinite(maxQty) || maxQty < 0.0001) return `Tier ${index + 1} maximum quantity must be at least 0.0001.`;
       if (!Number.isFinite(price) || price <= 0) return `Tier ${index + 1} price must be a positive number.`;
       if (minQty > maxQty) return `Tier ${index + 1} minimum quantity cannot exceed maximum quantity.`;
 
@@ -297,12 +298,12 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
       price: Number(tier.price),
     })).sort((a, b) => a.minQty - b.minQty);
 
-    if (sorted[0].minQty !== 1) {
-      return "The first tier must start at quantity 1.";
+    if (sorted[0].minQty > 1 || sorted[0].minQty < 0.0001) {
+      return "The first tier must start at a quantity between 0.0001 and 1.";
     }
 
     for (let index = 1; index < sorted.length; index += 1) {
-      if (sorted[index].minQty !== sorted[index - 1].maxQty + 1) {
+      if (sorted[index].minQty < sorted[index - 1].maxQty || sorted[index].minQty > sorted[index - 1].maxQty + 1) {
         return "Pricing tiers must be contiguous without gaps or overlaps.";
       }
     }
@@ -610,7 +611,7 @@ export function ListingForm({ mode, listingId, initial }: ListingFormProps) {
                   value={tier.maxQty}
                   onChange={(e) => updateTier(index, "maxQty", e.target.value)}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                  placeholder={index === tiers.length - 1 && Number.isInteger(maxServiceableQty) ? String(maxServiceableQty) : "10"}
+                  placeholder={index === tiers.length - 1 && Number.isFinite(maxServiceableQty) ? String(maxServiceableQty) : "10"}
                 />
               </label>
               <label className="space-y-1 text-sm text-slate-700">

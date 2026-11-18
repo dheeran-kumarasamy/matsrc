@@ -1869,6 +1869,32 @@ describe("Cart Optimization — Phase 1", () => {
         process.env.CRON_SECRET = origSecret;
       }
     });
+
+    it("20. Defensive sanitization: Subnormal/corrupted float quantities (e.g. 5e-324) are sanitized to 1 and never evaluate to 0 in getCartForUser", async () => {
+      productFindFirst.mockResolvedValue(PRODUCT_TIERED_8);
+      productFindMany.mockResolvedValue([PRODUCT_TIERED_8]);
+
+      // Simulate a corrupt CartItem row with 5e-324 (IEEE-754 bit pattern 0x0000000000000001)
+      const corruptedItem = {
+        id: "cart-item-corrupt",
+        userId: "builder-user-1",
+        productId: "prod-tiered-8",
+        quantity: 5e-324,
+        resolvedUnitPrice: 380,
+        resolvedTierMinQty: 5e-324,
+        resolvedTierMaxQty: 4.94e-321,
+        product: PRODUCT_TIERED_8,
+      };
+
+      cartItemFindMany.mockResolvedValue([corruptedItem]);
+
+      const cart = await getCartForUser("builder-user-1");
+      expect(cart.items.length).toBe(1);
+      // The corrupt 5e-324 is safely converted to 1, NEVER 0!
+      expect(cart.items[0].quantity).toBe(1);
+      expect(cart.items[0].lineTotal).toBe(380);
+      expect(cart.summary.subtotal).toBe(380);
+    });
   });
 });
 

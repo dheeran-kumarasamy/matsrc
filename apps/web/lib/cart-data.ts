@@ -271,36 +271,43 @@ export async function getCartForUser(userId: string, dbClient?: any): Promise<Ca
   );
 
   const itemsWithBuyerPrice = items.map((item: any, idx: number) => {
+    const safeQuantity =
+      Number.isFinite(item.quantity) && item.quantity >= 0.0001
+        ? Math.round(item.quantity * 10000) / 10000
+        : 1;
     const supplierUnitPrice = batchParams[idx].supplierUnitPrice;
     const markup = markups[idx];
     const unitPrice = markup ? markup.buyerUnitPrice : supplierUnitPrice;
-    return { item, unitPrice };
+    return { item, unitPrice, safeQuantity };
   });
 
   const subtotal = itemsWithBuyerPrice.reduce(
-    (acc: number, { unitPrice, item }: { unitPrice: number; item: any }) => acc + unitPrice * item.quantity,
+    (acc: number, { unitPrice, safeQuantity }: { unitPrice: number; safeQuantity: number }) =>
+      acc + unitPrice * safeQuantity,
     0
   );
 
   return {
-    items: itemsWithBuyerPrice.map(({ item, unitPrice }: { item: any; unitPrice: number }) => ({
-      id: item.id,
-      productId: item.productId,
-      name: item.product.name,
-      unit: item.product.unit,
-      image: item.product.images?.[0] ?? null,
-      supplierId: item.resolvedSupplierId ?? item.product.supplierId,
-      supplierName: getSupplierDisplayName(
-        item.product.supplier.companyName,
-        item.resolvedSupplierId ?? item.product.supplierId
-      ),
-      quantity: item.quantity,
-      unitPrice,
-      lineTotal: unitPrice * item.quantity,
-      aggregationEnabled: item.product.aggregationEnabled,
-      aggregationPriceTiers: item.product.aggregationPriceTiers,
-      aggregationWindowDays: item.product.aggregationWindowDays,
-    })),
+    items: itemsWithBuyerPrice.map(
+      ({ item, unitPrice, safeQuantity }: { item: any; unitPrice: number; safeQuantity: number }) => ({
+        id: item.id,
+        productId: item.productId,
+        name: item.product.name,
+        unit: item.product.unit,
+        image: item.product.images?.[0] ?? null,
+        supplierId: item.resolvedSupplierId ?? item.product.supplierId,
+        supplierName: getSupplierDisplayName(
+          item.product.supplier.companyName,
+          item.resolvedSupplierId ?? item.product.supplierId
+        ),
+        quantity: safeQuantity,
+        unitPrice,
+        lineTotal: unitPrice * safeQuantity,
+        aggregationEnabled: item.product.aggregationEnabled,
+        aggregationPriceTiers: item.product.aggregationPriceTiers,
+        aggregationWindowDays: item.product.aggregationWindowDays,
+      })
+    ),
     summary: {
       itemCount: items.length,
       subtotal,

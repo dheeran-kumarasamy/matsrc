@@ -18,7 +18,6 @@ import OrderRatingForm from "@/components/orders/OrderRatingForm";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
 import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
-import { AutoRefresh } from "@/components/shared/AutoRefresh";
 
 
 export type OverlayOrderDetail = {
@@ -152,7 +151,6 @@ export default function OrderDetailOverlay({ order }: Props) {
   return (
     <Dialog defaultOpen onOpenChange={handleOpenChange}>
       <DialogContent className="p-0 sm:max-w-4xl">
-        <AutoRefresh intervalMs={5000} />
         {/* C19 fix: DialogContent's Close button (components/ui/dialog.tsx)
             is `absolute right-4 top-4`, floating on top of whatever this
             header renders — it was never given its own reserved layout
@@ -215,6 +213,9 @@ export default function OrderDetailOverlay({ order }: Props) {
             <div className="rounded-2xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] px-4 py-3 text-sm text-[color:var(--posh-fg)]">
               The supplier has accepted your enquiry. Our team is now reviewing the final freight/other charges —
               you'll be able to pay once this is confirmed.
+              {order.paymentLinkAvailable
+                ? "The supplier has confirmed your enquiry. You can now proceed with payment using the payment link."
+                : "The supplier has accepted your enquiry. Our team is now reviewing the final freight/other charges — you'll be able to pay once this is confirmed."}
             </div>
           ) : order.confirmationState === "CONFIRMED" ? (
             <div className="rounded-2xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] px-4 py-3 text-sm text-[color:var(--posh-fg)]">
@@ -225,6 +226,34 @@ export default function OrderDetailOverlay({ order }: Props) {
 
           {order.status === "PROCESSING" && order.primaryListingId && order.supplierId ? (
             <SupplierSocialProof listingId={order.primaryListingId} supplierId={order.supplierId} acceptedContext />
+          ) : null}
+
+          {order.status === "DELIVERED" ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 text-sm font-medium text-slate-800">
+              <div>
+                <p className="font-bold text-emerald-800">Order Completed & Delivered</p>
+                <p className="mt-0.5 text-xs text-slate-600">
+                  {order.invoice
+                    ? `Form GST INV-01 Tax Invoice (${order.invoice.invoiceNumber}) is available.`
+                    : "Your order has been completed. The Tax Invoice is being prepared."}
+                </p>
+              </div>
+              {order.invoice ? (
+                <div className="flex items-center gap-2">
+                  <Link href={`/orders/${order.id}/invoice`} className="posh-btn-ghost text-xs">
+                    View Invoice
+                  </Link>
+                  <a
+                    href={`/api/builder/orders/${order.id}/invoice/pdf`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="posh-btn text-xs"
+                  >
+                    Download PDF
+                  </a>
+                </div>
+              ) : null}
+            </div>
           ) : null}
 
           {order.status === "CANCELLED" ? (
@@ -329,6 +358,29 @@ export default function OrderDetailOverlay({ order }: Props) {
                   </Link>
                 ) : null}
               </div>
+
+              {order.invoice ? (
+                <div className="panel space-y-3 p-5">
+                  <h2 className="text-lg font-semibold text-slate-800">Tax Invoice</h2>
+                  <p className="text-sm text-slate-500">{order.invoice.invoiceNumber}</p>
+                  <div className="flex gap-2">
+                    <Link
+                      href={`/orders/${order.id}/invoice`}
+                      className="posh-btn-ghost flex-1 text-center text-xs"
+                    >
+                      View Invoice
+                    </Link>
+                    <a
+                      href={`/api/builder/orders/${order.id}/invoice/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="posh-btn flex-1 text-center text-xs"
+                    >
+                      Download PDF
+                    </a>
+                  </div>
+                </div>
+              ) : null}
 
               {order.status === "DELIVERED" ? <OrderRatingForm orderId={order.id} /> : null}
             </aside>

@@ -108,6 +108,9 @@ export type SupplierInvoiceTotals = {
  * total; discount SUBTRACTS; roundingAdjustment is applied last (can be
  * positive or negative) so the final total matches the supplier's own
  * invoice total when the admin has verified it reconciles.
+ *
+ * Freight and other charges entered by Admin are exclusive of GST and
+ * attract 18% GST (Rule 46 & Form GST INV-01 compliance).
  */
 export function aggregateSupplierInvoiceTotals(
   lines: SupplierInvoiceLineResolution[],
@@ -121,8 +124,11 @@ export function aggregateSupplierInvoiceTotals(
   const discount = adjustments.discountAmount ?? 0;
   const rounding = adjustments.roundingAdjustment ?? 0;
 
-  const taxableValue = linesTaxableValue + freight + other - discount;
-  const taxAmount = linesTaxAmount;
+  const netAdjustment = freight + other - discount;
+  const adjustmentTax = netAdjustment > 0 ? roundCurrency((netAdjustment * DEFAULT_TAX_RATE_PERCENT) / 100) : 0;
+
+  const taxableValue = linesTaxableValue + netAdjustment;
+  const taxAmount = linesTaxAmount + adjustmentTax;
   const totalAmount = taxableValue + taxAmount + rounding;
 
   return {

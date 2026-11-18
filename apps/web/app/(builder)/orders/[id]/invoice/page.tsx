@@ -1,51 +1,79 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { builderApiGet, ApiError } from "@/lib/api";
-import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 type InvoiceDetail = {
   id: string;
   invoiceNumber: string;
   invoiceDate: string;
   status: string;
+  documentType?: string;
+  supplyType?: string;
+  reverseCharge?: boolean;
+  placeOfSupplyStateCode?: string | null;
+  placeOfSupplyStateName?: string | null;
+  sellerStateCode?: string;
   orderId: string;
   enquiryId: string;
-  site: { name: string; addressLine: string | null; city: string | null; state: string | null; pincode: string | null } | null;
-  // NOTE: deliberately no `supplier` field here — the buyer-facing invoice
-  // API never discloses the supplier's identity (name/GSTIN/contact); see
-  // apps/web/lib/invoice-utils.ts's serializeInvoice(). A `supplier` field
-  // was previously declared here but never actually emitted by the API or
-  // rendered below — removed as stale/dead (audit finding #5).
+  buyer?: {
+    legalName: string | null;
+    tradeName: string | null;
+    gstin: string | null;
+    addressLine: string | null;
+    city: string | null;
+    state: string | null;
+    pincode: string | null;
+    stateCode: string | null;
+  } | null;
+  site: { name: string; addressLine: string | null; city: string | null; state: string | null; pincode: string | null; gstin?: string | null } | null;
+  shipFrom?: { addressLine: string | null; city: string | null; state: string | null; pincode: string | null } | null;
+  shipTo?: { addressLine: string | null; city: string | null; state: string | null; pincode: string | null } | null;
   lineItems: Array<{
     id: string;
+    slNo?: number;
     productName: string;
+    description?: string | null;
+    hsnCode?: string | null;
+    uqc?: string | null;
+    unit?: string | null;
     quantity: number;
     unitPrice: number;
+    taxableAmount?: number;
     taxRate: number | null;
+    cgstRate?: number | null;
+    cgstAmount?: number;
+    sgstRate?: number | null;
+    sgstAmount?: number;
+    igstRate?: number | null;
+    igstAmount?: number;
     taxAmount: number;
+    subtotal: number;
     total: number;
   }>;
   subtotal: number;
-  // Invoice-level adjustments + reconciling taxable value (audit fix — see
-  // Invoice.taxableValue's schema doc comment). Always present on the API
-  // response (serializeInvoice defaults taxableValue to subtotal and the
-  // adjustment amounts to 0 for historical invoices).
   freightChargeAmount: number;
   otherChargesAmount: number;
   discountAmount: number;
   roundingAdjustment: number;
   taxableValue: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  igstAmount?: number;
   taxAmount: number;
   totalAmount: number;
+  totalInWords?: string;
   paymentStatus: string;
   amountPaid: number | null;
   amountDue: number | null;
+  bankDetails?: {
+    bankName: string;
+    accountName: string;
+    accountNumber: string;
+    ifscCode: string;
+    branch: string;
+  };
 };
 
-// Contractor/Client invoice view. Read-only — no generation action is ever
-// rendered here; the invoice must already exist (only an Admin can create
-// it, see the Admin app). Data comes entirely from the stored invoice
-// snapshot returned by /api/builder/orders/[id]/invoice.
 export default async function BuilderInvoicePage({ params }: { params: { id: string } }) {
   let invoice: InvoiceDetail | null = null;
   try {
@@ -61,14 +89,26 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
     notFound();
   }
 
+  const isIntraState =
+    (invoice.sellerStateCode ?? "33") === (invoice.placeOfSupplyStateCode ?? invoice.sellerStateCode ?? "33");
+
   return (
-    <div className="posh-body mx-auto max-w-3xl space-y-5">
+    <div className="posh-body mx-auto max-w-4xl space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="posh-eyebrow">Invoice</p>
+          <div className="flex items-center gap-2">
+            <span className="posh-eyebrow">Tax Invoice</span>
+            <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              {invoice.supplyType ?? "B2B"}
+            </span>
+            <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              Rev. Charge: {invoice.reverseCharge ? "Yes" : "No"}
+            </span>
+          </div>
           <h1 className="posh-page-title mt-2">{invoice.invoiceNumber}</h1>
           <p className="posh-subtitle mt-1">
-            {new Date(invoice.invoiceDate).toLocaleDateString("en-IN")} · Order #{invoice.enquiryId}
+            {new Date(invoice.invoiceDate).toLocaleDateString("en-IN")} · Order #{invoice.enquiryId} · Place of Supply:{" "}
+            {invoice.placeOfSupplyStateCode ?? "33"} ({invoice.placeOfSupplyStateName ?? "Tamil Nadu"})
           </p>
         </div>
         <a href={`/api/builder/orders/${params.id}/invoice/pdf`} target="_blank" rel="noreferrer" className="posh-btn">
@@ -76,69 +116,155 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
         </a>
       </header>
 
+      {/* Parties Grid (Bill To & Ship To) */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <section className="posh-card space-y-2 p-5 text-sm">
+          <h2 className="posh-card-title text-xs font-bold uppercase tracking-wider text-slate-500">Bill To (Recipient)</h2>
+          <p className="font-bold text-slate-900 dark:text-slate-100">
+            {invoice.buyer?.legalName ?? "Contractor / Client"}
+          </p>
+          <p className="text-slate-600 dark:text-slate-400">
+            {[invoice.buyer?.addressLine ?? invoice.site?.addressLine, invoice.buyer?.city ?? invoice.site?.city, invoice.buyer?.state ?? invoice.site?.state, invoice.buyer?.pincode ?? invoice.site?.pincode].filter(Boolean).join(", ") || "Address not provided"}
+          </p>
+          <div className="pt-1 text-xs text-slate-500">
+            <span className="font-semibold text-slate-700 dark:text-slate-300">GSTIN:</span>{" "}
+            {invoice.buyer?.gstin ?? invoice.site?.gstin ?? "URP (Unregistered)"}
+          </div>
+        </section>
+
+        <section className="posh-card space-y-2 p-5 text-sm">
+          <h2 className="posh-card-title text-xs font-bold uppercase tracking-wider text-slate-500">Ship To (Site)</h2>
+          <p className="font-bold text-slate-900 dark:text-slate-100">
+            {invoice.site?.name ?? "Site Delivery"}
+          </p>
+          <p className="text-slate-600 dark:text-slate-400">
+            {[invoice.site?.addressLine, invoice.site?.city, invoice.site?.state, invoice.site?.pincode].filter(Boolean).join(", ") || "Address not provided"}
+          </p>
+          <div className="pt-1 text-xs text-slate-500">
+            <span className="font-semibold text-slate-700 dark:text-slate-300">Destination State:</span>{" "}
+            {invoice.site?.state ?? invoice.placeOfSupplyStateName ?? "Tamil Nadu"} (Code: {invoice.placeOfSupplyStateCode ?? "33"})
+          </div>
+        </section>
+      </div>
+
       <section className="posh-card space-y-3 p-6">
         <h2 className="posh-card-title">Products / Services</h2>
         <div className="divide-y divide-[color:var(--posh-border)] rounded-xl border" style={{ borderColor: "var(--posh-border)" }}>
-          {invoice.lineItems.map((li) => (
-            <div key={li.id} className="flex items-center justify-between px-4 py-3 text-sm">
+          {invoice.lineItems.map((li, idx) => (
+            <div key={li.id} className="flex flex-col gap-2 px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="font-bold" style={{ color: "var(--posh-fg)" }}>{li.productName}</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-400">#{li.slNo ?? idx + 1}</span>
+                  <p className="font-bold" style={{ color: "var(--posh-fg)" }}>{li.productName}</p>
+                  {li.hsnCode ? (
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                      HSN {li.hsnCode}
+                    </span>
+                  ) : null}
+                </div>
                 <p className="posh-label mt-1">
-                  {li.quantity} × {formatProductPrice(li.unitPrice)}
-                  {/* typeof check (not a truthy check) so a genuine 0% GST
-                      line still shows its explicit rate/amount rather than
-                      silently disappearing — only a null taxRate
-                      (pre-migration row) omits this entirely. */}
-                  {typeof li.taxRate === "number" ? ` · GST ${li.taxRate}% (${formatCurrency(li.taxAmount)})` : ""}
+                  {li.quantity} {li.uqc ?? li.unit ?? "Unit"} × ₹{li.unitPrice.toLocaleString("en-IN")}
+                  {typeof li.taxRate === "number" ? (
+                    isIntraState ? (
+                      ` · CGST ${(li.cgstRate ?? li.taxRate / 2)}% + SGST ${(li.sgstRate ?? li.taxRate / 2)}% (Tax: ₹${li.taxAmount.toLocaleString("en-IN")})`
+                    ) : (
+                      ` · IGST ${(li.igstRate ?? li.taxRate)}% (Tax: ₹${li.taxAmount.toLocaleString("en-IN")})`
+                    )
+                  ) : ""}
                 </p>
               </div>
-              <p className="font-bold" style={{ color: "var(--posh-fg)" }}>{formatCurrency(li.total)}</p>
+              <p className="font-bold text-slate-900 dark:text-slate-100">₹{li.total.toLocaleString("en-IN")}</p>
             </div>
           ))}
         </div>
-        <div className="text-right text-sm">
-          <p className="posh-subtitle">Subtotal: {formatCurrency(invoice.subtotal)}</p>
-          {/* Invoice-level adjustments (audit fix): shown ONLY when
-              non-zero, so an invoice with no freight/other charges/
-              discount/rounding renders exactly as before this fix. */}
+
+        <div className="space-y-1.5 text-right text-sm">
+          <p className="posh-subtitle">Subtotal (Assessable Value): ₹{invoice.subtotal.toLocaleString("en-IN")}</p>
           {invoice.freightChargeAmount !== 0 ? (
-            <p className="posh-subtitle">Freight: {formatCurrency(invoice.freightChargeAmount)}</p>
+            <p className="posh-subtitle">Freight Charges (excl. GST): ₹{invoice.freightChargeAmount.toLocaleString("en-IN")}</p>
           ) : null}
           {invoice.otherChargesAmount !== 0 ? (
-            <p className="posh-subtitle">Other Charges: {formatCurrency(invoice.otherChargesAmount)}</p>
+            <p className="posh-subtitle">Other Charges (excl. GST): ₹{invoice.otherChargesAmount.toLocaleString("en-IN")}</p>
           ) : null}
           {invoice.discountAmount !== 0 ? (
-            <p className="posh-subtitle">Discount: -{formatCurrency(invoice.discountAmount)}</p>
+            <p className="posh-subtitle">Discount: -₹{invoice.discountAmount.toLocaleString("en-IN")}</p>
           ) : null}
           {invoice.freightChargeAmount !== 0 || invoice.otherChargesAmount !== 0 || invoice.discountAmount !== 0 ? (
-            <p className="posh-subtitle">Taxable Value: {formatCurrency(invoice.taxableValue)}</p>
+            <p className="posh-subtitle font-medium">Taxable Value: ₹{invoice.taxableValue.toLocaleString("en-IN")}</p>
           ) : null}
-          <p className="posh-subtitle">
-            {(() => {
-              const rates = Array.from(
-                new Set(invoice.lineItems.map((li) => li.taxRate).filter((r): r is number => typeof r === "number"))
-              );
-              const label = rates.length === 1 ? `GST @ ${rates[0]}%` : "Tax";
-              return `${label}: ${formatCurrency(invoice.taxAmount)}`;
-            })()}
-          </p>
+
+          {/* Explicit CGST/SGST vs IGST Breakdown */}
+          {isIntraState ? (
+            <>
+              <p className="posh-subtitle">
+                CGST Total: ₹
+                {(invoice.cgstAmount ?? Math.round((invoice.taxAmount / 2 + Number.EPSILON) * 100) / 100).toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </p>
+              <p className="posh-subtitle">
+                SGST Total: ₹
+                {(invoice.sgstAmount ?? Math.round((invoice.taxAmount / 2 + Number.EPSILON) * 100) / 100).toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </p>
+            </>
+          ) : (
+            <p className="posh-subtitle">
+              IGST Total: ₹
+              {(invoice.igstAmount ?? invoice.taxAmount).toLocaleString("en-IN", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </p>
+          )}
+
           {invoice.roundingAdjustment !== 0 ? (
             <p className="posh-subtitle">
-              Rounding: {invoice.roundingAdjustment > 0 ? "+" : "-"}{formatCurrency(Math.abs(invoice.roundingAdjustment))}
+              Rounding: {invoice.roundingAdjustment > 0 ? "+" : "-"}₹
+              {Math.abs(invoice.roundingAdjustment).toLocaleString("en-IN")}
             </p>
           ) : null}
-          <p className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>
-            Total: {formatCurrency(invoice.totalAmount)}
-          </p>
+
+          <div className="border-t pt-2" style={{ borderColor: "var(--posh-border)" }}>
+            <p className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>
+              Total: ₹{invoice.totalAmount.toLocaleString("en-IN")}
+            </p>
+            {invoice.totalInWords ? (
+              <p className="mt-1 text-xs italic text-slate-500">{invoice.totalInWords}</p>
+            ) : null}
+          </div>
         </div>
       </section>
 
-      <section className="posh-card space-y-2 p-6">
-        <h2 className="posh-card-title">Payment</h2>
-        <p className="posh-subtitle">Status: {invoice.paymentStatus}</p>
-        {invoice.amountPaid !== null ? <p className="posh-subtitle">Paid: {formatCurrency(invoice.amountPaid)}</p> : null}
-        {invoice.amountDue !== null ? <p className="posh-subtitle">Due: {formatCurrency(invoice.amountDue)}</p> : null}
-      </section>
+      {/* Payment & Bank Settlement Section */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <section className="posh-card space-y-2 p-5 text-sm">
+          <h2 className="posh-card-title text-xs font-bold uppercase tracking-wider text-slate-500">Payment Status</h2>
+          <p className="font-semibold text-slate-800 dark:text-slate-200">Status: {invoice.paymentStatus}</p>
+          {invoice.amountPaid !== null ? (
+            <p className="text-slate-600 dark:text-slate-400">Advance Paid: ₹{invoice.amountPaid.toLocaleString("en-IN")}</p>
+          ) : null}
+          {invoice.amountDue !== null ? (
+            <p className="font-medium text-slate-900 dark:text-slate-100">
+              Balance Payable: ₹{invoice.amountDue.toLocaleString("en-IN")}
+            </p>
+          ) : null}
+        </section>
+
+        {invoice.bankDetails ? (
+          <section className="posh-card space-y-1.5 p-5 text-xs text-slate-600 dark:text-slate-400">
+            <h2 className="posh-card-title text-xs font-bold uppercase tracking-wider text-slate-500">Bank Settlement Details</h2>
+            <p className="font-semibold text-slate-800 dark:text-slate-200">
+              {invoice.bankDetails.bankName} — A/C {invoice.bankDetails.accountNumber}
+            </p>
+            <p>Account Name: {invoice.bankDetails.accountName}</p>
+            <p>IFSC: {invoice.bankDetails.ifscCode} · Branch: {invoice.bankDetails.branch}</p>
+          </section>
+        ) : null}
+      </div>
 
       <Link href={`/orders/${params.id}`} className="posh-btn-ghost inline-block">
         Back to Order

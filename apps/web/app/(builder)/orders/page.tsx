@@ -1,13 +1,9 @@
-export const dynamic = "force-dynamic";
-
 import Link from "next/link";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
 import OrderConfirmationBanner from "@/components/orders/OrderConfirmationBanner";
 import { resolveConfirmedReferences } from "@/lib/order-confirmation";
 import { builderApiGet } from "@/lib/api";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
-import { AutoRefresh } from "@/components/shared/AutoRefresh";
-import { formatCurrency } from "@/lib/currency";
 
 type OrderItem = {
   id: string;
@@ -30,6 +26,7 @@ type OrderItem = {
   paymentLink?: string;
   isAggregated?: boolean;
   aggregationPoolId?: string | null;
+  invoice?: { id: string; invoiceNumber: string } | null;
 };
 
 
@@ -124,7 +121,6 @@ export default async function OrdersPage({
 
   return (
     <div className="posh-body space-y-5">
-      <AutoRefresh intervalMs={5000} />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="posh-eyebrow">Procurement desk</p>
@@ -199,7 +195,7 @@ export default async function OrdersPage({
                   {order.isAggregated ? <span className="posh-status">Group Order</span> : null}
                 </div>
                 <p className="mt-1 text-xs font-semibold text-[color:var(--posh-fg-muted)] transition-colors group-hover:text-[color:var(--posh-olive)]">
-                  {order.supplierName ? `${getSupplierDisplayName(order.supplierName)} · ` : ""}{order.itemCount} items · {formatCurrency(order.total)}
+                  {order.supplierName ? `${getSupplierDisplayName(order.supplierName)} · ` : ""}{order.itemCount} items · ₹{order.total.toLocaleString("en-IN")}
                 </p>
               </div>
               <div className="flex items-center gap-4">
@@ -215,6 +211,11 @@ export default async function OrdersPage({
                 {order.paymentLinkAvailable && order.paymentLink ? (
                   <Link href={order.paymentLink} className="posh-status-strong">
                     Payment link enabled
+                  </Link>
+                ) : null}
+                {order.invoice ? (
+                  <Link href={`/orders/${order.id}/invoice`} className="posh-btn-ghost text-xs">
+                    Invoice
                   </Link>
                 ) : null}
                 <Link href={`/orders/${order.id}`} className="posh-link">

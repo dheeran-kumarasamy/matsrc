@@ -162,6 +162,9 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         >
           The supplier has accepted your enquiry. Our team is now reviewing the final freight/other charges — you'll be
           able to pay once this is confirmed.
+          {order.paymentLinkAvailable
+            ? "The supplier has confirmed your enquiry. You can now proceed with payment using the payment link."
+            : "The supplier has accepted your enquiry. Our team is now reviewing the final freight/other charges — you'll be able to pay once this is confirmed."}
         </div>
       ) : order.confirmationState === "CONFIRMED" ? (
         <div

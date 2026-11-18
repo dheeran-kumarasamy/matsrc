@@ -159,12 +159,11 @@ export async function GET(request: Request) {
         siteId: order.siteId,
         siteName: order.site?.name ?? "Unassigned",
 
-        // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
-        // Dispatch — a payment link is never offered before
-        // confirmationState === "CONFIRMED" (mirrors the order-detail
-        // route's identical gate).
+        // Payment link is available once the supplier has confirmed the order
+        // (status is past PLACED and not CANCELLED) and payment is pending.
         paymentLinkAvailable:
-          confirmationState === "CONFIRMED" &&
+          order.status !== OrderStatus.PLACED &&
+          order.status !== OrderStatus.CANCELLED &&
           (order.paymentStatus === PaymentStatus.PENDING ||
             order.paymentStatus === PaymentStatus.PENDING_VERIFICATION),
         // Order reference number is always the LAST path segment — route

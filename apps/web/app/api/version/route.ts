@@ -39,6 +39,25 @@ export async function GET() {
     dbStatus = `error: ${e?.message || String(e)}`;
   }
 
+  let iciciAvailable = false;
+  let hasMerchantId = false;
+  let merchantId: string | null = null;
+  let aggregatorId: string | null = null;
+  let returnUrl: string | null = null;
+
+  try {
+    const { isIciciUatAvailable } = await import("@/lib/icici/environment");
+    const { getIciciConfig } = await import("@/lib/icici/config");
+    iciciAvailable = isIciciUatAvailable();
+    const config = getIciciConfig();
+    if (config) {
+      hasMerchantId = !!config.merchantId;
+      merchantId = config.merchantId;
+      aggregatorId = config.aggregatorId;
+      returnUrl = config.returnUrl;
+    }
+  } catch {}
+
   return NextResponse.json(
     {
       commit: process.env.VERCEL_GIT_COMMIT_SHA || null,
@@ -60,6 +79,15 @@ export async function GET() {
         databaseHost: dbHost,
         hasAuthIdentityTable: hasAuthIdentity,
         database: dbStatus,
+      },
+      iciciDiagnostics: {
+        isIciciUatAvailable: iciciAvailable,
+        hasMerchantId,
+        merchantId,
+        aggregatorId,
+        returnUrl,
+        pgEnabled: process.env.ICICI_PG_ENABLED || null,
+        buildohubEnv: process.env.BUILDOHUB_ENV || null,
       },
     },
     { headers: { "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate" } }

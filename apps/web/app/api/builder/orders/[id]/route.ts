@@ -174,13 +174,11 @@ export async function GET(
       confirmationStateLabel: BUYER_CONFIRMATION_STATE_LABELS[confirmationState],
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus,
-      // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
-      // Dispatch — a buyer must not be able to initiate a NEW payment until
-      // confirmationState === "CONFIRMED" (mirrors the server-side guard in
-      // the payment-proof/advance-payment routes — this flag is UI-level
-      // only, the authoritative enforcement lives in those routes).
+      // Payment link is available once the supplier has confirmed the order
+      // (status is past PLACED and not CANCELLED) and payment is pending.
       paymentLinkAvailable:
-        confirmationState === "CONFIRMED" &&
+        order.status !== OrderStatus.PLACED &&
+        order.status !== OrderStatus.CANCELLED &&
         (order.paymentStatus === PaymentStatus.PENDING ||
           order.paymentStatus === PaymentStatus.PENDING_VERIFICATION),
       // Order reference number is always the LAST path segment — route moved

@@ -213,6 +213,9 @@ export default function OrderDetailOverlay({ order }: Props) {
             <div className="rounded-2xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] px-4 py-3 text-sm text-[color:var(--posh-fg)]">
               The supplier has accepted your enquiry. Our team is now reviewing the final freight/other charges —
               you'll be able to pay once this is confirmed.
+              {order.paymentLinkAvailable
+                ? "The supplier has confirmed your enquiry. You can now proceed with payment using the payment link."
+                : "The supplier has accepted your enquiry. Our team is now reviewing the final freight/other charges — you'll be able to pay once this is confirmed."}
             </div>
           ) : order.confirmationState === "CONFIRMED" ? (
             <div className="rounded-2xl border border-[color:var(--posh-border)] bg-[rgba(var(--posh-wash-rgb),0.04)] px-4 py-3 text-sm text-[color:var(--posh-fg)]">

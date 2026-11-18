@@ -21,6 +21,12 @@ vi.mock("@/lib/builder-db", () => ({
     if (!userId || !email) throw new Error("UNAUTHENTICATED");
     return { userId, email, name: "Builder" };
   },
+  resolveUserCtx: async (request: Request) => {
+    const userId = request.headers.get("X-User-Id");
+    const email = request.headers.get("X-User-Email");
+    if (!userId || !email) throw new Error("UNAUTHENTICATED");
+    return { userId, email, name: "Builder" };
+  },
 }));
 
 vi.mock("@/lib/supplier-display", () => ({
@@ -95,7 +101,7 @@ describe("GET /api/builder/orders — GST-inclusive payable surfacing", () => {
 // Dispatch — each order's confirmationState/paymentLinkAvailable must be
 // derived consistently with the order-detail route's identical logic.
 describe("GET /api/builder/orders — Admin-Confirmed Freight / Buyer Final Confirmation", () => {
-  it("hides the payment link until the SupplierInvoice is CONFIRMED, even while status is already PROCESSING and paymentStatus PENDING", async () => {
+  it("shows the payment link once supplier confirmed (status PROCESSING and paymentStatus PENDING)", async () => {
     orderFindMany.mockResolvedValue([makeOrderRow({ status: "PROCESSING", paymentStatus: "PENDING", supplierInvoice: null })]);
 
     const { GET } = await import("../app/api/builder/orders/route");
@@ -103,7 +109,7 @@ describe("GET /api/builder/orders — Admin-Confirmed Freight / Buyer Final Conf
     const body = await response.json();
 
     expect(body[0].confirmationState).toBe("AWAITING_FINAL_CONFIRMATION");
-    expect(body[0].paymentLinkAvailable).toBe(false);
+    expect(body[0].paymentLinkAvailable).toBe(true);
   });
 
   it("shows the payment link once the SupplierInvoice is CONFIRMED, and uses its confirmed total", async () => {

@@ -45,6 +45,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         status: true,
         paymentStatus: true,
         totalAmount: true,
+        finalPayableAmount: true,
         enquiryId: true,
       },
     });
@@ -85,6 +86,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     // Server-side payable amount — never trusts any browser-supplied value.
     const payableAmount = Number(order.totalAmount).toFixed(2);
+    // Server-side payable amount — uses finalPayableAmount if present, else totalAmount
+    const rawPayable = order.finalPayableAmount != null ? order.finalPayableAmount : order.totalAmount;
+    const payableAmount = Number(rawPayable).toFixed(2);
 
     const merchantTxnNo = generateMerchantTxnNo();
     const paymentReference = generatePaymentReference();
@@ -98,6 +102,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         gatewayEnvironment: config.environment,
         merchantTxnNo,
         amount: order.totalAmount,
+        amount: rawPayable,
         currency: "INR",
         status: PaymentTransactionStatus.INITIATED,
       },

@@ -137,9 +137,8 @@ describe("GET /api/builder/orders/[id] — Admin-Confirmed Freight / Buyer Final
     const body = await response.json();
 
     expect(body.confirmationState).toBe("AWAITING_FINAL_CONFIRMATION");
-    // Payment must never be offered before final confirmation, even though
-    // the raw Order.status is already PROCESSING and paymentStatus PENDING.
-    expect(body.paymentLinkAvailable).toBe(false);
+    // Payment link is available once supplier confirms (status is PROCESSING)
+    expect(body.paymentLinkAvailable).toBe(true);
   });
 
   it("is AWAITING_FINAL_CONFIRMATION while the SupplierInvoice is PENDING_REVIEW", async () => {
@@ -152,7 +151,7 @@ describe("GET /api/builder/orders/[id] — Admin-Confirmed Freight / Buyer Final
     const body = await response.json();
 
     expect(body.confirmationState).toBe("AWAITING_FINAL_CONFIRMATION");
-    expect(body.paymentLinkAvailable).toBe(false);
+    expect(body.paymentLinkAvailable).toBe(true);
   });
 
   it("is CONFIRMED once the supplier has accepted AND the SupplierInvoice is CONFIRMED, exposing the admin-confirmed total", async () => {

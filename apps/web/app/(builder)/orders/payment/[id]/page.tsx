@@ -80,6 +80,7 @@ export default async function OrderPaymentPage({ params }: { params: { id: strin
             ? "Payment is not yet enabled for this enquiry."
             : order.paymentLinkAvailable
             ? "Payment link is enabled because our team has confirmed the final freight/other charges for this order."
+            ? "Payment link is enabled for this confirmed order."
             : order.confirmationState === "AWAITING_FINAL_CONFIRMATION"
             ? "The supplier has accepted your enquiry. Our team is reviewing the final freight/other charges — payment will be enabled once this is confirmed."
             : "Supplier has confirmed this enquiry."}

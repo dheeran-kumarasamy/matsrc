@@ -27,7 +27,15 @@ export const BUILDOHUB_COMPANY = {
   city: "Coimbatore",
   state: "Tamil Nadu",
   pincode: "641006",
+  stateCode: "33",
   gstin: "33AANCT3003A1Z0",
   email: null as string | null,
   phone: null as string | null,
+  bankDetails: {
+    bankName: "ICICI Bank Ltd",
+    accountName: "Triad Build Tech Private Limited",
+    accountNumber: "777705678978",
+    ifscCode: "ICIC0004179",
+    branch: "Ganapathy branch, Coimbatore",
+  },
 } as const;

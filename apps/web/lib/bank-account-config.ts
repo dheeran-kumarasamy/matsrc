@@ -17,16 +17,22 @@ export type BankAccountDetails = {
   accountNumber: string;
   ifscCode: string;
   branch: string;
+  accountType?: string;
+  mobileNo?: string;
+  emailId?: string;
   upiId: string | null;
 };
 
 export function getBankAccountDetails(): BankAccountDetails {
   return {
-    accountHolderName: process.env.BANK_ACCOUNT_HOLDER_NAME || "BuildOHub Technologies Pvt Ltd",
-    bankName: process.env.BANK_NAME || "HDFC Bank",
-    accountNumber: process.env.BANK_ACCOUNT_NUMBER || "50200012345678",
-    ifscCode: process.env.BANK_IFSC_CODE || "HDFC0000123",
-    branch: process.env.BANK_BRANCH_NAME || "Bengaluru — MG Road",
-    upiId: process.env.BANK_UPI_ID || "buildohub@hdfcbank",
+    accountHolderName: process.env.BANK_ACCOUNT_HOLDER_NAME || "Triad Build Tech Private Limited",
+    bankName: process.env.BANK_NAME || "ICICI Bank Ltd",
+    accountNumber: process.env.BANK_ACCOUNT_NUMBER || "777705678978",
+    ifscCode: process.env.BANK_IFSC_CODE || "ICIC0004179",
+    branch: process.env.BANK_BRANCH_NAME || "Ganapathy branch, Coimbatore",
+    accountType: process.env.BANK_ACCOUNT_TYPE || "CURRENT ACCOUNT",
+    mobileNo: process.env.BANK_MOBILE_NO || "9487944167",
+    emailId: process.env.BANK_EMAIL_ID || "TRIADBUILDTECH@GMAIL.COM",
+    upiId: process.env.BANK_UPI_ID || null,
   };
 }

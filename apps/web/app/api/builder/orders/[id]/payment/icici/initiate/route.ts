@@ -20,8 +20,8 @@ export const dynamic = "force-dynamic";
 // leaks whether the feature exists at all.
 //
 // Amount security (task §17): the amount sent to ICICI is ALWAYS
-// Order.totalAmount read fresh from the database in this request — nothing
-// from the request body is ever used to determine the payable amount.
+// Order.totalAmount / finalPayableAmount read fresh from the database in this
+// request — nothing from the request body is ever used to determine the payable amount.
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
     if (!isIciciUatAvailable()) {
@@ -84,8 +84,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
       });
     }
 
-    // Server-side payable amount — never trusts any browser-supplied value.
-    const payableAmount = Number(order.totalAmount).toFixed(2);
     // Server-side payable amount — uses finalPayableAmount if present, else totalAmount
     const rawPayable = order.finalPayableAmount != null ? order.finalPayableAmount : order.totalAmount;
     const payableAmount = Number(rawPayable).toFixed(2);
@@ -101,7 +99,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
         gateway: "ICICI",
         gatewayEnvironment: config.environment,
         merchantTxnNo,
-        amount: order.totalAmount,
         amount: rawPayable,
         currency: "INR",
         status: PaymentTransactionStatus.INITIATED,

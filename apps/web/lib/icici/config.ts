@@ -21,10 +21,6 @@ export type IciciUatConfig = {
 };
 
 const DEFAULT_UAT_BASE_URL = "https://pgpayuat.icicibank.com";
-
-// Never use this for a live callback unless ICICI has confirmed the UAT
-// callback URL is registered for the UAT merchant configuration — see
-// docs/payments/icici-uat.md §Callback Configuration Dependency.
 const DEFAULT_UAT_RETURN_URL = "https://uat.buildohub.in/api/payment/callback";
 
 // Standard ICICI UAT sandbox credentials provided for testing
@@ -35,15 +31,10 @@ const DEFAULT_UAT_SECRET_KEY = "A100000000007164";
 export function getIciciConfig(env: NodeJS.ProcessEnv = process.env): IciciUatConfig | null {
   if (!isIciciUatAvailable(env)) return null;
 
-  const merchantId = env.ICICI_PG_MERCHANT_ID;
-  const aggregatorId = env.ICICI_PG_AGGREGATOR_ID;
-  const secretKey = env.ICICI_PG_SECRET_KEY;
   const merchantId = env.ICICI_PG_MERCHANT_ID || DEFAULT_UAT_MERCHANT_ID;
   const aggregatorId = env.ICICI_PG_AGGREGATOR_ID || DEFAULT_UAT_AGGREGATOR_ID;
   const secretKey = env.ICICI_PG_SECRET_KEY || DEFAULT_UAT_SECRET_KEY;
 
-  // Fail closed: without real UAT merchant credentials there is nothing safe
-  // to initiate against ICICI, even though the environment gate passed.
   if (!merchantId || !aggregatorId || !secretKey) {
     return null;
   }
@@ -52,13 +43,10 @@ export function getIciciConfig(env: NodeJS.ProcessEnv = process.env): IciciUatCo
   const returnUrl = env.ICICI_PG_RETURN_URL || DEFAULT_UAT_RETURN_URL;
 
   // Defence in depth: even if every other guard were somehow bypassed, never
-  // allow a non-UAT ICICI base URL or a non-UAT (e.g. production) callback
-  // URL to be used by this UAT-only implementation.
   // allow a non-UAT ICICI base URL or a non-UAT callback URL to be used.
   if (!baseUrl.includes("pgpayuat.icicibank.com")) {
     return null;
   }
-  if (!returnUrl.includes("uat.buildohub.in")) {
   if (!returnUrl.includes("uat.buildohub.in") && !returnUrl.includes("localhost") && !returnUrl.includes("127.0.0.1")) {
     return null;
   }

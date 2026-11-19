@@ -83,8 +83,10 @@ export type InvoicePdfData = {
     bankName: string;
     accountName: string;
     accountNumber: string;
+    accountType?: string;
     ifscCode: string;
     branch: string;
+    bankAddress?: string;
   };
 };
 
@@ -337,10 +339,11 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
     const bank = invoice.bankDetails ?? (BUILDOHUB_COMPANY as any).bankDetails;
     if (bank) {
       doc.fontSize(8.5).fillColor(OLIVE_ACCENT).text("Bank Settlement Details", startX, currentY, { underline: true });
+      const acctTypeSuffix = bank.accountType ? ` (${bank.accountType})` : "";
       doc
         .fontSize(8)
         .fillColor("#64748b")
-        .text(`Bank: ${bank.bankName} | A/C: ${bank.accountNumber}`, startX, currentY + 12)
+        .text(`Bank: ${bank.bankName} | A/C: ${bank.accountNumber}${acctTypeSuffix}`, startX, currentY + 12)
         .text(`Account Name: ${bank.accountName}`, startX, currentY + 22)
         .text(`IFSC: ${bank.ifscCode} | Branch: ${bank.branch}`, startX, currentY + 32);
     }

@@ -17,6 +17,7 @@ export type BankAccountDetails = {
   accountNumber: string;
   ifscCode: string;
   branch: string;
+  bankAddress?: string;
   accountType?: string;
   mobileNo?: string;
   emailId?: string;
@@ -30,6 +31,7 @@ export function getBankAccountDetails(): BankAccountDetails {
     accountNumber: process.env.BANK_ACCOUNT_NUMBER || "777705678978",
     ifscCode: process.env.BANK_IFSC_CODE || "ICIC0004179",
     branch: process.env.BANK_BRANCH_NAME || "Ganapathy branch, Coimbatore",
+    bankAddress: process.env.BANK_ADDRESS || "Door No.1414A, Ambal Nagar, Sathy Main Road, Coimbatore-641006",
     accountType: process.env.BANK_ACCOUNT_TYPE || "CURRENT ACCOUNT",
     mobileNo: process.env.BANK_MOBILE_NO || "9487944167",
     emailId: process.env.BANK_EMAIL_ID || "TRIADBUILDTECH@GMAIL.COM",

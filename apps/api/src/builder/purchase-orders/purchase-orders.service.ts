@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { waitUntil } from "@vercel/functions";
-import { OrderStatus, PurchaseOrderStatus, calculateLineGst } from "@matsrc/db";
+import { OrderStatus, PurchaseOrderStatus, calculateLineGst, resolveInvoiceDisplayUnit } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { BuilderContextService } from "src/builder/builder-context.service";
 import { NotificationService } from "src/notifications/notification.service";
@@ -137,7 +137,7 @@ export class PurchaseOrdersService {
       id: li.id,
       productId: li.productId,
       productName: li.product.name,
-      unit: li.product.unit,
+      unit: resolveInvoiceDisplayUnit({ unit: li.product.unit, productName: li.product.name }),
       quantity: li.quantity,
       // Admin-Configurable Product Markup: `unitPrice` here is now the
       // BUYER-FACING marked-up price (this serialization is buyer-only).

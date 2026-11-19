@@ -151,4 +151,64 @@ describe("serializeInvoice financial-transparency fields", () => {
     expect(serialized.lineItems[0].igstRate).toBe(18);
     expect(serialized.lineItems[0].igstAmount).toBe(180);
   });
+
+  it("resolves user-facing unit and UQC correctly, never displaying OTH as unit", () => {
+    const serialized = serializeInvoice(
+      fakeInvoiceRow({
+        lineItems: [
+          {
+            id: "li-steel",
+            productId: "prod-steel",
+            productName: "Vizag Steel 12mm TMT Bar Fe 500D",
+            quantity: "20",
+            unitPrice: "65.00",
+            taxRate: "18.00",
+            taxAmount: "234.00",
+            subtotal: "1300.00",
+            total: "1534.00",
+            unit: null,
+            uqc: "OTH",
+          },
+          {
+            id: "li-cement",
+            productId: "prod-cement",
+            productName: "UltraTech Super Cement",
+            quantity: "50",
+            unitPrice: "380.00",
+            taxRate: "18.00",
+            taxAmount: "3420.00",
+            subtotal: "19000.00",
+            total: "22420.00",
+            unit: "Unit",
+            uqc: "OTH",
+          },
+          {
+            id: "li-mt",
+            productId: "prod-mt",
+            productName: "Bulk Steel 16mm",
+            quantity: "5",
+            unitPrice: "60000.00",
+            taxRate: "18.00",
+            taxAmount: "54000.00",
+            subtotal: "300000.00",
+            total: "354000.00",
+            unit: "MT",
+            uqc: "TON",
+          },
+        ],
+      })
+    );
+
+    // Steel line item resolves unit to KGS and UQC to KGS (never OTH as unit)
+    expect(serialized.lineItems[0].unit).toBe("KGS");
+    expect(serialized.lineItems[0].uqc).toBe("KGS");
+
+    // Cement line item resolves unit to BAG and UQC to BAG
+    expect(serialized.lineItems[1].unit).toBe("BAG");
+    expect(serialized.lineItems[1].uqc).toBe("BAG");
+
+    // MT line item preserves unit MT and UQC TON
+    expect(serialized.lineItems[2].unit).toBe("MT");
+    expect(serialized.lineItems[2].uqc).toBe("TON");
+  });
 });

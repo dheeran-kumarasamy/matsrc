@@ -7,6 +7,7 @@ import {
   resolveBuyerConfirmationState,
   resolveOrderFinalPayableAmount,
   BUYER_CONFIRMATION_STATE_LABELS,
+  resolveInvoiceDisplayUnit,
 } from "@matsrc/db";
 import {
   prisma,
@@ -334,7 +335,7 @@ export async function GET(
         productId: item.product.id,
         name: item.product.name,
         quantity: item.quantity,
-        unit: item.product.unit,
+        unit: resolveInvoiceDisplayUnit({ unit: item.product.unit, productName: item.product.name }),
         unitPrice: Number(item.unitPrice),
       })),
       tracking: order.tracking.map((step) => ({

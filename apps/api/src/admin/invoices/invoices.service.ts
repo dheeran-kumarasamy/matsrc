@@ -9,6 +9,7 @@ import {
   getStateCode,
   getStateName,
   normalizeUqc,
+  resolveInvoiceDisplayUnit,
   numberToIndianWords,
   roundCurrency,
   assertFullOrderSnapshotIntegrity,
@@ -261,8 +262,21 @@ export class InvoicesService {
         placeOfSupplyStateCode,
       });
 
-      const rawUnit = item?.product?.unitRef?.code || item?.product?.unit || null;
-      const uqc = normalizeUqc(rawUnit);
+      const rawUnit =
+        sli.orderUnitLabel ||
+        item?.product?.unit ||
+        item?.product?.unitRef?.code ||
+        item?.product?.unitRef?.name ||
+        (item?.product?.name?.toLowerCase().includes("steel") || item?.product?.name?.toLowerCase().includes("tmt")
+          ? "KGS"
+          : item?.product?.name?.toLowerCase().includes("cement")
+            ? "BAG"
+            : null);
+      const resolvedUnit = resolveInvoiceDisplayUnit({
+        unit: rawUnit,
+        productName: item?.product?.name,
+      });
+      const uqc = normalizeUqc(resolvedUnit);
       const hsnCode =
         item?.product?.hsnCode ??
         (item?.product?.name?.toLowerCase().includes("cement")
@@ -285,7 +299,7 @@ export class InvoicesService {
         // Form GST INV-01 / E-Invoice Item Compliance Fields (Phase 1 & 2)
         hsnCode,
         uqc,
-        unit: rawUnit ?? "Unit",
+        unit: resolvedUnit,
         isService: false,
         taxableAmount: new Prisma.Decimal(taxSplit.taxableAmount.toString()),
         cgstRate: taxSplit.cgstRate > 0 ? new Prisma.Decimal(taxSplit.cgstRate.toString()) : null,
@@ -830,6 +844,17 @@ export class InvoicesService {
               ? "7214"
               : "6810");
 
+        const resolvedUnit = resolveInvoiceDisplayUnit({
+          unit: li.unit,
+          uqc: li.uqc,
+          productName: li.productName,
+        });
+
+        const resolvedUqc =
+          li.uqc && li.uqc.toUpperCase() !== "OTH" && li.uqc.toUpperCase() !== "UNIT"
+            ? li.uqc
+            : normalizeUqc(resolvedUnit);
+
         return {
           id: li.id,
           slNo: li.slNo ?? index + 1,
@@ -837,8 +862,8 @@ export class InvoicesService {
           productName: li.productName,
           description: li.description,
           hsnCode,
-          uqc: li.uqc ?? "OTH",
-          unit: li.unit ?? "Unit",
+          uqc: resolvedUqc,
+          unit: resolvedUnit,
           isService: Boolean(li.isService),
           quantity: Number(li.quantity),
           unitPrice: Number(li.unitPrice),

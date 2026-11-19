@@ -221,4 +221,36 @@ describe("renderInvoicePdf (apps/web)", () => {
     const fs = await import("fs");
     fs.writeFileSync("sample-gst-invoice.pdf", buffer);
   });
+
+  it("renders a valid PDF with KGS unit display when uqc is OTH or unit is missing for steel product", async () => {
+    const buffer = await renderInvoicePdf(
+      fakeInvoice({
+        lineItems: [
+          {
+            slNo: 1,
+            productName: "Vizag Steel 12mm TMT Bar Fe 500D",
+            description: null,
+            hsnCode: "7214",
+            uqc: "OTH",
+            unit: null,
+            quantity: 20,
+            unitPrice: 65,
+            taxableAmount: 1300,
+            taxRate: 18,
+            cgstRate: 9,
+            cgstAmount: 117,
+            sgstRate: 9,
+            sgstAmount: 117,
+            igstRate: null,
+            igstAmount: 0,
+            taxAmount: 234,
+            subtotal: 1300,
+            total: 1534,
+          },
+        ],
+      })
+    );
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+  });
 });

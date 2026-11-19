@@ -1,4 +1,4 @@
-import { OrderStatus, PurchaseOrderStatus, calculateLineGst } from "@matsrc/db";
+import { OrderStatus, PurchaseOrderStatus, calculateLineGst, resolveInvoiceDisplayUnit } from "@matsrc/db";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 export function toNumber(value: unknown): number {
@@ -229,7 +229,7 @@ function buildBuyerPoLineItemView(li: any) {
     id: li.id,
     productId: li.productId,
     productName: li.product.name,
-    unit: li.product.unit,
+    unit: resolveInvoiceDisplayUnit({ unit: li.product.unit, productName: li.product.name }),
     quantity: li.quantity,
     // Admin-Configurable Product Markup: `unitPrice` here is now the
     // BUYER-FACING marked-up price — this JSON view is buyer-only (see

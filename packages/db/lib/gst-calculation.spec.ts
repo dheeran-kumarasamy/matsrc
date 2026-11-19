@@ -8,6 +8,7 @@ import {
   getStateName,
   isValidQuotedPrice,
   normalizeUqc,
+  resolveInvoiceDisplayUnit,
   numberToIndianWords,
   parseQuotedPrice,
   roundCurrency,
@@ -133,6 +134,52 @@ describe("Form GST INV-01 State Code & UQC Helpers", () => {
     expect(normalizeUqc("PCS")).toBe("NOS");
     expect(normalizeUqc("Boxes")).toBe("BOX");
     expect(normalizeUqc(null)).toBe("OTH");
+  });
+
+  it("resolveInvoiceDisplayUnit resolves site unit or intelligent domain fallback, never OTH", () => {
+    // When explicit unit is present and not generic
+    expect(resolveInvoiceDisplayUnit({ unit: "KGS", uqc: "KGS" })).toBe("KGS");
+    expect(resolveInvoiceDisplayUnit({ unit: "MT", uqc: "TON" })).toBe("MT");
+    expect(resolveInvoiceDisplayUnit({ unit: "BAG", uqc: "BAG" })).toBe("BAG");
+
+    // When unit is missing or "Unit" or "OTH", but uqc is a valid specific code
+    expect(resolveInvoiceDisplayUnit({ unit: null, uqc: "KGS" })).toBe("KGS");
+    expect(resolveInvoiceDisplayUnit({ unit: "Unit", uqc: "BAG" })).toBe("BAG");
+
+    // When uqc is "OTH" and unit is null/Unit, falls back to product name context
+    expect(
+      resolveInvoiceDisplayUnit({
+        unit: null,
+        uqc: "OTH",
+        productName: "Vizag Steel 12mm TMT Bar Fe 500D",
+      })
+    ).toBe("KGS");
+    expect(
+      resolveInvoiceDisplayUnit({
+        unit: "Unit",
+        uqc: "OTH",
+        productName: "Tata Tiscon 16mm TMT Steel Bar",
+      })
+    ).toBe("KGS");
+    expect(
+      resolveInvoiceDisplayUnit({
+        unit: null,
+        uqc: "OTH",
+        productName: "UltraTech Super Cement 53 Grade",
+      })
+    ).toBe("BAG");
+
+    // When unit is set to a site unit, even if uqc is "OTH", display unit preserves site unit
+    expect(
+      resolveInvoiceDisplayUnit({
+        unit: "KGS",
+        uqc: "OTH",
+        productName: "Steel Rods",
+      })
+    ).toBe("KGS");
+
+    // Fallback when nothing is known
+    expect(resolveInvoiceDisplayUnit({ unit: null, uqc: "OTH" })).toBe("Unit");
   });
 });
 

@@ -1,4 +1,4 @@
-import { numberToIndianWords, getStateCode, getStateName } from "@matsrc/db";
+import { numberToIndianWords, getStateCode, getStateName, normalizeUqc, resolveInvoiceDisplayUnit } from "@matsrc/db";
 import { BUILDOHUB_COMPANY } from "./company-info";
 
 // Shared Invoice serialization for the Contractor/Client-facing builder
@@ -148,6 +148,17 @@ export function serializeInvoice(invoice: any) {
             ? "7214"
             : "6810");
 
+      const resolvedUnit = resolveInvoiceDisplayUnit({
+        unit: li.unit,
+        uqc: li.uqc,
+        productName: li.productName,
+      });
+
+      const resolvedUqc =
+        li.uqc && li.uqc.toUpperCase() !== "OTH" && li.uqc.toUpperCase() !== "UNIT"
+          ? li.uqc
+          : normalizeUqc(resolvedUnit);
+
       return {
         id: li.id,
         slNo: li.slNo ?? index + 1,
@@ -155,8 +166,8 @@ export function serializeInvoice(invoice: any) {
         productName: li.productName,
         description: li.description,
         hsnCode,
-        uqc: li.uqc ?? "OTH",
-        unit: li.unit ?? "Unit",
+        uqc: resolvedUqc,
+        unit: resolvedUnit,
         isService: Boolean(li.isService),
         quantity: toNumber(li.quantity),
         unitPrice: toNumber(li.unitPrice),

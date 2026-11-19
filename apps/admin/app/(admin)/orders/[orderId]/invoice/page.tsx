@@ -86,8 +86,10 @@ type InvoiceDetail = {
     bankName: string;
     accountName: string;
     accountNumber: string;
+    accountType?: string;
     ifscCode: string;
     branch: string;
+    bankAddress?: string;
   };
   generatedBy: { id: string; name: string | null; email: string | null } | null;
   generatedAt: string;
@@ -399,11 +401,13 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Bank Settlement Details</h2>
             <p className="font-semibold text-slate-900">
               {invoice.bankDetails.bankName} · A/C {invoice.bankDetails.accountNumber}
+              {invoice.bankDetails.accountType ? ` (${invoice.bankDetails.accountType})` : ""}
             </p>
             <p>Account Name: {invoice.bankDetails.accountName}</p>
             <p>
               IFSC: {invoice.bankDetails.ifscCode} · Branch: {invoice.bankDetails.branch}
             </p>
+            {invoice.bankDetails.bankAddress ? <p>Bank Address: {invoice.bankDetails.bankAddress}</p> : null}
           </section>
         ) : null}
       </div>

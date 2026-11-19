@@ -144,6 +144,9 @@ export default function BankTransferPaymentPanel({ orderId, amount, bank }: Prop
           {bank.accountType ? <CopyField label="Account Type" value={bank.accountType} /> : null}
           <CopyField label="IFSC" value={bank.ifscCode} />
           <CopyField label="Branch" value={bank.branch} />
+          {bank.bankAddress ? <CopyField label="Bank Address" value={bank.bankAddress} /> : null}
+          {bank.emailId ? <CopyField label="Email" value={bank.emailId} /> : null}
+          {bank.mobileNo ? <CopyField label="Mobile" value={bank.mobileNo} /> : null}
           {bank.upiId ? <CopyField label="UPI ID" value={bank.upiId} /> : null}
           <CopyField label="Order Reference" value={orderId} />
         </div>

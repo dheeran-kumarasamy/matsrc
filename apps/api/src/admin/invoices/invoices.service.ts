@@ -719,8 +719,18 @@ export class InvoicesService {
       "Tamil Nadu";
     const isIntraState = sellerStateCode === placeOfSupplyStateCode;
 
-    const totalTaxAmount = Number(invoice.taxAmount);
+    const rawSubtotal = Number(invoice.subtotal ?? 0);
+    const freightChargeAmount = Number(invoice.freightChargeAmount ?? 0);
+    const otherChargesAmount = Number(invoice.otherChargesAmount ?? 0);
+    const discountAmount = Number(invoice.discountAmount ?? 0);
+    const roundingAdjustment = Number(invoice.roundingAdjustment ?? 0);
+    const netAdjustment = freightChargeAmount + otherChargesAmount - discountAmount;
+    const taxableValue =
+      invoice.taxableValue !== null && invoice.taxableValue !== undefined
+        ? Number(invoice.taxableValue)
+        : rawSubtotal + netAdjustment;
 
+    let totalTaxAmount = Number(invoice.taxAmount);
     let cgstTotal = Number(invoice.cgstAmount ?? 0);
     let sgstTotal = Number(invoice.sgstAmount ?? 0);
     let igstTotal = Number(invoice.igstAmount ?? 0);
@@ -733,6 +743,8 @@ export class InvoicesService {
         igstTotal = totalTaxAmount;
       }
     }
+
+    const totalAmount = Number(invoice.totalAmount);
 
     const buyer = {
       legalName: invoice.buyerLegalName ?? invoice.builder?.name ?? "Contractor/Client",
@@ -886,21 +898,18 @@ export class InvoicesService {
       // historical invoices generated before this field existed (where
       // subtotal already WAS the taxable value, since no adjustment fields
       // existed yet — see Invoice.taxableValue's schema doc comment).
-      freightChargeAmount: Number(invoice.freightChargeAmount ?? 0),
-      otherChargesAmount: Number(invoice.otherChargesAmount ?? 0),
-      discountAmount: Number(invoice.discountAmount ?? 0),
-      roundingAdjustment: Number(invoice.roundingAdjustment ?? 0),
-      taxableValue:
-        invoice.taxableValue !== null && invoice.taxableValue !== undefined
-          ? Number(invoice.taxableValue)
-          : Number(invoice.subtotal),
+      freightChargeAmount,
+      otherChargesAmount,
+      discountAmount,
+      roundingAdjustment,
+      taxableValue,
       cgstAmount: cgstTotal,
       sgstAmount: sgstTotal,
       igstAmount: igstTotal,
       cessAmount: Number(invoice.cessAmount ?? 0),
       taxAmount: totalTaxAmount,
-      totalAmount: Number(invoice.totalAmount),
-      totalInWords: numberToIndianWords(Number(invoice.totalAmount)),
+      totalAmount,
+      totalInWords: numberToIndianWords(totalAmount),
       currency: invoice.currency,
       paymentStatus: invoice.paymentStatus,
       amountPaid: invoice.amountPaid !== null && invoice.amountPaid !== undefined ? Number(invoice.amountPaid) : null,

@@ -281,11 +281,11 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
 
     if (hasAdjustments) {
       if (invoice.freightChargeAmount !== 0) {
-        doc.text(`Freight Charges: ${money(invoice.freightChargeAmount, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
+        doc.text(`Freight Charges (excl. GST): ${money(invoice.freightChargeAmount, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
         currentY += 12;
       }
       if (invoice.otherChargesAmount !== 0) {
-        doc.text(`Other Charges: ${money(invoice.otherChargesAmount, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
+        doc.text(`Other Charges (excl. GST): ${money(invoice.otherChargesAmount, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
         currentY += 12;
       }
       if (invoice.discountAmount !== 0) {

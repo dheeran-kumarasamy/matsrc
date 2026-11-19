@@ -315,6 +315,37 @@ export function normalizeUqc(unit?: string | null): string {
   }
 }
 
+/**
+ * Resolves the user-facing display unit of measurement for an invoice line item.
+ * In Form GST INV-01 / E-Invoicing, `uqc` is a 3-character statutory code (like "OTH" for other).
+ * However, buyers, admins, and PDFs must see the actual physical unit set on the site
+ * (e.g. "KGS", "BAG", "MT", "SQFT"), and must NEVER see "OTH" or "Unit" as the measurement label.
+ */
+export function resolveInvoiceDisplayUnit(params: {
+  unit?: string | null;
+  uqc?: string | null;
+  productName?: string | null;
+}): string {
+  const cleanUnit = params.unit?.trim();
+  if (cleanUnit && cleanUnit.toUpperCase() !== "OTH" && cleanUnit.toUpperCase() !== "UNIT") {
+    return cleanUnit;
+  }
+  const cleanUqc = params.uqc?.trim();
+  if (cleanUqc && cleanUqc.toUpperCase() !== "OTH" && cleanUqc.toUpperCase() !== "UNIT") {
+    return cleanUqc;
+  }
+  if (params.productName) {
+    const lower = params.productName.toLowerCase();
+    if (lower.includes("steel") || lower.includes("tmt")) {
+      return "KGS";
+    }
+    if (lower.includes("cement")) {
+      return "BAG";
+    }
+  }
+  return cleanUnit || (cleanUqc && cleanUqc.toUpperCase() !== "OTH" ? cleanUqc : null) || "Unit";
+}
+
 export type LineTaxSplitInput = {
   quantity: number;
   unitPrice: number;

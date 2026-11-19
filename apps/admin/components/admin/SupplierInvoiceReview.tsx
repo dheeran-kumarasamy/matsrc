@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminApiPatch, adminApiPost } from "@/lib/api-client";
 import { SupplierPaymentPanel } from "./SupplierPaymentPanel";
-import { formatCurrency, formatProductPrice } from "@/lib/currency";
 
 type LineItem = {
   id: string;
@@ -146,6 +145,45 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
   // .confirm), this is purely a UX convenience.
   const allUnitsConfirmed = useMemo(() => drafts.every((d) => d.unitConfirmed), [drafts]);
 
+  const livePreview = useMemo(() => {
+    const linesTaxable = drafts.reduce((sum, d) => {
+      const qty = parseFloat(d.actualQuantity) || 0;
+      const rate = d.approvedUnitPriceOverride ? parseFloat(d.approvedUnitPriceOverride) || d.originalUnitPrice : d.originalUnitPrice;
+      return sum + qty * rate;
+    }, 0);
+    const linesTax = drafts.reduce((sum, d, i) => {
+      const qty = parseFloat(d.actualQuantity) || 0;
+      const rate = d.approvedUnitPriceOverride ? parseFloat(d.approvedUnitPriceOverride) || d.originalUnitPrice : d.originalUnitPrice;
+      const itemTaxRate = invoice.lineItems[i]?.taxRatePercent ?? invoice.orderItems[i]?.taxRatePercent ?? 18;
+      return sum + Math.round((qty * rate * (itemTaxRate / 100) + Number.EPSILON) * 100) / 100;
+    }, 0);
+
+    const freight = parseFloat(freightChargeAmount) || 0;
+    const other = parseFloat(otherChargesAmount) || 0;
+    const discount = parseFloat(discountAmount) || 0;
+    const rounding = parseFloat(roundingAdjustment) || 0;
+
+    const netAdjustment = freight + other - discount;
+    const adjustmentTax = netAdjustment > 0 ? Math.round((netAdjustment * 0.18 + Number.EPSILON) * 100) / 100 : 0;
+    const taxableValue = linesTaxable + netAdjustment;
+    const totalTax = linesTax + adjustmentTax;
+    const totalAmount = taxableValue + totalTax + rounding;
+
+    return {
+      linesTaxable,
+      linesTax,
+      freight,
+      other,
+      discount,
+      netAdjustment,
+      adjustmentTax,
+      taxableValue,
+      totalTax,
+      rounding,
+      totalAmount,
+    };
+  }, [drafts, freightChargeAmount, otherChargesAmount, discountAmount, roundingAdjustment, invoice]);
+
   function updateDraft(index: number, patch: Partial<LineDraft>) {
     setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, ...patch } : d)));
   }
@@ -258,8 +296,8 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
             <div key={d.orderItemId} className="rounded-xl border border-slate-200 p-3">
               <p className="text-sm font-bold text-slate-900">{d.productName ?? "Product"}</p>
               <p className="text-xs text-slate-500">
-                Ordered: {d.originalQuantity} {d.unitLabel ?? "(unit not recorded)"} ×{" "}
-                {formatProductPrice(d.originalUnitPrice)}
+                Ordered: {d.originalQuantity} {d.unitLabel ?? "(unit not recorded)"} × ₹
+                {d.originalUnitPrice.toLocaleString("en-IN")}
               </p>
               <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <label className="text-xs font-semibold text-slate-600">
@@ -290,7 +328,7 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
                     disabled={readOnly}
                     value={d.approvedUnitPriceOverride}
                     onChange={(e) => updateDraft(i, { approvedUnitPriceOverride: e.target.value })}
-                    placeholder={`Default: ${formatProductPrice(d.originalUnitPrice)}`}
+                    placeholder={`Default: ₹${d.originalUnitPrice}`}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
                     type="number"
                     step="0.01"
@@ -338,54 +376,75 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
           </div>
         ) : null}
 
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <label className="text-xs font-semibold text-slate-600">
-            Freight
-            <input
-              disabled={readOnly}
-              value={freightChargeAmount}
-              onChange={(e) => setFreightChargeAmount(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
-              type="number"
-            />
-          </label>
-          <label className="text-xs font-semibold text-slate-600">
-            Other Charges
-            <input
-              disabled={readOnly}
-              value={otherChargesAmount}
-              onChange={(e) => setOtherChargesAmount(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
-              type="number"
-            />
-          </label>
-          <label className="text-xs font-semibold text-slate-600">
-            Discount
-            <input
-              disabled={readOnly}
-              value={discountAmount}
-              onChange={(e) => setDiscountAmount(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
-              type="number"
-            />
-          </label>
-          <label className="text-xs font-semibold text-slate-600">
-            Rounding
-            <input
-              disabled={readOnly}
-              value={roundingAdjustment}
-              onChange={(e) => setRoundingAdjustment(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
-              type="number"
-            />
-          </label>
+        <div className="mt-4">
+          <p className="text-xs font-semibold text-slate-700">Invoice Adjustments (exclusive of GST — 18% GST will be added):</p>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <label className="text-xs font-semibold text-slate-600">
+              Freight (excl. GST)
+              <input
+                disabled={readOnly}
+                value={freightChargeAmount}
+                onChange={(e) => setFreightChargeAmount(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                type="number"
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">
+              Other Charges (excl. GST)
+              <input
+                disabled={readOnly}
+                value={otherChargesAmount}
+                onChange={(e) => setOtherChargesAmount(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                type="number"
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">
+              Discount
+              <input
+                disabled={readOnly}
+                value={discountAmount}
+                onChange={(e) => setDiscountAmount(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                type="number"
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">
+              Rounding
+              <input
+                disabled={readOnly}
+                value={roundingAdjustment}
+                onChange={(e) => setRoundingAdjustment(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                type="number"
+              />
+            </label>
+          </div>
         </div>
 
-        {invoice.confirmedTotalAmount !== null ? (
-          <p className="mt-3 text-sm font-bold text-slate-900">
-            Confirmed total: {formatCurrency(invoice.confirmedTotalAmount)}
+        {/* Live Calculation Preview */}
+        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs text-slate-700">
+          <p className="font-semibold text-slate-900">Calculation Summary</p>
+          <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+            <div>Items Subtotal: ₹{livePreview.linesTaxable.toLocaleString("en-IN")}</div>
+            {livePreview.freight > 0 ? <div>Freight (excl. GST): ₹{livePreview.freight.toLocaleString("en-IN")}</div> : null}
+            {livePreview.other > 0 ? <div>Other Charges (excl. GST): ₹{livePreview.other.toLocaleString("en-IN")}</div> : null}
+            {livePreview.discount > 0 ? <div>Discount: -₹{livePreview.discount.toLocaleString("en-IN")}</div> : null}
+            <div className="font-medium text-slate-900">Taxable Value: ₹{livePreview.taxableValue.toLocaleString("en-IN")}</div>
+            <div>Items GST: ₹{livePreview.linesTax.toLocaleString("en-IN")}</div>
+            {livePreview.netAdjustment > 0 ? (
+              <div>GST on Adjustments (@18%): ₹{livePreview.adjustmentTax.toLocaleString("en-IN")}</div>
+            ) : null}
+            <div className="font-medium text-slate-900">Total GST: ₹{livePreview.totalTax.toLocaleString("en-IN")}</div>
+            {livePreview.rounding !== 0 ? (
+              <div>Rounding: {livePreview.rounding > 0 ? "+" : "-"}₹{Math.abs(livePreview.rounding).toLocaleString("en-IN")}</div>
+            ) : null}
+          </div>
+          <p className="mt-2 text-sm font-bold text-slate-950">
+            {invoice.confirmedTotalAmount !== null ? "Confirmed Total: " : "Estimated Total: "}
+            ₹{(invoice.confirmedTotalAmount !== null ? invoice.confirmedTotalAmount : livePreview.totalAmount).toLocaleString("en-IN")}
           </p>
-        ) : null}
+        </div>
 
         {!readOnly ? (
           <div className="mt-4 flex flex-wrap items-center gap-2">

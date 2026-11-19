@@ -38,10 +38,18 @@ export function serializeInvoice(invoice: any) {
     "Tamil Nadu";
   const isIntraState = sellerStateCode === placeOfSupplyStateCode;
 
-  const totalTaxAmount = toNumber(invoice.taxAmount);
+  const rawSubtotal = toNumber(invoice.subtotal);
+  const freightChargeAmount = toNumber(invoice.freightChargeAmount);
+  const otherChargesAmount = toNumber(invoice.otherChargesAmount);
+  const discountAmount = toNumber(invoice.discountAmount);
+  const roundingAdjustment = toNumber(invoice.roundingAdjustment);
+  const netAdjustment = freightChargeAmount + otherChargesAmount - discountAmount;
+  const taxableValue =
+    invoice.taxableValue !== null && invoice.taxableValue !== undefined
+      ? toNumber(invoice.taxableValue)
+      : rawSubtotal + netAdjustment;
 
-  // Reconcile CGST/SGST vs IGST totals: if explicit columns are 0 but taxAmount is non-zero,
-  // apply statutory split based on intra-state vs inter-state rules for seamless backwards compatibility.
+  let totalTaxAmount = toNumber(invoice.taxAmount);
   let cgstTotal = toNumber(invoice.cgstAmount);
   let sgstTotal = toNumber(invoice.sgstAmount);
   let igstTotal = toNumber(invoice.igstAmount);
@@ -54,6 +62,8 @@ export function serializeInvoice(invoice: any) {
       igstTotal = totalTaxAmount;
     }
   }
+
+  const totalAmount = toNumber(invoice.totalAmount);
 
   const buyer = {
     legalName: invoice.buyerLegalName ?? invoice.builder?.name ?? "Contractor/Client",
@@ -186,21 +196,18 @@ export function serializeInvoice(invoice: any) {
     // see Invoice.taxableValue's schema doc comment). `taxableValue` falls
     // back to `subtotal` for historical invoices generated before these
     // fields existed, so those invoices keep rendering exactly as before.
-    freightChargeAmount: toNumber(invoice.freightChargeAmount),
-    otherChargesAmount: toNumber(invoice.otherChargesAmount),
-    discountAmount: toNumber(invoice.discountAmount),
-    roundingAdjustment: toNumber(invoice.roundingAdjustment),
-    taxableValue:
-      invoice.taxableValue !== null && invoice.taxableValue !== undefined
-        ? toNumber(invoice.taxableValue)
-        : toNumber(invoice.subtotal),
+    freightChargeAmount,
+    otherChargesAmount,
+    discountAmount,
+    roundingAdjustment,
+    taxableValue,
     cgstAmount: cgstTotal,
     sgstAmount: sgstTotal,
     igstAmount: igstTotal,
     cessAmount: toNumber(invoice.cessAmount),
     taxAmount: totalTaxAmount,
-    totalAmount: toNumber(invoice.totalAmount),
-    totalInWords: numberToIndianWords(toNumber(invoice.totalAmount)),
+    totalAmount,
+    totalInWords: numberToIndianWords(totalAmount),
     currency: invoice.currency,
     paymentStatus: invoice.paymentStatus,
     amountPaid: invoice.amountPaid !== null && invoice.amountPaid !== undefined ? toNumber(invoice.amountPaid) : null,

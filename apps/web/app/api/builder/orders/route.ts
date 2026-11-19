@@ -91,7 +91,7 @@ export async function GET(request: Request) {
         // route. See packages/db/lib/order-buyer-confirmation.ts.
         supplierInvoice: { select: { status: true, confirmedTotalAmount: true } },
         invoice: {
-          select: { id: true, invoiceNumber: true },
+          select: { id: true, invoiceNumber: true, totalAmount: true },
         },
         items: {
 
@@ -137,6 +137,8 @@ export async function GET(request: Request) {
           : null;
         const confirmationState = resolveBuyerConfirmationState(order.status, supplierInvoiceSnapshot);
         const { amount: resolvedTotal } = resolveOrderFinalPayableAmount(preConfirmationEstimate, supplierInvoiceSnapshot);
+        const invoiceTotal = order.invoice?.totalAmount != null ? Number(order.invoice.totalAmount) : null;
+        const finalTotal = invoiceTotal ?? resolvedTotal;
 
         return {
         id: order.id,
@@ -147,9 +149,9 @@ export async function GET(request: Request) {
         confirmationStateLabel: BUYER_CONFIRMATION_STATE_LABELS[confirmationState],
         paymentStatus: order.paymentStatus,
         itemCount: order.items.length,
-        total: resolvedTotal,
-        totalLabel: formatCurrency(resolvedTotal),
-        gstInclusive: hasGstSnapshot,
+        total: finalTotal,
+        totalLabel: formatCurrency(finalTotal),
+        gstInclusive: hasGstSnapshot || invoiceTotal != null,
         createdAt: order.createdAt,
         isAggregated: order.isAggregated,
         aggregationPoolId: order.aggregationPoolId,

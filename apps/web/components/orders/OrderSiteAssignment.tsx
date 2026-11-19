@@ -37,9 +37,14 @@ const emptyNewSiteForm: NewSiteForm = {
 export default function OrderSiteAssignment({
   orderId,
   siteId: initialSiteId,
+  showMapSelector = false,
 }: {
   orderId: string;
   siteId?: string | null;
+  // When true, renders the MapLocationPicker selector. Defaults to false so
+  // users do not need to scroll down in compact order overlays; can be enabled
+  // at later stages.
+  showMapSelector?: boolean;
 }) {
   const [sites, setSites] = useState<SiteOption[]>([]);
   const [siteId, setSiteId] = useState(initialSiteId ?? "");
@@ -157,29 +162,79 @@ export default function OrderSiteAssignment({
           </button>
         </div>
 
+        {/* Top action row: 'Use my current location' on left, 'Create site & tag order' aligned to the right so user does not need to scroll down */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={handleUseMyLocation}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-[color:var(--posh-bg-card)] px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+          >
+            <MapPin size={12} /> Use my current location
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void handleCreateSite()}
+            disabled={creating}
+            className="posh-btn-solid flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50 transition"
+          >
+            <Plus size={14} /> {creating ? "Creating…" : "Create site & tag order"}
+          </button>
+        </div>
+
+        {form.lat !== null && form.lng !== null ? (
+          <p className="text-[11px] text-emerald-700">
+            Location pin set ({form.lat.toFixed(4)}, {form.lng.toFixed(4)})
+          </p>
+        ) : null}
+
         <div className="grid gap-2 sm:grid-cols-2">
           <input
             placeholder="Site name *"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleCreateSite();
+              }
+            }}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm sm:col-span-2"
           />
           <input
             placeholder="Address line"
             value={form.addressLine}
             onChange={(e) => setForm((f) => ({ ...f, addressLine: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleCreateSite();
+              }
+            }}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm sm:col-span-2"
           />
           <input
             placeholder="City"
             value={form.city}
             onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleCreateSite();
+              }
+            }}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />
           <input
             placeholder="State"
             value={form.state}
             onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleCreateSite();
+              }
+            }}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />
           <input
@@ -187,40 +242,28 @@ export default function OrderSiteAssignment({
             value={form.pincode}
             maxLength={6}
             onChange={(e) => setForm((f) => ({ ...f, pincode: e.target.value.replace(/\D/g, "") }))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleCreateSite();
+              }
+            }}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm sm:col-span-2"
           />
         </div>
 
-        <div>
-          <button
-            type="button"
-            onClick={handleUseMyLocation}
-            className="mb-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-[color:var(--posh-bg-card)] px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-          >
-            <MapPin size={12} /> Use my current location
-          </button>
-          <MapLocationPicker
-            lat={form.lat}
-            lng={form.lng}
-            onLocationSelect={(lat, lng) => setForm((f) => ({ ...f, lat, lng }))}
-          />
-          {form.lat !== null && form.lng !== null ? (
-            <p className="mt-1 text-[11px] text-emerald-700">
-              Location pin set ({form.lat.toFixed(4)}, {form.lng.toFixed(4)})
-            </p>
-          ) : null}
-        </div>
+        {/* Map selector hidden by default so user does not need to scroll; can be enabled at later stages */}
+        {showMapSelector ? (
+          <div>
+            <MapLocationPicker
+              lat={form.lat}
+              lng={form.lng}
+              onLocationSelect={(lat, lng) => setForm((f) => ({ ...f, lat, lng }))}
+            />
+          </div>
+        ) : null}
 
         {createError ? <p className="text-xs text-red-600">{createError}</p> : null}
-
-        <button
-          type="button"
-          onClick={() => void handleCreateSite()}
-          disabled={creating}
-          className="posh-btn-solid flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold disabled:opacity-50"
-        >
-          <Plus size={14} /> {creating ? "Creating…" : "Create site & tag order"}
-        </button>
       </div>
     );
   }

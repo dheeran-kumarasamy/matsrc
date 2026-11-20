@@ -209,9 +209,9 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
     doc.text("Sl", startX, currentY, { width: 18 });
     doc.text("Item / Description", startX + 20, currentY, { width: 170 });
     doc.text("HSN", startX + 192, currentY, { width: 40 });
-    doc.text("Qty & Unit", startX + 234, currentY, { width: 52 });
-    doc.text("Rate", startX + 288, currentY, { width: 48 });
-    doc.text("Taxable", startX + 338, currentY, { width: 50 });
+    doc.text("Qty & Unit", startX + 234, currentY, { width: 50 });
+    doc.text("Rate", startX + 284, currentY, { width: 48, align: "right" });
+    doc.text("Taxable", startX + 332, currentY, { width: 56, align: "right" });
 
     if (isIntraState) {
       doc.text("CGST", startX + 390, currentY, { width: 42 });
@@ -257,9 +257,9 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
       doc.text(String(sl), startX, currentY, { width: 18 });
       doc.text(li.productName, startX + 20, currentY, { width: 170 });
       doc.text(hsn, startX + 192, currentY, { width: 40 });
-      doc.text(`${li.quantity} ${uqc}`, startX + 234, currentY, { width: 52 });
-      doc.text(money(li.unitPrice, invoice.currency), startX + 288, currentY, { width: 48 });
-      doc.text(money(taxable, invoice.currency), startX + 338, currentY, { width: 50 });
+      doc.text(`${li.quantity} ${uqc}`, startX + 234, currentY, { width: 50 });
+      doc.text(money(li.unitPrice, invoice.currency), startX + 284, currentY, { width: 48, align: "right" });
+      doc.text(money(taxable, invoice.currency, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), startX + 332, currentY, { width: 56, align: "right" });
 
       if (isIntraState) {
         doc.fontSize(7.5).text(cgstText, startX + 390, currentY, { width: 42 });

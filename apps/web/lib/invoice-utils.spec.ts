@@ -80,8 +80,8 @@ describe("serializeInvoice financial-transparency fields", () => {
         freightChargeAmount: "50.00",
         otherChargesAmount: "10.00",
         discountAmount: "20.00",
-        roundingAdjustment: "-0.50",
-        totalAmount: "1219.50",
+        roundingAdjustment: "0.00",
+        totalAmount: "1220.00",
       })
     );
 
@@ -89,9 +89,9 @@ describe("serializeInvoice financial-transparency fields", () => {
     expect(serialized.freightChargeAmount).toBe(50);
     expect(serialized.otherChargesAmount).toBe(10);
     expect(serialized.discountAmount).toBe(20);
-    expect(serialized.roundingAdjustment).toBe(-0.5);
+    expect(serialized.roundingAdjustment).toBe(0);
     expect(serialized.taxableValue).toBe(1040);
-    expect(serialized.totalAmount).toBe(1219.5);
+    expect(serialized.totalAmount).toBe(1220);
 
     // Reconciliation: subtotal + freight + other - discount === taxableValue
     expect(

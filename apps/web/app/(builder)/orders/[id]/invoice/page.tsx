@@ -65,6 +65,7 @@ type InvoiceDetail = {
   paymentStatus: string;
   amountPaid: number | null;
   amountDue: number | null;
+  paymentDueBy?: string;
   bankDetails?: {
     bankName: string;
     accountName: string;
@@ -175,7 +176,9 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
                   ) : ""}
                 </p>
               </div>
-              <p className="font-bold text-slate-900 dark:text-slate-100">₹{li.total.toLocaleString("en-IN")}</p>
+              <p className="font-bold text-slate-900 dark:text-slate-100">
+                ₹{Math.round(li.total).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+              </p>
             </div>
           ))}
         </div>
@@ -232,7 +235,7 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
 
           <div className="border-t pt-2" style={{ borderColor: "var(--posh-border)" }}>
             <p className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>
-              Total: ₹{invoice.totalAmount.toLocaleString("en-IN")}
+              Total: ₹{Math.round(invoice.totalAmount).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
             </p>
             {invoice.totalInWords ? (
               <p className="mt-1 text-xs italic text-slate-500">{invoice.totalInWords}</p>
@@ -246,7 +249,7 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
         <section className="posh-card space-y-2 p-5 text-sm">
           <h2 className="posh-card-title text-xs font-bold uppercase tracking-wider text-slate-500">Payment Summary</h2>
           <p className="font-semibold text-slate-800 dark:text-slate-200">
-            Invoice Amount: ₹{invoice.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            Invoice Amount: ₹{Math.round(invoice.totalAmount).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
           </p>
           <p className="font-medium text-slate-700 dark:text-slate-300">
             Payment Due By: <span className="font-semibold text-slate-900 dark:text-slate-100">{invoice.paymentDueBy ?? "Immediate"}</span>

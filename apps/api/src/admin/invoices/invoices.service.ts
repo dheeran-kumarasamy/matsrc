@@ -317,26 +317,107 @@ export class InvoicesService {
     const freightChargeAmount = new Prisma.Decimal(supplierInvoice.freightChargeAmount.toString());
     const otherChargesAmount = new Prisma.Decimal(supplierInvoice.otherChargesAmount.toString());
     const discountAmount = new Prisma.Decimal(supplierInvoice.discountAmount.toString());
-    const roundingAdjustment = new Prisma.Decimal(supplierInvoice.roundingAdjustment.toString());
 
     // Freight and other charges entered by Admin are exclusive of GST and attract 18% GST (Rule 46 & Form GST INV-01)
-    const netAdjustment = freightChargeAmount.plus(otherChargesAmount).minus(discountAmount);
     const isIntraState = sellerStateCode === placeOfSupplyStateCode;
     let adjustmentCgst = new Prisma.Decimal(0);
     let adjustmentSgst = new Prisma.Decimal(0);
     let adjustmentIgst = new Prisma.Decimal(0);
 
-    if (netAdjustment.greaterThan(0)) {
+    // If freight charges exist, add as a line item
+    if (freightChargeAmount.greaterThan(0)) {
+      const freightVal = freightChargeAmount.toNumber();
+      let fCgst = 0;
+      let fSgst = 0;
+      let fIgst = 0;
+      let fTax = 0;
       if (isIntraState) {
-        // 9% CGST + 9% SGST
-        const halfTax = Math.round((netAdjustment.toNumber() * 0.09 + Number.EPSILON) * 100) / 100;
-        adjustmentCgst = new Prisma.Decimal(halfTax.toString());
-        adjustmentSgst = new Prisma.Decimal(halfTax.toString());
+        fCgst = Math.round((freightVal * 0.09 + Number.EPSILON) * 100) / 100;
+        fSgst = Math.round((freightVal * 0.09 + Number.EPSILON) * 100) / 100;
+        fTax = fCgst + fSgst;
       } else {
-        // 18% IGST
-        const fullTax = Math.round((netAdjustment.toNumber() * 0.18 + Number.EPSILON) * 100) / 100;
-        adjustmentIgst = new Prisma.Decimal(fullTax.toString());
+        fIgst = Math.round((freightVal * 0.18 + Number.EPSILON) * 100) / 100;
+        fTax = fIgst;
       }
+      lineItems.push({
+        slNo: lineItems.length + 1,
+        productId: null,
+        productName: "Freight charges",
+        description: "road transport of goods",
+        quantity: 1,
+        unitPrice: freightChargeAmount,
+        taxRate: new Prisma.Decimal("18.00"),
+        taxAmount: new Prisma.Decimal(fTax.toString()),
+        subtotal: freightChargeAmount,
+        total: freightChargeAmount.plus(fTax),
+        hsnCode: "996511",
+        uqc: "OTH",
+        unit: "OTH",
+        isService: true,
+        taxableAmount: freightChargeAmount,
+        cgstRate: isIntraState ? new Prisma.Decimal("9.00") : null,
+        cgstAmount: new Prisma.Decimal(fCgst.toString()),
+        sgstRate: isIntraState ? new Prisma.Decimal("9.00") : null,
+        sgstAmount: new Prisma.Decimal(fSgst.toString()),
+        igstRate: !isIntraState ? new Prisma.Decimal("18.00") : null,
+        igstAmount: new Prisma.Decimal(fIgst.toString()),
+        cessRate: null,
+        cessAmount: new Prisma.Decimal("0"),
+        supplierUnitPrice: freightChargeAmount,
+        markupPercent: new Prisma.Decimal("0"),
+        markupAmount: new Prisma.Decimal("0"),
+      });
+      adjustmentCgst = adjustmentCgst.plus(fCgst);
+      adjustmentSgst = adjustmentSgst.plus(fSgst);
+      adjustmentIgst = adjustmentIgst.plus(fIgst);
+    }
+
+    // If other charges exist, add as a line item
+    if (otherChargesAmount.greaterThan(0)) {
+      const otherVal = otherChargesAmount.toNumber();
+      let oCgst = 0;
+      let oSgst = 0;
+      let oIgst = 0;
+      let oTax = 0;
+      if (isIntraState) {
+        oCgst = Math.round((otherVal * 0.09 + Number.EPSILON) * 100) / 100;
+        oSgst = Math.round((otherVal * 0.09 + Number.EPSILON) * 100) / 100;
+        oTax = oCgst + oSgst;
+      } else {
+        oIgst = Math.round((otherVal * 0.18 + Number.EPSILON) * 100) / 100;
+        oTax = oIgst;
+      }
+      lineItems.push({
+        slNo: lineItems.length + 1,
+        productId: null,
+        productName: "Other charges (loading / handling)",
+        description: "loading / handling",
+        quantity: 1,
+        unitPrice: otherChargesAmount,
+        taxRate: new Prisma.Decimal("18.00"),
+        taxAmount: new Prisma.Decimal(oTax.toString()),
+        subtotal: otherChargesAmount,
+        total: otherChargesAmount.plus(oTax),
+        hsnCode: "999799",
+        uqc: "OTH",
+        unit: "OTH",
+        isService: true,
+        taxableAmount: otherChargesAmount,
+        cgstRate: isIntraState ? new Prisma.Decimal("9.00") : null,
+        cgstAmount: new Prisma.Decimal(oCgst.toString()),
+        sgstRate: isIntraState ? new Prisma.Decimal("9.00") : null,
+        sgstAmount: new Prisma.Decimal(oSgst.toString()),
+        igstRate: !isIntraState ? new Prisma.Decimal("18.00") : null,
+        igstAmount: new Prisma.Decimal(oIgst.toString()),
+        cessRate: null,
+        cessAmount: new Prisma.Decimal("0"),
+        supplierUnitPrice: otherChargesAmount,
+        markupPercent: new Prisma.Decimal("0"),
+        markupAmount: new Prisma.Decimal("0"),
+      });
+      adjustmentCgst = adjustmentCgst.plus(oCgst);
+      adjustmentSgst = adjustmentSgst.plus(oSgst);
+      adjustmentIgst = adjustmentIgst.plus(oIgst);
     }
 
     const linesTaxAmount = lineItems.reduce((acc: Prisma.Decimal, li: (typeof lineItems)[number]) => acc.plus(li.taxAmount), new Prisma.Decimal(0));
@@ -344,13 +425,16 @@ export class InvoicesService {
     const linesSgstAmount = lineItems.reduce((acc: Prisma.Decimal, li: (typeof lineItems)[number]) => acc.plus(li.sgstAmount), new Prisma.Decimal(0));
     const linesIgstAmount = lineItems.reduce((acc: Prisma.Decimal, li: (typeof lineItems)[number]) => acc.plus(li.igstAmount), new Prisma.Decimal(0));
 
-    const cgstAmount = linesCgstAmount.plus(adjustmentCgst);
-    const sgstAmount = linesSgstAmount.plus(adjustmentSgst);
-    const igstAmount = linesIgstAmount.plus(adjustmentIgst);
-    const taxAmount = linesTaxAmount.plus(adjustmentCgst).plus(adjustmentSgst).plus(adjustmentIgst);
+    const cgstAmount = linesCgstAmount;
+    const sgstAmount = linesSgstAmount;
+    const igstAmount = linesIgstAmount;
+    const taxAmount = linesTaxAmount;
 
     const taxableValue = subtotal.plus(freightChargeAmount).plus(otherChargesAmount).minus(discountAmount);
-    const totalAmount = taxableValue.plus(taxAmount).plus(roundingAdjustment);
+    const unroundedTotal = taxableValue.plus(taxAmount);
+    const roundedTotal = Math.round(unroundedTotal.toNumber());
+    const roundingAdjustment = new Prisma.Decimal((roundedTotal - unroundedTotal.toNumber()).toFixed(2));
+    const totalAmount = new Prisma.Decimal(roundedTotal.toString());
 
     // Payment snapshot — derived from the application's existing
     // PaymentStatus, taken at generation time only.
@@ -866,6 +950,8 @@ export class InvoicesService {
               ? "7214"
               : "6810");
 
+        const roundedLineTotal = Math.round(Number(li.total));
+
         return {
           id: li.id,
           slNo: li.slNo ?? index + 1,
@@ -906,7 +992,7 @@ export class InvoicesService {
           igstAmount: lineIgst,
           taxAmount: lineTaxAmount,
           subtotal: Number(li.subtotal),
-          total: Number(li.total),
+          total: roundedLineTotal,
           // Admin-Configurable Product Markup — platform gross-markup
           // reconciliation traceability, admin-only (see includeMarkupDetail
           // above). Null for invoices generated before this feature existed
@@ -944,8 +1030,8 @@ export class InvoicesService {
       igstAmount: igstTotal,
       cessAmount: Number(invoice.cessAmount ?? 0),
       taxAmount: totalTaxAmount,
-      totalAmount,
-      totalInWords: numberToIndianWords(totalAmount),
+      totalAmount: Math.round(totalAmount),
+      totalInWords: numberToIndianWords(Math.round(totalAmount)),
       currency: invoice.currency,
       paymentStatus: invoice.paymentStatus,
       amountPaid: invoice.amountPaid !== null && invoice.amountPaid !== undefined ? Number(invoice.amountPaid) : null,

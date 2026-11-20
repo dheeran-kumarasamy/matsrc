@@ -314,7 +314,9 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
                     </p>
                   ) : null}
                 </div>
-                <p className="font-bold text-slate-900">₹{li.total.toLocaleString("en-IN")}</p>
+                <p className="font-bold text-slate-900">
+                  ₹{Math.round(li.total).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                </p>
               </div>
             </div>
           ))}
@@ -375,7 +377,7 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
 
           <div className="border-t border-slate-200 pt-2">
             <p className="text-base font-extrabold text-slate-950">
-              Grand Total: ₹{invoice.totalAmount.toLocaleString("en-IN")}
+              Grand Total: ₹{Math.round(invoice.totalAmount).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
             </p>
             {invoice.totalInWords ? (
               <p className="mt-1 text-xs italic text-slate-600">{invoice.totalInWords}</p>
@@ -389,7 +391,7 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
         <section className="panel space-y-2 p-5 text-sm">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Payment Summary</h2>
           <p className="font-semibold text-slate-900">
-            Invoice Amount: ₹{invoice.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            Invoice Amount: ₹{Math.round(invoice.totalAmount).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
           </p>
           <p className="font-medium text-slate-700">
             Payment Due By: <span className="font-semibold text-slate-950">{invoice.paymentDueBy ?? "Immediate"}</span>

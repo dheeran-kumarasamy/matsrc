@@ -163,6 +163,8 @@ export function serializeInvoice(invoice: any) {
             ? "7214"
             : "6810");
 
+      const roundedLineTotal = Math.round(toNumber(li.total));
+
       return {
         id: li.id,
         slNo: li.slNo ?? index + 1,
@@ -203,7 +205,7 @@ export function serializeInvoice(invoice: any) {
         igstAmount: lineIgst,
         taxAmount: lineTaxAmount,
         subtotal: toNumber(li.subtotal),
-        total: toNumber(li.total),
+        total: roundedLineTotal,
       };
     }),
     subtotal: toNumber(invoice.subtotal),
@@ -221,8 +223,8 @@ export function serializeInvoice(invoice: any) {
     igstAmount: igstTotal,
     cessAmount: toNumber(invoice.cessAmount),
     taxAmount: totalTaxAmount,
-    totalAmount,
-    totalInWords: numberToIndianWords(totalAmount),
+    totalAmount: Math.round(totalAmount + Number.EPSILON),
+    totalInWords: numberToIndianWords(Math.round(totalAmount + Number.EPSILON)),
     currency: invoice.currency,
     paymentStatus: invoice.paymentStatus,
     amountPaid: invoice.amountPaid !== null && invoice.amountPaid !== undefined ? toNumber(invoice.amountPaid) : null,

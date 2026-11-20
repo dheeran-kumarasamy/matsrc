@@ -55,6 +55,7 @@ export type InvoicePdfData = {
     hsnCode?: string | null;
     uqc?: string | null;
     unit?: string | null;
+    isService?: boolean;
     quantity: number;
     unitPrice: number;
     taxableAmount?: number;
@@ -91,8 +92,11 @@ export type InvoicePdfData = {
   };
 };
 
-function money(value: number, currency: string): string {
-  return `${currency === "INR" ? "\u20B9" : currency + " "}${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+function money(value: number, currency: string, options?: { maximumFractionDigits?: number; minimumFractionDigits?: number }): string {
+  return `${currency === "INR" ? "\u20B9" : currency + " "}${value.toLocaleString("en-IN", {
+    maximumFractionDigits: options?.maximumFractionDigits ?? 2,
+    minimumFractionDigits: options?.minimumFractionDigits,
+  })}`;
 }
 
 const OLIVE_ACCENT = "#4A4A4A";
@@ -260,7 +264,7 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
         doc.fontSize(7.5).text(igstText, startX + 390, currentY, { width: 86 });
       }
 
-      doc.fontSize(8.5).text(money(li.total, invoice.currency), startX + 478, currentY, { width: 45, align: "right" });
+      doc.fontSize(8.5).text(money(Math.round(li.total), invoice.currency, { maximumFractionDigits: 0 }), startX + 478, currentY, { width: 45, align: "right" });
 
       currentY += rowHeight;
     }
@@ -324,7 +328,7 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
       currentY += 12;
     }
 
-    doc.fontSize(11).fillColor(OLIVE_ACCENT).text(`Grand Total: ${money(invoice.totalAmount, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
+    doc.fontSize(11).fillColor(OLIVE_ACCENT).text(`Grand Total: ${money(Math.round(invoice.totalAmount), invoice.currency, { maximumFractionDigits: 0 })}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
     currentY += 16;
 
     // Grand Total in Words

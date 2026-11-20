@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { resolveInvoiceDisplayUnit } from "@matsrc/db";
 import { adminApiGet } from "@/lib/api";
 import { requireAdminAccess } from "@/lib/rbac";
 import { BUILDOHUB_COMPANY } from "@/lib/company-info";
@@ -296,7 +295,7 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
                     ) : null}
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    {li.quantity} {resolveInvoiceDisplayUnit({ unit: li.unit, uqc: li.uqc, productName: li.productName })} × ₹{li.unitPrice.toLocaleString("en-IN")} · Taxable: ₹
+                    {li.quantity} {li.uqc ?? li.unit ?? "Unit"} × ₹{li.unitPrice.toLocaleString("en-IN")} · Taxable: ₹
                     {(li.taxableAmount ?? li.subtotal).toLocaleString("en-IN")}
                     {typeof li.taxRate === "number" ? (
                       isIntraState ? (

@@ -39,17 +39,24 @@ export type SupplierInvoiceLineInput = {
   /** The rate shown on the supplier's own invoice for this line, if any. */
   supplierInvoicedUnitPrice?: number | null;
   /**
-   * An admin's EXPLICIT decision to approve a different rate than
-   * originalUnitPrice (e.g. after reviewing a flagged rateDiscrepancy).
-   * Omitted/undefined -> the agreed originalUnitPrice is used, regardless
-   * of what the supplier's invoice shows.
+   * An admin's EXPLICIT decision to approve a different base rate than
+   * originalUnitPrice for buyer billing.
+   * Omitted/undefined -> the agreed originalUnitPrice is used.
    */
   approvedUnitPriceOverride?: number | null;
   taxRatePercent?: number | null;
+  /**
+   * Whether markup should be applied to approvedUnitPrice when generating
+   * the buyer invoice. Defaults to true.
+   */
+  applyMarkup?: boolean;
 };
 
 export type SupplierInvoiceLineResolution = {
   approvedUnitPrice: number;
+  supplierInvoicedUnitPrice: number | null;
+  supplierSettlementUnitPrice: number;
+  applyMarkup: boolean;
   rateDiscrepancy: boolean;
   lineSubtotal: number;
   taxRatePercent: number;
@@ -61,26 +68,40 @@ const RATE_EPSILON = 0.01;
 
 /**
  * Resolves a single supplier-invoice line's approved rate + GST breakdown.
- * Never silently substitutes a different rate than the agreed
- * originalUnitPrice unless the caller explicitly supplies
- * approvedUnitPriceOverride (an admin's explicit, reviewed decision).
+ * - `supplierSettlementUnitPrice`: The rate Buildohub pays/settles with the supplier.
+ *   Uses `supplierInvoicedUnitPrice` if provided; otherwise falls back to `originalUnitPrice`.
+ * - `approvedUnitPrice`: The base rate used for buyer billing.
+ *   Uses `approvedUnitPriceOverride` if provided; otherwise falls back to `originalUnitPrice`.
+ * - `lineSubtotal`, `lineTaxAmount`, `lineTotal`: Computed using `supplierSettlementUnitPrice`
+ *   so the supplier invoice's confirmed totals match what Buildohub owes the supplier.
  */
 export function resolveSupplierInvoiceLine(input: SupplierInvoiceLineInput): SupplierInvoiceLineResolution {
   const rateDiscrepancy =
     typeof input.supplierInvoicedUnitPrice === "number" &&
     Math.abs(input.supplierInvoicedUnitPrice - input.originalUnitPrice) > RATE_EPSILON;
 
+  const supplierInvoicedUnitPrice =
+    typeof input.supplierInvoicedUnitPrice === "number" ? roundCurrency(input.supplierInvoicedUnitPrice) : null;
+
+  const supplierSettlementUnitPrice = supplierInvoicedUnitPrice ?? input.originalUnitPrice;
+
   const approvedUnitPrice =
     typeof input.approvedUnitPriceOverride === "number" ? input.approvedUnitPriceOverride : input.originalUnitPrice;
 
+  const applyMarkup = input.applyMarkup !== false;
+
+  // The supplier invoice totals must reflect what the supplier invoiced Buildohub
   const gst = calculateLineGst({
     quantity: input.actualQuantity,
-    unitPrice: approvedUnitPrice,
+    unitPrice: supplierSettlementUnitPrice,
     gstRatePercent: input.taxRatePercent ?? null,
   });
 
   return {
     approvedUnitPrice: roundCurrency(approvedUnitPrice),
+    supplierInvoicedUnitPrice,
+    supplierSettlementUnitPrice: roundCurrency(supplierSettlementUnitPrice),
+    applyMarkup,
     rateDiscrepancy,
     lineSubtotal: gst.lineSubtotal,
     taxRatePercent: gst.gstRatePercent,

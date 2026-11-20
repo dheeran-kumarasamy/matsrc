@@ -18,7 +18,21 @@ export function toNumber(value: unknown): number {
 // directly below instead.
 export const invoiceInclude = {
   order: { select: { id: true, enquiryId: true } },
-  builder: { select: { id: true, name: true, email: true, phone: true } },
+  builder: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      legalName: true,
+      tradeName: true,
+      gstin: true,
+      billingAddress: true,
+      billingCity: true,
+      billingState: true,
+      billingPincode: true,
+    },
+  },
   site: { select: { id: true, name: true, addressLine: true, city: true, state: true, pincode: true, gstin: true } },
   generatedBy: { select: { id: true, name: true, email: true } },
   lineItems: true,
@@ -66,13 +80,13 @@ export function serializeInvoice(invoice: any) {
   const totalAmount = toNumber(invoice.totalAmount);
 
   const buyer = {
-    legalName: invoice.buyerLegalName ?? invoice.builder?.name ?? "Contractor/Client",
-    tradeName: invoice.buyerTradeName ?? invoice.site?.name ?? null,
-    gstin: invoice.buyerGstin ?? invoice.site?.gstin ?? "URP",
-    addressLine: invoice.buyerAddressLine ?? invoice.site?.addressLine ?? null,
-    city: invoice.buyerCity ?? invoice.site?.city ?? null,
-    state: invoice.buyerState ?? invoice.site?.state ?? null,
-    pincode: invoice.buyerPincode ?? invoice.site?.pincode ?? null,
+    legalName: invoice.buyerLegalName ?? invoice.builder?.legalName ?? invoice.builder?.name ?? "Contractor/Client",
+    tradeName: invoice.buyerTradeName ?? invoice.builder?.tradeName ?? invoice.site?.name ?? null,
+    gstin: invoice.buyerGstin ?? invoice.builder?.gstin ?? invoice.site?.gstin ?? "URP",
+    addressLine: invoice.buyerAddressLine ?? invoice.builder?.billingAddress ?? invoice.site?.addressLine ?? null,
+    city: invoice.buyerCity ?? invoice.builder?.billingCity ?? invoice.site?.city ?? null,
+    state: invoice.buyerState ?? invoice.builder?.billingState ?? invoice.site?.state ?? null,
+    pincode: invoice.buyerPincode ?? invoice.builder?.billingPincode ?? invoice.site?.pincode ?? null,
     stateCode: invoice.buyerStateCode ?? placeOfSupplyStateCode,
   };
 

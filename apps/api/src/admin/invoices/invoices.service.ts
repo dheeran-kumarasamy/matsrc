@@ -243,14 +243,24 @@ export class InvoicesService {
     const site = (order as any).site;
     const user = (order as any).user;
     const sellerStateCode = "33"; // BUILDOHUB_COMPANY (Tamil Nadu)
-    const placeOfSupplyStateCode = getStateCode(site?.state, site?.gstin) ?? "33";
-    const placeOfSupplyStateName = site?.state ?? getStateName(placeOfSupplyStateCode) ?? "Tamil Nadu";
+    const placeOfSupplyStateCode =
+      getStateCode(user?.billingState, user?.gstin) ??
+      getStateCode(site?.state, site?.gstin) ??
+      "33";
+    const placeOfSupplyStateName =
+      user?.billingState ??
+      site?.state ??
+      getStateName(placeOfSupplyStateCode) ??
+      "Tamil Nadu";
 
     const lineItems = supplierInvoice.lineItems.map((sli: any, index: number) => {
       const item = orderItemById.get(sli.orderItemId);
       const approvedUnitPrice = Number(sli.approvedUnitPrice);
+      const shouldApplyMarkup = sli.applyMarkup !== false;
       const markupPercent =
-        item?.markupPercent !== null && item?.markupPercent !== undefined ? Number(item.markupPercent) : 0;
+        shouldApplyMarkup && item?.markupPercent !== null && item?.markupPercent !== undefined
+          ? Number(item.markupPercent)
+          : 0;
       const buyerUnitPrice = Math.round((approvedUnitPrice * (1 + markupPercent / 100) + Number.EPSILON) * 100) / 100;
       const markupAmount = Math.round((buyerUnitPrice - approvedUnitPrice + Number.EPSILON) * 100) / 100;
 
@@ -481,13 +491,13 @@ export class InvoicesService {
             sgstAmount,
             igstAmount,
             cessAmount: new Prisma.Decimal(0),
-            buyerLegalName: user?.name ?? site?.name ?? "Contractor/Client",
-            buyerTradeName: site?.name ?? null,
-            buyerGstin: site?.gstin ?? "URP",
-            buyerAddressLine: site?.addressLine ?? null,
-            buyerCity: site?.city ?? null,
-            buyerState: site?.state ?? null,
-            buyerPincode: site?.pincode ?? null,
+            buyerLegalName: user?.legalName ?? user?.name ?? site?.name ?? "Contractor/Client",
+            buyerTradeName: user?.tradeName ?? site?.name ?? null,
+            buyerGstin: user?.gstin ?? site?.gstin ?? "URP",
+            buyerAddressLine: user?.billingAddress ?? site?.addressLine ?? null,
+            buyerCity: user?.billingCity ?? site?.city ?? null,
+            buyerState: user?.billingState ?? site?.state ?? null,
+            buyerPincode: user?.billingPincode ?? site?.pincode ?? null,
             buyerStateCode: placeOfSupplyStateCode,
             shipFromState: supplierInvoice.supplier?.region ?? null,
             shipToAddressLine: site?.addressLine ?? null,
@@ -701,7 +711,21 @@ export class InvoicesService {
   private detailInclude() {
     return {
       order: { select: { id: true, enquiryId: true } },
-      builder: { select: { id: true, name: true, email: true, phone: true } },
+      builder: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          legalName: true,
+          tradeName: true,
+          gstin: true,
+          billingAddress: true,
+          billingCity: true,
+          billingState: true,
+          billingPincode: true,
+        },
+      },
       site: { select: { id: true, name: true, addressLine: true, city: true, state: true, pincode: true, gstin: true } },
       generatedBy: { select: { id: true, name: true, email: true } },
       lineItems: true,
@@ -761,13 +785,13 @@ export class InvoicesService {
     const totalAmount = Number(invoice.totalAmount);
 
     const buyer = {
-      legalName: invoice.buyerLegalName ?? invoice.builder?.name ?? "Contractor/Client",
-      tradeName: invoice.buyerTradeName ?? invoice.site?.name ?? null,
-      gstin: invoice.buyerGstin ?? invoice.site?.gstin ?? "URP",
-      addressLine: invoice.buyerAddressLine ?? invoice.site?.addressLine ?? null,
-      city: invoice.buyerCity ?? invoice.site?.city ?? null,
-      state: invoice.buyerState ?? invoice.site?.state ?? null,
-      pincode: invoice.buyerPincode ?? invoice.site?.pincode ?? null,
+      legalName: invoice.buyerLegalName ?? (invoice.builder as any)?.legalName ?? invoice.builder?.name ?? "Contractor/Client",
+      tradeName: invoice.buyerTradeName ?? (invoice.builder as any)?.tradeName ?? invoice.site?.name ?? null,
+      gstin: invoice.buyerGstin ?? (invoice.builder as any)?.gstin ?? invoice.site?.gstin ?? "URP",
+      addressLine: invoice.buyerAddressLine ?? (invoice.builder as any)?.billingAddress ?? invoice.site?.addressLine ?? null,
+      city: invoice.buyerCity ?? (invoice.builder as any)?.billingCity ?? invoice.site?.city ?? null,
+      state: invoice.buyerState ?? (invoice.builder as any)?.billingState ?? invoice.site?.state ?? null,
+      pincode: invoice.buyerPincode ?? (invoice.builder as any)?.billingPincode ?? invoice.site?.pincode ?? null,
       stateCode: invoice.buyerStateCode ?? placeOfSupplyStateCode,
     };
 

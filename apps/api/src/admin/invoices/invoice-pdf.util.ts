@@ -1,5 +1,4 @@
 import PDFDocument from "pdfkit";
-import { resolveInvoiceDisplayUnit } from "@matsrc/db";
 import { useRupeeCapableFont } from "src/common/pdf-fonts";
 import { BUILDOHUB_COMPANY } from "src/common/company-info";
 
@@ -226,11 +225,7 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
       const li = invoice.lineItems[i];
       const sl = li.slNo ?? i + 1;
       const hsn = li.hsnCode ?? "—";
-      const displayUnit = resolveInvoiceDisplayUnit({
-        unit: li.unit,
-        uqc: li.uqc,
-        productName: li.productName,
-      });
+      const uqc = li.uqc ?? li.unit ?? "Unit";
       const taxable = li.taxableAmount ?? li.subtotal;
 
       const taxRate = typeof li.taxRate === "number" ? li.taxRate : 0;
@@ -257,7 +252,7 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
       doc.text(String(sl), startX, currentY, { width: 18 });
       doc.text(li.productName, startX + 20, currentY, { width: 170 });
       doc.text(hsn, startX + 192, currentY, { width: 40 });
-      doc.text(`${li.quantity} ${displayUnit}`, startX + 234, currentY, { width: 52 });
+      doc.text(`${li.quantity} ${uqc}`, startX + 234, currentY, { width: 52 });
       doc.text(money(li.unitPrice, invoice.currency), startX + 288, currentY, { width: 48 });
       doc.text(money(taxable, invoice.currency), startX + 338, currentY, { width: 50 });
 

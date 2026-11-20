@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { resolveInvoiceDisplayUnit } from "@matsrc/db";
 import { builderApiGet, ApiError } from "@/lib/api";
 
 type InvoiceDetail = {
@@ -166,7 +165,7 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
                   ) : null}
                 </div>
                 <p className="posh-label mt-1">
-                  {li.quantity} {resolveInvoiceDisplayUnit({ unit: li.unit, uqc: li.uqc, productName: li.productName })} × ₹{li.unitPrice.toLocaleString("en-IN")}
+                  {li.quantity} {li.uqc ?? li.unit ?? "Unit"} × ₹{li.unitPrice.toLocaleString("en-IN")}
                   {typeof li.taxRate === "number" ? (
                     isIntraState ? (
                       ` · CGST ${(li.cgstRate ?? li.taxRate / 2)}% + SGST ${(li.sgstRate ?? li.taxRate / 2)}% (Tax: ₹${li.taxAmount.toLocaleString("en-IN")})`

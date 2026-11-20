@@ -1,5 +1,4 @@
-import { OrderStatus, PurchaseOrderStatus, calculateLineGst, resolveInvoiceDisplayUnit } from "@matsrc/db";
-import { getSupplierDisplayName } from "@/lib/supplier-display";
+import { OrderStatus, PurchaseOrderStatus, calculateLineGst } from "@matsrc/db";
 
 export function toNumber(value: unknown): number {
   return value === null || value === undefined ? 0 : Number(value);
@@ -151,17 +150,24 @@ export function serializePurchaseOrder(po: any) {
     orderSiteId: po.order?.siteId ?? null,
     supplier: {
       id: po.supplier.id,
-      companyName: getSupplierDisplayName(po.supplier.companyName, po.supplier.id),
-      gstin: null,
+      companyName: po.supplier.companyName,
+      gstin: po.supplier.gstin ?? null,
       region: po.supplier.region ?? null,
-      email: null,
-      phone: null,
+      email: po.supplier.user?.email ?? null,
+      phone: po.supplier.user?.phone ?? null,
     },
     builder: {
       id: po.builder.id,
       name: po.builder.name,
       email: po.builder.email,
       phone: po.builder.phone ?? null,
+      legalName: po.builder.legalName ?? null,
+      tradeName: po.builder.tradeName ?? null,
+      gstin: po.builder.gstin ?? null,
+      billingAddress: po.builder.billingAddress ?? null,
+      billingCity: po.builder.billingCity ?? null,
+      billingState: po.builder.billingState ?? null,
+      billingPincode: po.builder.billingPincode ?? null,
     },
     // The order's delivery/"ship to" destination — the Purchase Order PDF
     // (see app/api/builder/purchase-orders/[id]/export/route.ts) displays
@@ -229,7 +235,7 @@ function buildBuyerPoLineItemView(li: any) {
     id: li.id,
     productId: li.productId,
     productName: li.product.name,
-    unit: resolveInvoiceDisplayUnit({ unit: li.product.unit, productName: li.product.name }),
+    unit: li.product.unit,
     quantity: li.quantity,
     // Admin-Configurable Product Markup: `unitPrice` here is now the
     // BUYER-FACING marked-up price — this JSON view is buyer-only (see

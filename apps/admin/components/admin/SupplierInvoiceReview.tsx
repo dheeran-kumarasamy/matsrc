@@ -21,6 +21,8 @@ type LineItem = {
   approvedUnitPrice: number;
   supplierInvoicedUnitPrice: number | null;
   rateDiscrepancy: boolean;
+  applyMarkup?: boolean;
+  markupPercent?: number | null;
   taxRatePercent: number | null;
   lineSubtotal: number;
   lineTaxAmount: number;
@@ -33,6 +35,8 @@ type OrderItemRef = {
   unitLabel: string | null;
   quantity: number;
   unitPrice: number;
+  supplierUnitPrice?: number | null;
+  markupPercent?: number | null;
   taxRatePercent: number | null;
 };
 
@@ -73,6 +77,8 @@ type LineDraft = {
   actualQuantity: string;
   supplierInvoicedUnitPrice: string;
   approvedUnitPriceOverride: string;
+  applyMarkup: boolean;
+  markupPercent: number | null;
   // Unit-of-measure validation (audit fix): the admin's explicit, per-line
   // acknowledgment that actualQuantity above is genuinely expressed in
   // unitLabel's unit. Re-initialized to the PREVIOUSLY saved value (never
@@ -84,17 +90,22 @@ type LineDraft = {
 
 function buildInitialDrafts(invoice: SupplierInvoiceDetail): LineDraft[] {
   if (invoice.lineItems.length > 0) {
-    return invoice.lineItems.map((li) => ({
-      orderItemId: li.orderItemId,
-      productName: li.productName,
-      unitLabel: li.orderUnitLabel,
-      originalQuantity: li.originalQuantity,
-      originalUnitPrice: li.originalUnitPrice,
-      actualQuantity: String(li.actualQuantity),
-      supplierInvoicedUnitPrice: li.supplierInvoicedUnitPrice !== null ? String(li.supplierInvoicedUnitPrice) : "",
-      approvedUnitPriceOverride: li.rateDiscrepancy ? String(li.approvedUnitPrice) : "",
-      unitConfirmed: li.unitConfirmed,
-    }));
+    return invoice.lineItems.map((li) => {
+      const matchingOrderItem = invoice.orderItems.find((oi) => oi.id === li.orderItemId);
+      return {
+        orderItemId: li.orderItemId,
+        productName: li.productName,
+        unitLabel: li.orderUnitLabel,
+        originalQuantity: li.originalQuantity,
+        originalUnitPrice: li.originalUnitPrice,
+        actualQuantity: String(li.actualQuantity),
+        supplierInvoicedUnitPrice: li.supplierInvoicedUnitPrice !== null ? String(li.supplierInvoicedUnitPrice) : "",
+        approvedUnitPriceOverride: li.rateDiscrepancy ? String(li.approvedUnitPrice) : "",
+        applyMarkup: li.applyMarkup !== false,
+        markupPercent: li.markupPercent ?? matchingOrderItem?.markupPercent ?? null,
+        unitConfirmed: li.unitConfirmed,
+      };
+    });
   }
   // No review exists yet — seed the form from the order's own line items,
   // defaulting actualQuantity to the originally ordered quantity (the
@@ -106,10 +117,12 @@ function buildInitialDrafts(invoice: SupplierInvoiceDetail): LineDraft[] {
     productName: item.productName,
     unitLabel: item.unitLabel,
     originalQuantity: item.quantity,
-    originalUnitPrice: item.unitPrice,
+    originalUnitPrice: item.supplierUnitPrice ?? item.unitPrice,
     actualQuantity: String(item.quantity),
     supplierInvoicedUnitPrice: "",
     approvedUnitPriceOverride: "",
+    applyMarkup: true,
+    markupPercent: item.markupPercent ?? null,
     unitConfirmed: false,
   }));
 }
@@ -146,16 +159,19 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
   const allUnitsConfirmed = useMemo(() => drafts.every((d) => d.unitConfirmed), [drafts]);
 
   const livePreview = useMemo(() => {
+    // Supplier invoice lines total must reflect the supplier-invoiced rate (or agreed rate if unchanged)
     const linesTaxable = drafts.reduce((sum, d) => {
       const qty = parseFloat(d.actualQuantity) || 0;
-      const rate = d.approvedUnitPriceOverride ? parseFloat(d.approvedUnitPriceOverride) || d.originalUnitPrice : d.originalUnitPrice;
-      return sum + qty * rate;
+      const invoicedRate = parseFloat(d.supplierInvoicedUnitPrice);
+      const supplierSettlementRate = !Number.isNaN(invoicedRate) && invoicedRate > 0 ? invoicedRate : d.originalUnitPrice;
+      return sum + qty * supplierSettlementRate;
     }, 0);
     const linesTax = drafts.reduce((sum, d, i) => {
       const qty = parseFloat(d.actualQuantity) || 0;
-      const rate = d.approvedUnitPriceOverride ? parseFloat(d.approvedUnitPriceOverride) || d.originalUnitPrice : d.originalUnitPrice;
+      const invoicedRate = parseFloat(d.supplierInvoicedUnitPrice);
+      const supplierSettlementRate = !Number.isNaN(invoicedRate) && invoicedRate > 0 ? invoicedRate : d.originalUnitPrice;
       const itemTaxRate = invoice.lineItems[i]?.taxRatePercent ?? invoice.orderItems[i]?.taxRatePercent ?? 18;
-      return sum + Math.round((qty * rate * (itemTaxRate / 100) + Number.EPSILON) * 100) / 100;
+      return sum + Math.round((qty * supplierSettlementRate * (itemTaxRate / 100) + Number.EPSILON) * 100) / 100;
     }, 0);
 
     const freight = parseFloat(freightChargeAmount) || 0;
@@ -198,6 +214,7 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
           actualQuantity: parseFloat(d.actualQuantity),
           supplierInvoicedUnitPrice: d.supplierInvoicedUnitPrice ? parseFloat(d.supplierInvoicedUnitPrice) : null,
           approvedUnitPriceOverride: d.approvedUnitPriceOverride ? parseFloat(d.approvedUnitPriceOverride) : null,
+          applyMarkup: d.applyMarkup,
           unitConfirmed: d.unitConfirmed,
         })),
         freightChargeAmount: parseFloat(freightChargeAmount) || 0,
@@ -310,30 +327,79 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
                     type="number"
                     step="0.001"
                   />
+                  <span className="block text-[11px] text-slate-400 mt-0.5">Quantity from physical invoice</span>
                 </label>
+
                 <label className="text-xs font-semibold text-slate-600">
                   Supplier-Invoiced Rate (if different)
                   <input
                     disabled={readOnly}
                     value={d.supplierInvoicedUnitPrice}
                     onChange={(e) => updateDraft(i, { supplierInvoicedUnitPrice: e.target.value })}
+                    placeholder={`Agreed PO: ₹${d.originalUnitPrice.toLocaleString("en-IN")}`}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
                     type="number"
                     step="0.01"
                   />
+                  <span className="block text-[11px] text-slate-400 mt-0.5">Rate supplier billed Buildohub</span>
                 </label>
-                <label className="text-xs font-semibold text-slate-600">
-                  Approved Rate Override
-                  <input
-                    disabled={readOnly}
-                    value={d.approvedUnitPriceOverride}
-                    onChange={(e) => updateDraft(i, { approvedUnitPriceOverride: e.target.value })}
-                    placeholder={`Default: ₹${d.originalUnitPrice}`}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
-                    type="number"
-                    step="0.01"
-                  />
-                </label>
+
+                <div className="flex flex-col justify-between">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Approved Rate Override
+                    <input
+                      disabled={readOnly}
+                      value={d.approvedUnitPriceOverride}
+                      onChange={(e) => updateDraft(i, { approvedUnitPriceOverride: e.target.value })}
+                      placeholder={`Default: ₹${d.originalUnitPrice.toLocaleString("en-IN")}`}
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                      type="number"
+                      step="0.01"
+                    />
+                    <span className="block text-[11px] text-slate-400 mt-0.5">Base rate used for buyer billing</span>
+                  </label>
+
+                  {/* Markup control checkbox */}
+                  <label className="mt-1.5 flex items-center gap-2 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5">
+                    <input
+                      type="checkbox"
+                      disabled={readOnly}
+                      checked={d.applyMarkup}
+                      onChange={(e) => updateDraft(i, { applyMarkup: e.target.checked })}
+                      className="rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>
+                      Apply Markup{d.markupPercent != null ? ` (${d.markupPercent}%)` : ""}
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Live buyer rate calculation preview */}
+              <div className="mt-2 flex items-center justify-between text-xs bg-blue-50/60 border border-blue-100 rounded-lg px-3 py-1.5 text-blue-900">
+                <span>
+                  <strong>Buyer Billed Rate:</strong>{" "}
+                  {(() => {
+                    const base = d.approvedUnitPriceOverride
+                      ? parseFloat(d.approvedUnitPriceOverride) || d.originalUnitPrice
+                      : d.originalUnitPrice;
+                    const markup = d.applyMarkup && d.markupPercent != null ? d.markupPercent : 0;
+                    const buyerRate = Math.round((base * (1 + markup / 100) + Number.EPSILON) * 100) / 100;
+                    return `₹${buyerRate.toLocaleString("en-IN")} / ${d.unitLabel ?? "unit"} ${
+                      d.applyMarkup && d.markupPercent
+                        ? `(Base ₹${base.toLocaleString("en-IN")} + ${markup}% markup)`
+                        : `(Flat base rate, no markup)`
+                    }`;
+                  })()}
+                </span>
+                <span>
+                  <strong>Supplier Settlement Rate:</strong>{" "}
+                  {(() => {
+                    const invoiced = parseFloat(d.supplierInvoicedUnitPrice);
+                    const rate = !Number.isNaN(invoiced) && invoiced > 0 ? invoiced : d.originalUnitPrice;
+                    return `₹${rate.toLocaleString("en-IN")} / ${d.unitLabel ?? "unit"}`;
+                  })()}
+                </span>
               </div>
 
               {/* Unit-of-measure validation (audit fix): there is no

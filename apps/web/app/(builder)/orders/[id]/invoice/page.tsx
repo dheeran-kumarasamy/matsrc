@@ -65,6 +65,7 @@ type InvoiceDetail = {
   paymentStatus: string;
   amountPaid: number | null;
   amountDue: number | null;
+  paymentDueBy?: string;
   bankDetails?: {
     bankName: string;
     accountName: string;
@@ -244,16 +245,13 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
       {/* Payment & Bank Settlement Section */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <section className="posh-card space-y-2 p-5 text-sm">
-          <h2 className="posh-card-title text-xs font-bold uppercase tracking-wider text-slate-500">Payment Status</h2>
-          <p className="font-semibold text-slate-800 dark:text-slate-200">Status: {invoice.paymentStatus}</p>
-          {invoice.amountPaid !== null ? (
-            <p className="text-slate-600 dark:text-slate-400">Advance Paid: ₹{invoice.amountPaid.toLocaleString("en-IN")}</p>
-          ) : null}
-          {invoice.amountDue !== null ? (
-            <p className="font-medium text-slate-900 dark:text-slate-100">
-              Balance Payable: ₹{invoice.amountDue.toLocaleString("en-IN")}
-            </p>
-          ) : null}
+          <h2 className="posh-card-title text-xs font-bold uppercase tracking-wider text-slate-500">Payment Summary</h2>
+          <p className="font-semibold text-slate-800 dark:text-slate-200">
+            Invoice Amount: ₹{invoice.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="font-medium text-slate-700 dark:text-slate-300">
+            Payment Due By: <span className="font-semibold text-slate-900 dark:text-slate-100">{invoice.paymentDueBy ?? "Immediate"}</span>
+          </p>
         </section>
 
         {invoice.bankDetails ? (

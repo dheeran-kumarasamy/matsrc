@@ -83,6 +83,7 @@ export type InvoicePdfData = {
   totalAmount: number;
   amountPaid: number | null;
   amountDue: number | null;
+  paymentDueBy?: string;
   bankDetails?: {
     bankName: string;
     accountName: string;
@@ -357,13 +358,8 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
     doc
       .fontSize(8)
       .fillColor("#64748b")
-      .text(`Payment Status: ${invoice.paymentStatus}`, payX, currentY + 12);
-    if (invoice.amountPaid !== null) {
-      doc.text(`Amount Paid (Advance): ${money(invoice.amountPaid, invoice.currency)}`, payX, currentY + 22);
-    }
-    if (invoice.amountDue !== null) {
-      doc.text(`Balance Payable: ${money(invoice.amountDue, invoice.currency)}`, payX, currentY + 32);
-    }
+      .text(`Invoice Amount: ${money(invoice.totalAmount, invoice.currency)}`, payX, currentY + 12)
+      .text(`Payment Due By: ${invoice.paymentDueBy ?? "Immediate"}`, payX, currentY + 22);
 
     currentY += 48;
     doc.moveTo(startX, currentY).lineTo(startX + pageWidth, currentY).strokeColor("#E2E8F0").stroke();

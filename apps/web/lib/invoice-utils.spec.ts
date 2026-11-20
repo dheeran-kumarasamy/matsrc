@@ -151,4 +151,37 @@ describe("serializeInvoice financial-transparency fields", () => {
     expect(serialized.lineItems[0].igstRate).toBe(18);
     expect(serialized.lineItems[0].igstAmount).toBe(180);
   });
+
+  it("calculates paymentDueBy as 'Immediate' when paymentDueDays is 0 and paymentDueDate is null", () => {
+    const serialized = serializeInvoice(
+      fakeInvoiceRow({
+        paymentDueDays: 0,
+        paymentDueDate: null,
+      })
+    );
+    expect(serialized.paymentDueBy).toBe("Immediate");
+  });
+
+  it("calculates paymentDueBy formatted date when paymentDueDays is positive", () => {
+    const baseDate = new Date("2026-11-20T00:00:00Z");
+    const serialized = serializeInvoice(
+      fakeInvoiceRow({
+        invoiceDate: baseDate,
+        paymentDueDays: 7,
+        paymentDueDate: null,
+      })
+    );
+    expect(serialized.paymentDueBy).toBe("27/11/2026");
+  });
+
+  it("uses explicit paymentDueDate snapshot when present", () => {
+    const dueDate = new Date("2026-12-05T00:00:00Z");
+    const serialized = serializeInvoice(
+      fakeInvoiceRow({
+        paymentDueDays: 15,
+        paymentDueDate: dueDate,
+      })
+    );
+    expect(serialized.paymentDueBy).toBe("05/12/2026");
+  });
 });

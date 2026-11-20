@@ -18,6 +18,7 @@ import { PurchaseOrdersModule } from "./builder/purchase-orders/purchase-orders.
 import { AdminModule } from "./admin/admin.module";
 import { AdminDashboardModule } from "./admin/dashboard/dashboard.module";
 import { VendorsModule } from "./admin/vendors/vendors.module";
+import { BuyersModule } from "./admin/buyers/buyers.module";
 import { KycModule } from "./admin/kyc/kyc.module";
 import { DisputesModule } from "./admin/disputes/disputes.module";
 import { AuditModule } from "./admin/audit/audit.module";
@@ -75,6 +76,7 @@ import { AdminNotificationEngineModule } from "./notification-engine/admin/admin
 
     AdminDashboardModule,
     VendorsModule,
+    BuyersModule,
     KycModule,
     DisputesModule,
     AuditModule,

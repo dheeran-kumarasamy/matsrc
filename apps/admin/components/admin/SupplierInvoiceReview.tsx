@@ -60,6 +60,7 @@ type SupplierInvoiceDetail = {
   otherChargesAmount: number;
   discountAmount: number;
   roundingAdjustment: number;
+  paymentDueDays?: number | null;
   confirmedTaxableValue: number | null;
   confirmedTaxAmount: number | null;
   confirmedTotalAmount: number | null;
@@ -134,6 +135,7 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
   const [otherChargesAmount, setOtherChargesAmount] = useState(String(invoice.otherChargesAmount || 0));
   const [discountAmount, setDiscountAmount] = useState(String(invoice.discountAmount || 0));
   const [roundingAdjustment, setRoundingAdjustment] = useState(String(invoice.roundingAdjustment || 0));
+  const [paymentDueDays, setPaymentDueDays] = useState(String(invoice.paymentDueDays ?? 0));
   const [discrepancyNotes, setDiscrepancyNotes] = useState(invoice.discrepancyNotes ?? "");
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
@@ -221,6 +223,7 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
         otherChargesAmount: parseFloat(otherChargesAmount) || 0,
         discountAmount: parseFloat(discountAmount) || 0,
         roundingAdjustment: parseFloat(roundingAdjustment) || 0,
+        paymentDueDays: parseInt(paymentDueDays, 10) >= 0 ? parseInt(paymentDueDays, 10) : 0,
         discrepancyNotes: discrepancyNotes || null,
       });
       router.refresh();
@@ -484,6 +487,21 @@ export function SupplierInvoiceReview({ invoice }: { invoice: SupplierInvoiceDet
                 className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
                 type="number"
               />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">
+              Buyer Payment Due Terms (Days)
+              <input
+                disabled={readOnly}
+                value={paymentDueDays}
+                onChange={(e) => setPaymentDueDays(e.target.value)}
+                placeholder="0 for Immediate"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm font-medium"
+                type="number"
+                min="0"
+              />
+              <span className="block text-[10px] text-slate-500 mt-0.5">
+                {parseInt(paymentDueDays, 10) > 0 ? `${paymentDueDays} day(s) from invoice date` : "Immediate payment required"}
+              </span>
             </label>
           </div>
         </div>

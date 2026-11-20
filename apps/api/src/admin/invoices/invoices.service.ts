@@ -9,7 +9,6 @@ import {
   getStateCode,
   getStateName,
   normalizeUqc,
-  resolveInvoiceDisplayUnit,
   numberToIndianWords,
   roundCurrency,
   assertFullOrderSnapshotIntegrity,
@@ -272,21 +271,8 @@ export class InvoicesService {
         placeOfSupplyStateCode,
       });
 
-      const rawUnit =
-        sli.orderUnitLabel ||
-        item?.product?.unit ||
-        item?.product?.unitRef?.code ||
-        item?.product?.unitRef?.name ||
-        (item?.product?.name?.toLowerCase().includes("steel") || item?.product?.name?.toLowerCase().includes("tmt")
-          ? "KGS"
-          : item?.product?.name?.toLowerCase().includes("cement")
-            ? "BAG"
-            : null);
-      const resolvedUnit = resolveInvoiceDisplayUnit({
-        unit: rawUnit,
-        productName: item?.product?.name,
-      });
-      const uqc = normalizeUqc(resolvedUnit);
+      const rawUnit = item?.product?.unitRef?.code || item?.product?.unit || null;
+      const uqc = normalizeUqc(rawUnit);
       const hsnCode =
         item?.product?.hsnCode ??
         (item?.product?.name?.toLowerCase().includes("cement")
@@ -309,7 +295,7 @@ export class InvoicesService {
         // Form GST INV-01 / E-Invoice Item Compliance Fields (Phase 1 & 2)
         hsnCode,
         uqc,
-        unit: resolvedUnit,
+        unit: rawUnit ?? "Unit",
         isService: false,
         taxableAmount: new Prisma.Decimal(taxSplit.taxableAmount.toString()),
         cgstRate: taxSplit.cgstRate > 0 ? new Prisma.Decimal(taxSplit.cgstRate.toString()) : null,
@@ -516,6 +502,17 @@ export class InvoicesService {
             paymentStatus: order.paymentStatus,
             amountPaid,
             amountDue,
+            paymentDueDays:
+              supplierInvoice.paymentDueDays !== null && supplierInvoice.paymentDueDays !== undefined
+                ? supplierInvoice.paymentDueDays
+                : user?.paymentDueDays ?? 0,
+            paymentDueDate: (() => {
+              const dueDays =
+                supplierInvoice.paymentDueDays !== null && supplierInvoice.paymentDueDays !== undefined
+                  ? supplierInvoice.paymentDueDays
+                  : user?.paymentDueDays ?? 0;
+              return dueDays > 0 ? new Date(now.getTime() + dueDays * 24 * 60 * 60 * 1000) : null;
+            })(),
             generatedById: actorId,
             generatedAt: now,
             lineItems: {
@@ -724,6 +721,7 @@ export class InvoicesService {
           billingCity: true,
           billingState: true,
           billingPincode: true,
+          paymentDueDays: true,
         },
       },
       site: { select: { id: true, name: true, addressLine: true, city: true, state: true, pincode: true, gstin: true } },
@@ -868,17 +866,6 @@ export class InvoicesService {
               ? "7214"
               : "6810");
 
-        const resolvedUnit = resolveInvoiceDisplayUnit({
-          unit: li.unit,
-          uqc: li.uqc,
-          productName: li.productName,
-        });
-
-        const resolvedUqc =
-          li.uqc && li.uqc.toUpperCase() !== "OTH" && li.uqc.toUpperCase() !== "UNIT"
-            ? li.uqc
-            : normalizeUqc(resolvedUnit);
-
         return {
           id: li.id,
           slNo: li.slNo ?? index + 1,
@@ -886,8 +873,8 @@ export class InvoicesService {
           productName: li.productName,
           description: li.description,
           hsnCode,
-          uqc: resolvedUqc,
-          unit: resolvedUnit,
+          uqc: li.uqc ?? "OTH",
+          unit: li.unit ?? "Unit",
           isService: Boolean(li.isService),
           quantity: Number(li.quantity),
           unitPrice: Number(li.unitPrice),
@@ -963,6 +950,38 @@ export class InvoicesService {
       paymentStatus: invoice.paymentStatus,
       amountPaid: invoice.amountPaid !== null && invoice.amountPaid !== undefined ? Number(invoice.amountPaid) : null,
       amountDue: invoice.amountDue !== null && invoice.amountDue !== undefined ? Number(invoice.amountDue) : null,
+      paymentDueDays:
+        invoice.paymentDueDays !== null && invoice.paymentDueDays !== undefined
+          ? Number(invoice.paymentDueDays)
+          : invoice.builder?.paymentDueDays !== null && invoice.builder?.paymentDueDays !== undefined
+            ? Number(invoice.builder.paymentDueDays)
+            : 0,
+      paymentDueDate: invoice.paymentDueDate ? new Date(invoice.paymentDueDate).toISOString() : null,
+      paymentDueBy: (() => {
+        const dueDays =
+          invoice.paymentDueDays !== null && invoice.paymentDueDays !== undefined
+            ? Number(invoice.paymentDueDays)
+            : invoice.builder?.paymentDueDays !== null && invoice.builder?.paymentDueDays !== undefined
+              ? Number(invoice.builder.paymentDueDays)
+              : 0;
+        if (invoice.paymentDueDate) {
+          return new Date(invoice.paymentDueDate).toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          });
+        }
+        if (dueDays > 0) {
+          const baseDate = invoice.invoiceDate ? new Date(invoice.invoiceDate) : new Date();
+          const dueDate = new Date(baseDate.getTime() + dueDays * 24 * 60 * 60 * 1000);
+          return dueDate.toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          });
+        }
+        return "Immediate";
+      })(),
       bankDetails: BUILDOHUB_COMPANY.bankDetails,
       buyerPoNumber: invoice.buyerPoNumber ?? null,
       ewayBillNumber: invoice.ewayBillNumber ?? null,

@@ -82,6 +82,7 @@ type InvoiceDetail = {
   paymentStatus: string;
   amountPaid: number | null;
   amountDue: number | null;
+  paymentDueBy?: string;
   bankDetails?: {
     bankName: string;
     accountName: string;
@@ -386,14 +387,13 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
       {/* Payment & Settlement Summary */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <section className="panel space-y-2 p-5 text-sm">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Payment Status</h2>
-          <p className="font-semibold text-slate-900">Status: {invoice.paymentStatus}</p>
-          {invoice.amountPaid !== null ? (
-            <p className="text-slate-600">Advance Paid: ₹{invoice.amountPaid.toLocaleString("en-IN")}</p>
-          ) : null}
-          {invoice.amountDue !== null ? (
-            <p className="font-semibold text-slate-900">Balance Due: ₹{invoice.amountDue.toLocaleString("en-IN")}</p>
-          ) : null}
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Payment Summary</h2>
+          <p className="font-semibold text-slate-900">
+            Invoice Amount: ₹{invoice.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="font-medium text-slate-700">
+            Payment Due By: <span className="font-semibold text-slate-950">{invoice.paymentDueBy ?? "Immediate"}</span>
+          </p>
         </section>
 
         {invoice.bankDetails ? (

@@ -316,6 +316,7 @@ export class SupplierInvoicesService {
           otherChargesAmount: dto.otherChargesAmount ?? 0,
           discountAmount: dto.discountAmount ?? 0,
           roundingAdjustment: dto.roundingAdjustment ?? 0,
+          paymentDueDays: dto.paymentDueDays !== undefined ? dto.paymentDueDays : invoice.paymentDueDays,
           confirmedTaxableValue: totals.taxableValue,
           confirmedTaxAmount: totals.taxAmount,
           confirmedTotalAmount: totals.totalAmount,
@@ -663,6 +664,12 @@ export class SupplierInvoicesService {
       otherChargesAmount: toNumber(invoice.otherChargesAmount),
       discountAmount: toNumber(invoice.discountAmount),
       roundingAdjustment: toNumber(invoice.roundingAdjustment),
+      paymentDueDays:
+        invoice.paymentDueDays !== null && invoice.paymentDueDays !== undefined
+          ? toNumber(invoice.paymentDueDays)
+          : invoice.order?.user?.paymentDueDays !== null && invoice.order?.user?.paymentDueDays !== undefined
+            ? toNumber(invoice.order.user.paymentDueDays)
+            : 0,
       confirmedTaxableValue:
         invoice.confirmedTaxableValue !== null && invoice.confirmedTaxableValue !== undefined
           ? toNumber(invoice.confirmedTaxableValue)

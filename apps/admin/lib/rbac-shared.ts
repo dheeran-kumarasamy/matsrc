@@ -5,6 +5,7 @@
 export const MENU_CONFIG = [
   { key: "dashboard", href: "/dashboard", label: "Dashboard" },
   { key: "vendors", href: "/vendors", label: "Vendor Approval" },
+  { key: "buyers", href: "/buyers", label: "Buyer Credit Terms" },
   { key: "kyc", href: "/kyc", label: "KYC Queue" },
   { key: "disputes", href: "/disputes", label: "Disputes" },
   { key: "payments", href: "/payments", label: "Payment Verification" },

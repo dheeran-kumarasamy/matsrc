@@ -31,6 +31,7 @@ export const invoiceInclude = {
       billingCity: true,
       billingState: true,
       billingPincode: true,
+      paymentDueDays: true,
     },
   },
   site: { select: { id: true, name: true, addressLine: true, city: true, state: true, pincode: true, gstin: true } },
@@ -226,6 +227,38 @@ export function serializeInvoice(invoice: any) {
     paymentStatus: invoice.paymentStatus,
     amountPaid: invoice.amountPaid !== null && invoice.amountPaid !== undefined ? toNumber(invoice.amountPaid) : null,
     amountDue: invoice.amountDue !== null && invoice.amountDue !== undefined ? toNumber(invoice.amountDue) : null,
+    paymentDueDays:
+      invoice.paymentDueDays !== null && invoice.paymentDueDays !== undefined
+        ? toNumber(invoice.paymentDueDays)
+        : invoice.builder?.paymentDueDays !== null && invoice.builder?.paymentDueDays !== undefined
+          ? toNumber(invoice.builder.paymentDueDays)
+          : 0,
+    paymentDueDate: invoice.paymentDueDate ? new Date(invoice.paymentDueDate).toISOString() : null,
+    paymentDueBy: (() => {
+      const dueDays =
+        invoice.paymentDueDays !== null && invoice.paymentDueDays !== undefined
+          ? toNumber(invoice.paymentDueDays)
+          : invoice.builder?.paymentDueDays !== null && invoice.builder?.paymentDueDays !== undefined
+            ? toNumber(invoice.builder.paymentDueDays)
+            : 0;
+      if (invoice.paymentDueDate) {
+        return new Date(invoice.paymentDueDate).toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        });
+      }
+      if (dueDays > 0) {
+        const baseDate = invoice.invoiceDate ? new Date(invoice.invoiceDate) : new Date();
+        const dueDate = new Date(baseDate.getTime() + dueDays * 24 * 60 * 60 * 1000);
+        return dueDate.toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        });
+      }
+      return "Immediate";
+    })(),
     bankDetails: BUILDOHUB_COMPANY.bankDetails,
     buyerPoNumber: invoice.buyerPoNumber ?? null,
     ewayBillNumber: invoice.ewayBillNumber ?? null,

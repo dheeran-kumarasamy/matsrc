@@ -78,6 +78,11 @@ export class ReviewSupplierInvoiceLineItemsDto {
   roundingAdjustment?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  paymentDueDays?: number | null;
+
+  @IsOptional()
   @IsString()
   discrepancyNotes?: string | null;
 }

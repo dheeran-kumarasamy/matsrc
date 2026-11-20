@@ -502,6 +502,17 @@ export class InvoicesService {
             paymentStatus: order.paymentStatus,
             amountPaid,
             amountDue,
+            paymentDueDays:
+              supplierInvoice.paymentDueDays !== null && supplierInvoice.paymentDueDays !== undefined
+                ? supplierInvoice.paymentDueDays
+                : user?.paymentDueDays ?? 0,
+            paymentDueDate: (() => {
+              const dueDays =
+                supplierInvoice.paymentDueDays !== null && supplierInvoice.paymentDueDays !== undefined
+                  ? supplierInvoice.paymentDueDays
+                  : user?.paymentDueDays ?? 0;
+              return dueDays > 0 ? new Date(now.getTime() + dueDays * 24 * 60 * 60 * 1000) : null;
+            })(),
             generatedById: actorId,
             generatedAt: now,
             lineItems: {
@@ -710,6 +721,7 @@ export class InvoicesService {
           billingCity: true,
           billingState: true,
           billingPincode: true,
+          paymentDueDays: true,
         },
       },
       site: { select: { id: true, name: true, addressLine: true, city: true, state: true, pincode: true, gstin: true } },
@@ -938,6 +950,38 @@ export class InvoicesService {
       paymentStatus: invoice.paymentStatus,
       amountPaid: invoice.amountPaid !== null && invoice.amountPaid !== undefined ? Number(invoice.amountPaid) : null,
       amountDue: invoice.amountDue !== null && invoice.amountDue !== undefined ? Number(invoice.amountDue) : null,
+      paymentDueDays:
+        invoice.paymentDueDays !== null && invoice.paymentDueDays !== undefined
+          ? Number(invoice.paymentDueDays)
+          : invoice.builder?.paymentDueDays !== null && invoice.builder?.paymentDueDays !== undefined
+            ? Number(invoice.builder.paymentDueDays)
+            : 0,
+      paymentDueDate: invoice.paymentDueDate ? new Date(invoice.paymentDueDate).toISOString() : null,
+      paymentDueBy: (() => {
+        const dueDays =
+          invoice.paymentDueDays !== null && invoice.paymentDueDays !== undefined
+            ? Number(invoice.paymentDueDays)
+            : invoice.builder?.paymentDueDays !== null && invoice.builder?.paymentDueDays !== undefined
+              ? Number(invoice.builder.paymentDueDays)
+              : 0;
+        if (invoice.paymentDueDate) {
+          return new Date(invoice.paymentDueDate).toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          });
+        }
+        if (dueDays > 0) {
+          const baseDate = invoice.invoiceDate ? new Date(invoice.invoiceDate) : new Date();
+          const dueDate = new Date(baseDate.getTime() + dueDays * 24 * 60 * 60 * 1000);
+          return dueDate.toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          });
+        }
+        return "Immediate";
+      })(),
       bankDetails: BUILDOHUB_COMPANY.bankDetails,
       buyerPoNumber: invoice.buyerPoNumber ?? null,
       ewayBillNumber: invoice.ewayBillNumber ?? null,

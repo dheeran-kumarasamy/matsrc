@@ -23,6 +23,7 @@ type SupplierInvoiceDetail = {
   otherChargesAmount: number;
   discountAmount: number;
   roundingAdjustment: number;
+  paymentDueDays?: number | null;
   confirmedTaxableValue: number | null;
   confirmedTaxAmount: number | null;
   confirmedTotalAmount: number | null;

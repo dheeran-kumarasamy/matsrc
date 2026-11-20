@@ -213,8 +213,10 @@ export function isAllowedAdminProxyRoute(slug: string, method: string): boolean 
   // 17. Supplier Rejections
   if (m === 'GET' && slug === 'admin/supplier-rejections') return true;
 
-  // 18. Vendors
+  // 18. Vendors & Buyers
   if (m === 'GET' && (slug === 'admin/vendors' || /^admin\/vendors\/[a-zA-Z0-9_-]+$/.test(slug))) return true;
+  if (m === 'GET' && slug === 'admin/buyers') return true;
+  if (m === 'PATCH' && /^admin\/buyers\/[a-zA-Z0-9_-]+\/credit-terms$/.test(slug)) return true;
 
   // 19. WhatsApp Alerts / Notifications
   if (m === 'GET' && (slug === 'admin/whatsapp-alerts/mode' || slug === 'admin/whatsapp-alerts/logs')) return true;

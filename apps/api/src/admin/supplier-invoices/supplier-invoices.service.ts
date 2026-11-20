@@ -234,6 +234,7 @@ export class SupplierInvoicesService {
         supplierInvoicedUnitPrice: line.supplierInvoicedUnitPrice ?? null,
         approvedUnitPriceOverride: line.approvedUnitPriceOverride ?? null,
         taxRatePercent: line.taxRatePercent ?? (orderItem.taxRatePercent ? toNumber(orderItem.taxRatePercent) : null),
+        applyMarkup: line.applyMarkup,
       });
       if (resolution.rateDiscrepancy) {
         hasDiscrepancy = true;
@@ -285,6 +286,7 @@ export class SupplierInvoicesService {
             actualQuantity: line.actualQuantity,
             approvedUnitPrice: resolution.approvedUnitPrice,
             supplierInvoicedUnitPrice: line.supplierInvoicedUnitPrice ?? null,
+            applyMarkup: resolution.applyMarkup,
             rateDiscrepancy: resolution.rateDiscrepancy,
             taxRatePercent: resolution.taxRatePercent,
             lineSubtotal: resolution.lineSubtotal,
@@ -297,6 +299,7 @@ export class SupplierInvoicesService {
             actualQuantity: line.actualQuantity,
             approvedUnitPrice: resolution.approvedUnitPrice,
             supplierInvoicedUnitPrice: line.supplierInvoicedUnitPrice ?? null,
+            applyMarkup: resolution.applyMarkup,
             rateDiscrepancy: resolution.rateDiscrepancy,
             taxRatePercent: resolution.taxRatePercent,
             lineSubtotal: resolution.lineSubtotal,
@@ -652,6 +655,8 @@ export class SupplierInvoicesService {
         unitLabel: resolveOrderUnitLabel(item.product),
         quantity: item.quantity,
         unitPrice: toNumber(item.unitPrice),
+        supplierUnitPrice: item.supplierUnitPrice !== null && item.supplierUnitPrice !== undefined ? toNumber(item.supplierUnitPrice) : null,
+        markupPercent: item.markupPercent !== null && item.markupPercent !== undefined ? toNumber(item.markupPercent) : null,
         taxRatePercent: item.taxRatePercent !== null && item.taxRatePercent !== undefined ? toNumber(item.taxRatePercent) : null,
       })),
       freightChargeAmount: toNumber(invoice.freightChargeAmount),
@@ -690,6 +695,11 @@ export class SupplierInvoicesService {
             ? toNumber(li.supplierInvoicedUnitPrice)
             : null,
         rateDiscrepancy: li.rateDiscrepancy,
+        applyMarkup: li.applyMarkup !== false,
+        markupPercent:
+          li.orderItem?.markupPercent !== null && li.orderItem?.markupPercent !== undefined
+            ? toNumber(li.orderItem.markupPercent)
+            : null,
         taxRatePercent: li.taxRatePercent !== null && li.taxRatePercent !== undefined ? toNumber(li.taxRatePercent) : null,
         lineSubtotal: toNumber(li.lineSubtotal),
         lineTaxAmount: toNumber(li.lineTaxAmount),

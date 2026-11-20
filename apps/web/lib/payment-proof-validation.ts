@@ -32,8 +32,9 @@ export function validatePaymentProofFile(params: {
 
 // Never trust the client-provided filename for storage — generate a safe,
 // predictable, collision-resistant name derived only from the orderId and
-// validated extension.
-export function buildSafePaymentProofFileName(orderId: string, fileName: string): string {
+// validated extension. Supports optional index for multiple attachments.
+export function buildSafePaymentProofFileName(orderId: string, fileName: string, index?: number): string {
   const extension = (fileName.split(".").pop() || "").toLowerCase();
-  return `payment-proof-${orderId}.${extension}`;
+  const suffix = typeof index === "number" && index > 0 ? `-${index + 1}` : "";
+  return `payment-proof-${orderId}${suffix}.${extension}`;
 }

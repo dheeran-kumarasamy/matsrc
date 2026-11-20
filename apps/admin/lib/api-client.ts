@@ -3,7 +3,9 @@
 // since it is imported by "use client" components and would otherwise pull
 // server-only Node crypto code into the browser bundle.
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+const API_BASE_URL = typeof window !== "undefined"
+  ? "/api/proxy"
+  : (process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api");
 
 type AdminSessionUser = {
   id?: string;
@@ -41,7 +43,11 @@ export async function adminApiGet<T>(path: string): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`Admin API request failed: ${response.status}`);
+    const data = await response.json().catch(() => null);
+    const msg = Array.isArray(data?.message)
+      ? data.message.join(", ")
+      : data?.message || data?.error || `Admin API request failed: ${response.status}`;
+    throw new Error(msg);
   }
 
   return response.json() as Promise<T>;
@@ -56,7 +62,11 @@ export async function adminApiPatch<T>(path: string, body: unknown): Promise<T> 
   });
 
   if (!response.ok) {
-    throw new Error(`Admin API patch failed: ${response.status}`);
+    const data = await response.json().catch(() => null);
+    const msg = Array.isArray(data?.message)
+      ? data.message.join(", ")
+      : data?.message || data?.error || `Admin API patch failed: ${response.status}`;
+    throw new Error(msg);
   }
 
   return response.json() as Promise<T>;
@@ -71,7 +81,11 @@ export async function adminApiPost<T>(path: string, body?: unknown): Promise<T> 
   });
 
   if (!response.ok) {
-    throw new Error(`Admin API post failed: ${response.status}`);
+    const data = await response.json().catch(() => null);
+    const msg = Array.isArray(data?.message)
+      ? data.message.join(", ")
+      : data?.message || data?.error || `Admin API post failed: ${response.status}`;
+    throw new Error(msg);
   }
 
   return response.json() as Promise<T>;
@@ -104,7 +118,11 @@ export async function adminApiDelete<T>(path: string): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`Admin API delete failed: ${response.status}`);
+    const data = await response.json().catch(() => null);
+    const msg = Array.isArray(data?.message)
+      ? data.message.join(", ")
+      : data?.message || data?.error || `Admin API delete failed: ${response.status}`;
+    throw new Error(msg);
   }
 
   return response.json() as Promise<T>;

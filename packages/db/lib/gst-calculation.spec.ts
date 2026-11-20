@@ -3,7 +3,13 @@ import {
   DEFAULT_TAX_RATE_PERCENT,
   aggregateQuotationTotals,
   calculateLineGst,
+  calculateLineTaxSplit,
+  getStateCode,
+  getStateName,
   isValidQuotedPrice,
+  normalizeUqc,
+  resolveInvoiceDisplayUnit,
+  numberToIndianWords,
   parseQuotedPrice,
   roundCurrency,
 } from "./gst-calculation";
@@ -97,5 +103,156 @@ describe("isValidQuotedPrice / parseQuotedPrice", () => {
     expect(isValidQuotedPrice(0)).toBe(true);
     expect(parseQuotedPrice("0")).toBe(0);
     expect(parseQuotedPrice("425.50")).toBe(425.5);
+  });
+});
+
+describe("Form GST INV-01 State Code & UQC Helpers", () => {
+  it("resolves 2-digit state code from GSTIN prefix", () => {
+    expect(getStateCode(null, "33AANCT3003A1Z0")).toBe("33");
+    expect(getStateCode(null, "29AABCS1429B1ZB")).toBe("29");
+  });
+
+  it("resolves 2-digit state code from state name", () => {
+    expect(getStateCode("Tamil Nadu")).toBe("33");
+    expect(getStateCode("karnataka")).toBe("29");
+    expect(getStateCode("Kerala")).toBe("32");
+    expect(getStateCode("Unknown State")).toBeNull();
+  });
+
+  it("resolves state name from 2-digit state code", () => {
+    expect(getStateName("33")).toBe("Tamil Nadu");
+    expect(getStateName("29")).toBe("Karnataka");
+    expect(getStateName("99")).toBeNull();
+  });
+
+  it("normalizes product units to standard GST UQC codes", () => {
+    expect(normalizeUqc("MT")).toBe("TON");
+    expect(normalizeUqc("Metric Ton")).toBe("TON");
+    expect(normalizeUqc("Bag")).toBe("BAG");
+    expect(normalizeUqc("Bags")).toBe("BAG");
+    expect(normalizeUqc("SQM")).toBe("SQM");
+    expect(normalizeUqc("PCS")).toBe("NOS");
+    expect(normalizeUqc("Boxes")).toBe("BOX");
+    expect(normalizeUqc(null)).toBe("OTH");
+  });
+
+  it("resolveInvoiceDisplayUnit resolves site unit or intelligent domain fallback, never OTH", () => {
+    // When explicit unit is present and not generic
+    expect(resolveInvoiceDisplayUnit({ unit: "KGS", uqc: "KGS" })).toBe("KGS");
+    expect(resolveInvoiceDisplayUnit({ unit: "MT", uqc: "TON" })).toBe("MT");
+    expect(resolveInvoiceDisplayUnit({ unit: "BAG", uqc: "BAG" })).toBe("BAG");
+
+    // When unit is missing or "Unit" or "OTH", but uqc is a valid specific code
+    expect(resolveInvoiceDisplayUnit({ unit: null, uqc: "KGS" })).toBe("KGS");
+    expect(resolveInvoiceDisplayUnit({ unit: "Unit", uqc: "BAG" })).toBe("BAG");
+
+    // When uqc is "OTH" and unit is null/Unit, falls back to product name context
+    expect(
+      resolveInvoiceDisplayUnit({
+        unit: null,
+        uqc: "OTH",
+        productName: "Vizag Steel 12mm TMT Bar Fe 500D",
+      })
+    ).toBe("MT");
+    expect(
+      resolveInvoiceDisplayUnit({
+        unit: "Unit",
+        uqc: "OTH",
+        productName: "Tata Tiscon 16mm TMT Steel Bar",
+      })
+    ).toBe("MT");
+    expect(
+      resolveInvoiceDisplayUnit({
+        unit: null,
+        uqc: "OTH",
+        productName: "UltraTech Super Cement 53 Grade",
+      })
+    ).toBe("BAG");
+
+    // When unit is set to a site unit, even if uqc is "OTH", display unit preserves site unit
+    expect(
+      resolveInvoiceDisplayUnit({
+        unit: "KGS",
+        uqc: "OTH",
+        productName: "Steel Rods",
+      })
+    ).toBe("KGS");
+
+    // Fallback when nothing is known
+    expect(resolveInvoiceDisplayUnit({ unit: null, uqc: "OTH" })).toBe("Unit");
+  });
+});
+
+describe("calculateLineTaxSplit (Intra-state vs Inter-state)", () => {
+  it("calculates CGST and SGST split for intra-state supplies (TN to TN)", () => {
+    const result = calculateLineTaxSplit({
+      quantity: 10,
+      unitPrice: 1000,
+      gstRatePercent: 18,
+      sellerStateCode: "33",
+      placeOfSupplyStateCode: "33",
+    });
+
+    expect(result.isIntraState).toBe(true);
+    expect(result.taxableAmount).toBe(10000);
+    expect(result.cgstRate).toBe(9);
+    expect(result.cgstAmount).toBe(900);
+    expect(result.sgstRate).toBe(9);
+    expect(result.sgstAmount).toBe(900);
+    expect(result.igstRate).toBe(0);
+    expect(result.igstAmount).toBe(0);
+    expect(result.totalTaxAmount).toBe(1800);
+    expect(result.lineTotal).toBe(11800);
+  });
+
+  it("calculates IGST for inter-state supplies (TN to KA)", () => {
+    const result = calculateLineTaxSplit({
+      quantity: 10,
+      unitPrice: 1000,
+      gstRatePercent: 18,
+      sellerStateCode: "33",
+      placeOfSupplyStateCode: "29",
+    });
+
+    expect(result.isIntraState).toBe(false);
+    expect(result.taxableAmount).toBe(10000);
+    expect(result.cgstRate).toBe(0);
+    expect(result.cgstAmount).toBe(0);
+    expect(result.sgstRate).toBe(0);
+    expect(result.sgstAmount).toBe(0);
+    expect(result.igstRate).toBe(18);
+    expect(result.igstAmount).toBe(1800);
+    expect(result.totalTaxAmount).toBe(1800);
+    expect(result.lineTotal).toBe(11800);
+  });
+
+  it("handles 0% tax lines gracefully", () => {
+    const result = calculateLineTaxSplit({
+      quantity: 5,
+      unitPrice: 200,
+      gstRatePercent: 0,
+      sellerStateCode: "33",
+      placeOfSupplyStateCode: "33",
+    });
+
+    expect(result.taxableAmount).toBe(1000);
+    expect(result.cgstAmount).toBe(0);
+    expect(result.sgstAmount).toBe(0);
+    expect(result.igstAmount).toBe(0);
+    expect(result.totalTaxAmount).toBe(0);
+    expect(result.lineTotal).toBe(1000);
+  });
+});
+
+describe("numberToIndianWords", () => {
+  it("converts amounts to standard Indian numbering words", () => {
+    expect(numberToIndianWords(0)).toBe("Rupees Zero Only");
+    expect(numberToIndianWords(500)).toBe("Rupees Five Hundred Only");
+    expect(numberToIndianWords(1500)).toBe("Rupees One Thousand Five Hundred Only");
+    expect(numberToIndianWords(45250)).toBe("Rupees Forty-Five Thousand Two Hundred Fifty Only");
+    expect(numberToIndianWords(145250.5)).toBe(
+      "Rupees One Lakh Forty-Five Thousand Two Hundred Fifty and Paise Fifty Only"
+    );
+    expect(numberToIndianWords(25000000)).toBe("Rupees Two Crores Fifty Lakhs Only");
   });
 });

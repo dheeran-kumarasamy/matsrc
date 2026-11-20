@@ -2,7 +2,7 @@
 // apps/web/lib/rfq-pdf.spec.ts's identical test coverage for apps/web's
 // own duplicated renderer (see rfq-pdf.ts's header comment).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import PDFDocument from "pdfkit";
 import { useRupeeCapableFont } from "./pdf-fonts";
 import { renderRfqPdf, renderRfqPdfContent, type RfqPdfData } from "./rfq-pdf";
@@ -91,5 +91,85 @@ describe("renderRfqPdf", () => {
     const buffer = await renderRfqPdf(fakeRfq());
     expect(buffer.length).toBeGreaterThan(0);
     expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+  });
+
+  describe("Site Name & Identity Privacy Verification (Fix 4)", () => {
+    it("1. Displays actual construction site name under Requested By when a site exists", () => {
+      const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
+      useRupeeCapableFont(doc);
+      const textCalls: string[] = [];
+      const originalText = doc.text.bind(doc);
+      vi.spyOn(doc, "text").mockImplementation((text: any, ...args: any[]) => {
+        if (typeof text === "string") textCalls.push(text);
+        return originalText(text, ...args);
+      });
+
+      renderRfqPdfContent(
+        doc,
+        fakeRfq({
+          site: {
+            name: "Skyline Tower Site",
+            addressLine: "100 Construction Rd",
+            city: "Bengaluru",
+            state: "Karnataka",
+            pincode: "560001",
+          },
+        })
+      );
+
+      const requestedByIndex = textCalls.indexOf("Requested By");
+      expect(requestedByIndex).toBeGreaterThanOrEqual(0);
+      expect(textCalls).toContain("Skyline Tower Site");
+    });
+
+    it("2. Displays 'Site not specified' under Requested By when no site exists", () => {
+      const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
+      useRupeeCapableFont(doc);
+      const textCalls: string[] = [];
+      const originalText = doc.text.bind(doc);
+      vi.spyOn(doc, "text").mockImplementation((text: any, ...args: any[]) => {
+        if (typeof text === "string") textCalls.push(text);
+        return originalText(text, ...args);
+      });
+
+      renderRfqPdfContent(doc, fakeRfq({ site: null }));
+
+      const requestedByIndex = textCalls.indexOf("Requested By");
+      expect(requestedByIndex).toBeGreaterThanOrEqual(0);
+      expect(textCalls).toContain("Site not specified");
+    });
+
+    it("3. Never renders builder personal name, email, or phone under Requested By", () => {
+      const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
+      useRupeeCapableFont(doc);
+      const textCalls: string[] = [];
+      const originalText = doc.text.bind(doc);
+      vi.spyOn(doc, "text").mockImplementation((text: any, ...args: any[]) => {
+        if (typeof text === "string") textCalls.push(text);
+        return originalText(text, ...args);
+      });
+
+      renderRfqPdfContent(doc, fakeRfq());
+
+      const piiPattern = /builder@|bob@|alice@|\+91\d{10}|[Bb]uilder [Nn]ame/;
+      const hasPii = textCalls.some((t) => piiPattern.test(t));
+      expect(hasPii).toBe(false);
+    });
+
+    it("4. Does not use BuildOhub as fallback under Requested By when site is null", () => {
+      const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
+      useRupeeCapableFont(doc);
+      const textCalls: string[] = [];
+      const originalText = doc.text.bind(doc);
+      vi.spyOn(doc, "text").mockImplementation((text: any, ...args: any[]) => {
+        if (typeof text === "string") textCalls.push(text);
+        return originalText(text, ...args);
+      });
+
+      renderRfqPdfContent(doc, fakeRfq({ site: null }));
+
+      const requestedByIndex = textCalls.indexOf("Requested By");
+      expect(textCalls[requestedByIndex + 1]).toBe("Site not specified");
+    });
   });
 });

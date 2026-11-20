@@ -40,7 +40,16 @@ describe("TwilioWhatsAppProvider", () => {
   });
 
   afterEach(() => {
+    delete process.env.VERCEL_ENV;
     vi.restoreAllMocks();
+  });
+
+  it("suppresses real Twilio WhatsApp send in VERCEL_ENV=preview and returns mock ID", async () => {
+    process.env.VERCEL_ENV = "preview";
+    const result = await provider.sendTemplateMessage("919876543210", "watchlist_price_hit", { orderId: "order-1" });
+    expect(createMock).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(result.providerMessageId).toContain("mock-preview-wa-");
   });
 
   it("sends a template message and returns the provider message SID on success", async () => {
@@ -167,6 +176,51 @@ describe("TwilioWhatsAppProvider", () => {
       const callArgs = createMock.mock.calls[0][0];
       expect(callArgs.contentSid).toBe("HX-content-sid");
       expect(result).toEqual({ success: true, providerMessageId: "SM-template-1" });
+    });
+  });
+
+  describe("recipient phone number log masking", () => {
+    it("masks recipient in preview suppression logs and never exposes raw phone number", async () => {
+      process.env.VERCEL_ENV = "preview";
+      const logSpy = vi.spyOn((provider as any).logger, "log");
+
+      await provider.sendTemplateMessage("919876543210", "watchlist_price_hit", { orderId: "order-1" });
+
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      const logMessage = logSpy.mock.calls[0][0];
+      expect(logMessage).toContain("********3210");
+      expect(logMessage).not.toContain("919876543210");
+    });
+
+    it("masks recipient in permanent failure error logs and never exposes raw phone number", async () => {
+      const errorSpy = vi.spyOn((provider as any).logger, "error");
+      const twilioError = new Error("Invalid phone number");
+      (twilioError as any).code = 21211; // permanent error
+      (twilioError as any).status = 400;
+      createMock.mockRejectedValueOnce(twilioError);
+
+      const result = await provider.sendTemplateMessage("+919876543210", "watchlist_price_hit", { orderId: "order-1" });
+
+      expect(result.success).toBe(false);
+      expect(errorSpy).toHaveBeenCalled();
+      const errorLogs = errorSpy.mock.calls.map((c) => c[0]).join(" ");
+      expect(errorLogs).toContain("+********3210");
+      expect(errorLogs).not.toContain("919876543210");
+    });
+
+    it("masks recipient in unexpected exception logs", async () => {
+      const errorSpy = vi.spyOn((provider as any).logger, "error");
+      vi.spyOn(provider as any, "resolveFrom").mockImplementationOnce(() => {
+        throw new Error("Simulated unexpected crash");
+      });
+
+      const result = await provider.sendTemplateMessage("919876543210", "watchlist_price_hit", { orderId: "order-1" });
+
+      expect(result.success).toBe(false);
+      expect(errorSpy).toHaveBeenCalled();
+      const errorLogs = errorSpy.mock.calls.map((c) => c[0]).join(" ");
+      expect(errorLogs).toContain("********3210");
+      expect(errorLogs).not.toContain("919876543210");
     });
   });
 });

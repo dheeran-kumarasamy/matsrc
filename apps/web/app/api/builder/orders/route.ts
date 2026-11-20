@@ -86,6 +86,7 @@ export async function GET(request: Request) {
         aggregationPoolId: true,
         siteId: true,
         site: { select: { id: true, name: true } },
+        invoice: { select: { id: true, invoiceNumber: true, totalAmount: true } },
         // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
         // Dispatch — drives `confirmationState`/`total`/`paymentLinkAvailable`
         // below for each order in the list, exactly like the order-detail
@@ -135,6 +136,8 @@ export async function GET(request: Request) {
           : null;
         const confirmationState = resolveBuyerConfirmationState(order.status, supplierInvoiceSnapshot);
         const { amount: resolvedTotal } = resolveOrderFinalPayableAmount(preConfirmationEstimate, supplierInvoiceSnapshot);
+        const invoiceTotal = (order as any).invoice?.totalAmount != null ? Number((order as any).invoice.totalAmount) : null;
+        const finalTotal = invoiceTotal ?? resolvedTotal;
 
         return {
         id: order.id,
@@ -145,9 +148,9 @@ export async function GET(request: Request) {
         confirmationStateLabel: BUYER_CONFIRMATION_STATE_LABELS[confirmationState],
         paymentStatus: order.paymentStatus,
         itemCount: order.items.length,
-        total: resolvedTotal,
-        totalLabel: formatCurrency(resolvedTotal),
-        gstInclusive: hasGstSnapshot,
+        total: finalTotal,
+        totalLabel: formatCurrency(finalTotal),
+        gstInclusive: hasGstSnapshot || invoiceTotal != null,
         createdAt: order.createdAt,
         isAggregated: order.isAggregated,
         aggregationPoolId: order.aggregationPoolId,
@@ -158,6 +161,9 @@ export async function GET(request: Request) {
         ),
         siteId: order.siteId,
         siteName: order.site?.name ?? "Unassigned",
+        invoice: (order as any).invoice
+          ? { id: (order as any).invoice.id, invoiceNumber: (order as any).invoice.invoiceNumber }
+          : null,
 
         // Payment link is available once the supplier has confirmed the order
         // (status is past PLACED and not CANCELLED) and payment is pending.

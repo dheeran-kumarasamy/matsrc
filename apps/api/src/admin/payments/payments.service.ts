@@ -86,6 +86,10 @@ export class PaymentsService {
           },
         },
         user: { select: { id: true, name: true, email: true, phone: true } },
+        attachments: {
+          select: { id: true, fileName: true, fileSize: true },
+          orderBy: { createdAt: "asc" },
+        },
       },
       orderBy: { submittedAt: "asc" },
     });
@@ -116,6 +120,10 @@ export class PaymentsService {
           },
         },
         user: { select: { id: true, name: true, email: true, phone: true } },
+        attachments: {
+          select: { id: true, fileName: true, fileSize: true },
+          orderBy: { createdAt: "asc" },
+        },
       },
       orderBy: { reviewedAt: "desc" },
     });
@@ -135,18 +143,39 @@ export class PaymentsService {
       include: {
         order: { select: { id: true, enquiryId: true, status: true, totalAmount: true, paymentMethod: true, paymentStatus: true } },
         user: { select: { id: true, name: true, email: true, phone: true } },
+        attachments: {
+          select: { id: true, fileName: true, fileSize: true },
+          orderBy: { createdAt: "asc" },
+        },
       },
     });
     if (!verification) {
       throw new NotFoundException("No payment verification found for this order");
     }
-    return this.serializeSummary(verification);
+    return this.serializeSummary(verification as any);
   }
 
   // Returns the raw screenshot bytes + mime type for the admin-only viewer
   // route. Authorization (ADMIN role) is already enforced by the
   // controller's guards — this only checks the record exists.
-  async getScreenshot(orderId: string) {
+  async getScreenshot(orderId: string, attachmentId?: string) {
+    if (attachmentId) {
+      const att = await this.prisma.paymentVerificationAttachment.findFirst({
+        where: {
+          id: attachmentId,
+          paymentVerification: { orderId },
+        },
+        select: { fileData: true, fileMimeType: true, fileName: true },
+      });
+      if (att) {
+        return {
+          screenshotData: att.fileData,
+          screenshotMimeType: att.fileMimeType,
+          screenshotFileName: att.fileName,
+        };
+      }
+    }
+
     const verification = await this.prisma.paymentVerification.findUnique({
       where: { orderId },
       select: { screenshotData: true, screenshotMimeType: true, screenshotFileName: true },
@@ -713,6 +742,7 @@ export class PaymentsService {
     reviewedAt: Date | null;
     reviewedBy: string | null;
     rejectionReason: string | null;
+    attachments?: Array<{ id: string; fileName: string; fileSize: number }>;
     order: {
       id: string;
       enquiryId?: string | null;
@@ -724,6 +754,22 @@ export class PaymentsService {
     };
     user: { id: string; name: string | null; email: string | null; phone: string | null };
   }) {
+    const attachments = (v.attachments && v.attachments.length > 0)
+      ? v.attachments.map((att) => ({
+          id: att.id,
+          fileName: att.fileName,
+          fileSize: att.fileSize,
+          screenshotUrl: `/api/admin/payments/${v.orderId}/screenshot?attachmentId=${att.id}`,
+        }))
+      : [
+          {
+            id: v.id,
+            fileName: v.screenshotFileName,
+            fileSize: 0,
+            screenshotUrl: `/api/admin/payments/${v.orderId}/screenshot`,
+          },
+        ];
+
     return {
       id: v.id,
       orderId: v.orderId,
@@ -742,6 +788,8 @@ export class PaymentsService {
       reviewedAt: v.reviewedAt,
       reviewedBy: v.reviewedBy,
       rejectionReason: v.rejectionReason,
+      // Multiple attachments support
+      attachments,
       // Admin visibility (spec §33) — lets the admin answer "Advance
       // Reserved: X / Advance Status: ACTIVE" without a separate lookup.
       // null when this order never used the Buildohub Advance Balance.

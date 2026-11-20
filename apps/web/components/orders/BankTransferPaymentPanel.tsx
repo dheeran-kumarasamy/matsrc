@@ -12,6 +12,12 @@ type ProofStatus = {
   submittedAt?: string;
   reviewedAt?: string | null;
   rejectionReason?: string | null;
+  attachments?: Array<{
+    id: string;
+    fileName: string;
+    fileSize: number;
+    createdAt: string;
+  }>;
 };
 
 type Props = {
@@ -22,6 +28,7 @@ type Props = {
 
 const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png"];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_ATTACHMENTS = 10;
 
 function CopyField({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
@@ -57,8 +64,8 @@ function CopyField({ label, value }: { label: string; value: string }) {
 export default function BankTransferPaymentPanel({ orderId, amount, bank }: Props) {
   const [proof, setProof] = useState<ProofStatus | null>(null);
   const [loadingProof, setLoadingProof] = useState(true);
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -81,44 +88,70 @@ export default function BankTransferPaymentPanel({ orderId, amount, bank }: Prop
     };
   }, [orderId]);
 
-  function validateAndSetFile(selected: File | null) {
+  function handleFilesSelected(selectedList: FileList | null) {
     setError(null);
-    if (!selected) {
-      setFile(null);
-      setPreview(null);
+    if (!selectedList || selectedList.length === 0) return;
+
+    const newFiles = Array.from(selectedList);
+    const combined = [...files, ...newFiles];
+
+    if (combined.length > MAX_ATTACHMENTS) {
+      setError(`You can upload a maximum of ${MAX_ATTACHMENTS} screenshots`);
       return;
     }
-    if (!ALLOWED_TYPES.includes(selected.type)) {
-      setError("Only JPG, JPEG or PNG files are allowed");
-      return;
+
+    for (const f of newFiles) {
+      if (!ALLOWED_TYPES.includes(f.type)) {
+        setError(`"${f.name}" is not a valid format. Only JPG, JPEG or PNG files are allowed.`);
+        return;
+      }
+      if (f.size > MAX_SIZE_BYTES) {
+        setError(`"${f.name}" exceeds the 5 MB limit.`);
+        return;
+      }
     }
-    if (selected.size > MAX_SIZE_BYTES) {
-      setError("File must be 5 MB or smaller");
-      return;
-    }
-    setFile(selected);
-    setPreview(URL.createObjectURL(selected));
+
+    const newPreviews = newFiles.map((f) => URL.createObjectURL(f));
+    setFiles(combined);
+    setPreviews((prev) => [...prev, ...newPreviews]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  function removeFile() {
-    setFile(null);
-    setPreview(null);
+  function removeFile(index: number) {
+    const updatedFiles = files.filter((_, i) => i !== index);
+    const updatedPreviews = previews.filter((_, i) => i !== index);
+    setFiles(updatedFiles);
+    setPreviews(updatedPreviews);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   async function submit() {
-    if (!file) {
-      setError("Please select a payment screenshot to upload");
+    if (files.length === 0) {
+      setError("Please select at least one payment screenshot to upload");
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      for (const f of files) {
+        formData.append("files", f);
+      }
       await builderApiUpload(`/orders/${orderId}/payment-proof`, formData);
-      setProof({ exists: true, status: "PENDING", submittedAt: new Date().toISOString() });
-      removeFile();
+      setProof({
+        exists: true,
+        status: "PENDING",
+        submittedAt: new Date().toISOString(),
+        attachments: files.map((f, i) => ({
+          id: String(i),
+          fileName: f.name,
+          fileSize: f.size,
+          createdAt: new Date().toISOString(),
+        })),
+      });
+      setFiles([]);
+      setPreviews([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit payment proof. Please try again.");
     } finally {
@@ -141,8 +174,12 @@ export default function BankTransferPaymentPanel({ orderId, amount, bank }: Prop
           <CopyField label="Account Holder" value={bank.accountHolderName} />
           <CopyField label="Bank" value={bank.bankName} />
           <CopyField label="Account Number" value={bank.accountNumber} />
+          {bank.accountType ? <CopyField label="Account Type" value={bank.accountType} /> : null}
           <CopyField label="IFSC" value={bank.ifscCode} />
           <CopyField label="Branch" value={bank.branch} />
+          {bank.bankAddress ? <CopyField label="Bank Address" value={bank.bankAddress} /> : null}
+          {bank.emailId ? <CopyField label="Email" value={bank.emailId} /> : null}
+          {bank.mobileNo ? <CopyField label="Mobile" value={bank.mobileNo} /> : null}
           {bank.upiId ? <CopyField label="UPI ID" value={bank.upiId} /> : null}
           <CopyField label="Order Reference" value={orderId} />
         </div>
@@ -183,43 +220,64 @@ export default function BankTransferPaymentPanel({ orderId, amount, bank }: Prop
 
       {canUpload ? (
         <div className="space-y-3">
-          <p className="posh-label">Upload Payment Screenshot</p>
-          {!preview ? (
-            <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-[color:var(--posh-border)] px-4 py-8 text-center text-sm text-[color:var(--posh-fg-muted)] hover:border-[color:var(--posh-primary)]">
-              <Upload className="h-5 w-5" />
-              <span>Click to select a JPG, JPEG or PNG screenshot (max 5 MB)</span>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/jpg,image/png"
-                className="hidden"
-                onChange={(e) => validateAndSetFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-          ) : (
-            <div className="relative w-fit">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={preview} alt="Payment screenshot preview" className="max-h-64 rounded-xl border border-[color:var(--posh-border)]" />
-              <button
-                type="button"
-                onClick={removeFile}
-                aria-label="Remove selected screenshot"
-                className="absolute -right-2 -top-2 rounded-full bg-[color:var(--posh-fg)] p-1 text-white"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+          <div className="flex items-center justify-between">
+            <p className="posh-label">Upload Payment Screenshot(s)</p>
+            {files.length > 0 ? (
+              <span className="text-xs text-[color:var(--posh-fg-muted)]">
+                {files.length} / {MAX_ATTACHMENTS} selected
+              </span>
+            ) : null}
+          </div>
+
+          <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-[color:var(--posh-border)] px-4 py-8 text-center text-sm text-[color:var(--posh-fg-muted)] hover:border-[color:var(--posh-primary)]">
+            <Upload className="h-5 w-5" />
+            <span>Click or tap to select JPG, JPEG or PNG screenshots (max 5 MB each)</span>
+            <span className="text-xs text-[color:var(--posh-fg-muted)]">You can select multiple files at once or add more</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png"
+              multiple
+              className="hidden"
+              onChange={(e) => handleFilesSelected(e.target.files)}
+            />
+          </label>
+
+          {previews.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+              {previews.map((previewUrl, idx) => (
+                <div key={idx} className="relative group rounded-xl border border-[color:var(--posh-border)] p-1 bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={previewUrl}
+                    alt={`Payment screenshot preview ${idx + 1}`}
+                    className="h-28 w-full object-cover rounded-lg"
+                  />
+                  <p className="mt-1 truncate text-[11px] text-slate-500 px-1" title={files[idx]?.name}>
+                    {files[idx]?.name}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(idx)}
+                    aria-label={`Remove screenshot ${idx + 1}`}
+                    className="absolute -right-2 -top-2 rounded-full bg-[color:var(--posh-fg)] p-1 text-white shadow hover:opacity-90"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
             </div>
-          )}
+          ) : null}
 
           {error ? <p className="text-xs text-rose-600">{error}</p> : null}
 
           <button
             type="button"
             onClick={submit}
-            disabled={!file || submitting}
+            disabled={files.length === 0 || submitting}
             className="posh-btn-solid rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
           >
-            {submitting ? "Submitting…" : "Submit Payment for Verification"}
+            {submitting ? "Submitting…" : `Submit Payment for Verification (${files.length} screenshot${files.length === 1 ? "" : "s"})`}
           </button>
         </div>
       ) : null}

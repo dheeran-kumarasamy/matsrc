@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Query, Res, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
 import { OptionalJwtAuthGuard } from "src/auth/optional-jwt-auth.guard";
 import { Roles } from "src/auth/roles.decorator";
@@ -40,10 +40,14 @@ export class PaymentsController {
   // Streams the raw screenshot bytes to an authorized admin only — never a
   // public/static URL, and never accessible without passing the same
   // OptionalJwtAuthGuard + RoleGuard("ADMIN") checks as every other route
-  // on this controller.
+  // on this controller. Supports optional attachmentId query param for multiple screenshots.
   @Get(":orderId/screenshot")
-  async getScreenshot(@Param("orderId") orderId: string, @Res() res: Response) {
-    const screenshot = await this.paymentsService.getScreenshot(orderId);
+  async getScreenshot(
+    @Param("orderId") orderId: string,
+    @Query("attachmentId") attachmentId: string | undefined,
+    @Res() res: Response
+  ) {
+    const screenshot = await this.paymentsService.getScreenshot(orderId, attachmentId);
     res.setHeader("Content-Type", screenshot.screenshotMimeType);
     res.setHeader("Content-Disposition", `inline; filename="${screenshot.screenshotFileName}"`);
     // Never cached/publicly stored — this is sensitive banking evidence.

@@ -161,6 +161,13 @@ export function serializePurchaseOrder(po: any) {
       name: po.builder.name,
       email: po.builder.email,
       phone: po.builder.phone ?? null,
+      legalName: po.builder.legalName ?? null,
+      tradeName: po.builder.tradeName ?? null,
+      gstin: po.builder.gstin ?? null,
+      billingAddress: po.builder.billingAddress ?? null,
+      billingCity: po.builder.billingCity ?? null,
+      billingState: po.builder.billingState ?? null,
+      billingPincode: po.builder.billingPincode ?? null,
     },
     // The order's delivery/"ship to" destination — the Purchase Order PDF
     // (see app/api/builder/purchase-orders/[id]/export/route.ts) displays

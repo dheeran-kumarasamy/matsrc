@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { Bell, TrendingDown, Trash2, AlertCircle, Clock, Edit2, Check, X } from "lucide-react";
 import { builderApiDelete, builderApiGet, builderApiPatch } from "@/lib/api";
+import ProfileNavOptions from "@/components/profile/ProfileNavOptions";
 
 type PriceIntelligence = {
   resolved: boolean;
@@ -156,6 +157,7 @@ export default function WatchlistPage() {
 
   return (
     <div className="posh-body space-y-5">
+      <ProfileNavOptions />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="posh-eyebrow">Price desk</p>

@@ -10,7 +10,15 @@ export function getSiteUrl(): string {
     process.env.VERCEL_PROJECT_PRODUCTION_URL ||
     process.env.VERCEL_URL;
 
-  if (!configured) return "https://buildohub.in";
+  if (!configured) {
+    if (process.env.VERCEL_ENV === "preview") {
+      throw new Error("NEXT_PUBLIC_APP_URL or VERCEL_URL must be configured in preview environment");
+    }
+    if (process.env.NODE_ENV !== "production") {
+      return "http://localhost:3000";
+    }
+    return "https://buildohub.in";
+  }
 
   return configured.startsWith("http") ? configured : `https://${configured}`;
 }

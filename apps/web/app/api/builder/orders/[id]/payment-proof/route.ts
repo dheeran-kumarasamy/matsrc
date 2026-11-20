@@ -36,6 +36,15 @@ export async function GET(request: Request, { params }: { params: { id: string }
         reviewedAt: true,
         rejectionReason: true,
         amount: true,
+        attachments: {
+          select: {
+            id: true,
+            fileName: true,
+            fileSize: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
       },
     });
 
@@ -51,6 +60,12 @@ export async function GET(request: Request, { params }: { params: { id: string }
       reviewedAt: verification.reviewedAt,
       rejectionReason: verification.rejectionReason,
       amount: Number(verification.amount),
+      attachments: verification.attachments.map((att) => ({
+        id: att.id,
+        fileName: att.fileName,
+        fileSize: att.fileSize,
+        createdAt: att.createdAt,
+      })),
     });
   } catch (error) {
     console.error("Payment proof GET error:", error);
@@ -146,24 +161,52 @@ export async function POST(request: Request, { params }: { params: { id: string 
     try {
       formData = await request.formData();
     } catch {
-      return NextResponse.json({ error: "Expected multipart/form-data with a 'file' field" }, { status: 400 });
+      return NextResponse.json({ error: "Expected multipart/form-data with a 'files' or 'file' field" }, { status: 400 });
     }
 
-    const file = formData.get("file");
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "A payment screenshot file is required" }, { status: 400 });
+    // Support both single file ("file") and multiple files ("files" or multiple "file")
+    const rawFiles: FormDataEntryValue[] = [];
+    const filesEntries = formData.getAll("files");
+    const fileEntries = formData.getAll("file");
+    if (filesEntries.length > 0) {
+      rawFiles.push(...filesEntries);
+    }
+    if (fileEntries.length > 0) {
+      for (const entry of fileEntries) {
+        if (!rawFiles.includes(entry)) {
+          rawFiles.push(entry);
+        }
+      }
     }
 
-    // Server-side validation — never trust client-side checks alone.
-    const validation = validatePaymentProofFile({ fileName: file.name, mimeType: file.type, size: file.size });
-    if (!validation.valid) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+    const uploadedFiles = rawFiles.filter((f): f is File => f instanceof File && f.size > 0);
+    if (uploadedFiles.length === 0) {
+      return NextResponse.json({ error: "At least one payment screenshot file is required" }, { status: 400 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+    // Server-side validation for all files
+    for (const f of uploadedFiles) {
+      const validation = validatePaymentProofFile({ fileName: f.name, mimeType: f.type, size: f.size });
+      if (!validation.valid) {
+        return NextResponse.json({ error: `${f.name}: ${validation.error}` }, { status: 400 });
+      }
+    }
 
-    // Never trust the uploaded filename for storage — only used for display.
-    const safeFileName = buildSafePaymentProofFileName(order.id, file.name);
+    // Convert all files to buffers and safe filenames
+    const processedFiles: { buffer: Buffer; mimeType: string; fileName: string; size: number }[] = [];
+    for (let i = 0; i < uploadedFiles.length; i++) {
+      const f = uploadedFiles[i];
+      const buffer = Buffer.from(await f.arrayBuffer());
+      const safeName = buildSafePaymentProofFileName(order.id, f.name, i);
+      processedFiles.push({
+        buffer,
+        mimeType: f.type,
+        fileName: safeName,
+        size: f.size,
+      });
+    }
+
+    const primaryFile = processedFiles[0];
 
     // Mixed payment support (Buildohub Advance Balance + bank transfer, see
     // spec §30): the bank-transfer screenshot's declared amount is the
@@ -174,21 +217,36 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const { outstanding } = await computeOrderOutstandingAmount(order.id);
 
     if (existing) {
-      await prisma.paymentVerification.update({
-        where: { id: existing.id },
-        data: {
-          paymentMethod: PaymentMethod.BANK_TRANSFER,
-          amount: outstanding,
-          screenshotData: buffer,
-          screenshotMimeType: file.type,
-          screenshotFileName: safeFileName,
-          screenshotSize: file.size,
-          status: "PENDING",
-          submittedAt: new Date(),
-          reviewedAt: null,
-          reviewedBy: null,
-          rejectionReason: null,
-        },
+      await prisma.$transaction(async (tx) => {
+        // Delete previous attachments if resubmitting after rejection
+        await tx.paymentVerificationAttachment.deleteMany({
+          where: { paymentVerificationId: existing.id },
+        });
+
+        await tx.paymentVerification.update({
+          where: { id: existing.id },
+          data: {
+            paymentMethod: PaymentMethod.BANK_TRANSFER,
+            amount: outstanding,
+            screenshotData: primaryFile.buffer,
+            screenshotMimeType: primaryFile.mimeType,
+            screenshotFileName: primaryFile.fileName,
+            screenshotSize: primaryFile.size,
+            status: "PENDING",
+            submittedAt: new Date(),
+            reviewedAt: null,
+            reviewedBy: null,
+            rejectionReason: null,
+            attachments: {
+              create: processedFiles.map((pf) => ({
+                fileData: pf.buffer,
+                fileMimeType: pf.mimeType,
+                fileName: pf.fileName,
+                fileSize: pf.size,
+              })),
+            },
+          },
+        });
       });
     } else {
       await prisma.paymentVerification.create({
@@ -197,11 +255,19 @@ export async function POST(request: Request, { params }: { params: { id: string 
           userId: user.id,
           paymentMethod: PaymentMethod.BANK_TRANSFER,
           amount: outstanding,
-          screenshotData: buffer,
-          screenshotMimeType: file.type,
-          screenshotFileName: safeFileName,
-          screenshotSize: file.size,
+          screenshotData: primaryFile.buffer,
+          screenshotMimeType: primaryFile.mimeType,
+          screenshotFileName: primaryFile.fileName,
+          screenshotSize: primaryFile.size,
           status: "PENDING",
+          attachments: {
+            create: processedFiles.map((pf) => ({
+              fileData: pf.buffer,
+              fileMimeType: pf.mimeType,
+              fileName: pf.fileName,
+              fileSize: pf.size,
+            })),
+          },
         },
       });
     }

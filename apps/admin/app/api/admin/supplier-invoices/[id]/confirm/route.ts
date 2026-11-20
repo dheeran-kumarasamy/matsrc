@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { getAdminServerHeaders } from "@/lib/service-auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
 
@@ -13,12 +14,7 @@ async function requireAdmin() {
 }
 
 function adminHeaders(user: { id?: string; email: string; name?: string | null; role?: string }) {
-  return {
-    "X-User-Id": user.id || user.email,
-    "X-User-Email": user.email,
-    "X-User-Name": user.name || "Admin",
-    "X-User-Role": user.role || "ADMIN",
-  };
+  return getAdminServerHeaders(user);
 }
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {

@@ -178,8 +178,8 @@ export class WhatsAppAlertConfigService implements OnModuleInit {
       }
 
       // Guardrail: sandbox mode should never be the configured mode when the app's own
-      // environment indicator says this is a production deployment.
-      if (nodeEnv === "production") {
+      // environment indicator says this is a production deployment (exempting preview environments).
+      if (nodeEnv === "production" && process.env.VERCEL_ENV !== "preview") {
         errors.push(
           'WHATSAPP_MODE=sandbox but NODE_ENV="production". Refusing to start: this looks like a sandbox config that was ' +
             "not switched to WHATSAPP_MODE=production before a production deploy."

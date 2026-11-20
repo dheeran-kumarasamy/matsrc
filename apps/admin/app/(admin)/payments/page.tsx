@@ -16,6 +16,12 @@ type PendingPayment = {
   screenshotFileName: string;
   submittedAt: string;
   screenshotUrl: string;
+  attachments?: Array<{
+    id: string;
+    fileName: string;
+    fileSize: number;
+    screenshotUrl: string;
+  }>;
 };
 
 type VerifiedPayment = PendingPayment & {

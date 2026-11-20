@@ -23,7 +23,7 @@ function parseNumberLabel(value: string) {
 }
 
 function parseQuantityLabel(value: string) {
-  const numeric = Number(value.replace(/[^\d]/g, ""));
+  const numeric = Number(value.replace(/[^\d.]/g, ""));
   return Number.isFinite(numeric) ? numeric : 0;
 }
 

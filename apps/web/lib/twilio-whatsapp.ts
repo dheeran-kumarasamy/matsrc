@@ -37,6 +37,18 @@ export async function sendWhatsAppMessage(to: string, body: string): Promise<Twi
     return { error: "WhatsApp sending is disabled (WHATSAPP_ENABLED is not \"true\")" };
   }
 
+  // Non-production isolation guard:
+  // In preview, dev, test, or dry-run mode, NEVER dispatch real WhatsApp messages to handsets.
+  const isPreview = process.env.VERCEL_ENV === "preview";
+  const isTestOrDev = process.env.NODE_ENV !== "production";
+  const isDryRun = (process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE || "").toLowerCase() === "dry-run";
+
+  if (isPreview || isTestOrDev || isDryRun) {
+    const maskedTo = to.replace(/\d(?=\d{4})/g, "*");
+    console.log(`[dry-run] Suppressed real WhatsApp send to ${maskedTo} in ${process.env.VERCEL_ENV || process.env.NODE_ENV} environment`);
+    return { externalId: `mock-preview-wa-${Date.now()}`, provider: "mock-preview" };
+  }
+
   try {
     const from = process.env.TWILIO_WHATSAPP_NUMBER || "whatsapp:+14155238886";
     const message = await getClient().messages.create({

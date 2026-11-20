@@ -161,7 +161,16 @@ describe("GET /api/builder/orders/[id] — Admin-Confirmed Freight / Buyer Final
         totalAmount: 10000,
         taxAmount: 1800,
         finalPayableAmount: 11800,
-        supplierInvoice: { status: "CONFIRMED", confirmedTotalAmount: 13500 },
+        supplierInvoice: {
+          status: "CONFIRMED",
+          confirmedTotalAmount: 13500,
+          confirmedTaxableValue: 11440.68,
+          confirmedTaxAmount: 2059.32,
+          freightChargeAmount: 1000,
+          otherChargesAmount: 500,
+          discountAmount: 60,
+          roundingAdjustment: 0,
+        },
       })
     );
 
@@ -172,6 +181,54 @@ describe("GET /api/builder/orders/[id] — Admin-Confirmed Freight / Buyer Final
     expect(body.confirmationState).toBe("CONFIRMED");
     expect(body.total).toBe(13500); // admin-confirmed, NOT the pre-confirmation 11800
     expect(body.paymentLinkAvailable).toBe(true);
+    expect(body.hasAdjustments).toBe(true);
+    expect(body.freightChargeAmount).toBe(1000);
+    expect(body.otherChargesAmount).toBe(500);
+    expect(body.discountAmount).toBe(60);
+    expect(body.taxAmount).toBe(2059.32);
+    expect(body.itemsSubtotal).toBe(10000);
+  });
+
+  it("exposes complete financial breakdown and Form GST INV-01 totals when an invoice exists", async () => {
+    orderFindFirst.mockResolvedValue(
+      baseOrder({
+        status: "DELIVERED",
+        totalAmount: 41849.46,
+        taxAmount: 7532.90,
+        finalPayableAmount: 49382.36,
+        invoice: {
+          id: "inv-1",
+          invoiceNumber: "IN/2608/00002",
+          subtotal: 41849.46,
+          freightChargeAmount: 2000,
+          otherChargesAmount: 1100,
+          discountAmount: 100,
+          roundingAdjustment: 0,
+          taxableValue: 44849.46,
+          taxAmount: 8072.90,
+          cgstAmount: 4036.45,
+          sgstAmount: 4036.45,
+          igstAmount: 0,
+          totalAmount: 52922.36,
+        },
+      })
+    );
+
+    const { GET } = await import("../app/api/builder/orders/[id]/route");
+    const response = await GET(makeRequest(), { params: { id: "order-1" } });
+    const body = await response.json();
+
+    expect(body.total).toBe(52922.36);
+    expect(body.hasAdjustments).toBe(true);
+    expect(body.itemsSubtotal).toBe(41849.46);
+    expect(body.freightChargeAmount).toBe(2000);
+    expect(body.otherChargesAmount).toBe(1100);
+    expect(body.discountAmount).toBe(100);
+    expect(body.taxableValue).toBe(44849.46);
+    expect(body.taxAmount).toBe(8072.90);
+    expect(body.cgstAmount).toBe(4036.45);
+    expect(body.sgstAmount).toBe(4036.45);
+    expect(body.subtotalBeforeTax).toBe(44849.46);
   });
 
   it("legacy/in-flight order compatibility: treats an already-DISPATCHED order with no SupplierInvoice as CONFIRMED (never permanently stranded)", async () => {

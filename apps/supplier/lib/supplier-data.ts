@@ -895,7 +895,7 @@ async function transformRawListingsToPublic(
 function resolveGroupImages(
   group: any[],
   fallback: { category?: string | null; brand?: string | null; name?: string | null },
-  options?: { fullImages?: boolean }
+  _options?: { fullImages?: boolean }
 ): string[] {
   const withImages = group.filter((item) => Array.isArray(item.images) && item.images.length > 0);
 
@@ -909,21 +909,11 @@ function resolveGroupImages(
     return candidateTime >= latestTime ? candidate : latest;
   });
 
-  if (options?.fullImages) {
-    return mostRecentlyUploaded.images;
-  }
+  const validImages = Array.isArray(mostRecentlyUploaded.images)
+    ? mostRecentlyUploaded.images.filter((img: any) => typeof img === "string" && img.trim().length > 0)
+    : [];
 
-  // Lightweight representation for catalogue browsing:
-  // Preserves external URLs; replaces raw base64 data URIs with the brand/category fallback
-  // to avoid sending multi-megabyte image payloads in the public listings feed.
-  const lightweightImages = mostRecentlyUploaded.images.map((img: string) => {
-    if (typeof img === "string" && (img.startsWith("http://") || img.startsWith("https://"))) {
-      return img;
-    }
-    return getProductImage(fallback);
-  });
-
-  return lightweightImages.length > 0 ? lightweightImages : [getProductImage(fallback)];
+  return validImages.length > 0 ? validImages : [getProductImage(fallback)];
 }
 
 export async function getPublicSupplierProductById(id: string): Promise<{
@@ -1197,6 +1187,14 @@ async function recordPriceSnapshot(params: {
   });
 }
 
+function parsePositiveQuantity(value: string | number, field: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0.0001) {
+    throw new Error(`${field} must be at least 0.0001`);
+  }
+  return parsed;
+}
+
 function parsePositiveInt(value: string, field: string) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) {
@@ -1217,7 +1215,7 @@ function normalizePricingTiers(tiers: PricingTierInput[] | undefined, maxService
   if (!tiers || tiers.length === 0) {
     return [
       {
-        minQty: 1,
+        minQty: 0.0001,
         maxQty: maxServiceableQty,
         tierPrice: basePrice,
       },
@@ -1225,8 +1223,8 @@ function normalizePricingTiers(tiers: PricingTierInput[] | undefined, maxService
   }
 
   const normalized = tiers.map((tier, index) => {
-    const minQty = parsePositiveInt(tier.minQty, `Tier ${index + 1} minimum quantity`);
-    const maxQty = parsePositiveInt(tier.maxQty, `Tier ${index + 1} maximum quantity`);
+    const minQty = parsePositiveQuantity(tier.minQty, `Tier ${index + 1} minimum quantity`);
+    const maxQty = parsePositiveQuantity(tier.maxQty, `Tier ${index + 1} maximum quantity`);
     const tierPrice = parsePositivePrice(tier.price, `Tier ${index + 1} price`);
 
     if (minQty > maxQty) {
@@ -1238,14 +1236,14 @@ function normalizePricingTiers(tiers: PricingTierInput[] | undefined, maxService
 
   normalized.sort((left, right) => left.minQty - right.minQty);
 
-  if (normalized[0].minQty !== 1) {
-    throw new Error("The first pricing tier must start at quantity 1");
+  if (normalized[0].minQty > 1 || normalized[0].minQty < 0.0001) {
+    throw new Error("The first pricing tier must start at a quantity between 0.0001 and 1");
   }
 
   for (let index = 1; index < normalized.length; index += 1) {
     const previous = normalized[index - 1];
     const current = normalized[index];
-    if (current.minQty !== previous.maxQty + 1) {
+    if (current.minQty < previous.maxQty || current.minQty > previous.maxQty + 1) {
       throw new Error("Pricing tiers must be contiguous with no gaps or overlaps");
     }
   }
@@ -1398,7 +1396,7 @@ export async function createSupplierListing(input: ListingInput, email: string) 
   const slugBase = slugify(input.title);
   const suffix = Math.random().toString(36).slice(2, 7);
   const basePrice = parsePositivePrice(input.price, "Base Price");
-  const maxServiceableQty = parsePositiveInt(input.maxServiceableQty, "Maximum Serviceable Quantity");
+  const maxServiceableQty = parsePositiveQuantity(input.maxServiceableQty, "Maximum Serviceable Quantity");
   const pricingTiers = normalizePricingTiers(input.pricingTiers, maxServiceableQty, basePrice);
 
   const createWithPricingSchema = () =>
@@ -1492,7 +1490,7 @@ export async function updateSupplierListing(id: string, input: ListingInput, ema
   });
 
   const basePrice = parsePositivePrice(input.price, "Base Price");
-  const maxServiceableQty = parsePositiveInt(input.maxServiceableQty, "Maximum Serviceable Quantity");
+  const maxServiceableQty = parsePositiveQuantity(input.maxServiceableQty, "Maximum Serviceable Quantity");
   const pricingTiers = normalizePricingTiers(input.pricingTiers, maxServiceableQty, basePrice);
 
   const updateWithPricingSchema = () =>
@@ -3093,7 +3091,7 @@ export async function updateListingAggregationSettings(
   const priceTiers = (input.priceTiers ?? [])
     .filter((tier) => tier.minQty !== "" && tier.unitPrice !== "")
     .map((tier) => {
-      const minQty = parsePositiveInt(tier.minQty, "Group pricing tier minimum quantity");
+      const minQty = parsePositiveQuantity(tier.minQty, "Group pricing tier minimum quantity");
       const unitPrice = Number(tier.unitPrice);
       if (!Number.isFinite(unitPrice) || unitPrice < 0) {
         throw new Error("Group pricing tier unit price must be a non-negative number");

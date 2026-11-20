@@ -45,7 +45,26 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  // Identity Header Hardening: strip any client-supplied X-User-* headers
+  // and replace them with authoritative values from the verified session.
+  const requestHeaders = new Headers(req.headers);
+  if (isLoggedIn && req.auth?.user?.email) {
+    requestHeaders.set("x-user-id", req.auth.user.id || req.auth.user.email);
+    requestHeaders.set("x-user-email", req.auth.user.email);
+    requestHeaders.set("x-user-role", (req.auth.user as any).role || "BUILDER");
+    if (req.auth.user.name) requestHeaders.set("x-user-name", req.auth.user.name);
+  } else {
+    requestHeaders.delete("x-user-id");
+    requestHeaders.delete("x-user-email");
+    requestHeaders.delete("x-user-role");
+    requestHeaders.delete("x-user-name");
+  }
+
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
 });
 
 export const config = {

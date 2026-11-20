@@ -57,6 +57,19 @@ export type OverlayOrderDetail = {
   // apps/web/app/(builder)/orders/[id]/page.tsx's identical field for the
   // full rationale — this overlay mirrors that page's rendering.
   invoice?: { id: string; invoiceNumber: string; totalAmount: number } | null;
+  gstInclusive?: boolean;
+  subtotalBeforeTax?: number | null;
+  itemsSubtotal?: number;
+  freightChargeAmount?: number;
+  otherChargesAmount?: number;
+  discountAmount?: number;
+  roundingAdjustment?: number;
+  taxableValue?: number;
+  hasAdjustments?: boolean;
+  taxAmount?: number | null;
+  cgstAmount?: number | null;
+  sgstAmount?: number | null;
+  igstAmount?: number | null;
   // The Order's own already-authoritative business number
   // ("OD/YYMM/SSSSS") — the same number the downloaded buyer-facing PO PDF
   // displays/names its file after. See
@@ -228,6 +241,34 @@ export default function OrderDetailOverlay({ order }: Props) {
             <SupplierSocialProof listingId={order.primaryListingId} supplierId={order.supplierId} acceptedContext />
           ) : null}
 
+          {order.status === "DELIVERED" ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 text-sm font-medium text-slate-800">
+              <div>
+                <p className="font-bold text-emerald-800">Order Completed & Delivered</p>
+                <p className="mt-0.5 text-xs text-slate-600">
+                  {order.invoice
+                    ? `Form GST INV-01 Tax Invoice (${order.invoice.invoiceNumber}) is available.`
+                    : "Your order has been completed. The Tax Invoice is being prepared."}
+                </p>
+              </div>
+              {order.invoice ? (
+                <div className="flex items-center gap-2">
+                  <Link href={`/orders/${order.id}/invoice`} className="posh-btn-ghost text-xs">
+                    View Invoice
+                  </Link>
+                  <a
+                    href={`/api/builder/orders/${order.id}/invoice/pdf`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="posh-btn text-xs"
+                  >
+                    Download PDF
+                  </a>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           {order.status === "CANCELLED" ? (
             <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-800">
               Supplier declined this enquiry. You can review the details and place a fresh order if needed.
@@ -280,14 +321,98 @@ export default function OrderDetailOverlay({ order }: Props) {
                   </div>
                 ))}
               </div>
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm">
-                {/* See `invoice` field's doc comment above for why this
-                    prefers the generated invoice's final total once one
-                    exists. */}
-                <span className="font-medium text-slate-600">{order.invoice ? "Total (Final Invoiced Amount)" : "Total"}</span>
-                <span className="font-bold text-slate-900">
-                  ₹{(order.invoice ? order.invoice.totalAmount : order.total).toLocaleString("en-IN")}
-                </span>
+              <div className="space-y-2 rounded-xl bg-slate-50 p-4 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Items Subtotal</span>
+                  <span className="font-semibold text-slate-900">
+                    ₹{(order.itemsSubtotal ?? order.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)).toLocaleString("en-IN")}
+                  </span>
+                </div>
+
+                {order.freightChargeAmount ? (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600">Freight Charges (excl. GST)</span>
+                    <span className="font-medium text-slate-800">
+                      ₹{order.freightChargeAmount.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                ) : null}
+
+                {order.otherChargesAmount ? (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600">Other Charges (excl. GST)</span>
+                    <span className="font-medium text-slate-800">
+                      ₹{order.otherChargesAmount.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                ) : null}
+
+                {order.discountAmount ? (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600">Discount</span>
+                    <span className="font-medium text-emerald-600">
+                      -₹{order.discountAmount.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                ) : null}
+
+                {order.hasAdjustments && order.taxableValue ? (
+                  <div className="flex items-center justify-between border-t border-slate-200 pt-1.5 text-xs font-semibold">
+                    <span className="text-slate-700">Total Taxable Value</span>
+                    <span className="text-slate-900">₹{order.taxableValue.toLocaleString("en-IN")}</span>
+                  </div>
+                ) : null}
+
+                {order.taxAmount !== null && order.taxAmount !== undefined ? (
+                  order.cgstAmount !== null && order.cgstAmount !== undefined && order.sgstAmount !== null && order.sgstAmount !== undefined ? (
+                    <>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600">CGST (9%)</span>
+                        <span className="font-medium text-slate-800">
+                          ₹{order.cgstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600">SGST (9%)</span>
+                        <span className="font-medium text-slate-800">
+                          ₹{order.sgstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </>
+                  ) : order.igstAmount !== null && order.igstAmount !== undefined ? (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600">IGST (18%)</span>
+                      <span className="font-medium text-slate-800">
+                        ₹{order.igstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600">Total GST (18%)</span>
+                      <span className="font-medium text-slate-800">
+                        ₹{order.taxAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  )
+                ) : null}
+
+                {order.roundingAdjustment ? (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600">Rounding</span>
+                    <span className="font-medium text-slate-800">
+                      {order.roundingAdjustment > 0 ? "+" : "-"}₹{Math.abs(order.roundingAdjustment).toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                ) : null}
+
+                <div className="flex items-center justify-between border-t border-slate-200 pt-2">
+                  <span className="font-bold text-slate-800">
+                    {order.invoice ? "Grand Total (Invoiced)" : "Total Amount"}
+                  </span>
+                  <span className="font-bold text-slate-900">
+                    ₹{(order.invoice ? order.invoice.totalAmount : order.total).toLocaleString("en-IN")}
+                  </span>
+                </div>
               </div>
             </section>
 
@@ -330,6 +455,29 @@ export default function OrderDetailOverlay({ order }: Props) {
                   </Link>
                 ) : null}
               </div>
+
+              {order.invoice ? (
+                <div className="panel space-y-3 p-5">
+                  <h2 className="text-lg font-semibold text-slate-800">Tax Invoice</h2>
+                  <p className="text-sm text-slate-500">{order.invoice.invoiceNumber}</p>
+                  <div className="flex gap-2">
+                    <Link
+                      href={`/orders/${order.id}/invoice`}
+                      className="posh-btn-ghost flex-1 text-center text-xs"
+                    >
+                      View Invoice
+                    </Link>
+                    <a
+                      href={`/api/builder/orders/${order.id}/invoice/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="posh-btn flex-1 text-center text-xs"
+                    >
+                      Download PDF
+                    </a>
+                  </div>
+                </div>
+              ) : null}
 
               {order.status === "DELIVERED" ? <OrderRatingForm orderId={order.id} /> : null}
             </aside>

@@ -21,6 +21,13 @@ export async function GET(request: Request) {
       phoneVerified: !!user.phoneVerifiedAt,
       whatsappNumber: user.whatsappNumber,
       whatsappEnabled: preference?.whatsappEnabled ?? true,
+      legalName: user.legalName,
+      tradeName: user.tradeName,
+      gstin: user.gstin,
+      billingAddress: user.billingAddress,
+      billingCity: user.billingCity,
+      billingState: user.billingState,
+      billingPincode: user.billingPincode,
     });
   } catch (error: any) {
     if (error?.message === "UNAUTHENTICATED") {
@@ -51,21 +58,49 @@ export async function POST(request: Request) {
     const whatsappNumber: string | null | undefined = body?.whatsappNumber ?? null;
     const whatsappEnabled: boolean = Boolean(body?.whatsappEnabled);
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        whatsappNumber: whatsappNumber?.trim() || null,
-      },
-    });
+    const updateData: Record<string, any> = {};
+    if ("whatsappNumber" in body) {
+      updateData.whatsappNumber = whatsappNumber?.trim() || null;
+    }
+    if ("legalName" in body) {
+      updateData.legalName = typeof body.legalName === "string" ? body.legalName.trim() || null : null;
+    }
+    if ("tradeName" in body) {
+      updateData.tradeName = typeof body.tradeName === "string" ? body.tradeName.trim() || null : null;
+    }
+    if ("gstin" in body) {
+      updateData.gstin = typeof body.gstin === "string" ? body.gstin.trim().toUpperCase() || null : null;
+    }
+    if ("billingAddress" in body) {
+      updateData.billingAddress = typeof body.billingAddress === "string" ? body.billingAddress.trim() || null : null;
+    }
+    if ("billingCity" in body) {
+      updateData.billingCity = typeof body.billingCity === "string" ? body.billingCity.trim() || null : null;
+    }
+    if ("billingState" in body) {
+      updateData.billingState = typeof body.billingState === "string" ? body.billingState.trim() || null : null;
+    }
+    if ("billingPincode" in body) {
+      updateData.billingPincode = typeof body.billingPincode === "string" ? body.billingPincode.trim() || null : null;
+    }
 
-    await prisma.notificationPreference.upsert({
-      where: { userId: user.id },
-      update: { whatsappEnabled },
-      create: {
-        userId: user.id,
-        whatsappEnabled,
-      },
-    });
+    if (Object.keys(updateData).length > 0) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: updateData,
+      });
+    }
+
+    if ("whatsappEnabled" in body) {
+      await prisma.notificationPreference.upsert({
+        where: { userId: user.id },
+        update: { whatsappEnabled },
+        create: {
+          userId: user.id,
+          whatsappEnabled,
+        },
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

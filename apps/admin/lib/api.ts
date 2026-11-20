@@ -1,7 +1,8 @@
 import "server-only";
 import { auth } from "@/auth";
+import { getAdminServerHeaders } from "@/lib/service-auth";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+const API_BASE_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
 
 type AdminSessionUser = {
   id?: string;
@@ -21,12 +22,11 @@ async function getAdminHeaders(extra?: HeadersInit): Promise<HeadersInit> {
     throw new Error("Not authenticated");
   }
 
+  const serverHeaders = getAdminServerHeaders(user);
+
   return {
     ...(extra || {}),
-    "X-User-Id": user.id || user.email,
-    "X-User-Email": user.email,
-    "X-User-Name": user.name || "Admin",
-    "X-User-Role": user.role || "ADMIN",
+    ...serverHeaders,
   };
 }
 
@@ -40,8 +40,6 @@ export async function adminApiGet<T>(path: string): Promise<T> {
   if (!response.ok) {
     throw new Error(`Admin API request failed: ${response.status}`);
   }
-
-
 
   return response.json() as Promise<T>;
 }

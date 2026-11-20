@@ -13,7 +13,103 @@ const requestCache: <T extends (...args: any[]) => any>(fn: T) => T =
 // Centralizing this avoids drift between the "full page" and "overlay" render
 // paths, which must show identical data per spec section 5A.
 
-const SUPPLIER_APP_URL = process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://supplier.buildohub.in";
+/**
+ * Validates service URLs against the target deployment environment to prevent
+ * cross-environment contamination (e.g. Preview calling Production, or Production calling Preview).
+ */
+export function validateServiceUrl(
+  url: string,
+  options?: { vercelEnv?: string; buildohubEnv?: string; nodeEnv?: string }
+): string {
+  const vercelEnv = options?.vercelEnv ?? process.env.VERCEL_ENV;
+  const buildohubEnv = options?.buildohubEnv ?? process.env.BUILDOHUB_ENV;
+  const nodeEnv = options?.nodeEnv ?? process.env.NODE_ENV;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid service URL format: ${url}`);
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Unsupported protocol for service URL: ${url}`);
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  const isProductionTarget =
+    (hostname.endsWith("matsrc.in") && !hostname.includes("preview") && !hostname.includes("uat")) ||
+    (hostname.endsWith("buildohub.in") && !hostname.includes("preview") && !hostname.includes("uat")) ||
+    hostname === "matsrc-supplier.vercel.app" ||
+    hostname === "matsrc-web.vercel.app" ||
+    hostname === "matsrc-admin.vercel.app";
+
+  const isPreviewTarget =
+    hostname.includes("-preview.") ||
+    hostname.includes("-git-") ||
+    hostname.includes("preview.vercel.app") ||
+    hostname.startsWith("preview.");
+
+  const isUatTarget =
+    hostname.includes("uat.") ||
+    hostname.includes("-uat.") ||
+    hostname.includes("-uat-") ||
+    hostname.startsWith("uat-");
+
+  // Preview environment checks
+  if (vercelEnv === "preview") {
+    if (isProductionTarget) {
+      throw new Error(`Preview environment cannot connect to Production service URL: ${url}`);
+    }
+    if (isUatTarget) {
+      throw new Error(`Preview environment cannot connect to UAT service URL: ${url}`);
+    }
+  }
+
+  // Production environment checks
+  if (vercelEnv === "production" || (nodeEnv === "production" && buildohubEnv === "production")) {
+    if (isPreviewTarget) {
+      throw new Error(`Production environment cannot connect to Preview service URL: ${url}`);
+    }
+    if (isUatTarget) {
+      throw new Error(`Production environment cannot connect to UAT service URL: ${url}`);
+    }
+  }
+
+  // UAT environment checks
+  if (buildohubEnv === "uat" && vercelEnv !== "preview") {
+    if (isProductionTarget) {
+      throw new Error(`UAT environment cannot connect to Production service URL: ${url}`);
+    }
+    if (isPreviewTarget) {
+      throw new Error(`UAT environment cannot connect to Preview service URL: ${url}`);
+    }
+  }
+
+  return url.replace(/\/$/, "");
+}
+
+export function getSupplierAppUrl(): string {
+  const configured =
+    process.env.SUPPLIER_APP_URL ||
+    process.env.NEXT_PUBLIC_SUPPLIER_APP_URL ||
+    process.env.SUPPLIER_PORTAL_URL;
+
+  if (configured) {
+    return validateServiceUrl(configured);
+  }
+
+  // Preview and Production environments must NEVER silently connect to hardcoded Production URLs
+  if (process.env.VERCEL_ENV === "preview" || process.env.NODE_ENV === "production") {
+    throw new Error(
+      "SUPPLIER_APP_URL must be configured in preview and production environments. Automatic production fallback is forbidden."
+    );
+  }
+
+  // Local development/test fallback only
+  return "http://localhost:3001";
+}
 
 export type PricingTier = {
   minQty: string;
@@ -76,33 +172,70 @@ export type ProductGroupResult = {
 };
 
 export const getSupplierListings = requestCache(async (): Promise<SupplierListing[]> => {
+  let supplierUrl: string;
   try {
-    const response = await fetch(`${SUPPLIER_APP_URL}/api/public/listings`, {
+    supplierUrl = getSupplierAppUrl();
+  } catch (err: any) {
+    console.error("[listings] Configuration error:", err.message);
+    return [];
+  }
+
+  try {
+    const response = await fetch(`${supplierUrl}/api/public/listings`, {
       next: { revalidate: 300, tags: ["catalog-listings"] },
       redirect: "manual",
     });
 
-    if (!response.ok) return [];
+    if (response.status === 302 || response.status === 307 || response.status === 308) {
+      console.warn(
+        `[listings] Supplier app returned HTTP ${response.status} redirect (likely Vercel SSO protection). URL: ${supplierUrl}/api/public/listings`
+      );
+      return [];
+    }
+
+    if (!response.ok) {
+      console.error(`[listings] Supplier app returned HTTP ${response.status}: ${response.statusText}`);
+      return [];
+    }
 
     const contentType = response.headers.get("content-type") ?? "";
-    if (!contentType.includes("application/json")) return [];
+    if (!contentType.includes("application/json")) {
+      console.error(`[listings] Expected JSON response but received ${contentType}`);
+      return [];
+    }
 
     return response.json() as Promise<SupplierListing[]>;
-  } catch {
+  } catch (err: any) {
+    console.error("[listings] Error fetching supplier listings:", err.message || err);
     return [];
   }
 });
 
 export const getSupplierProductGroup = requestCache(async (slug: string): Promise<ProductGroupResult | null> => {
   let shouldFallback = false;
+  let supplierUrl: string;
   try {
-    const response = await fetch(`${SUPPLIER_APP_URL}/api/public/listings/${encodeURIComponent(slug)}`, {
+    supplierUrl = getSupplierAppUrl();
+  } catch (err: any) {
+    console.error("[listings] Configuration error for product group:", err.message);
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${supplierUrl}/api/public/listings/${encodeURIComponent(slug)}`, {
       next: { revalidate: 300, tags: ["catalog-listings", `product-${slug}`] },
       redirect: "manual",
     });
 
     // Genuine 404: product does not exist. Return null immediately without expensive full-catalogue fallback.
     if (response.status === 404) {
+      return null;
+    }
+
+    if (response.status === 302 || response.status === 307 || response.status === 308) {
+      console.warn(
+        `[listings] Supplier app returned HTTP ${response.status} redirect (likely Vercel SSO protection) for product slug: ${slug}`
+      );
       return null;
     }
 
@@ -116,11 +249,13 @@ export const getSupplierProductGroup = requestCache(async (slug: string): Promis
 
     // Only 5xx server errors warrant fallback to cached full catalogue
     if (response.status >= 500) {
+      console.warn(`[listings] Supplier app returned HTTP ${response.status} for product ${slug}, attempting fallback to catalogue`);
       shouldFallback = true;
     } else {
       return null;
     }
-  } catch {
+  } catch (err: any) {
+    console.error(`[listings] Network error for product ${slug}:`, err.message || err);
     // Network failures or offline errors may attempt fallback to cached full catalogue
     shouldFallback = true;
   }

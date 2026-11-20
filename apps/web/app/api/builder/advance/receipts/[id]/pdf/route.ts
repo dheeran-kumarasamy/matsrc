@@ -22,6 +22,8 @@ type ReceiptPdfData = {
   buyerName: string | null;
   buyerEmail: string | null;
   buyerPhone: string | null;
+  buyerGstin?: string | null;
+  buyerAddress?: string | null;
   advancePaymentReference: string | null;
 };
 
@@ -65,6 +67,12 @@ function renderReceiptPdf(receipt: ReceiptPdfData): Promise<Buffer> {
     doc.fontSize(12).text("Buyer Details", { underline: true });
     doc.moveDown(0.3);
     doc.fontSize(10).text(`Name: ${receipt.buyerName ?? "-"}`);
+    if (receipt.buyerGstin) {
+      doc.text(`GSTIN: ${receipt.buyerGstin}`);
+    }
+    if (receipt.buyerAddress) {
+      doc.text(`Address: ${receipt.buyerAddress}`);
+    }
     doc.text(`Email: ${receipt.buyerEmail ?? "-"}`);
     doc.text(`Phone: ${receipt.buyerPhone ?? "-"}`);
 
@@ -122,6 +130,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: "Receipt not found" }, { status: 404 });
     }
 
+    const buyerAddress = user.billingAddress
+      ? [user.billingAddress, [user.billingCity, user.billingState].filter(Boolean).join(", "), user.billingPincode].filter(Boolean).join(", ")
+      : null;
+
     const buffer = await renderReceiptPdf({
       receiptNumber: receipt.receiptNumber,
       issuedAt: receipt.issuedAt,
@@ -130,9 +142,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
       currency: receipt.currency,
       paymentMethod: receipt.paymentMethod,
       paymentReferenceNo: receipt.paymentReferenceNo,
-      buyerName: receipt.buyerName,
+      buyerName: user.legalName || receipt.buyerName,
       buyerEmail: receipt.buyerEmail,
       buyerPhone: receipt.buyerPhone,
+      buyerGstin: user.gstin ?? null,
+      buyerAddress,
       advancePaymentReference: receipt.advancePayment?.referenceNumber ?? null,
     });
 

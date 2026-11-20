@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { builderApiGet } from "@/lib/api";
+import ProfileNavOptions from "@/components/profile/ProfileNavOptions";
 
 type Dispute = {
   id: string;
@@ -35,6 +36,7 @@ export default async function DisputesPage() {
 
   return (
     <div className="posh-body space-y-5">
+      <ProfileNavOptions />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="posh-eyebrow">Resolution desk</p>

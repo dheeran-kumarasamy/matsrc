@@ -230,17 +230,19 @@ export function renderPoPdfContent(doc: PDFKit.PDFDocument, po: any, mode: PoDoc
     [po.supplier?.email, po.supplier?.phone].filter(Boolean).join(" \u00b7 ") || null,
   ].filter(Boolean) as string[];
 
-  // The real customer/builder has no registered-address or GSTIN fields in
-  // the schema today (see User model) — falls back to the order's own
-  // deliverTo/ship-to address (the closest authoritative address on file)
-  // and an explicit "Not configured" GSTIN label, mirroring BUILDOHUB_
-  // COMPANY's own documented fallback for the same genuine data gap,
-  // rather than fabricating a registered address.
-  const builderAddress = po.deliverTo ? addressLines(po.deliverTo) : null;
+  // The real customer/builder registered billing address and GSTIN:
+  // Reads from the builder's profile (legalName, billingAddress, gstin),
+  // falling back to the deliverTo site address if not configured.
+  const builderBillingAddress = po.builder?.billingAddress
+    ? [po.builder.billingAddress, [po.builder.billingCity, po.builder.billingState].filter(Boolean).join(", "), po.builder.billingPincode].filter(Boolean).join("\n")
+    : (po.deliverTo ? addressLines(po.deliverTo) : null);
+  const builderGstin = po.builder?.gstin ?? po.deliverTo?.gstin ?? null;
+  const builderDisplayName = po.builder?.legalName || po.builder?.name || "Customer";
+
   const builderBlock = [
-    po.builder?.name ?? "Customer",
-    builderAddress || "Registered address: Not configured",
-    po.deliverTo?.gstin ? `GSTIN: ${po.deliverTo.gstin}` : "GSTIN: Not configured",
+    builderDisplayName,
+    builderBillingAddress || "Registered address: Not configured",
+    builderGstin ? `GSTIN: ${builderGstin}` : "GSTIN: Not configured",
     [po.builder?.email, po.builder?.phone].filter(Boolean).join(" \u00b7 ") || null,
   ].filter(Boolean) as string[];
 

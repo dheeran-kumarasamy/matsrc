@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { builderApiGet, builderApiPost } from "@/lib/api";
@@ -84,6 +84,8 @@ export default function CheckoutPage() {
   const [optInError, setOptInError] = useState<string | null>(null);
   const [optInSuccessId, setOptInSuccessId] = useState<string | null>(null);
   const [siteId, setSiteId] = useState<string>("");
+  const isSubmittingRef = useRef(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -162,6 +164,9 @@ export default function CheckoutPage() {
   }
 
   async function handleSubmitEnquiry() {
+    // P0: Immediate synchronous submission lock to prevent double-click race conditions
+    if (isSubmittingRef.current || loading) return;
+
     const remainingItems = cart.items.filter((item) => !poolingItemIds.has(item.id));
     if (!remainingItems.length) {
       setError("Your enquiry basket is empty.");
@@ -181,25 +186,42 @@ export default function CheckoutPage() {
       return;
     }
 
+    isSubmittingRef.current = true;
     setLoading(true);
-
     setError(null);
+
+    // P0: Reuse existing key on retry, or generate a fresh UUID for a new attempt
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `chk-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    }
+    const idempotencyKey = idempotencyKeyRef.current;
+
     try {
       const listingIds = Array.from(new Set(remainingItems.map((item) => item.productId)));
       const response = await builderApiPost<{ orders: Array<{ enquiryId?: string; id: string }> }>("/orders/checkout", {
         deliveryDate: deliveryDate || undefined,
         siteId,
+        idempotencyKey,
       });
 
-      await Promise.allSettled(listingIds.map((listingId) => recordInterestEvent(listingId, "ORDER_PLACED")));
+      // Clear the idempotency key only after confirmed successful checkout
+      idempotencyKeyRef.current = null;
+
+      // Fire-and-forget tracking; never blocks UX or slows down redirect to confirmation
+      void Promise.allSettled(listingIds.map((listingId) => recordInterestEvent(listingId, "ORDER_PLACED")));
 
       // Confirmation message is shown only after this backend call has
       // resolved successfully — never merely on button click. See
       // lib/order-confirmation.ts buildConfirmedOrdersUrl().
       router.push(buildConfirmedOrdersUrl(response));
     } catch {
-      setError("Unable to submit enquiry right now.");
+      // Preserve idempotencyKeyRef.current on error so user retry reuses the same key
+      setError("Unable to submit enquiry right now. Please try again.");
     } finally {
+      isSubmittingRef.current = false;
       setLoading(false);
     }
   }

@@ -18,21 +18,69 @@
 import { createHmac } from "crypto";
 
 function detectEnvironment(env: NodeJS.ProcessEnv): string {
-  const candidates = [env.DATABASE_ENV, env.BUILDOHUB_ENV, env.VERCEL_ENV, env.NODE_ENV];
-  for (const raw of candidates) {
-    if (!raw) continue;
-    const value = String(raw).toLowerCase();
-    if (value === "production") return "production";
-    if (value === "uat") return "uat";
-    if (value === "preview" || value === "staging") return "staging";
-    if (value === "test") return "test";
-    if (value === "development") return "development";
+  // Guard: Vercel preview deployments are strictly staging/preview, NEVER uat or production
+  if (env.VERCEL_ENV === "preview") {
+    return "staging";
   }
+
+  // Guard: Vercel production deployments are strictly production
+  if (env.VERCEL_ENV === "production") {
+    return "production";
+  }
+
+  // Explicit BUILDOHUB_ENV takes precedence for defining application runtime identity
+  const buildohubEnv = (env.BUILDOHUB_ENV || "").toLowerCase();
+  if (buildohubEnv === "uat") {
+    // Conflicting configuration check: if DATABASE_ENV is explicitly set to something other than uat,
+    // fail closed to development so UAT payment operations are denied.
+    if (env.DATABASE_ENV && env.DATABASE_ENV.toLowerCase() !== "uat") {
+      return "development";
+    }
+    return "uat";
+  }
+
+  if (buildohubEnv === "production") return "production";
+  if (buildohubEnv === "staging") return "staging";
+  if (buildohubEnv === "test") return "test";
+  if (buildohubEnv === "development") return "development";
+
+  // Fallback to NODE_ENV
+  const nodeEnv = (env.NODE_ENV || "").toLowerCase();
+  if (nodeEnv === "production") return "production";
+  if (nodeEnv === "test") return "test";
+
   return "development";
 }
 
 export function isIciciUatAvailable(env: NodeJS.ProcessEnv = process.env): boolean {
-  return detectEnvironment(env) === "uat" && String(env.ICICI_PG_ENABLED || "").toLowerCase() === "true";
+  // 1. Database environment variables must NEVER independently authorise payment operations.
+  const buildohubEnv = (env.BUILDOHUB_ENV || "").toLowerCase();
+  if (buildohubEnv !== "uat") {
+    return false;
+  }
+
+  // 2. Preview deployments must NOT enable ICICI operations
+  if (env.VERCEL_ENV === "preview") {
+    return false;
+  }
+
+  // 3. Production deployments must NOT enable ICICI operations
+  if (env.VERCEL_ENV === "production") {
+    return false;
+  }
+
+  // 4. Conflicting configuration check (e.g. DATABASE_ENV !== "uat")
+  if (env.DATABASE_ENV && env.DATABASE_ENV.toLowerCase() !== "uat") {
+    return false;
+  }
+
+  // 5. Environment detection check
+  if (detectEnvironment(env) !== "uat") {
+    return false;
+  }
+
+  // 6. Explicit master switch
+  return String(env.ICICI_PG_ENABLED || "").toLowerCase() === "true";
 }
 
 export type IciciUatConfig = {
@@ -42,11 +90,15 @@ export type IciciUatConfig = {
   secretKey: string;
 };
 
+const DEFAULT_UAT_MERCHANT_ID = "100000000007164";
+const DEFAULT_UAT_AGGREGATOR_ID = "A100000000007164";
+const DEFAULT_UAT_SECRET_KEY = "db06cca0-838b-4e01-8b20-6ac446ffb6bd";
+
 export function getIciciConfig(env: NodeJS.ProcessEnv = process.env): IciciUatConfig | null {
   if (!isIciciUatAvailable(env)) return null;
-  const merchantId = env.ICICI_PG_MERCHANT_ID;
-  const aggregatorId = env.ICICI_PG_AGGREGATOR_ID;
-  const secretKey = env.ICICI_PG_SECRET_KEY;
+  const merchantId = env.ICICI_PG_MERCHANT_ID || DEFAULT_UAT_MERCHANT_ID;
+  const aggregatorId = env.ICICI_PG_AGGREGATOR_ID || DEFAULT_UAT_AGGREGATOR_ID;
+  const secretKey = env.ICICI_PG_SECRET_KEY || DEFAULT_UAT_SECRET_KEY;
   if (!merchantId || !aggregatorId || !secretKey) return null;
   const baseUrl = env.ICICI_PG_BASE_URL || "https://pgpayuat.icicibank.com";
   if (!baseUrl.includes("pgpayuat.icicibank.com")) return null;
@@ -91,3 +143,6 @@ export async function requestRefund(
     return { ok: false, error: error instanceof Error ? error.message : "Unknown network error calling ICICI REFUND command" };
   }
 }
+
+// Exported for tests only
+export { detectEnvironment as __detectEnvironmentForTests };

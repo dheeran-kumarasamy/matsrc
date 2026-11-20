@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { builderApiGet } from "@/lib/api";
 import PurchaseOrderApprovalCard from "@/components/orders/PurchaseOrderApprovalCard";
+import ProfileNavOptions from "@/components/profile/ProfileNavOptions";
 
 type PurchaseOrderDetail = {
   id: string;
@@ -67,6 +68,7 @@ export default async function PurchaseOrderDetailPage({ params }: { params: { id
 
   return (
     <div className="posh-body mx-auto max-w-4xl space-y-4">
+      <ProfileNavOptions />
       <p className="posh-eyebrow">Purchase Orders</p>
       <PurchaseOrderApprovalCard po={po} />
     </div>

@@ -21,6 +21,12 @@ type PendingPayment = {
   screenshotFileName: string;
   submittedAt: string;
   screenshotUrl: string;
+  attachments?: Array<{
+    id: string;
+    fileName: string;
+    fileSize: number;
+    screenshotUrl: string;
+  }>;
   // Admin visibility into Buildohub Advance Balance usage (spec §33) — 0/null
   // when this order never used the advance balance.
   advanceReserved?: number;
@@ -106,14 +112,28 @@ export function PaymentVerificationQueue({ items }: { items: PendingPayment[] })
               ) : null}
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <a
-                  href={item.screenshotUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
-                >
-                  View Payment Screenshot
-                </a>
+                {item.attachments && item.attachments.length > 1 ? (
+                  item.attachments.map((att, idx) => (
+                    <a
+                      key={att.id}
+                      href={att.screenshotUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
+                    >
+                      View Screenshot #{idx + 1}
+                    </a>
+                  ))
+                ) : (
+                  <a
+                    href={item.screenshotUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
+                  >
+                    View Payment Screenshot
+                  </a>
+                )}
                 {/* Navigates to the Admin RFQ detail page
                     (app/(admin)/orders/[orderId]/page.tsx) using the real
                     Order.id (item.orderId), never the displayed enquiryId

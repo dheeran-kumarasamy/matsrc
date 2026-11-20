@@ -1,4 +1,4 @@
-import { IsDateString, IsInt, IsNotEmpty, IsString, Min } from "class-validator";
+import { IsDateString, IsNotEmpty, IsNumber, IsString, Min } from "class-validator";
 
 export class OptInDto {
   @IsString()
@@ -16,7 +16,7 @@ export class OptInDto {
   @IsDateString()
   requestedDeliveryDate!: string;
 
-  @IsInt()
-  @Min(1)
+  @IsNumber()
+  @Min(0.0001)
   quantity!: number;
 }

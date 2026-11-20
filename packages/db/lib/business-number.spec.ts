@@ -7,6 +7,8 @@ import {
   generateInvoiceNumber,
   generateAdvancePaymentNumber,
   validateBusinessNumber,
+  allocateBusinessNumbers,
+  allocateEnquiryNumbers,
 } from "./business-number";
 
 function createFakeTx() {
@@ -202,5 +204,61 @@ describe("Enquiry -> Order -> Invoice Conversions", () => {
     expect(eqNumber).toBe("EQ/2601/00001");
     expect(odNumber).toBe("OD/2601/00001");
     expect(inNumber).toBe("IN/2601/00001");
+  });
+});
+
+describe("Batch Enquiry Number Allocation (P0 Optimization)", () => {
+  it("allocates N sequential enquiry numbers in a single atomic increment", async () => {
+    const { tx } = createFakeTx();
+    const date = new Date(2026, 3, 1);
+
+    const allocated = await allocateEnquiryNumbers(tx, 3, date);
+    expect(allocated).toEqual([
+      "EQ/2601/00001",
+      "EQ/2601/00002",
+      "EQ/2601/00003",
+    ]);
+
+    // Subsequent single allocation picks up right after the allocated batch
+    const nextSingle = await generateEnquiryNumber(tx as any, date);
+    expect(nextSingle).toBe("EQ/2601/00004");
+  });
+
+  it("returns an empty array when count is zero or negative", async () => {
+    const { tx } = createFakeTx();
+    const date = new Date(2026, 3, 1);
+
+    const zero = await allocateEnquiryNumbers(tx, 0, date);
+    const negative = await allocateEnquiryNumbers(tx, -5, date);
+
+    expect(zero).toEqual([]);
+    expect(negative).toEqual([]);
+  });
+
+  it("handles concurrent checkout allocations without overlap or duplicate numbers", async () => {
+    const { tx } = createFakeTx();
+    const date = new Date(2026, 3, 1);
+
+    // Simulate 5 simultaneous checkouts with varying supplier group counts
+    const counts = [2, 1, 3, 2, 1]; // Total = 9
+    const results = await Promise.all(
+      counts.map((count) => allocateEnquiryNumbers(tx, count, date))
+    );
+
+    const allAllocated = results.flat();
+    expect(allAllocated).toHaveLength(9);
+
+    // Verify all 9 enquiry numbers are completely unique
+    const uniqueNumbers = new Set(allAllocated);
+    expect(uniqueNumbers.size).toBe(9);
+
+    // Verify every number matches the EQ business number specification
+    allAllocated.forEach((num) => {
+      expect(validateBusinessNumber("EQ", num)).toBe(true);
+    });
+
+    // Verify range spans exactly 00001 through 00009
+    expect(allAllocated[0]).toBe("EQ/2601/00001");
+    expect(allAllocated[allAllocated.length - 1]).toBe("EQ/2601/00009");
   });
 });

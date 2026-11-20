@@ -45,6 +45,10 @@ export class SupplierInvoiceLineReviewDto {
   @IsNumber()
   @Min(0)
   taxRatePercent?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  applyMarkup?: boolean;
 }
 
 export class ReviewSupplierInvoiceLineItemsDto {

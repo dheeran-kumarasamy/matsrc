@@ -144,6 +144,10 @@ export type SupplierRfqReceivedWhatsAppMode = "live" | "dry-run" | "off";
  * var.
  */
 export function getSupplierRfqReceivedWhatsAppMode(): SupplierRfqReceivedWhatsAppMode {
+  // Preview deployments must NEVER send live WhatsApp messages
+  if (process.env.VERCEL_ENV === "preview") {
+    return "dry-run";
+  }
   const raw = (process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE || "dry-run").toLowerCase();
   if (raw === "live" || raw === "off") return raw;
   return "dry-run";

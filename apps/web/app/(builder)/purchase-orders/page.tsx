@@ -2,6 +2,7 @@ import Link from "next/link";
 import { builderApiGet } from "@/lib/api";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
+import ProfileNavOptions from "@/components/profile/ProfileNavOptions";
 
 type PurchaseOrderListItem = {
   id: string;
@@ -68,6 +69,7 @@ export default async function PurchaseOrdersPage({
 
   return (
     <div className="posh-body space-y-5">
+      <ProfileNavOptions />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="posh-eyebrow">Procurement desk</p>

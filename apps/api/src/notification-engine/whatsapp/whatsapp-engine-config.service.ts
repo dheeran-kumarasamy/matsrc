@@ -34,6 +34,11 @@ export class WhatsAppEngineConfigService {
    * assumption/deviation in the deliverables report.
    */
   getMode(): WhatsAppEngineMode {
+    // Non-production isolation guard: preview environment must never execute live Meta sends
+    if (process.env.VERCEL_ENV === "preview") {
+      return "dry-run";
+    }
+
     const raw = (process.env.NOTIFICATION_ENGINE_WHATSAPP_MODE || "dry-run").toLowerCase();
     if (raw === "live" || raw === "off") return raw;
     return "dry-run";

@@ -97,7 +97,7 @@ describe("aggregateSupplierInvoiceTotals", () => {
     expect(totals.totalAmount).toBe(2360);
   });
 
-  it("adds freight/other charges, subtracts discount, and applies rounding last", () => {
+  it("adds freight/other charges (with 18% GST), subtracts discount, and applies rounding last", () => {
     const lines = [resolveSupplierInvoiceLine({ originalQuantity: 10, originalUnitPrice: 100, actualQuantity: 10, taxRatePercent: 18 })];
 
     const totals = aggregateSupplierInvoiceTotals(lines, {
@@ -107,10 +107,12 @@ describe("aggregateSupplierInvoiceTotals", () => {
       roundingAdjustment: -0.5,
     });
 
-    // taxableValue = 1000 + 50 + 10 - 20 = 1040; tax stays line-derived = 180
+    // taxableValue = 1000 + 50 + 10 - 20 = 1040
+    // Net adjustment = 50 + 10 - 20 = 40; GST on adjustments @ 18% = 7.20
+    // taxAmount = 180 + 7.20 = 187.20
     expect(totals.taxableValue).toBe(1040);
-    expect(totals.taxAmount).toBe(180);
-    // total = 1040 + 180 - 0.5
-    expect(totals.totalAmount).toBe(1219.5);
+    expect(totals.taxAmount).toBe(187.2);
+    // total = 1040 + 187.2 - 0.5 = 1226.7
+    expect(totals.totalAmount).toBe(1226.7);
   });
 });

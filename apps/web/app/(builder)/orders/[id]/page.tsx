@@ -53,6 +53,19 @@ type OrderDetail = {
   // Order.finalPayableAmount/totalAmount) remains the pre-invoice estimate
   // and is never itself mutated by invoice generation.
   invoice?: { id: string; invoiceNumber: string; totalAmount: number } | null;
+  gstInclusive?: boolean;
+  subtotalBeforeTax?: number | null;
+  itemsSubtotal?: number;
+  freightChargeAmount?: number;
+  otherChargesAmount?: number;
+  discountAmount?: number;
+  roundingAdjustment?: number;
+  taxableValue?: number;
+  hasAdjustments?: boolean;
+  taxAmount?: number | null;
+  cgstAmount?: number | null;
+  sgstAmount?: number | null;
+  igstAmount?: number | null;
   // The Order's own already-authoritative business number
   // ("OD/YYMM/SSSSS") — the same number the downloaded buyer-facing PO PDF
   // displays/names its file after. See
@@ -184,6 +197,37 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         />
       ) : null}
 
+      {order.status === "DELIVERED" ? (
+        <div
+          className="rounded-2xl border p-4 text-sm font-medium flex flex-wrap items-center justify-between gap-3"
+          style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.06)", color: "var(--posh-fg)" }}
+        >
+          <div>
+            <p className="font-bold text-emerald-700 dark:text-emerald-400">Order Completed & Delivered</p>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+              {order.invoice
+                ? `Official Form GST INV-01 Tax Invoice (${order.invoice.invoiceNumber}) is available.`
+                : "Your order has been completed. The Tax Invoice is being prepared."}
+            </p>
+          </div>
+          {order.invoice ? (
+            <div className="flex items-center gap-2">
+              <Link href={`/orders/${order.id}/invoice`} className="posh-btn-ghost text-xs">
+                View Tax Invoice
+              </Link>
+              <a
+                href={`/api/builder/orders/${order.id}/invoice/pdf`}
+                target="_blank"
+                rel="noreferrer"
+                className="posh-btn text-xs"
+              >
+                Download PDF
+              </a>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {order.status === "CANCELLED" ? (
         <div
           className="rounded-2xl border px-4 py-3 text-sm font-bold"
@@ -234,21 +278,106 @@ export default async function OrderDetailPage({ params }: { params: { id: string
               </div>
             ))}
           </div>
-          <div
-            className="flex items-center justify-between rounded-xl border px-4 py-3 text-sm"
-            style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)" }}
-          >
-            {/* Once an Admin has generated the buyer invoice, its own
-                totalAmount (which reflects any freight/other charges/
-                discount/rounding confirmed on the Supplier Invoice) is the
-                FINAL payable figure and is shown here instead of the
-                earlier, pre-invoice `order.total` estimate — see the
-                `invoice` field's doc comment above for why these two can
-                legitimately differ. */}
-            <span className="posh-label">{order.invoice ? "Total (Final Invoiced Amount)" : "Total"}</span>
-            <span className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>
-              ₹{(order.invoice ? order.invoice.totalAmount : order.total).toLocaleString("en-IN")}
-            </span>
+          <div className="space-y-2 rounded-xl border p-4 text-sm" style={{ borderColor: "var(--posh-border)", background: "rgba(var(--posh-wash-rgb),0.04)" }}>
+            <div className="flex items-center justify-between">
+              <span className="posh-label">Items Subtotal</span>
+              <span className="font-semibold" style={{ color: "var(--posh-fg)" }}>
+                ₹{(order.itemsSubtotal ?? order.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)).toLocaleString("en-IN")}
+              </span>
+            </div>
+
+            {order.freightChargeAmount ? (
+              <div className="flex items-center justify-between text-xs">
+                <span className="posh-label">Freight Charges (excl. GST)</span>
+                <span className="font-medium" style={{ color: "var(--posh-fg)" }}>
+                  ₹{order.freightChargeAmount.toLocaleString("en-IN")}
+                </span>
+              </div>
+            ) : null}
+
+            {order.otherChargesAmount ? (
+              <div className="flex items-center justify-between text-xs">
+                <span className="posh-label">Other Charges (excl. GST)</span>
+                <span className="font-medium" style={{ color: "var(--posh-fg)" }}>
+                  ₹{order.otherChargesAmount.toLocaleString("en-IN")}
+                </span>
+              </div>
+            ) : null}
+
+            {order.discountAmount ? (
+              <div className="flex items-center justify-between text-xs">
+                <span className="posh-label">Discount</span>
+                <span className="font-medium text-emerald-600">
+                  -₹{order.discountAmount.toLocaleString("en-IN")}
+                </span>
+              </div>
+            ) : null}
+
+            {order.hasAdjustments && order.taxableValue ? (
+              <div className="flex items-center justify-between border-t pt-1.5 text-xs font-semibold" style={{ borderColor: "var(--posh-border)" }}>
+                <span className="posh-label">Total Taxable Value</span>
+                <span style={{ color: "var(--posh-fg)" }}>₹{order.taxableValue.toLocaleString("en-IN")}</span>
+              </div>
+            ) : null}
+
+            {order.taxAmount !== null && order.taxAmount !== undefined ? (
+              order.cgstAmount !== null && order.cgstAmount !== undefined && order.sgstAmount !== null && order.sgstAmount !== undefined ? (
+                <>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="posh-label">CGST (9%)</span>
+                    <span className="font-medium" style={{ color: "var(--posh-fg)" }}>
+                      ₹{order.cgstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="posh-label">SGST (9%)</span>
+                    <span className="font-medium" style={{ color: "var(--posh-fg)" }}>
+                      ₹{order.sgstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </>
+              ) : order.igstAmount !== null && order.igstAmount !== undefined ? (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="posh-label">IGST (18%)</span>
+                  <span className="font-medium" style={{ color: "var(--posh-fg)" }}>
+                    ₹{order.igstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="posh-label">Total GST (18%)</span>
+                  <span className="font-medium" style={{ color: "var(--posh-fg)" }}>
+                    ₹{order.taxAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )
+            ) : null}
+
+            {order.roundingAdjustment ? (
+              <div className="flex items-center justify-between text-xs">
+                <span className="posh-label">Rounding</span>
+                <span className="font-medium" style={{ color: "var(--posh-fg)" }}>
+                  {order.roundingAdjustment > 0 ? "+" : "-"}₹{Math.abs(order.roundingAdjustment).toLocaleString("en-IN")}
+                </span>
+              </div>
+            ) : null}
+
+            <div
+              className="flex items-center justify-between border-t pt-2"
+              style={{ borderColor: "var(--posh-border)" }}
+            >
+              {/* Once an Admin has generated the buyer invoice, its own
+                  totalAmount (which reflects any freight/other charges/
+                  discount/rounding confirmed on the Supplier Invoice) is the
+                  FINAL payable figure and is shown here instead of the
+                  earlier, pre-invoice `order.total` estimate. */}
+              <span className="font-bold" style={{ color: "var(--posh-fg)" }}>
+                {order.invoice ? "Grand Total (Invoiced)" : "Total Amount"}
+              </span>
+              <span className="text-base font-bold" style={{ color: "var(--posh-fg)" }}>
+                ₹{(order.invoice ? order.invoice.totalAmount : order.total).toLocaleString("en-IN")}
+              </span>
+            </div>
           </div>
         </section>
 

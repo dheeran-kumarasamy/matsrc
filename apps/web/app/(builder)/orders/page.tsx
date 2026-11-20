@@ -26,6 +26,7 @@ type OrderItem = {
   paymentLink?: string;
   isAggregated?: boolean;
   aggregationPoolId?: string | null;
+  invoice?: { id: string; invoiceNumber: string } | null;
 };
 
 
@@ -210,6 +211,11 @@ export default async function OrdersPage({
                 {order.paymentLinkAvailable && order.paymentLink ? (
                   <Link href={order.paymentLink} className="posh-status-strong">
                     Payment link enabled
+                  </Link>
+                ) : null}
+                {order.invoice ? (
+                  <Link href={`/orders/${order.id}/invoice`} className="posh-btn-ghost text-xs">
+                    Invoice
                   </Link>
                 ) : null}
                 <Link href={`/orders/${order.id}`} className="posh-link">

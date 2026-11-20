@@ -15,6 +15,13 @@ type ContactInfo = {
   phoneVerified: boolean;
   whatsappNumber: string | null;
   whatsappEnabled: boolean;
+  legalName?: string | null;
+  tradeName?: string | null;
+  gstin?: string | null;
+  billingAddress?: string | null;
+  billingCity?: string | null;
+  billingState?: string | null;
+  billingPincode?: string | null;
 };
 
 type PendingVerification = {
@@ -58,6 +65,17 @@ export default function BuilderProfilePage() {
   const [whatsappError, setWhatsappError] = useState("");
   const [whatsappSuccess, setWhatsappSuccess] = useState("");
 
+  const [legalName, setLegalName] = useState("");
+  const [tradeName, setTradeName] = useState("");
+  const [gstin, setGstin] = useState("");
+  const [billingAddress, setBillingAddress] = useState("");
+  const [billingCity, setBillingCity] = useState("");
+  const [billingState, setBillingState] = useState("");
+  const [billingPincode, setBillingPincode] = useState("");
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingError, setBillingError] = useState("");
+  const [billingSuccess, setBillingSuccess] = useState("");
+
   const [pending, setPending] = useState<PendingVerification | null>(null);
 
   useEffect(() => {
@@ -74,6 +92,13 @@ export default function BuilderProfilePage() {
       setPhoneInput(data.phone || "");
       setWhatsappNumber(data.whatsappNumber || "");
       setWhatsappEnabled(data.whatsappEnabled);
+      setLegalName(data.legalName || "");
+      setTradeName(data.tradeName || "");
+      setGstin(data.gstin || "");
+      setBillingAddress(data.billingAddress || "");
+      setBillingCity(data.billingCity || "");
+      setBillingState(data.billingState || "");
+      setBillingPincode(data.billingPincode || "");
     } catch {
       // Non-fatal — the page still renders with session-derived fallbacks below.
     }
@@ -353,6 +378,177 @@ export default function BuilderProfilePage() {
           className="posh-btn-solid w-full rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
         >
           {whatsappLoading ? "Updating..." : "Update WhatsApp Preferences"}
+        </button>
+      </form>
+
+      {/* Registered Billing Profile & GST Details for Invoicing */}
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBillingError("");
+          setBillingSuccess("");
+          setBillingLoading(true);
+
+          const trimmedGstin = gstin.trim().toUpperCase();
+          if (trimmedGstin) {
+            const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+            if (!gstinRegex.test(trimmedGstin)) {
+              setBillingError("Please enter a valid 15-digit GSTIN (e.g. 33AANCT3003A1Z0)");
+              setBillingLoading(false);
+              return;
+            }
+          }
+
+          try {
+            await builderApiPost("/update-contact", {
+              legalName: legalName.trim() || null,
+              tradeName: tradeName.trim() || null,
+              gstin: trimmedGstin || null,
+              billingAddress: billingAddress.trim() || null,
+              billingCity: billingCity.trim() || null,
+              billingState: billingState.trim() || null,
+              billingPincode: billingPincode.trim() || null,
+            });
+            setBillingSuccess("Billing profile and GST details updated successfully!");
+          } catch (err: any) {
+            setBillingError(err?.message || "Failed to save billing profile");
+          } finally {
+            setBillingLoading(false);
+          }
+        }}
+        className="space-y-4 border-t border-gray-100 pt-6"
+      >
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">Billing Profile & GST Details</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            These details will appear under the Bill To (Recipient) section on your Tax Invoices, Purchase Orders, and Advance Receipts.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="billing-legalName" className="block text-xs font-medium text-gray-700 mb-1">
+              Legal Entity / Company Name
+            </label>
+            <input
+              id="billing-legalName"
+              type="text"
+              placeholder="e.g. Acme Constructions Pvt Ltd"
+              value={legalName}
+              onChange={(e) => setLegalName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="billing-tradeName" className="block text-xs font-medium text-gray-700 mb-1">
+              Trade / Brand Name (Optional)
+            </label>
+            <input
+              id="billing-tradeName"
+              type="text"
+              placeholder="e.g. Acme Developers"
+              value={tradeName}
+              onChange={(e) => setTradeName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="billing-gstin" className="block text-xs font-medium text-gray-700 mb-1">
+            GSTIN (Goods and Services Tax Identification Number)
+          </label>
+          <input
+            id="billing-gstin"
+            type="text"
+            placeholder="e.g. 33AANCT3003A1Z0"
+            maxLength={15}
+            value={gstin}
+            onChange={(e) => setGstin(e.target.value.toUpperCase())}
+            className="w-full uppercase font-mono tracking-wider border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">
+            Leave blank if not registered for GST. If provided, GST will be billed under B2B with input tax credit eligibility.
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="billing-address" className="block text-xs font-medium text-gray-700 mb-1">
+            Registered Office Address
+          </label>
+          <textarea
+            id="billing-address"
+            rows={2}
+            placeholder="Door No, Street Name, Landmark / Industrial Estate"
+            value={billingAddress}
+            onChange={(e) => setBillingAddress(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <label htmlFor="billing-city" className="block text-xs font-medium text-gray-700 mb-1">
+              City
+            </label>
+            <input
+              id="billing-city"
+              type="text"
+              placeholder="e.g. Chennai"
+              value={billingCity}
+              onChange={(e) => setBillingCity(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="billing-state" className="block text-xs font-medium text-gray-700 mb-1">
+              State
+            </label>
+            <input
+              id="billing-state"
+              type="text"
+              placeholder="e.g. Tamil Nadu"
+              value={billingState}
+              onChange={(e) => setBillingState(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="billing-pincode" className="block text-xs font-medium text-gray-700 mb-1">
+              PIN Code
+            </label>
+            <input
+              id="billing-pincode"
+              type="text"
+              maxLength={6}
+              placeholder="600001"
+              value={billingPincode}
+              onChange={(e) => setBillingPincode(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+        </div>
+
+        {billingError && (
+          <div className="bg-red-50 border border-red-100 rounded-lg p-3">
+            <p className="text-sm text-red-700">{billingError}</p>
+          </div>
+        )}
+        {billingSuccess && (
+          <div className="bg-green-50 border border-green-100 rounded-lg p-3">
+            <p className="text-sm text-green-700">{billingSuccess}</p>
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={billingLoading}
+          className="posh-btn-solid w-full rounded-lg py-2.5 text-sm font-medium disabled:opacity-50"
+        >
+          {billingLoading ? "Saving..." : "Save Billing & GST Profile"}
         </button>
       </form>
 

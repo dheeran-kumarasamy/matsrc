@@ -107,7 +107,7 @@ export function renderRfqPdfContent(doc: PDFKit.PDFDocument, data: RfqPdfData): 
   // Identity privacy: neither party's real name/contact details are ever
   // part of this document. "Requested By" always identifies BuildOhub
   // itself (the platform issuing the RFQ on the builder's behalf), never
-  // the requesting builder's or site's own identity.
+  // the requesting builder's personal identity or construction site name.
   const colWidth = contentWidth / 2 - 10;
   const colRightX = marginLeft + colWidth + 20;
 

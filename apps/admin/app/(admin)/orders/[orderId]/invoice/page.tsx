@@ -9,9 +9,25 @@ type InvoiceDetail = {
   invoiceNumber: string;
   invoiceDate: string;
   status: string;
+  documentType?: string;
+  supplyType?: string;
+  reverseCharge?: boolean;
+  placeOfSupplyStateCode?: string | null;
+  placeOfSupplyStateName?: string | null;
+  sellerStateCode?: string;
   orderId: string;
   enquiryId: string;
   builder: { id: string; name: string | null; email: string | null; phone: string | null } | null;
+  buyer?: {
+    legalName: string | null;
+    tradeName: string | null;
+    gstin: string | null;
+    addressLine: string | null;
+    city: string | null;
+    state: string | null;
+    pincode: string | null;
+    stateCode: string | null;
+  } | null;
   site: {
     id: string;
     name: string;
@@ -21,25 +37,60 @@ type InvoiceDetail = {
     pincode: string | null;
     gstin: string | null;
   } | null;
-  supplier: { id: string; companyName: string; gstin: string | null; email: string | null; phone: string | null } | null;
+  shipFrom?: { addressLine: string | null; city: string | null; state: string | null; pincode: string | null } | null;
+  shipTo?: { addressLine: string | null; city: string | null; state: string | null; pincode: string | null } | null;
+  supplier?: { id: string; companyName: string; gstin: string | null; email: string | null; phone: string | null } | null;
   lineItems: Array<{
     id: string;
+    slNo?: number;
     productName: string;
     description: string | null;
+    hsnCode?: string | null;
+    uqc?: string | null;
+    unit?: string | null;
     quantity: number;
     unitPrice: number;
+    taxableAmount?: number;
     taxRate: number | null;
+    cgstRate?: number | null;
+    cgstAmount?: number;
+    sgstRate?: number | null;
+    sgstAmount?: number;
+    igstRate?: number | null;
+    igstAmount?: number;
     taxAmount: number;
     subtotal: number;
     total: number;
+    supplierUnitPrice?: number | null;
+    markupPercent?: number | null;
+    markupAmount?: number | null;
   }>;
   subtotal: number;
+  freightChargeAmount: number;
+  otherChargesAmount: number;
+  discountAmount: number;
+  roundingAdjustment: number;
+  taxableValue: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  igstAmount?: number;
+  cessAmount?: number;
   taxAmount: number;
   totalAmount: number;
+  totalInWords?: string;
   currency: string;
   paymentStatus: string;
   amountPaid: number | null;
   amountDue: number | null;
+  bankDetails?: {
+    bankName: string;
+    accountName: string;
+    accountNumber: string;
+    accountType?: string;
+    ifscCode: string;
+    branch: string;
+    bankAddress?: string;
+  };
   generatedBy: { id: string; name: string | null; email: string | null } | null;
   generatedAt: string;
   // Buyer Invoice / Frozen Order Snapshot Reconciliation (Phase 5B) — null
@@ -66,11 +117,10 @@ type RatingDetail = {
   receipt: { fileName: string; mimeType: string | null; size: number | null; uploadedAt: string | null } | null;
 };
 
-// Admin invoice view — every Admin/Super Admin can view any invoice (no
-// per-order ownership scoping needed here, unlike the builder-facing
-// equivalent). Displayed data comes entirely from the stored Invoice/
-// InvoiceLineItem snapshot — never recomputed from live order/product
-// pricing (see InvoicesService.serialize).
+// Admin invoice view — Form GST INV-01 / E-Invoice compliant document view.
+// Every Admin/Super Admin can view any invoice. Displayed data comes entirely
+// from the stored Invoice/InvoiceLineItem snapshot — never recomputed from
+// live order/product pricing.
 export default async function AdminInvoiceViewPage({ params }: { params: { orderId: string } }) {
   await requireAdminAccess();
 
@@ -85,65 +135,91 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
     notFound();
   }
 
-  // Rating + optional receipt is independent of the invoice itself — an
-  // order may have no rating yet (builder hasn't submitted one), so a
-  // missing rating here is expected and not a page-level error. Never
-  // fetches raw receipt bytes server-side — only metadata, used to decide
-  // whether to render a View/Download Receipt link (see
-  // AdminRatingReceiptLink below, which hits the dedicated authenticated
-  // bytes-streaming proxy route directly from the browser).
   const rating = await adminApiGet<RatingDetail>(`/admin/ratings/${params.orderId}`).catch(() => null);
 
+  const sellerStateCode = invoice.sellerStateCode ?? "33";
+  const posCode = invoice.placeOfSupplyStateCode ?? sellerStateCode;
+  const posName = invoice.placeOfSupplyStateName ?? "Tamil Nadu";
+  const isIntraState = sellerStateCode === posCode;
+
+  const hasAdjustments =
+    invoice.freightChargeAmount !== 0 ||
+    invoice.otherChargesAmount !== 0 ||
+    invoice.discountAmount !== 0 ||
+    invoice.roundingAdjustment !== 0;
+
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
-      {/* Platform identity — the registered parent company operating
-          BuildOhub (Triad Build Tech Private Limited). Shown here so the
-          GSTIN-bearing invoice detail page matches the PDF's own header
-          (see apps/api/src/admin/invoices/invoice-pdf.util.ts). */}
+    <div className="mx-auto max-w-4xl space-y-5">
+      {/* Platform identity Header */}
       <div className="panel p-4 text-sm text-slate-600">
-        <p className="text-base font-extrabold text-slate-950">{BUILDOHUB_COMPANY.name}</p>
-        <p className="font-semibold text-slate-800">{BUILDOHUB_COMPANY.legalName}</p>
-        <p>
-          {[BUILDOHUB_COMPANY.addressLine, BUILDOHUB_COMPANY.city, BUILDOHUB_COMPANY.state, BUILDOHUB_COMPANY.pincode]
-            .filter(Boolean)
-            .join(", ")}
-        </p>
-        <p>GSTIN: {BUILDOHUB_COMPANY.gstin}</p>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-base font-extrabold text-slate-950">{BUILDOHUB_COMPANY.name}</p>
+            <p className="font-semibold text-slate-800">{BUILDOHUB_COMPANY.legalName}</p>
+            <p>
+              {[BUILDOHUB_COMPANY.addressLine, BUILDOHUB_COMPANY.city, BUILDOHUB_COMPANY.state, BUILDOHUB_COMPANY.pincode]
+                .filter(Boolean)
+                .join(", ")}
+            </p>
+            <p className="font-medium text-slate-800">
+              GSTIN: {BUILDOHUB_COMPANY.gstin} · State Code: {sellerStateCode} (Tamil Nadu)
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white">
+              {invoice.documentType ?? "INV"} / TAX INVOICE
+            </span>
+          </div>
+        </div>
       </div>
 
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Invoice</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Tax Invoice</p>
+            <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+              Supply: {invoice.supplyType ?? "B2B"}
+            </span>
+            <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+              Rev. Charge: {invoice.reverseCharge ? "Yes" : "No"}
+            </span>
+          </div>
           <h1 className="mt-1 text-2xl font-extrabold text-slate-950">{invoice.invoiceNumber}</h1>
           <p className="mt-1 text-sm text-slate-600">
-            {new Date(invoice.invoiceDate).toLocaleDateString("en-IN")} · Order/Enquiry #{invoice.enquiryId}
+            Date: {new Date(invoice.invoiceDate).toLocaleDateString("en-IN")} · Ref: #{invoice.enquiryId} · Place of Supply:{" "}
+            {posCode} - {posName}
           </p>
         </div>
         <a
           href={`/api/admin/orders/${params.orderId}/invoice/pdf`}
           target="_blank"
           rel="noreferrer"
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white"
+          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800"
         >
           Download PDF
         </a>
       </header>
 
-      {/* Buyer Invoice / Frozen Order Snapshot Reconciliation (Phase 5B) —
-          admin-only, never shown on the buyer-facing invoice view. Surfaces
-          a reconciliation discrepancy recorded at generation time (see
-          InvoicesService.generate's doc comment) without ever altering the
-          invoice's own stored financial fields or the frozen Order
-          snapshot — purely informational, for admin follow-up. */}
+      {/* Reconciliation discrepancy warning (Admin-only) */}
       {invoice.reconciliationDiscrepancy ? (
         <section className="panel border-2 border-amber-400 bg-amber-50 p-4">
           <p className="text-sm font-extrabold text-amber-900">⚠ Reconciliation discrepancy flagged for review</p>
           <p className="mt-1 text-xs text-amber-800">{invoice.reconciliationDiscrepancy.reason}</p>
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-amber-900">
-            <p>Expected (frozen) payable: ₹{invoice.reconciliationDiscrepancy.expectedPayable?.toLocaleString("en-IN") ?? "—"}</p>
-            <p>Calculated invoice total: ₹{invoice.reconciliationDiscrepancy.calculatedPayable?.toLocaleString("en-IN") ?? "—"}</p>
-            <p>Expected (frozen) GST: ₹{invoice.reconciliationDiscrepancy.expectedTax?.toLocaleString("en-IN") ?? "—"}</p>
-            <p>Calculated GST: ₹{invoice.reconciliationDiscrepancy.calculatedTax?.toLocaleString("en-IN") ?? "—"}</p>
+            <p>
+              Expected (frozen) payable: ₹
+              {invoice.reconciliationDiscrepancy.expectedPayable?.toLocaleString("en-IN") ?? "—"}
+            </p>
+            <p>
+              Calculated invoice total: ₹
+              {invoice.reconciliationDiscrepancy.calculatedPayable?.toLocaleString("en-IN") ?? "—"}
+            </p>
+            <p>
+              Expected (frozen) GST: ₹{invoice.reconciliationDiscrepancy.expectedTax?.toLocaleString("en-IN") ?? "—"}
+            </p>
+            <p>
+              Calculated GST: ₹{invoice.reconciliationDiscrepancy.calculatedTax?.toLocaleString("en-IN") ?? "—"}
+            </p>
           </div>
           <p className="mt-2 text-xs text-amber-700">
             Flagged {new Date(invoice.reconciliationDiscrepancy.flaggedAt).toLocaleString("en-IN")}. The frozen order
@@ -152,72 +228,189 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
         </section>
       ) : null}
 
-      <section className="panel grid gap-4 p-5 sm:grid-cols-2">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Contractor/Client</p>
-          <p className="mt-1 font-semibold text-slate-900">{invoice.builder?.name ?? "—"}</p>
-          <p className="text-sm text-slate-600">{invoice.builder?.email}</p>
-          <p className="text-sm text-slate-600">{invoice.builder?.phone}</p>
-        </div>
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Site</p>
-          <p className="mt-1 font-semibold text-slate-900">{invoice.site?.name ?? "Unassigned"}</p>
-          <p className="text-sm text-slate-600">
-            {[invoice.site?.addressLine, invoice.site?.city, invoice.site?.state, invoice.site?.pincode].filter(Boolean).join(", ")}
+      {/* 2-Column Parties Grid: Bill To & Ship To */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <section className="panel space-y-2 p-5 text-sm">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Bill To (Recipient)</h2>
+          <p className="font-bold text-slate-900">
+            {invoice.buyer?.legalName ?? invoice.builder?.name ?? "Contractor / Client"}
           </p>
-          {invoice.site?.gstin ? <p className="text-sm text-slate-600">GSTIN: {invoice.site.gstin}</p> : null}
-        </div>
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Supplier</p>
-          <p className="mt-1 font-semibold text-slate-900">{invoice.supplier?.companyName ?? "—"}</p>
-          {invoice.supplier?.gstin ? <p className="text-sm text-slate-600">GSTIN: {invoice.supplier.gstin}</p> : null}
-          <p className="text-sm text-slate-600">{[invoice.supplier?.email, invoice.supplier?.phone].filter(Boolean).join(" · ")}</p>
-        </div>
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Payment</p>
-          <p className="mt-1 font-semibold text-slate-900">{invoice.paymentStatus}</p>
-          {invoice.amountPaid !== null ? <p className="text-sm text-slate-600">Paid: ₹{invoice.amountPaid.toLocaleString("en-IN")}</p> : null}
-          {invoice.amountDue !== null ? <p className="text-sm text-slate-600">Due: ₹{invoice.amountDue.toLocaleString("en-IN")}</p> : null}
-        </div>
-      </section>
+          {invoice.buyer?.tradeName ? <p className="text-xs text-slate-500">{invoice.buyer.tradeName}</p> : null}
+          <p className="text-slate-600">
+            {[
+              invoice.buyer?.addressLine ?? invoice.site?.addressLine,
+              invoice.buyer?.city ?? invoice.site?.city,
+              invoice.buyer?.state ?? invoice.site?.state,
+              invoice.buyer?.pincode ?? invoice.site?.pincode,
+            ]
+              .filter(Boolean)
+              .join(", ") || "Address not provided"}
+          </p>
+          <div className="pt-1 text-xs text-slate-600">
+            <span className="font-semibold text-slate-800">GSTIN:</span>{" "}
+            {invoice.buyer?.gstin ?? invoice.site?.gstin ?? "URP (Unregistered)"} ·{" "}
+            <span className="font-semibold text-slate-800">State:</span>{" "}
+            {invoice.buyer?.state ?? posName} ({invoice.buyer?.stateCode ?? posCode})
+          </div>
+        </section>
 
+        <section className="panel space-y-2 p-5 text-sm">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Ship To (Site Delivery)</h2>
+          <p className="font-bold text-slate-900">{invoice.site?.name ?? "Site Delivery"}</p>
+          <p className="text-slate-600">
+            {[
+              invoice.shipTo?.addressLine ?? invoice.site?.addressLine,
+              invoice.shipTo?.city ?? invoice.site?.city,
+              invoice.shipTo?.state ?? invoice.site?.state,
+              invoice.shipTo?.pincode ?? invoice.site?.pincode,
+            ]
+              .filter(Boolean)
+              .join(", ") || "Address not provided"}
+          </p>
+          <div className="pt-1 text-xs text-slate-600">
+            <span className="font-semibold text-slate-800">Destination State:</span>{" "}
+            {invoice.shipTo?.state ?? posName} ({posCode})
+          </div>
+          {invoice.shipFrom?.state ? (
+            <p className="text-xs text-slate-500">Dispatch Origin: {invoice.shipFrom.state}</p>
+          ) : null}
+        </section>
+      </div>
+
+      {/* Products / Services Section */}
       <section className="panel p-5">
-        <h2 className="text-lg font-bold text-slate-950">Products / Services</h2>
+        <h2 className="text-lg font-bold text-slate-950">Line Items (Goods & Services)</h2>
         <div className="mt-3 divide-y divide-slate-200 rounded-xl border border-slate-200">
-          {invoice.lineItems.map((li) => (
-            <div key={li.id} className="flex items-center justify-between px-4 py-3 text-sm">
-              <div>
-                <p className="font-bold text-slate-900">{li.productName}</p>
-                <p className="text-xs text-slate-500">
-                  {li.quantity} × ₹{li.unitPrice.toLocaleString("en-IN")}
-                  {/* typeof check (not a truthy check) so a genuine 0% GST
-                      line still shows its explicit rate/amount rather than
-                      silently disappearing — only a null taxRate
-                      (pre-migration row) omits this entirely. */}
-                  {typeof li.taxRate === "number"
-                    ? ` · GST ${li.taxRate}% (₹${li.taxAmount.toLocaleString("en-IN")})`
-                    : ""}
-                </p>
+          {invoice.lineItems.map((li, idx) => (
+            <div key={li.id} className="p-4 text-sm">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-400">#{li.slNo ?? idx + 1}</span>
+                    <p className="font-bold text-slate-900">{li.productName}</p>
+                    {li.hsnCode ? (
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
+                        HSN {li.hsnCode}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {li.quantity} {li.uqc ?? li.unit ?? "Unit"} × ₹{li.unitPrice.toLocaleString("en-IN")} · Taxable: ₹
+                    {(li.taxableAmount ?? li.subtotal).toLocaleString("en-IN")}
+                    {typeof li.taxRate === "number" ? (
+                      isIntraState ? (
+                        ` · CGST ${(li.cgstRate ?? li.taxRate / 2)}% (₹${(li.cgstAmount ?? Math.round(li.taxAmount / 2)).toLocaleString("en-IN")}) + SGST ${(li.sgstRate ?? li.taxRate / 2)}% (₹${(li.sgstAmount ?? Math.round(li.taxAmount / 2)).toLocaleString("en-IN")})`
+                      ) : (
+                        ` · IGST ${(li.igstRate ?? li.taxRate)}% (₹${(li.igstAmount ?? li.taxAmount).toLocaleString("en-IN")})`
+                      )
+                    ) : ""}
+                  </p>
+                  {/* Admin-only markup traceability */}
+                  {li.supplierUnitPrice !== null && li.supplierUnitPrice !== undefined ? (
+                    <p className="mt-1 text-xs font-medium text-slate-500">
+                      Settlement: ₹{li.supplierUnitPrice.toLocaleString("en-IN")} · Markup: {li.markupPercent ?? 0}% (+₹
+                      {(li.markupAmount ?? 0).toLocaleString("en-IN")})
+                    </p>
+                  ) : null}
+                </div>
+                <p className="font-bold text-slate-900">₹{li.total.toLocaleString("en-IN")}</p>
               </div>
-              <p className="font-bold text-slate-900">₹{li.total.toLocaleString("en-IN")}</p>
             </div>
           ))}
         </div>
 
-        <div className="mt-4 space-y-1 text-right text-sm">
-          <p className="text-slate-600">Subtotal: ₹{invoice.subtotal.toLocaleString("en-IN")}</p>
-          <p className="text-slate-600">
-            {(() => {
-              const rates = Array.from(
-                new Set(invoice.lineItems.map((li) => li.taxRate).filter((r): r is number => typeof r === "number"))
-              );
-              const label = rates.length === 1 ? `GST @ ${rates[0]}%` : "Tax";
-              return `${label}: ₹${invoice.taxAmount.toLocaleString("en-IN")}`;
-            })()}
-          </p>
-          <p className="text-base font-bold text-slate-950">Total: ₹{invoice.totalAmount.toLocaleString("en-IN")}</p>
+        {/* Totals Breakdown */}
+        <div className="mt-4 space-y-1.5 text-right text-sm">
+          <p className="text-slate-600">Subtotal (Assessable Value): ₹{invoice.subtotal.toLocaleString("en-IN")}</p>
+          {invoice.freightChargeAmount !== 0 ? (
+            <p className="text-slate-600">Freight Charges (excl. GST): ₹{invoice.freightChargeAmount.toLocaleString("en-IN")}</p>
+          ) : null}
+          {invoice.otherChargesAmount !== 0 ? (
+            <p className="text-slate-600">Other Charges (excl. GST): ₹{invoice.otherChargesAmount.toLocaleString("en-IN")}</p>
+          ) : null}
+          {invoice.discountAmount !== 0 ? (
+            <p className="text-slate-600">Discount: -₹{invoice.discountAmount.toLocaleString("en-IN")}</p>
+          ) : null}
+          {hasAdjustments ? (
+            <p className="font-semibold text-slate-800">
+              Total Taxable Value: ₹{invoice.taxableValue.toLocaleString("en-IN")}
+            </p>
+          ) : null}
+
+          {/* Tax Splits */}
+          {isIntraState ? (
+            <>
+              <p className="text-slate-600">
+                CGST Total: ₹
+                {(invoice.cgstAmount ?? Math.round((invoice.taxAmount / 2 + Number.EPSILON) * 100) / 100).toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </p>
+              <p className="text-slate-600">
+                SGST Total: ₹
+                {(invoice.sgstAmount ?? Math.round((invoice.taxAmount / 2 + Number.EPSILON) * 100) / 100).toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </p>
+            </>
+          ) : (
+            <p className="text-slate-600">
+              IGST Total: ₹
+              {(invoice.igstAmount ?? invoice.taxAmount).toLocaleString("en-IN", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </p>
+          )}
+
+          {invoice.roundingAdjustment !== 0 ? (
+            <p className="text-slate-600">
+              Rounding: {invoice.roundingAdjustment > 0 ? "+" : "-"}₹
+              {Math.abs(invoice.roundingAdjustment).toLocaleString("en-IN")}
+            </p>
+          ) : null}
+
+          <div className="border-t border-slate-200 pt-2">
+            <p className="text-base font-extrabold text-slate-950">
+              Grand Total: ₹{invoice.totalAmount.toLocaleString("en-IN")}
+            </p>
+            {invoice.totalInWords ? (
+              <p className="mt-1 text-xs italic text-slate-600">{invoice.totalInWords}</p>
+            ) : null}
+          </div>
         </div>
       </section>
+
+      {/* Payment & Settlement Summary */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <section className="panel space-y-2 p-5 text-sm">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Payment Status</h2>
+          <p className="font-semibold text-slate-900">Status: {invoice.paymentStatus}</p>
+          {invoice.amountPaid !== null ? (
+            <p className="text-slate-600">Advance Paid: ₹{invoice.amountPaid.toLocaleString("en-IN")}</p>
+          ) : null}
+          {invoice.amountDue !== null ? (
+            <p className="font-semibold text-slate-900">Balance Due: ₹{invoice.amountDue.toLocaleString("en-IN")}</p>
+          ) : null}
+        </section>
+
+        {invoice.bankDetails ? (
+          <section className="panel space-y-1.5 p-5 text-xs text-slate-600">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">Bank Settlement Details</h2>
+            <p className="font-semibold text-slate-900">
+              {invoice.bankDetails.bankName} · A/C {invoice.bankDetails.accountNumber}
+              {invoice.bankDetails.accountType ? ` (${invoice.bankDetails.accountType})` : ""}
+            </p>
+            <p>Account Name: {invoice.bankDetails.accountName}</p>
+            <p>
+              IFSC: {invoice.bankDetails.ifscCode} · Branch: {invoice.bankDetails.branch}
+            </p>
+            {invoice.bankDetails.bankAddress ? <p>Bank Address: {invoice.bankDetails.bankAddress}</p> : null}
+          </section>
+        ) : null}
+      </div>
 
       <p className="text-xs text-slate-500">
         Generated by {invoice.generatedBy?.name ?? invoice.generatedBy?.email ?? "Admin"} on{" "}
@@ -230,7 +423,7 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
           <p className="mt-1 text-sm text-slate-600">
             Delivery: {rating.deliveryRating}/5 · Quality: {rating.qualityRating}/5
           </p>
-          {rating.comment ? <p className="mt-1 text-sm text-slate-600 italic">"{rating.comment}"</p> : null}
+          {rating.comment ? <p className="mt-1 text-sm italic text-slate-600">"{rating.comment}"</p> : null}
 
           {rating.receipt ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -252,15 +445,6 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
         </section>
       ) : null}
 
-      {/* RFQ PDF download discoverability fix: an invoice-generated order
-          has already moved past PaymentVerificationQueue/
-          InvoiceGenerationQueue (the two queues that otherwise carry the
-          RFQ download link), so this is the last remaining Admin screen in
-          the order's lifecycle an admin would land on — without this link
-          the RFQ download would become unreachable from the UI once an
-          invoice exists. Reuses the exact same authenticated proxy route
-          already used by PaymentVerificationQueue/InvoiceGenerationQueue
-          and the Admin RFQ detail page — no new endpoint. */}
       <div className="flex flex-wrap items-center gap-3">
         <a
           href={`/api/admin/orders/${params.orderId}/rfq-pdf`}

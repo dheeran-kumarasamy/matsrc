@@ -120,6 +120,15 @@ model User {
   emailVerifiedAt DateTime?
   phoneVerifiedAt DateTime?
 
+  // Registered Billing & GST Profile (Buyer / Contractor details for B2B billing & invoicing)
+  legalName      String?
+  tradeName      String?
+  gstin          String?
+  billingAddress String?
+  billingCity    String?
+  billingState   String?
+  billingPincode String?
+
   // Relations
   kycDocuments                KycDocument[]
   orders                      Order[]
@@ -1180,10 +1189,13 @@ model PaymentVerification {
   paymentMethod PaymentMethod
   amount        Decimal       @db.Decimal(12, 2)
 
+  // Primary screenshot (retained for backward compatibility)
   screenshotData     Bytes
   screenshotMimeType String
   screenshotFileName String
   screenshotSize     Int
+
+  attachments PaymentVerificationAttachment[]
 
   status PaymentVerificationStatus @default(PENDING)
 
@@ -1198,6 +1210,22 @@ model PaymentVerification {
   @@index([orderId])
   @@index([userId])
   @@index([status])
+}
+
+// Bank-transfer payment proof attachments (supports multiple screenshot uploads per payment verification)
+model PaymentVerificationAttachment {
+  id                    String              @id @default(cuid())
+  paymentVerificationId String
+  paymentVerification   PaymentVerification @relation(fields: [paymentVerificationId], references: [id], onDelete: Cascade)
+
+  fileData     Bytes
+  fileMimeType String
+  fileName     String
+  fileSize     Int
+
+  createdAt DateTime @default(now())
+
+  @@index([paymentVerificationId])
 }
 
 // ─────────────────────────────────────────────
@@ -2161,6 +2189,10 @@ model SupplierInvoiceLineItem {
   rateDiscrepancy Boolean @default(false)
 
   taxRatePercent Decimal? @db.Decimal(5, 2)
+
+  // Admin decision whether product/category/global markup should be applied
+  // to approvedUnitPrice when generating the buyer invoice. Defaults to true.
+  applyMarkup Boolean @default(true)
 
   // Reconciled, confirmed figures for this line — computed via the shared
   // calculateLineGst() helper from actualQuantity x approvedUnitPrice

@@ -49,7 +49,7 @@ export async function GET(
         priceBeforeAggregation: true,
         priceAfterAggregation: true,
         siteId: true,
-        site: { select: { id: true, name: true } },
+        site: { select: { id: true, name: true, state: true, gstin: true } },
         aggregationPool: {
           select: { status: true },
         },
@@ -74,12 +74,39 @@ export async function GET(
         // comment) — they remain the authoritative figures for
         // payment/advance/outstanding calculations (order-outstanding.ts)
         // and are used below ONLY as the pre-invoice fallback.
-        invoice: { select: { id: true, invoiceNumber: true, totalAmount: true } },
+        invoice: {
+          select: {
+            id: true,
+            invoiceNumber: true,
+            totalAmount: true,
+            subtotal: true,
+            taxableValue: true,
+            taxAmount: true,
+            cgstAmount: true,
+            sgstAmount: true,
+            igstAmount: true,
+            freightChargeAmount: true,
+            otherChargesAmount: true,
+            discountAmount: true,
+            roundingAdjustment: true,
+          },
+        },
         // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
         // Dispatch — drives this route's `confirmationState`/`total` fields
         // below. See packages/db/lib/order-buyer-confirmation.ts for the
         // full rationale.
-        supplierInvoice: { select: { status: true, confirmedTotalAmount: true } },
+        supplierInvoice: {
+          select: {
+            status: true,
+            confirmedTotalAmount: true,
+            confirmedTaxableValue: true,
+            confirmedTaxAmount: true,
+            freightChargeAmount: true,
+            otherChargesAmount: true,
+            discountAmount: true,
+            roundingAdjustment: true,
+          },
+        },
         items: {
           select: {
             id: true,
@@ -159,6 +186,64 @@ export async function GET(
       supplierInvoiceSnapshot
     );
 
+    const isIntraState =
+      !order.site?.state ||
+      order.site.state.toLowerCase().includes("tamil") ||
+      (order.site.gstin ? order.site.gstin.startsWith("33") : true);
+
+    let itemsSubtotal = Number(order.totalAmount ?? 0);
+    let freightChargeAmount = 0;
+    let otherChargesAmount = 0;
+    let discountAmount = 0;
+    let roundingAdjustment = 0;
+    let taxableValue = Number(order.totalAmount ?? 0);
+    let taxAmount = order.taxAmount != null ? Number(order.taxAmount) : null;
+    let cgstAmount: number | null =
+      taxAmount != null && isIntraState ? Math.round((taxAmount / 2 + Number.EPSILON) * 100) / 100 : null;
+    let sgstAmount: number | null =
+      taxAmount != null && isIntraState && cgstAmount != null ? Math.round((taxAmount - cgstAmount + Number.EPSILON) * 100) / 100 : null;
+    let igstAmount: number | null = taxAmount != null && !isIntraState ? taxAmount : null;
+    let hasAdjustments = false;
+
+    if (order.invoice) {
+      itemsSubtotal = Number(order.invoice.subtotal);
+      freightChargeAmount = Number(order.invoice.freightChargeAmount ?? 0);
+      otherChargesAmount = Number(order.invoice.otherChargesAmount ?? 0);
+      discountAmount = Number(order.invoice.discountAmount ?? 0);
+      roundingAdjustment = Number(order.invoice.roundingAdjustment ?? 0);
+      taxableValue = Number(order.invoice.taxableValue);
+      taxAmount = Number(order.invoice.taxAmount);
+      cgstAmount = Number(order.invoice.cgstAmount ?? 0);
+      sgstAmount = Number(order.invoice.sgstAmount ?? 0);
+      igstAmount = Number(order.invoice.igstAmount ?? 0);
+      hasAdjustments = freightChargeAmount > 0 || otherChargesAmount > 0 || discountAmount > 0;
+    } else if (order.supplierInvoice && order.supplierInvoice.status === "CONFIRMED") {
+      freightChargeAmount = Number(order.supplierInvoice.freightChargeAmount ?? 0);
+      otherChargesAmount = Number(order.supplierInvoice.otherChargesAmount ?? 0);
+      discountAmount = Number(order.supplierInvoice.discountAmount ?? 0);
+      roundingAdjustment = Number(order.supplierInvoice.roundingAdjustment ?? 0);
+      taxableValue =
+        order.supplierInvoice.confirmedTaxableValue != null
+          ? Number(order.supplierInvoice.confirmedTaxableValue)
+          : itemsSubtotal + freightChargeAmount + otherChargesAmount - discountAmount;
+      taxAmount =
+        order.supplierInvoice.confirmedTaxAmount != null
+          ? Number(order.supplierInvoice.confirmedTaxAmount)
+          : Number(order.taxAmount ?? 0);
+      if (isIntraState) {
+        cgstAmount = Math.round((taxAmount / 2 + Number.EPSILON) * 100) / 100;
+        sgstAmount = Math.round((taxAmount - cgstAmount + Number.EPSILON) * 100) / 100;
+        igstAmount = 0;
+      } else {
+        igstAmount = taxAmount;
+        cgstAmount = 0;
+        sgstAmount = 0;
+      }
+      hasAdjustments = freightChargeAmount > 0 || otherChargesAmount > 0 || discountAmount > 0;
+    }
+
+    const finalOrderTotal = order.invoice ? Number(order.invoice.totalAmount) : resolvedTotal;
+
     return NextResponse.json({
       id: order.id,
       enquiryId: order.enquiryId ?? order.id,
@@ -188,14 +273,22 @@ export async function GET(
 
       supplierId: order.items[0]?.product.supplier.id ?? null,
       primaryListingId: order.items[0]?.product.id ?? null,
-      total: resolvedTotal,
-      totalLabel: formatCurrency(resolvedTotal),
-      // GST breakdown — only ever populated once this order carries a
-      // frozen snapshot; null for a legacy/not-yet-confirmed order (never
-      // inferred as "zero tax").
-      gstInclusive: hasGstSnapshot,
-      subtotalBeforeTax: hasGstSnapshot ? Number(order.totalAmount) : null,
-      taxAmount: hasGstSnapshot ? Number(order.taxAmount) : null,
+      total: finalOrderTotal,
+      totalLabel: formatCurrency(finalOrderTotal),
+      // GST breakdown & financial summary (including 18% GST on freight/other charges)
+      gstInclusive: hasGstSnapshot || order.invoice != null,
+      subtotalBeforeTax: taxableValue,
+      itemsSubtotal,
+      freightChargeAmount,
+      otherChargesAmount,
+      discountAmount,
+      roundingAdjustment,
+      taxableValue,
+      hasAdjustments,
+      taxAmount,
+      cgstAmount,
+      sgstAmount,
+      igstAmount,
       advancePercent: order.advancePercent == null ? null : Number(order.advancePercent),
       requiredAdvanceAmount: order.requiredAdvanceAmount == null ? null : Number(order.requiredAdvanceAmount),
       deliveryDate: formatDate(order.deliveryDate),

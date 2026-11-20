@@ -7,10 +7,11 @@ import { BUILDOHUB_COMPANY } from "src/common/company-info";
 // invoice download routes — see invoices.controller.ts /pdf and
 // builder/orders/orders.controller.ts's own invoice PDF route.
 //
-// Deliberately built from the exact same `serialize()`-shaped invoice
-// object InvoicesService returns, so downloading an invoice always
-// reproduces the same issued document, regardless of any later change to
-// product/order pricing.
+// Form GST INV-01 / E-Invoice & GST Compliance layout:
+// Includes Document Type (INV / Tax Invoice), Supply Type, Reverse Charge flag,
+// Place of Supply, Buyer Bill-To & Ship-To, HSN/SAC codes, UQC unit codes,
+// intra-state CGST+SGST vs inter-state IGST split, totals in words,
+// and platform settlement bank account details.
 export type InvoicePdfData = {
   invoiceNumber: string;
   invoiceDate: string | Date;
@@ -19,8 +20,29 @@ export type InvoicePdfData = {
   status: string;
   paymentStatus: string;
   currency: string;
-  builder: { name: string | null; email: string | null; phone: string | null } | null;
-  site: {
+  documentType?: string;
+  supplyType?: string;
+  reverseCharge?: boolean;
+  placeOfSupplyStateCode?: string | null;
+  placeOfSupplyStateName?: string | null;
+  sellerStateCode?: string;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  igstAmount?: number;
+  cessAmount?: number;
+  totalInWords?: string;
+  builder?: { name: string | null; email: string | null; phone: string | null } | null;
+  buyer?: {
+    legalName: string | null;
+    tradeName: string | null;
+    gstin: string | null;
+    addressLine: string | null;
+    city: string | null;
+    state: string | null;
+    pincode: string | null;
+    stateCode: string | null;
+  } | null;
+  site?: {
     name: string;
     addressLine: string | null;
     city: string | null;
@@ -28,28 +50,30 @@ export type InvoicePdfData = {
     pincode: string | null;
     gstin: string | null;
   } | null;
-  // Ship-from/ship-to — location only, NEVER the supplier's identity
-  // (name/GSTIN/contact). See the Supplier Invoice Upload / Admin
-  // Verification / Buyer Invoice Generation feature's buyer-facing privacy
-  // requirement — this PDF must never disclose which supplier fulfilled
-  // the order.
-  shipFrom: { addressLine: string | null; city: string | null; state: string | null; pincode: string | null } | null;
-  shipTo: { addressLine: string | null; city: string | null; state: string | null; pincode: string | null } | null;
+  shipFrom?: { addressLine: string | null; city: string | null; state: string | null; pincode: string | null } | null;
+  shipTo?: { addressLine: string | null; city: string | null; state: string | null; pincode: string | null } | null;
   lineItems: Array<{
+    slNo?: number;
     productName: string;
     description: string | null;
+    hsnCode?: string | null;
+    uqc?: string | null;
+    unit?: string | null;
     quantity: number;
     unitPrice: number;
+    taxableAmount?: number;
     taxRate: number | null;
+    cgstRate?: number | null;
+    cgstAmount?: number;
+    sgstRate?: number | null;
+    sgstAmount?: number;
+    igstRate?: number | null;
+    igstAmount?: number;
     taxAmount: number;
     subtotal: number;
     total: number;
   }>;
   subtotal: number;
-  // Invoice-level adjustments + reconciling taxable value (audit fix —
-  // see Invoice.taxableValue's schema doc comment). All default to 0/
-  // subtotal respectively for historical invoices with no adjustments, so
-  // every pre-existing invoice renders unchanged.
   freightChargeAmount: number;
   otherChargesAmount: number;
   discountAmount: number;
@@ -59,197 +83,299 @@ export type InvoicePdfData = {
   totalAmount: number;
   amountPaid: number | null;
   amountDue: number | null;
+  bankDetails?: {
+    bankName: string;
+    accountName: string;
+    accountNumber: string;
+    accountType?: string;
+    ifscCode: string;
+    branch: string;
+    bankAddress?: string;
+  };
 };
 
 function money(value: number, currency: string): string {
   return `${currency === "INR" ? "\u20B9" : currency + " "}${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
-// Print-friendly grayscale accent (see the Grayscale PDF Printing task —
-// every generated PDF in this codebase must render identically on a
-// black-and-white printer as on a colour one, so no brand colour/orange is
-// ever used here) used for this document's section headings.
 const OLIVE_ACCENT = "#4A4A4A";
 
 export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: 40 });
+    const doc = new PDFDocument({ size: "A4", margin: 36 });
     const chunks: Buffer[] = [];
     doc.on("data", (chunk) => chunks.push(chunk as Buffer));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
     useRupeeCapableFont(doc);
 
-    // Platform identity — the registered parent company operating BuildOhub
-    // (Triad Build Tech Private Limited), shown at the top of every invoice
-    // alongside its GSTIN/registered address. See src/common/company-info.ts
-    // for the single source of truth this is read from.
-    doc.fontSize(14).text(BUILDOHUB_COMPANY.name);
+    const startX = 36;
+    const pageWidth = 523; // 595 - 72
+
+    const sellerStateCode = invoice.sellerStateCode ?? (BUILDOHUB_COMPANY as any).stateCode ?? "33";
+    const posCode = invoice.placeOfSupplyStateCode ?? sellerStateCode;
+    const posName = invoice.placeOfSupplyStateName ?? "Tamil Nadu";
+    const isIntraState = sellerStateCode === posCode;
+
+    // Header Left: Platform Identity
+    doc.fontSize(14).fillColor("#0f172a").text(BUILDOHUB_COMPANY.name, startX, 36);
+    doc
+      .fontSize(8.5)
+      .fillColor("#64748b")
+      .text(BUILDOHUB_COMPANY.legalName, startX, 54)
+      .text([BUILDOHUB_COMPANY.addressLine, BUILDOHUB_COMPANY.city, BUILDOHUB_COMPANY.state, BUILDOHUB_COMPANY.pincode].filter(Boolean).join(", "), startX, 66)
+      .fillColor("#0f172a")
+      .text(`GSTIN: ${BUILDOHUB_COMPANY.gstin} | State Code: ${sellerStateCode} (Tamil Nadu)`, startX, 78);
+
+    // Header Right: Tax Invoice Details
+    doc
+      .fontSize(14)
+      .fillColor(OLIVE_ACCENT)
+      .text("TAX INVOICE", startX + 280, 36, { width: 243, align: "right" });
     doc
       .fontSize(9)
-      .fillColor("#6B6B6B")
-      .text(BUILDOHUB_COMPANY.legalName)
-      .text([BUILDOHUB_COMPANY.addressLine, BUILDOHUB_COMPANY.city, BUILDOHUB_COMPANY.state, BUILDOHUB_COMPANY.pincode].filter(Boolean).join(", "))
-      .text(`GSTIN: ${BUILDOHUB_COMPANY.gstin}`)
-      .fillColor("#0f172a");
-
-    doc.moveDown();
-    doc.fontSize(18).fillColor(OLIVE_ACCENT).text(`Invoice ${invoice.invoiceNumber}`, { align: "left" }).fillColor("#0f172a");
+      .fillColor("#0f172a")
+      .text(`Invoice No: ${invoice.invoiceNumber}`, startX + 280, 54, { width: 243, align: "right" });
     doc
-      .fontSize(10)
-      .fillColor("#6B6B6B")
-      .text(`Invoice date: ${new Date(invoice.invoiceDate).toLocaleDateString("en-IN")}`)
-      .text(`Order/Enquiry ref: ${invoice.enquiryId}`)
-      .text(`Status: ${invoice.status} · Payment status: ${invoice.paymentStatus}`)
-      .fillColor("#0f172a");
+      .fontSize(8.5)
+      .fillColor("#64748b")
+      .text(`Date: ${new Date(invoice.invoiceDate).toLocaleDateString("en-IN")}`, startX + 280, 66, { width: 243, align: "right" })
+      .text(`Order/Enquiry Ref: ${invoice.enquiryId}`, startX + 280, 78, { width: 243, align: "right" })
+      .text(`Place of Supply: ${posCode} - ${posName}`, startX + 280, 90, { width: 243, align: "right" })
+      .text(`Supply: ${invoice.supplyType ?? "B2B"} | Rev. Charge: ${invoice.reverseCharge ? "Yes" : "No"}`, startX + 280, 102, { width: 243, align: "right" });
 
-    doc.moveDown();
-    doc.fontSize(12).fillColor(OLIVE_ACCENT).text("Bill To", { underline: true }).fillColor("#0f172a");
+    doc.moveTo(startX, 118).lineTo(startX + pageWidth, 118).strokeColor("#D0D0D0").stroke();
+
+    // 2-Column Parties Grid: Bill To (Buyer) vs Ship To (Delivery Site)
+    const partyY = 126;
+    const colWidth = 250;
+
+    // Bill To
+    const buyerName = invoice.buyer?.legalName ?? invoice.builder?.name ?? "Contractor/Client";
+    const buyerAddress =
+      [invoice.buyer?.addressLine ?? invoice.site?.addressLine, invoice.buyer?.city ?? invoice.site?.city, invoice.buyer?.state ?? invoice.site?.state, invoice.buyer?.pincode ?? invoice.site?.pincode]
+        .filter(Boolean)
+        .join(", ") || "Not configured";
+    const buyerGstin = invoice.buyer?.gstin ?? invoice.site?.gstin ?? "URP";
+    const buyerState = invoice.buyer?.state ?? invoice.site?.state ?? posName;
+    const buyerStateCode = invoice.buyer?.stateCode ?? posCode;
+
+    doc.fontSize(10).fillColor(OLIVE_ACCENT).text("BILL TO (RECIPIENT)", startX, partyY, { underline: true });
     doc
-      .fontSize(10)
-      .text(invoice.builder?.name ?? "Contractor/Client")
-      .text(invoice.builder?.email ?? "")
-      .text(invoice.builder?.phone ?? "");
+      .fontSize(9)
+      .fillColor("#0f172a")
+      .text(buyerName, startX, partyY + 14, { width: colWidth })
+      .fillColor("#64748b")
+      .text(`Address: ${buyerAddress}`, startX, partyY + 26, { width: colWidth })
+      .text(`GSTIN: ${buyerGstin} | State: ${buyerState} (${buyerStateCode})`, startX, partyY + 50, { width: colWidth });
 
-    if (invoice.site) {
-      doc.moveDown(0.5);
-      doc.fontSize(12).fillColor(OLIVE_ACCENT).text("Site", { underline: true }).fillColor("#0f172a");
-      doc
-        .fontSize(10)
-        .text(invoice.site.name)
-        .text([invoice.site.addressLine, invoice.site.city, invoice.site.state, invoice.site.pincode].filter(Boolean).join(", "))
-        .text(invoice.site.gstin ? `GSTIN: ${invoice.site.gstin}` : "");
-    }
+    // Ship To
+    const shipToX = startX + 273;
+    const siteName = invoice.site?.name ?? "Site Delivery";
+    const shipToAddress =
+      [invoice.shipTo?.addressLine ?? invoice.site?.addressLine, invoice.shipTo?.city ?? invoice.site?.city, invoice.shipTo?.state ?? invoice.site?.state, invoice.shipTo?.pincode ?? invoice.site?.pincode]
+        .filter(Boolean)
+        .join(", ") || "Not configured";
 
-    // Ship From / Ship To — location only, never the supplier's identity
-    // (mirrors the Purchase Order PDF's "Deliver To" block convention, but
-    // additionally shows the dispatch origin location so the buyer can see
-    // where the shipment came from without learning who the supplier is).
+    doc.fontSize(10).fillColor(OLIVE_ACCENT).text("SHIP TO (DELIVERY SITE)", shipToX, partyY, { underline: true });
+    doc
+      .fontSize(9)
+      .fillColor("#0f172a")
+      .text(siteName, shipToX, partyY + 14, { width: colWidth })
+      .fillColor("#64748b")
+      .text(`Address: ${shipToAddress}`, shipToX, partyY + 26, { width: colWidth })
+      .text(`State: ${invoice.shipTo?.state ?? posName} (${posCode})`, shipToX, partyY + 50, { width: colWidth });
+
+    let currentY = partyY + 68;
+
     if (invoice.shipFrom) {
-      doc.moveDown(0.5);
-      doc.fontSize(12).fillColor(OLIVE_ACCENT).text("Ship From", { underline: true }).fillColor("#0f172a");
-      doc
-        .fontSize(10)
-        .text(
-          [invoice.shipFrom.addressLine, invoice.shipFrom.city, invoice.shipFrom.state, invoice.shipFrom.pincode]
-            .filter(Boolean)
-            .join(", ") || "Not configured"
-        );
+      const shipFromText = [invoice.shipFrom.addressLine, invoice.shipFrom.city, invoice.shipFrom.state, invoice.shipFrom.pincode].filter(Boolean).join(", ");
+      if (shipFromText) {
+        doc.fontSize(8).fillColor("#64748b").text(`Dispatch Origin: ${shipFromText}`, startX, currentY, { width: pageWidth });
+        currentY += 14;
+      }
     }
 
-    if (invoice.shipTo) {
-      doc.moveDown(0.5);
-      doc.fontSize(12).fillColor(OLIVE_ACCENT).text("Ship To", { underline: true }).fillColor("#0f172a");
-      doc
-        .fontSize(10)
-        .text(
-          [invoice.shipTo.addressLine, invoice.shipTo.city, invoice.shipTo.state, invoice.shipTo.pincode]
-            .filter(Boolean)
-            .join(", ") || "Not configured"
-        );
+    doc.moveTo(startX, currentY).lineTo(startX + pageWidth, currentY).strokeColor("#D0D0D0").stroke();
+    currentY += 8;
+
+    // Line Items Table Header
+    doc.fontSize(8.5).fillColor("#64748b");
+    doc.text("Sl", startX, currentY, { width: 18 });
+    doc.text("Item / Description", startX + 20, currentY, { width: 170 });
+    doc.text("HSN", startX + 192, currentY, { width: 40 });
+    doc.text("Qty & Unit", startX + 234, currentY, { width: 52 });
+    doc.text("Rate", startX + 288, currentY, { width: 48 });
+    doc.text("Taxable", startX + 338, currentY, { width: 50 });
+
+    if (isIntraState) {
+      doc.text("CGST", startX + 390, currentY, { width: 42 });
+      doc.text("SGST", startX + 434, currentY, { width: 42 });
+    } else {
+      doc.text("IGST", startX + 390, currentY, { width: 86 });
+    }
+    doc.text("Total", startX + 478, currentY, { width: 45, align: "right" });
+
+    currentY += 13;
+    doc.moveTo(startX, currentY).lineTo(startX + pageWidth, currentY).strokeColor("#E2E8F0").stroke();
+    currentY += 6;
+
+    // Line Items Rows
+    for (let i = 0; i < invoice.lineItems.length; i++) {
+      const li = invoice.lineItems[i];
+      const sl = li.slNo ?? i + 1;
+      const hsn = li.hsnCode ?? "—";
+      const uqc = li.uqc ?? li.unit ?? "Unit";
+      const taxable = li.taxableAmount ?? li.subtotal;
+
+      const taxRate = typeof li.taxRate === "number" ? li.taxRate : 0;
+      let cgstText = "—";
+      let sgstText = "—";
+      let igstText = "—";
+
+      if (isIntraState) {
+        const rateHalf = taxRate > 0 ? (li.cgstRate ?? taxRate / 2) : 0;
+        const cgstAmt = li.cgstAmount ?? Math.round((li.taxAmount / 2 + Number.EPSILON) * 100) / 100;
+        const sgstAmt = li.sgstAmount ?? Math.round((li.taxAmount - cgstAmt + Number.EPSILON) * 100) / 100;
+        cgstText = `${rateHalf}%\n${money(cgstAmt, invoice.currency)}`;
+        sgstText = `${rateHalf}%\n${money(sgstAmt, invoice.currency)}`;
+      } else {
+        const rateFull = li.igstRate ?? taxRate;
+        const igstAmt = li.igstAmount ?? li.taxAmount;
+        igstText = `${rateFull}%\n${money(igstAmt, invoice.currency)}`;
+      }
+
+      const descHeight = doc.heightOfString(li.productName, { width: 170 });
+      const rowHeight = Math.max(22, descHeight + 10);
+
+      doc.fontSize(8.5).fillColor("#0f172a");
+      doc.text(String(sl), startX, currentY, { width: 18 });
+      doc.text(li.productName, startX + 20, currentY, { width: 170 });
+      doc.text(hsn, startX + 192, currentY, { width: 40 });
+      doc.text(`${li.quantity} ${uqc}`, startX + 234, currentY, { width: 52 });
+      doc.text(money(li.unitPrice, invoice.currency), startX + 288, currentY, { width: 48 });
+      doc.text(money(taxable, invoice.currency), startX + 338, currentY, { width: 50 });
+
+      if (isIntraState) {
+        doc.fontSize(7.5).text(cgstText, startX + 390, currentY, { width: 42 });
+        doc.fontSize(7.5).text(sgstText, startX + 434, currentY, { width: 42 });
+      } else {
+        doc.fontSize(7.5).text(igstText, startX + 390, currentY, { width: 86 });
+      }
+
+      doc.fontSize(8.5).text(money(li.total, invoice.currency), startX + 478, currentY, { width: 45, align: "right" });
+
+      currentY += rowHeight;
     }
 
-    doc.moveDown();
-    doc.fontSize(12).fillColor(OLIVE_ACCENT).text("Products / Services", { underline: true }).fillColor("#0f172a");
-    doc.moveDown(0.3);
+    doc.moveTo(startX, currentY).lineTo(startX + pageWidth, currentY).strokeColor("#D0D0D0").stroke();
+    currentY += 8;
 
-    const startX = doc.x;
-    let y = doc.y;
-    doc.fontSize(9).fillColor("#6B6B6B");
-    doc.text("Item", startX, y, { width: 130, continued: false });
-    doc.text("Qty", startX + 130, y, { width: 40 });
-    doc.text("Unit Price", startX + 170, y, { width: 70 });
-    doc.text("GST %", startX + 240, y, { width: 50 });
-    doc.text("Tax", startX + 290, y, { width: 60 });
-    doc.text("Total", startX + 350, y, { width: 80 });
-    doc.fillColor("#0f172a");
-    y += 16;
-    doc.moveTo(startX, y).lineTo(startX + 430, y).strokeColor("#D0D0D0").stroke();
-    y += 6;
-
-    for (const li of invoice.lineItems) {
-      doc.fontSize(9);
-      // BUG FIX: this previously advanced y by a fixed 18px per row
-      // regardless of how many lines li.productName actually wrapped to,
-      // so any description longer than the 130px Item column caused the
-      // next row to start drawing while the current row's wrapped text
-      // was still rendering — visually merging the two rows together.
-      // Measuring the exact string/width/font used to render it (plus
-      // generous padding) fixes that, mirroring the same row-height fix
-      // already applied to the Purchase Order PDF (see
-      // apps/web/lib/purchase-order-pdf.ts).
-      const descHeight = doc.heightOfString(li.productName, { width: 130 });
-      const rowHeight = Math.max(20, descHeight + 12);
-      doc.text(li.productName, startX, y, { width: 130 });
-      doc.text(String(li.quantity), startX + 130, y, { width: 40 });
-      doc.text(money(li.unitPrice, invoice.currency), startX + 170, y, { width: 70 });
-      // Explicit GST rate per line — "—" (never a fabricated rate) for
-      // pre-migration line items that have no stored taxRate (nullable —
-      // see InvoiceLineItem.taxRate in schema.prisma).
-      doc.text(typeof li.taxRate === "number" ? `${li.taxRate}%` : "\u2014", startX + 240, y, { width: 50 });
-      doc.text(money(li.taxAmount, invoice.currency), startX + 290, y, { width: 60 });
-      doc.text(money(li.total, invoice.currency), startX + 350, y, { width: 80 });
-      y += rowHeight;
-    }
-
-    // Explicit Subtotal / GST / Total breakdown — the GST line is labelled
-    // with the actual rate when every line item shares one (the common
-    // case), since a single "@X%" suffix would misstate an invoice with
-    // genuinely mixed per-line rates.
-    const distinctRates = Array.from(
-      new Set(invoice.lineItems.map((li) => (typeof li.taxRate === "number" ? li.taxRate : null)))
-    );
-    const uniformRate = distinctRates.length === 1 ? distinctRates[0] : null;
-    const taxLabel = uniformRate !== null ? `GST @ ${uniformRate}%` : "Tax";
-
-    // Invoice-level adjustments (audit fix): shown explicitly, each on its
-    // own line, ONLY when non-zero — so an invoice with no freight/other
-    // charges/discount/rounding renders exactly as before this fix
-    // (Subtotal / Tax / Total only), while one that has adjustments shows
-    // the full reconciling chain: Subtotal -> Freight/Other/Discount ->
-    // Taxable Value -> Tax -> Rounding -> Total. Every amount here is read
-    // directly from the stored, confirmed Invoice snapshot — never
-    // recomputed from live order/supplier data.
+    // Totals Breakdown (Right-Aligned)
     const hasAdjustments =
       invoice.freightChargeAmount !== 0 ||
       invoice.otherChargesAmount !== 0 ||
       invoice.discountAmount !== 0 ||
       invoice.roundingAdjustment !== 0;
 
-    doc.moveDown();
-    doc.fontSize(10);
-    doc.text(`Subtotal: ${money(invoice.subtotal, invoice.currency)}`, { align: "right" });
+    const totalsStartX = startX + 260;
+    const totalsWidth = 263;
+
+    doc.fontSize(9).fillColor("#0f172a");
+    doc.text(`Subtotal (Assessable Value): ${money(invoice.subtotal, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
+    currentY += 12;
 
     if (hasAdjustments) {
       if (invoice.freightChargeAmount !== 0) {
-        doc.text(`Freight: ${money(invoice.freightChargeAmount, invoice.currency)}`, { align: "right" });
+        doc.text(`Freight Charges (excl. GST): ${money(invoice.freightChargeAmount, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
+        currentY += 12;
       }
       if (invoice.otherChargesAmount !== 0) {
-        doc.text(`Other Charges: ${money(invoice.otherChargesAmount, invoice.currency)}`, { align: "right" });
+        doc.text(`Other Charges (excl. GST): ${money(invoice.otherChargesAmount, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
+        currentY += 12;
       }
       if (invoice.discountAmount !== 0) {
-        doc.text(`Discount: -${money(invoice.discountAmount, invoice.currency)}`, { align: "right" });
+        doc.text(`Discount: -${money(invoice.discountAmount, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
+        currentY += 12;
       }
-      doc.text(`Taxable Value: ${money(invoice.taxableValue, invoice.currency)}`, { align: "right" });
+      doc.text(`Total Taxable Value: ${money(invoice.taxableValue, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
+      currentY += 12;
     }
 
-    doc.text(`${taxLabel}: ${money(invoice.taxAmount, invoice.currency)}`, { align: "right" });
+    // Split Tax Totals
+    const totalTax = invoice.taxAmount;
+    if (isIntraState) {
+      const cgstTot = invoice.cgstAmount ?? Math.round((totalTax / 2 + Number.EPSILON) * 100) / 100;
+      const sgstTot = invoice.sgstAmount ?? Math.round((totalTax - cgstTot + Number.EPSILON) * 100) / 100;
+      doc.text(`CGST Total: ${money(cgstTot, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
+      currentY += 12;
+      doc.text(`SGST Total: ${money(sgstTot, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
+      currentY += 12;
+    } else {
+      const igstTot = invoice.igstAmount ?? totalTax;
+      doc.text(`IGST Total: ${money(igstTot, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
+      currentY += 12;
+    }
 
     if (hasAdjustments && invoice.roundingAdjustment !== 0) {
       doc.text(
         `Rounding: ${invoice.roundingAdjustment > 0 ? "+" : "-"}${money(Math.abs(invoice.roundingAdjustment), invoice.currency)}`,
-        { align: "right" }
+        totalsStartX,
+        currentY,
+        { width: totalsWidth, align: "right" }
       );
+      currentY += 12;
     }
 
-    doc.fontSize(12).text(`Total: ${money(invoice.totalAmount, invoice.currency)}`, { align: "right" });
+    doc.fontSize(11).fillColor(OLIVE_ACCENT).text(`Grand Total: ${money(invoice.totalAmount, invoice.currency)}`, totalsStartX, currentY, { width: totalsWidth, align: "right" });
+    currentY += 16;
 
-    if (invoice.amountPaid !== null || invoice.amountDue !== null) {
-      doc.moveDown(0.5);
-      doc.fontSize(10);
-      if (invoice.amountPaid !== null) doc.text(`Amount paid: ${money(invoice.amountPaid, invoice.currency)}`, { align: "right" });
-      if (invoice.amountDue !== null) doc.text(`Amount due: ${money(invoice.amountDue, invoice.currency)}`, { align: "right" });
+    // Grand Total in Words
+    if (invoice.totalInWords) {
+      doc.fontSize(8.5).fillColor("#0f172a").text(`Amount in Words: ${invoice.totalInWords}`, startX, currentY, { width: pageWidth });
+      currentY += 16;
     }
+
+    doc.moveTo(startX, currentY).lineTo(startX + pageWidth, currentY).strokeColor("#D0D0D0").stroke();
+    currentY += 10;
+
+    // Bank Details & Payment Summary Block (2 columns)
+    const bank = invoice.bankDetails ?? (BUILDOHUB_COMPANY as any).bankDetails;
+    if (bank) {
+      doc.fontSize(8.5).fillColor(OLIVE_ACCENT).text("Bank Settlement Details", startX, currentY, { underline: true });
+      const acctTypeSuffix = bank.accountType ? ` (${bank.accountType})` : "";
+      doc
+        .fontSize(8)
+        .fillColor("#64748b")
+        .text(`Bank: ${bank.bankName} | A/C: ${bank.accountNumber}${acctTypeSuffix}`, startX, currentY + 12)
+        .text(`Account Name: ${bank.accountName}`, startX, currentY + 22)
+        .text(`IFSC: ${bank.ifscCode} | Branch: ${bank.branch}`, startX, currentY + 32);
+    }
+
+    const payX = startX + 320;
+    doc.fontSize(8.5).fillColor(OLIVE_ACCENT).text("Payment Summary", payX, currentY, { underline: true });
+    doc
+      .fontSize(8)
+      .fillColor("#64748b")
+      .text(`Payment Status: ${invoice.paymentStatus}`, payX, currentY + 12);
+    if (invoice.amountPaid !== null) {
+      doc.text(`Amount Paid (Advance): ${money(invoice.amountPaid, invoice.currency)}`, payX, currentY + 22);
+    }
+    if (invoice.amountDue !== null) {
+      doc.text(`Balance Payable: ${money(invoice.amountDue, invoice.currency)}`, payX, currentY + 32);
+    }
+
+    currentY += 48;
+    doc.moveTo(startX, currentY).lineTo(startX + pageWidth, currentY).strokeColor("#E2E8F0").stroke();
+    currentY += 8;
+
+    // Signatory & Declaration Footer
+    doc
+      .fontSize(7.5)
+      .fillColor("#94a3b8")
+      .text("Certified that the particulars given above are true and correct.", startX, currentY)
+      .text("This is a digitally generated tax invoice issued under Rule 48(4) of the CGST Rules. No physical signature is required.", startX, currentY + 10)
+      .text(`For ${BUILDOHUB_COMPANY.legalName} (${BUILDOHUB_COMPANY.name})`, startX + 300, currentY, { width: 223, align: "right" });
 
     doc.end();
   });

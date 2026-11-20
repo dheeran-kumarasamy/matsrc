@@ -240,8 +240,8 @@ describe("RfqsService.createQuote", () => {
     });
   });
 
-  it("rejects submission once the RFQ has already been finalized (quoteSelectionCompletedAt set)", async () => {
-    const { service } = createHarness({ quoteSelectionCompletedAt: new Date("2026-01-01T00:00:00Z") });
+  it("rejects submission once the RFQ has already been locked by payment or purchase order", async () => {
+    const { service } = createHarness({ paymentStatus: "PAID" });
 
     await expect(
       service.createQuote("enq-1", { price: "100", lineQuotes: [{ lineItemId: "line-1", unitPrice: "100" }] } as any, USER)

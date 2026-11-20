@@ -851,18 +851,28 @@ model Quote {
   @@index([supplierId])
 }
 
+enum SupplierQuoteStatus {
+  PENDING_ADMIN_REVIEW
+  SENT_TO_BUYER
+  REJECTED
+}
+
 model SupplierQuote {
-  id           String          @id @default(cuid())
+  id           String              @id @default(cuid())
   enquiryId    String
-  enquiry      Order           @relation(fields: [enquiryId], references: [id])
+  enquiry      Order               @relation(fields: [enquiryId], references: [id])
   supplierId   String
-  supplier     SupplierProfile @relation(fields: [supplierId], references: [id])
+  supplier     SupplierProfile     @relation(fields: [supplierId], references: [id])
   lineItemId   String
-  lineItem     OrderItem       @relation(fields: [lineItemId], references: [id])
-  unitPrice    Decimal         @db.Decimal(12, 2)
-  currency     String          @default("INR")
+  lineItem     OrderItem           @relation(fields: [lineItemId], references: [id])
+  unitPrice    Decimal             @db.Decimal(12, 2)
+  currency     String              @default("INR")
   leadTimeDays Int?
-  createdAt    DateTime        @default(now())
+  status       SupplierQuoteStatus @default(PENDING_ADMIN_REVIEW)
+  sentToBuyerAt DateTime?
+  reviewedByAdminId String?
+  adminNotes   String?
+  createdAt    DateTime            @default(now())
 
   // Supplier RFQ Price Revision & GST-Inclusive Order Value — the
   // RFQ-specific supplier-quoted price (unitPrice above) plus its
@@ -904,6 +914,7 @@ model SupplierQuote {
   @@index([supplierId])
   @@index([lineItemId])
   @@index([enquiryId, lineItemId])
+  @@index([enquiryId, status])
 }
 
 model QuickRequest {
@@ -1107,6 +1118,7 @@ model Order {
   site   Site?   @relation(fields: [siteId], references: [id])
 
   selectedSupplier          SupplierProfile? @relation("SelectedSupplierOrders", fields: [selectedSupplierId], references: [id])
+  selectedQuoteId           String?
   bestPriceTotal            Decimal?         @db.Decimal(12, 2)
   tentativeDeliveryDate     DateTime?
   quoteSelectionCompletedAt DateTime?

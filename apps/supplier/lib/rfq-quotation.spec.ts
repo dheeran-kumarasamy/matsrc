@@ -367,8 +367,8 @@ describe("createSupplierQuote — RFQ line-item quotation (lineQuotes path)", ()
     expect(supplierQuoteRows.some((q) => q.supplierId === "sup-1" && q.unitPrice === 450)).toBe(true);
   });
 
-  it("rejects submission once the RFQ has already been finalized", async () => {
-    seedOrder("enq-6", { quoteSelectionCompletedAt: new Date("2026-01-01T00:00:00Z") });
+  it("rejects submission once the RFQ has already been locked by payment or purchase order", async () => {
+    seedOrder("enq-6", { paymentStatus: "PAID" });
     await expect(
       createSupplierQuote("enq-6", { price: "100", lineQuotes: [{ lineItemId: "line-1", unitPrice: "100" }] }, "supplier@example.com")
     ).rejects.toThrow(/no longer available for quotation/);

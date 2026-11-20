@@ -46,13 +46,25 @@ export class RfqsService {
       }),
       this.prisma.orderItem.findMany({
         where: {
-          order: { status: "PLACED" },
           OR: [
             { supplierId: supplierProfile.id },
-            { candidates: { some: { supplierId: supplierProfile.id } } },
+            { candidates: { some: { supplierId: supplierProfile.id, status: "PENDING" } } },
           ],
+          order: {
+            status: { in: ["PLACED", "PROCESSING"] },
+            paymentStatus: { not: "PAID" },
+            purchaseOrders: { none: {} },
+          },
         },
-        include: { product: true, order: true },
+        include: {
+          product: true,
+          order: true,
+          supplierQuotes: {
+            where: { supplierId: supplierProfile.id },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
         orderBy: { order: { createdAt: "desc" } },
         take: 20,
       }),
@@ -83,7 +95,12 @@ export class RfqsService {
       quantity: `${item.quantity} ${item.product.unit}`,
       pincode: item.order.deliveryAddress ?? "See order for delivery details",
       dueBy: formatDate(item.deliveryDate ?? item.order.deliveryDate),
-      latestQuote: null,
+      latestQuote: (item as any).supplierQuotes?.[0]
+        ? {
+            price: (item as any).supplierQuotes[0].unitPrice.toString(),
+            validUntil: null,
+          }
+        : null,
       source: "ENQUIRY" as const,
     }));
 
@@ -160,6 +177,7 @@ export class RfqsService {
     const enquiry = await this.prisma.order.findUnique({
       where: { id: enquiryId },
       include: {
+        purchaseOrders: { select: { id: true } },
         items: {
           include: {
             candidates: { select: { supplierId: true } },
@@ -172,15 +190,13 @@ export class RfqsService {
       throw new NotFoundException("Enquiry not found");
     }
 
-    // Supplier RFQ Price Revision & GST-Inclusive Order Value (spec §11/§20):
-    // reject quotation submissions against an enquiry that is no longer
-    // open/quotable — either because best-price selection has already
-    // finalized it (quoteSelectionCompletedAt set — the concurrency/
-    // uniqueness backstop against duplicate/late quotations), or because the
-    // enquiry has moved to a terminal state (CANCELLED). This is a client
-    // error (stale UI / a direct API call against an expired RFQ), not a
-    // server fault.
-    if (enquiry.quoteSelectionCompletedAt || enquiry.status === "CANCELLED") {
+    // Reject quotation submissions against an enquiry that is locked by payment,
+    // has a Purchase Order already generated, or has moved to CANCELLED.
+    if (
+      enquiry.status === "CANCELLED" ||
+      enquiry.paymentStatus === "PAID" ||
+      (enquiry.purchaseOrders && enquiry.purchaseOrders.length > 0)
+    ) {
       throw new BadRequestException("This RFQ is no longer available for quotation.");
     }
 
@@ -200,12 +216,10 @@ export class RfqsService {
         throw new NotFoundException(`Line item ${lineQuote.lineItemId} not found for enquiry`);
       }
 
-      // Authorization (spec §11/§23): only the supplier currently assigned
-      // to this line item or listed as an eligible candidate may submit a quotation for it.
-      const isCandidate =
-        Array.isArray((item as any).candidates) &&
-        (item as any).candidates.some((c: any) => c.supplierId === supplierProfile.id);
-      if (item.supplierId !== supplierProfile.id && !isCandidate) {
+      // Authorization: active supplier or eligible candidate supplier may submit quotation
+      const isAssigned = item.supplierId === supplierProfile.id;
+      const isCandidate = Array.isArray((item as any).candidates) && (item as any).candidates.some((c: any) => c.supplierId === supplierProfile.id);
+      if (!isAssigned && !isCandidate) {
         throw new BadRequestException(`You are not authorized to quote line item ${lineQuote.lineItemId}.`);
       }
 
@@ -253,6 +267,7 @@ export class RfqsService {
             lineSubtotal: gst.lineSubtotal,
             gstAmount: gst.gstAmount,
             lineTotal: gst.lineTotal,
+            status: "PENDING_ADMIN_REVIEW",
           },
         });
 

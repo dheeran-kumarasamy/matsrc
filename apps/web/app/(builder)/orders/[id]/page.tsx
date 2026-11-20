@@ -9,6 +9,7 @@ import SupplierSocialProof from "@/components/products/SupplierSocialProof";
 import OrderRatingForm from "@/components/orders/OrderRatingForm";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
+import { BuyerQuotationSelector } from "@/components/orders/BuyerQuotationSelector";
 import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
 
 
@@ -235,6 +236,10 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         >
           Supplier declined this enquiry. You can review the details and place a fresh order if needed.
         </div>
+      ) : null}
+
+      {order.status !== "CANCELLED" ? (
+        <BuyerQuotationSelector orderId={order.id} />
       ) : null}
 
       {/* Digital Purchase Order — additive layer on top of existing enquiry/order tracking */}

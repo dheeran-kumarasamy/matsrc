@@ -2,8 +2,6 @@ import {
   prisma,
   notifyCustomerOrderStatusChanged,
   notifyPaymentRequired,
-  notifyQuoteReceived,
-  finalizeEnquiryBestPriceIfEligible,
   calculateLineGst,
   parseQuotedPrice,
   lockAdvanceAccountRow,
@@ -2694,11 +2692,15 @@ export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]>
     }),
     prisma.orderItem.findMany({
       where: {
-        order: { status: "PLACED" },
         OR: [
           { supplierId: supplierProfile.id },
-          { candidates: { some: { supplierId: supplierProfile.id } } },
+          { candidates: { some: { supplierId: supplierProfile.id, status: "PENDING" } } },
         ],
+        order: {
+          status: { in: ["PLACED", "PROCESSING"] },
+          paymentStatus: { not: "PAID" },
+          purchaseOrders: { none: {} },
+        },
       },
       include: {
         product: true,
@@ -2710,7 +2712,7 @@ export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]>
         },
       },
       orderBy: { order: { createdAt: "desc" } },
-      take: 12,
+      take: 20,
     }),
   ]);
 
@@ -2743,7 +2745,7 @@ export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]>
     latestQuote: item.supplierQuotes?.[0]
       ? {
           price: item.supplierQuotes[0].unitPrice.toString(),
-          validUntil: item.supplierQuotes[0].validUntil?.toISOString() ?? null,
+          validUntil: (item.supplierQuotes[0] as any).validUntil instanceof Date ? (item.supplierQuotes[0] as any).validUntil.toISOString() : ((item.supplierQuotes[0] as any).validUntil ?? null),
         }
       : null,
     source: "ENQUIRY",
@@ -2802,10 +2804,11 @@ async function createEnquiryLineQuotesForSupplier(
     // Order.totalAmount can be correctly resynced from the FULL set of
     // lines after this submission, not just the submitted subset.
     include: {
+      purchaseOrders: { select: { id: true } },
       items: {
         include: {
-          product: { select: { categoryId: true } },
           candidates: { select: { supplierId: true } },
+          product: { select: { categoryId: true } },
         },
       },
     },
@@ -2815,9 +2818,12 @@ async function createEnquiryLineQuotesForSupplier(
     throw new Error("Enquiry not found");
   }
 
-  // Spec §11/§20: reject submissions against an RFQ that is no longer
-  // open/quotable.
-  if (enquiry.quoteSelectionCompletedAt || enquiry.status === "CANCELLED") {
+  // Reject submissions against an RFQ that is no longer open/quotable
+  if (
+    enquiry.status === "CANCELLED" ||
+    enquiry.paymentStatus === "PAID" ||
+    (enquiry.purchaseOrders && enquiry.purchaseOrders.length > 0)
+  ) {
     throw new Error("This RFQ is no longer available for quotation.");
   }
 
@@ -2830,12 +2836,10 @@ async function createEnquiryLineQuotesForSupplier(
         throw new Error(`Line item ${lineQuote.lineItemId} not found for enquiry`);
       }
 
-      // Authorization: only the supplier currently assigned or listed as an eligible candidate
-      // to this line item may submit a quotation for it.
-      const isCandidate =
-        Array.isArray((item as any).candidates) &&
-        (item as any).candidates.some((c: any) => c.supplierId === supplierId);
-      if ((item as any).supplierId !== supplierId && !isCandidate) {
+      // Authorization: active supplier or eligible candidate supplier may submit quotation
+      const isAssigned = (item as any).supplierId === supplierId;
+      const isCandidate = Array.isArray((item as any).candidates) && (item as any).candidates.some((c: any) => c.supplierId === supplierId);
+      if (!isAssigned && !isCandidate) {
         throw new Error(`You are not authorized to quote line item ${lineQuote.lineItemId}.`);
       }
 
@@ -2899,6 +2903,7 @@ async function createEnquiryLineQuotesForSupplier(
           buyerUnitPrice: resolved.buyerUnitPrice,
           markupPercent: resolved.markupPercent,
           markupAmount: resolved.markupAmount,
+          status: "PENDING_ADMIN_REVIEW",
         },
       });
       rows.push({ id: row.id, unitPrice: row.unitPrice });
@@ -2946,49 +2951,8 @@ async function createEnquiryLineQuotesForSupplier(
     return rows;
   });
 
-  const quoteIds = created.map((row) => row.id);
-
-  // 1. Record OrderTracking that supplier submitted quotation
-  await prisma.orderTracking
-    .create({
-      data: {
-        orderId: enquiryId,
-        status: enquiry.status,
-        note: `Supplier submitted quotation for enquiry`,
-      },
-    })
-    .catch(() => undefined);
-
-  // 2. Dispatch quote_received notification to Buyer (WhatsApp + In-App notification)
-  waitUntil(
-    notifyQuoteReceived(prisma, {
-      enquiryId,
-      supplierId,
-      quoteIds,
-    }).catch((err) => {
-      console.warn(`Failed to send quote_received notification for enquiry ${enquiryId}:`, err);
-    })
-  );
-
-  // 3. Evaluate best-price selection & enquiry auto-finalization
-  // If minQuotes or deadline is met (default minQuotes=1), transitions order to PROCESSING,
-  // sets quoteSelectionCompletedAt, freezes financial snapshot, generates orderNumber,
-  // and dispatches customer_order_status and payment_required notifications to buyer.
-  const finalizeResult = await finalizeEnquiryBestPriceIfEligible(prisma, enquiryId, {
-    waitUntil,
-    onLog: (msg) => console.log(`[best-price-selection] ${msg}`),
-  }).catch((err) => {
-    console.warn(`Failed to auto-finalize enquiry ${enquiryId} after quote submission:`, err);
-    return null;
-  });
-
   const latest = created[created.length - 1];
-  return {
-    id: latest?.id ?? enquiryId,
-    rfqId: enquiryId,
-    price: latest?.unitPrice?.toString() ?? "0",
-    finalized: finalizeResult?.finalized ?? false,
-  };
+  return { id: latest?.id ?? enquiryId, rfqId: enquiryId, price: latest?.unitPrice?.toString() ?? "0" };
 }
 
 export async function getSupplierProfileData(email: string) {

@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from "@nestjs/common";
 import { OptionalJwtAuthGuard } from "src/auth/optional-jwt-auth.guard";
@@ -31,6 +32,33 @@ function assertEntity(entity: string): CatalogEntity {
 @Roles("ADMIN")
 export class CatalogController {
   constructor(private readonly catalogService: CatalogService) {}
+
+  @Get("order-splitting-config")
+  getOrderSplittingConfig() {
+    return this.catalogService.getOrderSplittingConfig();
+  }
+
+  @Put("order-splitting-config")
+  updateOrderSplittingConfig(
+    @Body() dto: { allowMultiSupplierSplitting?: boolean; splitOnlyAcrossCategories?: boolean },
+    @CurrentUser() user: any
+  ) {
+    return this.catalogService.updateOrderSplittingConfig(dto, user?.userId ?? "system");
+  }
+
+  @Get("products")
+  findProducts() {
+    return this.catalogService.findProducts();
+  }
+
+  @Patch("products/:id")
+  updateProduct(
+    @Param("id") id: string,
+    @Body() dto: { isOrderable?: boolean; isActive?: boolean },
+    @CurrentUser() user: any
+  ) {
+    return this.catalogService.updateProduct(id, dto, user?.userId ?? "system");
+  }
 
   @Get(":entity")
   findAll(@Param("entity") entity: string) {

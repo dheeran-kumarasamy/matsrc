@@ -104,6 +104,7 @@ export class CatalogService {
       payload.code = data.code.trim().toUpperCase();
     }
     if (data.isActive !== undefined) payload.isActive = data.isActive;
+    if ((data as any).isOrderable !== undefined) payload.isOrderable = (data as any).isOrderable;
 
     const updated = await model.update({ where: { id }, data: payload });
 
@@ -127,5 +128,109 @@ export class CatalogService {
   // the required FK so a hard delete would fail naturally if in use).
   async deactivate(entity: CatalogEntity, id: string, actorId: string) {
     return this.update(entity, id, { isActive: false }, actorId);
+  }
+
+  // Product customer ordering management
+  async findProducts() {
+    return this.prisma.product.findMany({
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        categoryId: true,
+        category: { select: { id: true, name: true } },
+        supplierId: true,
+        supplier: { select: { id: true, companyName: true } },
+        basePrice: true,
+        stock: true,
+        unit: true,
+        isActive: true,
+        isOrderable: true,
+      },
+      orderBy: [{ category: { name: "asc" } }, { name: "asc" }],
+    });
+  }
+
+  async updateProduct(
+    id: string,
+    data: { isOrderable?: boolean; isActive?: boolean },
+    actorId: string
+  ) {
+    const existing = await this.prisma.product.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Product not found");
+
+    const payload: { isOrderable?: boolean; isActive?: boolean } = {};
+    if (data.isOrderable !== undefined) payload.isOrderable = data.isOrderable;
+    if (data.isActive !== undefined) payload.isActive = data.isActive;
+
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data: payload,
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: "CATALOG_PRODUCT_UPDATED",
+        entityType: "product",
+        entityId: id,
+        metadata: payload as any,
+      },
+    });
+
+    return updated;
+  }
+
+  // Order Splitting Configuration
+  async getOrderSplittingConfig() {
+    let config = await this.prisma.orderSplittingConfig.findUnique({ where: { id: "global" } });
+    if (!config) {
+      config = await this.prisma.orderSplittingConfig.create({
+        data: {
+          id: "global",
+          allowMultiSupplierSplitting: false,
+          splitOnlyAcrossCategories: true,
+        },
+      });
+    }
+    return config;
+  }
+
+  async updateOrderSplittingConfig(
+    data: { allowMultiSupplierSplitting?: boolean; splitOnlyAcrossCategories?: boolean },
+    actorId: string
+  ) {
+    const payload: { allowMultiSupplierSplitting?: boolean; splitOnlyAcrossCategories?: boolean; updatedBy?: string } = {
+      updatedBy: actorId,
+    };
+    if (data.allowMultiSupplierSplitting !== undefined) {
+      payload.allowMultiSupplierSplitting = data.allowMultiSupplierSplitting;
+    }
+    if (data.splitOnlyAcrossCategories !== undefined) {
+      payload.splitOnlyAcrossCategories = data.splitOnlyAcrossCategories;
+    }
+
+    const updated = await this.prisma.orderSplittingConfig.upsert({
+      where: { id: "global" },
+      create: {
+        id: "global",
+        allowMultiSupplierSplitting: data.allowMultiSupplierSplitting ?? false,
+        splitOnlyAcrossCategories: data.splitOnlyAcrossCategories ?? true,
+        updatedBy: actorId,
+      },
+      update: payload,
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId,
+        action: "ORDER_SPLITTING_CONFIG_UPDATED",
+        entityType: "OrderSplittingConfig",
+        entityId: "global",
+        metadata: payload as any,
+      },
+    });
+
+    return updated;
   }
 }

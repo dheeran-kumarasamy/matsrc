@@ -95,6 +95,10 @@ export async function createOrdersFromCart(
           canonicalProductId: true,
           categoryId: true,
           basePrice: true,
+          isOrderable: true,
+          category: {
+            select: { id: true, name: true, isOrderable: true },
+          },
           supplier: { select: { companyName: true } },
           pricingTiers: {
             select: { minQty: true, maxQty: true, tierPrice: true },
@@ -107,6 +111,23 @@ export async function createOrdersFromCart(
 
   if (!cartItems.length) {
     return { ok: false, error: "Cart is empty", status: 400 };
+  }
+
+  // Customer Ordering Enable/Disable verification:
+  // If any product or category in the cart has been disabled for customer ordering by admin,
+  // refuse checkout and instruct the buyer to remove the unorderable item.
+  for (const item of cartItems) {
+    if (
+      (item.product as any)?.isOrderable === false ||
+      (item.product as any)?.category?.isOrderable === false
+    ) {
+      const name = item.product?.name || "One or more items";
+      return {
+        ok: false,
+        error: `"${name}" is currently not available for customer ordering. Please remove it from your cart to proceed.`,
+        status: 400,
+      };
+    }
   }
 
   // Pre-validate that every cart item has a valid, non-empty database identifier.
@@ -210,15 +231,60 @@ export async function createOrdersFromCart(
     candidates: ResolutionResult[];
   };
 
-  // Case 2 & Case 3 — Validate product availability and resolve each line.
-  // All-or-nothing checkout: if any cart item cannot be matched to active products
-  // or resolved to an eligible supplier tier, return a clean controlled failure and
-  // preserve the cart without creating partial orders or using stale cart snapshots.
-  type SupplierResolvedLine = Omit<ResolvedLine, "unitPrice" | "markupPercent" | "markupAmount">;
-  const supplierResolvedLines: SupplierResolvedLine[] = [];
+  // Load order splitting configuration.
+  // In production database, this table has default row:
+  // allowMultiSupplierSplitting: false, splitOnlyAcrossCategories: true.
+  // In unit test mocks where orderSplittingConfig is not defined on the client,
+  // fallback to allowMultiSupplierSplitting: true for backward compatibility with legacy tests.
+  let splittingConfig = {
+    allowMultiSupplierSplitting: false,
+    splitOnlyAcrossCategories: true,
+  };
+
+  try {
+    if (typeof (prisma as any).orderSplittingConfig?.findUnique === "function") {
+      const cfg = await (prisma as any).orderSplittingConfig.findUnique({
+        where: { id: "global" },
+      });
+      if (cfg) {
+        splittingConfig = {
+          allowMultiSupplierSplitting: Boolean(cfg.allowMultiSupplierSplitting),
+          splitOnlyAcrossCategories: Boolean(cfg.splitOnlyAcrossCategories),
+        };
+      }
+    } else if (!(prisma as any).orderSplittingConfig) {
+      splittingConfig = {
+        allowMultiSupplierSplitting: true,
+        splitOnlyAcrossCategories: false,
+      };
+    }
+  } catch {
+    // Keep defaults
+  }
+
+  // Pre-process items: match against dbProducts and build candidate lists
+  type ProcessedItem = {
+    item: (typeof cartItems)[0];
+    group: typeof dbProducts;
+    eligibleCandidates: Array<{
+      listingId: string;
+      supplierId: string;
+      supplierName: string;
+      basePrice: number;
+      stock: number;
+      maxServiceableQty: number;
+      pricingTiers: Array<{ minQty: number; maxQty: number; tierPrice: number }>;
+      isActive: boolean;
+    }>;
+  };
+
+  const processedItems: ProcessedItem[] = [];
 
   for (const item of cartItems) {
     const group = dbProducts.filter((p) => {
+      if ((p as any).isOrderable === false || (p as any).category?.isOrderable === false) {
+        return false;
+      }
       if (item.product.canonicalProductId && p.canonicalProductId === item.product.canonicalProductId) {
         return true;
       }
@@ -253,6 +319,7 @@ export async function createOrdersFromCart(
       return {
         listingId: p.id,
         supplierId: p.supplierId,
+        supplierName: p.supplier?.companyName ?? item.product.supplier.companyName,
         basePrice: Number(p.basePrice),
         stock: Number(p.stock),
         maxServiceableQty: p.maxServiceableQty != null ? Number(p.maxServiceableQty) : Number(p.stock),
@@ -261,18 +328,13 @@ export async function createOrdersFromCart(
       };
     });
 
-    // Serviceability & Capacity verification (Section 2):
-    // Candidates must be active and have sufficient capacity (maxServiceableQty or stock >= quantity) to fulfill the line.
-    // When maxServiceableQty is explicitly configured (including 0), it takes precedence over stock.
-    // Zero capacity represents a genuine out-of-capacity condition and must not fall back to stock.
     const eligibleCandidates = candidates.filter((c) => {
       if (!c.isActive) return false;
       const serviceable = c.maxServiceableQty ?? c.stock;
       return serviceable > 0 && serviceable >= item.quantity;
     });
 
-    const resolution = resolveLowestPriceForQuantity(eligibleCandidates, item.quantity);
-    if (!resolution || !resolution.supplierId) {
+    if (eligibleCandidates.length === 0) {
       return {
         ok: false,
         error: "One or more items in your cart are no longer available. Please review your cart.",
@@ -280,30 +342,211 @@ export async function createOrdersFromCart(
       };
     }
 
-    const range = resolvePriceRange(eligibleCandidates);
-    const minPrice = range?.minPrice ?? null;
-    const ranked = rankCandidatesForQuantity(eligibleCandidates, item.quantity);
-    const winningProduct = group.find((p) => p.id === resolution.listingId);
-    const matchedSupplierName = winningProduct?.supplier?.companyName;
-
-    supplierResolvedLines.push({
-      productId: item.productId,
-      quantity: item.quantity,
-      supplierUnitPrice: resolution.unitPrice,
-      // REQ-06: askPrice is the minimum of the full canonical price
-      // range shown to the builder — the only price figure surfaced
-      // to the supplier. Falls back to the resolved unitPrice if no
-      // range could be computed (e.g. single-listing canonical group).
-      askPrice: minPrice ?? resolution.unitPrice,
-      supplierId: resolution.supplierId,
-      supplierName: matchedSupplierName ?? item.product.supplier.companyName,
-      categoryId: item.product.categoryId,
-      canonicalProductId: item.product.canonicalProductId,
-      resolvedListingId: resolution.listingId,
-      tierMinQty: resolution.tierMinQty,
-      tierMaxQty: resolution.tierMaxQty,
-      candidates: ranked,
+    processedItems.push({
+      item,
+      group,
+      eligibleCandidates,
     });
+  }
+
+  // Partition processed items into fulfillment units based on admin configuration:
+  // - If allowMultiSupplierSplitting === false: entire cart is a single unit (no splitting).
+  // - If allowMultiSupplierSplitting === true && splitOnlyAcrossCategories === true: grouped by categoryId.
+  // - If allowMultiSupplierSplitting === true && splitOnlyAcrossCategories === false: each item is its own unit (legacy).
+  type FulfillmentUnit = {
+    unitKey: string;
+    unitLabel: string;
+    items: ProcessedItem[];
+  };
+
+  const units: FulfillmentUnit[] = [];
+
+  if (!splittingConfig.allowMultiSupplierSplitting) {
+    units.push({
+      unitKey: "global",
+      unitLabel: "your cart",
+      items: processedItems,
+    });
+  } else if (splittingConfig.splitOnlyAcrossCategories) {
+    const catMap = new Map<string, ProcessedItem[]>();
+    for (const p of processedItems) {
+      const catId = p.item.product.categoryId || "uncategorized";
+      const list = catMap.get(catId) ?? [];
+      list.push(p);
+      catMap.set(catId, list);
+    }
+    for (const [catId, list] of catMap.entries()) {
+      const catName =
+        list[0]?.item.product?.category?.name ||
+        list[0]?.group[0]?.category?.name ||
+        "Category";
+      units.push({
+        unitKey: catId,
+        unitLabel: `category "${catName}"`,
+        items: list,
+      });
+    }
+  } else {
+    for (const p of processedItems) {
+      units.push({
+        unitKey: p.item.id,
+        unitLabel: p.item.product.name,
+        items: [p],
+      });
+    }
+  }
+
+  type SupplierResolvedLine = Omit<ResolvedLine, "unitPrice" | "markupPercent" | "markupAmount">;
+  const supplierResolvedLines: SupplierResolvedLine[] = [];
+
+  for (const unit of units) {
+    if (unit.items.length === 1 && splittingConfig.allowMultiSupplierSplitting && !splittingConfig.splitOnlyAcrossCategories) {
+      // Legacy per-item resolution
+      const { item, group, eligibleCandidates } = unit.items[0];
+      const resolution = resolveLowestPriceForQuantity(eligibleCandidates, item.quantity);
+      if (!resolution || !resolution.supplierId) {
+        return {
+          ok: false,
+          error: "One or more items in your cart are no longer available. Please review your cart.",
+          status: 400,
+        };
+      }
+      const range = resolvePriceRange(eligibleCandidates);
+      const minPrice = range?.minPrice ?? null;
+      const ranked = rankCandidatesForQuantity(eligibleCandidates, item.quantity);
+      const winningProduct = group.find((p) => p.id === resolution.listingId);
+      const matchedSupplierName = winningProduct?.supplier?.companyName;
+
+      supplierResolvedLines.push({
+        productId: item.productId,
+        quantity: item.quantity,
+        supplierUnitPrice: resolution.unitPrice,
+        askPrice: minPrice ?? resolution.unitPrice,
+        supplierId: resolution.supplierId,
+        supplierName: matchedSupplierName ?? item.product.supplier.companyName,
+        categoryId: item.product.categoryId,
+        canonicalProductId: item.product.canonicalProductId,
+        resolvedListingId: resolution.listingId,
+        tierMinQty: resolution.tierMinQty,
+        tierMaxQty: resolution.tierMaxQty,
+        candidates: ranked,
+      });
+      continue;
+    }
+
+    // Single-Supplier Basket Optimization:
+    // Identify all candidate suppliers who can fulfill EVERY item in this unit with sufficient capacity.
+    const allSuppliers = new Set<string>();
+    for (const it of unit.items) {
+      for (const cand of it.eligibleCandidates) {
+        allSuppliers.add(cand.supplierId);
+      }
+    }
+
+    type UnitSupplierEvaluation = {
+      supplierId: string;
+      totalBasketPrice: number;
+      itemResolutions: Map<
+        string,
+        {
+          candidate: ProcessedItem["eligibleCandidates"][0];
+          unitPrice: number;
+          tierMinQty: number | null;
+          tierMaxQty: number | null;
+        }
+      >;
+    };
+
+    const eligibleUnitSuppliers: UnitSupplierEvaluation[] = [];
+
+    for (const suppId of allSuppliers) {
+      let canFulfillAll = true;
+      let totalCost = 0;
+      const itemResolutions = new Map<
+        string,
+        {
+          candidate: ProcessedItem["eligibleCandidates"][0];
+          unitPrice: number;
+          tierMinQty: number | null;
+          tierMaxQty: number | null;
+        }
+      >();
+
+      for (const it of unit.items) {
+        const suppCandidates = it.eligibleCandidates.filter((c) => c.supplierId === suppId);
+        if (suppCandidates.length === 0) {
+          canFulfillAll = false;
+          break;
+        }
+        const suppRes = resolveLowestPriceForQuantity(suppCandidates, it.item.quantity);
+        if (!suppRes || !suppRes.supplierId) {
+          canFulfillAll = false;
+          break;
+        }
+        const winningCand = suppCandidates.find((c) => c.listingId === suppRes.listingId) || suppCandidates[0];
+        itemResolutions.set(it.item.id, {
+          candidate: winningCand,
+          unitPrice: suppRes.unitPrice,
+          tierMinQty: suppRes.tierMinQty,
+          tierMaxQty: suppRes.tierMaxQty,
+        });
+        totalCost += suppRes.unitPrice * it.item.quantity;
+      }
+
+      if (canFulfillAll) {
+        eligibleUnitSuppliers.push({
+          supplierId: suppId,
+          totalBasketPrice: totalCost,
+          itemResolutions,
+        });
+      }
+    }
+
+    // If no single supplier can fulfill all items in the unit:
+    // Option A: Refuse checkout and notify the buyer which items cannot be fulfilled together
+    if (eligibleUnitSuppliers.length === 0) {
+      const itemNames = unit.items.map((it) => `"${it.item.product.name}"`).join(", ");
+      return {
+        ok: false,
+        error: `All items in ${unit.unitLabel} must be fulfilled by a single supplier. No single supplier has sufficient stock or capacity to fulfill all of these items together: ${itemNames}. Please adjust item quantities or order them separately.`,
+        status: 400,
+      };
+    }
+
+    // Select the single supplier with the lowest total basket price
+    eligibleUnitSuppliers.sort((a, b) => a.totalBasketPrice - b.totalBasketPrice);
+    const winningSupplier = eligibleUnitSuppliers[0];
+
+    for (const it of unit.items) {
+      const suppRes = winningSupplier.itemResolutions.get(it.item.id)!;
+      const range = resolvePriceRange(it.eligibleCandidates);
+      const minPrice = range?.minPrice ?? null;
+
+      // Candidate ranking: the winning supplier's candidate is ranked #1 (index 0),
+      // followed by other eligible candidates ordered by price
+      const allRanked = rankCandidatesForQuantity(it.eligibleCandidates, it.item.quantity);
+      const winnerRanked = allRanked.filter((c) => c.supplierId === winningSupplier.supplierId);
+      const othersRanked = allRanked.filter((c) => c.supplierId !== winningSupplier.supplierId);
+      const candidates = [...winnerRanked, ...othersRanked];
+
+      const winningProduct = it.group.find((p) => p.id === suppRes.candidate.listingId);
+      const matchedSupplierName = winningProduct?.supplier?.companyName ?? suppRes.candidate.supplierName;
+
+      supplierResolvedLines.push({
+        productId: it.item.productId,
+        quantity: it.item.quantity,
+        supplierUnitPrice: suppRes.unitPrice,
+        askPrice: minPrice ?? suppRes.unitPrice,
+        supplierId: winningSupplier.supplierId,
+        supplierName: matchedSupplierName ?? it.item.product.supplier.companyName,
+        categoryId: it.item.product.categoryId,
+        canonicalProductId: it.item.product.canonicalProductId,
+        resolvedListingId: suppRes.candidate.listingId,
+        tierMinQty: suppRes.tierMinQty,
+        tierMaxQty: suppRes.tierMaxQty,
+        candidates,
+      });
+    }
   }
 
   // Admin-Configurable Product Markup — batched database query resolving

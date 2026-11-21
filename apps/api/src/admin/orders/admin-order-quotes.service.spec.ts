@@ -13,6 +13,7 @@ describe("AdminOrderQuotesService", () => {
     prisma = {
       order: {
         findUnique: vi.fn(),
+        findMany: vi.fn(),
       },
       supplierQuote: {
         findFirst: vi.fn(),
@@ -263,6 +264,35 @@ describe("AdminOrderQuotesService", () => {
           }),
         })
       );
+    });
+  });
+
+  describe("listOrders", () => {
+    it("returns list of orders with quote counts and pendingReviewCount", async () => {
+      prisma.order.findMany.mockResolvedValue([
+        {
+          id: "order-1",
+          orderNumber: "OD/001",
+          enquiryId: "EQ/001",
+          status: "PLACED",
+          paymentStatus: "PENDING",
+          createdAt: new Date(),
+          user: { id: "u-1", name: "Builder A", email: "builder@a.com", phone: "123" },
+          items: [{ id: "i-1", quantity: 5, product: { id: "p-1", name: "TMT Bar", unit: "MT" } }],
+          purchaseOrders: [],
+          supplierQuotes: [
+            { id: "q-1", status: SupplierQuoteStatus.PENDING_ADMIN_REVIEW, unitPrice: 50000, buyerUnitPrice: null },
+            { id: "q-2", status: SupplierQuoteStatus.SENT_TO_BUYER, unitPrice: 51000, buyerUnitPrice: 53550 },
+          ],
+        },
+      ]);
+
+      const result = await service.listOrders();
+      expect(result).toHaveLength(1);
+      expect(result[0].pendingReviewCount).toBe(1);
+      expect(result[0].sentToBuyerCount).toBe(1);
+      expect(result[0].totalQuotesCount).toBe(2);
+      expect(result[0].isLocked).toBe(false);
     });
   });
 });

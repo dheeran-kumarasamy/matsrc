@@ -11,6 +11,56 @@ export class AdminOrderQuotesService {
     private readonly markupService: MarkupService
   ) {}
 
+  async listOrders() {
+    const orders = await this.prisma.order.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        user: { select: { id: true, name: true, email: true, phone: true } },
+        items: {
+          include: {
+            product: { select: { id: true, name: true, unit: true } },
+          },
+        },
+        purchaseOrders: {
+          select: { id: true, poNumber: true, status: true },
+        },
+        supplierQuotes: {
+          select: { id: true, status: true, unitPrice: true, buyerUnitPrice: true, createdAt: true },
+        },
+      },
+    });
+
+    return orders.map((order) => {
+      const pendingReviewCount = order.supplierQuotes.filter(
+        (q) => q.status === SupplierQuoteStatus.PENDING_ADMIN_REVIEW
+      ).length;
+      const sentToBuyerCount = order.supplierQuotes.filter(
+        (q) => q.status === SupplierQuoteStatus.SENT_TO_BUYER
+      ).length;
+
+      return {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        enquiryId: order.enquiryId ?? order.id,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        createdAt: order.createdAt,
+        builder: order.user ? { name: order.user.name, email: order.user.email, phone: order.user.phone } : null,
+        itemCount: order.items.length,
+        items: order.items.map((i) => ({
+          id: i.id,
+          name: i.product.name,
+          quantity: i.quantity,
+          unit: i.product.unit,
+        })),
+        totalQuotesCount: order.supplierQuotes.length,
+        pendingReviewCount,
+        sentToBuyerCount,
+        isLocked: order.paymentStatus === "PAID" || order.purchaseOrders.length > 0,
+      };
+    });
+  }
+
   async getQuotes(orderId: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },

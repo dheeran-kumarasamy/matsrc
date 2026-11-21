@@ -138,10 +138,11 @@ export function isAllowedAdminProxyRoute(slug: string, method: string): boolean 
   if (m === 'POST' && slug === 'admin/icici-payments/reconcile') return true;
 
   // 10. Invoices & Orders
-  if (m === 'GET' && slug === 'admin/invoices') return true;
+  if (m === 'GET' && (slug === 'admin/orders' || slug === 'admin/invoices')) return true;
   if (m === 'GET' && /^admin\/invoices\/[a-zA-Z0-9_-]+$/.test(slug)) return true;
   if (m === 'GET' && /^admin\/invoices\/[a-zA-Z0-9_-]+\/pdf$/.test(slug)) return true;
-  if (m === 'GET' && /^admin\/orders\/[a-zA-Z0-9_-]+\/(rfq|rfq-pdf|invoice|invoice\/pdf)$/.test(slug)) return true;
+  if (m === 'GET' && /^admin\/orders\/[a-zA-Z0-9_-]+\/(rfq|rfq-pdf|invoice|invoice\/pdf|quotes)$/.test(slug)) return true;
+  if (m === 'POST' && /^admin\/orders\/[a-zA-Z0-9_-]+\/quotes\/[a-zA-Z0-9_-]+\/review$/.test(slug)) return true;
 
   // 11. KYC
   if (m === 'GET' && slug === 'admin/kyc') return true;

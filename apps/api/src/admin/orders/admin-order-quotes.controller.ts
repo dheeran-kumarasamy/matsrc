@@ -5,6 +5,18 @@ import { RoleGuard } from "src/auth/role.guard";
 import { AdminOrderQuotesService } from "./admin-order-quotes.service";
 import { ReviewSupplierQuoteDto } from "./dto/review-supplier-quote.dto";
 
+@Controller("admin/orders")
+@UseGuards(OptionalJwtAuthGuard, RoleGuard)
+@Roles("ADMIN")
+export class AdminOrdersListController {
+  constructor(private readonly quotesService: AdminOrderQuotesService) {}
+
+  @Get()
+  async listOrders() {
+    return this.quotesService.listOrders();
+  }
+}
+
 @Controller("admin/orders/:orderId/quotes")
 @UseGuards(OptionalJwtAuthGuard, RoleGuard)
 @Roles("ADMIN")

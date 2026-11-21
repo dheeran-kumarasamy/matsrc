@@ -580,14 +580,26 @@ export async function getPublicSupplierListings(options?: { fullImages?: boolean
 
   try {
     listings = await prisma.product.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        isOrderable: true,
+        category: {
+          isOrderable: true,
+        },
+      },
       include: { category: true, brandRef: true, pricingTiers: { orderBy: { minQty: "asc" } } },
       orderBy: { updatedAt: "desc" },
     });
   } catch (error) {
     if (!isMissingPricingSchemaError(error)) throw error;
     listings = await prisma.product.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        isOrderable: true,
+        category: {
+          isOrderable: true,
+        },
+      },
       include: { category: true, brandRef: true },
       orderBy: { updatedAt: "desc" },
     });
@@ -648,7 +660,7 @@ async function transformRawListingsToPublic(
     return calculateMarkup({ supplierUnitPrice: supplierPrice, markupPercent: percent }).buyerUnitPrice;
   }
 
-  const mapped = listings.map((product: any) => {
+  const mapped = orderableListings.map((product: any) => {
     const fallbackMaxQty = product.maxServiceableQty ?? product.stock;
     const pricingTiers = Array.isArray(product.pricingTiers) && product.pricingTiers.length > 0
       ? product.pricingTiers
@@ -701,6 +713,8 @@ async function transformRawListingsToPublic(
       stock: `${product.stock} ${product.unit}`,
       maxServiceableQty: `${fallbackMaxQty} ${product.unit}`,
       active: product.isActive,
+      isOrderable: product.isOrderable !== false && product.category?.isOrderable !== false,
+      categoryOrderable: product.category?.isOrderable !== false,
       // BUG-04 fix: expose updatedAt so the builder-side "Newest" sort option
       // has real data to sort against.
       updatedAt: product.updatedAt ? product.updatedAt.toISOString() : null,
@@ -972,6 +986,8 @@ export async function getPublicSupplierProductById(id: string): Promise<{
         where: {
           canonicalProductId: requestedProduct.canonicalProductId,
           isActive: true,
+          isOrderable: true,
+          category: { isOrderable: true },
         },
         include: { category: true, brandRef: true, pricingTiers: { orderBy: { minQty: "asc" } } },
         orderBy: { updatedAt: "desc" },
@@ -982,6 +998,8 @@ export async function getPublicSupplierProductById(id: string): Promise<{
         where: {
           canonicalProductId: requestedProduct.canonicalProductId,
           isActive: true,
+          isOrderable: true,
+          category: { isOrderable: true },
         },
         include: { category: true, brandRef: true },
         orderBy: { updatedAt: "desc" },

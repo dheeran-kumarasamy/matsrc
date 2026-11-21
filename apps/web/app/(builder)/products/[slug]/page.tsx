@@ -16,7 +16,7 @@ import { getCategoryEmoji } from "@/lib/category-images";
 import { getSupplierProduct, getSupplierProductGroup, parseNumericLabel, type SupplierListing } from "@/lib/listings";
 import { formatGstExclusiveNote } from "@/lib/gst-display";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 // P2-D — unique per-product metadata using only real name/brand/category
 // (no generic duplicated title across products). Canonical points at this
@@ -50,6 +50,13 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
   if (!group) notFound();
 
   const { displayListing: product, siblings } = group;
+
+  if (
+    (product as any).isOrderable === false ||
+    (product as any).categoryOrderable === false
+  ) {
+    notFound();
+  }
 
   const maxServiceableQty = parseNumericLabel(product.maxServiceableQty);
   const basePrice = parseNumericLabel(product.price);

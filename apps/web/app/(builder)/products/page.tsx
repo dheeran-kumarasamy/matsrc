@@ -7,8 +7,9 @@ import { buildBreadcrumbJsonLd } from "@/lib/json-ld";
 import { getSiteUrl } from "@/lib/site-url";
 import { getSupplierListings, dedupeByCanonicalGroup, parseListingPrice } from "@/lib/listings";
 import { getProductImage } from "@/lib/category-images";
+import { prisma } from "@/lib/builder-db";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 interface SearchParams {
   category?: string | string[];
@@ -79,9 +80,35 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
 
   const minPrice = parseNumber(minPriceRaw);
   const maxPrice = parseNumber(maxPriceRaw);
-  const allListings = await getSupplierListings();
+  const [allListings, disabledCategories, disabledProducts] = await Promise.all([
+    getSupplierListings(),
+    prisma.category.findMany({
+      where: { isOrderable: false },
+      select: { name: true },
+    }).catch(() => []),
+    prisma.product.findMany({
+      where: { isOrderable: false },
+      select: { id: true, name: true },
+    }).catch(() => []),
+  ]);
 
-  let filtered = allListings.filter((listing) => listing.active);
+  const disabledCategoryNames = new Set(
+    disabledCategories.map((c) => (c.name || "").trim().toLowerCase())
+  );
+  const disabledProductIds = new Set(disabledProducts.map((p) => p.id));
+  const disabledProductNames = new Set(
+    disabledProducts.map((p) => (p.name || "").trim().toLowerCase())
+  );
+
+  let filtered = allListings.filter(
+    (listing) =>
+      listing.active &&
+      (listing as any).isOrderable !== false &&
+      (listing as any).categoryOrderable !== false &&
+      !disabledCategoryNames.has((listing.category || "").trim().toLowerCase()) &&
+      !disabledProductIds.has(listing.id) &&
+      !disabledProductNames.has((listing.name || "").trim().toLowerCase())
+  );
 
   // Category/Brand cross-filter dependency data (BUG fix): a lightweight
   // {category, brand} pair list derived from the *full* active listings

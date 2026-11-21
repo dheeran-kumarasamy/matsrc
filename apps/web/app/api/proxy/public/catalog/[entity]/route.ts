@@ -52,7 +52,11 @@ export async function GET(_req: Request, { params }: { params: { entity: string 
         // fabricating a number. One extra _count aggregate per category,
         // still no N+1 (Prisma batches this into the same query).
         rows = await prisma.category.findMany({
-          where: { isActive: true, products: { some: { isActive: true } } },
+          where: {
+            isActive: true,
+            isOrderable: true,
+            products: { some: { isActive: true, isOrderable: true } },
+          },
           orderBy: { name: "asc" },
           select: {
             id: true,
@@ -60,7 +64,7 @@ export async function GET(_req: Request, { params }: { params: { entity: string 
             slug: true,
             isActive: true,
             imageUrl: true,
-            _count: { select: { products: { where: { isActive: true } } } },
+            _count: { select: { products: { where: { isActive: true, isOrderable: true } } } },
           },
         });
         rows = rows.map((r: any) => ({
@@ -74,7 +78,19 @@ export async function GET(_req: Request, { params }: { params: { entity: string 
         break;
       }
       case "brand":
-        rows = await prisma.brand.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
+        rows = await prisma.brand.findMany({
+          where: {
+            isActive: true,
+            products: {
+              some: {
+                isActive: true,
+                isOrderable: true,
+                category: { isOrderable: true },
+              },
+            },
+          },
+          orderBy: { name: "asc" },
+        });
         break;
       case "grade":
         rows = await prisma.grade.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });

@@ -64,7 +64,12 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
 
     const [offers, historyRows] = await Promise.all([
       prisma.product.findMany({
-        where: { canonicalProductId, isActive: true },
+        where: {
+          canonicalProductId,
+          isActive: true,
+          isOrderable: true,
+          category: { isOrderable: true },
+        },
         select: {
           id: true,
           name: true,

@@ -118,7 +118,11 @@ export async function loadSourcingListings(): Promise<{
 }> {
   const [products, ratings] = await Promise.all([
     prisma.product.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        isOrderable: true,
+        category: { isOrderable: true },
+      },
       select: {
         id: true,
         name: true,

@@ -20,7 +20,7 @@ export class PublicCatalogController {
     switch (entity as Entity) {
       case "category":
         return this.prisma.category.findMany({
-          where: { isActive: true },
+          where: { isActive: true, isOrderable: true },
           orderBy: { name: "asc" },
         });
       case "brand":

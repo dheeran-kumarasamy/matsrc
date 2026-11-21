@@ -20,13 +20,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     const [categories, listings] = await Promise.all([
       prisma.category.findMany({
-        where: { isActive: true, products: { some: { isActive: true } } },
+        where: {
+          isActive: true,
+          isOrderable: true,
+          products: { some: { isActive: true, isOrderable: true } },
+        },
         select: { name: true },
       }),
       getSupplierListings(),
     ]);
 
-    const activeProducts = dedupeByCanonicalGroup(listings.filter((l) => l.active));
+    const activeProducts = dedupeByCanonicalGroup(
+      listings.filter((l) => l.active && l.isOrderable !== false && l.categoryOrderable !== false)
+    );
 
     const categoryEntries: MetadataRoute.Sitemap = categories.map((c) => ({
       url: `${siteUrl}/products?category=${encodeURIComponent(c.name)}`,

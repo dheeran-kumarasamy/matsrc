@@ -41,6 +41,8 @@ export type SupplierListing = {
   stock: string;
   maxServiceableQty: string;
   active: boolean;
+  isOrderable?: boolean;
+  categoryOrderable?: boolean;
   pricingTiers: PricingTier[];
   images?: string[];
   // BUG-04 fix: ISO timestamp used to power the "Newest" sort option.

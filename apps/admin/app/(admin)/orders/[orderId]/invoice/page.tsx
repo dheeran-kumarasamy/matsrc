@@ -191,14 +191,25 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
             {posCode} - {posName}
           </p>
         </div>
-        <a
-          href={`/api/admin/orders/${params.orderId}/invoice/pdf`}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800"
-        >
-          Download PDF
-        </a>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={`/api/admin/orders/${params.orderId}/invoice/pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800"
+          >
+            Download Invoice PDF
+          </a>
+          <a
+            href={`/api/admin/orders/${params.orderId}/site-receipt-sheet/pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+            title="Download Site Material Receipt & Verification Sheet (DC / Non-financial)"
+          >
+            Download Site Receipt (DC)
+          </a>
+        </div>
       </header>
 
       {/* Reconciliation discrepancy warning (Admin-only) */}

@@ -6,6 +6,8 @@ import { RoleGuard } from "src/auth/role.guard";
 import { CurrentUser } from "src/auth/current-user.decorator";
 import { InvoicesService } from "./invoices.service";
 import { renderInvoicePdf } from "./invoice-pdf.util";
+import { mapInvoiceToSiteReceiptSheet } from "./site-receipt-sheet-dto";
+import { renderSiteReceiptSheetPdf } from "./site-receipt-sheet-pdf.util";
 
 // Admin-only invoice generation/read endpoints. Mirrors the existing
 // admin/payments controller pattern: OptionalJwtAuthGuard resolves the
@@ -42,6 +44,16 @@ export class AdminInvoicesController {
     const buffer = await renderInvoicePdf(invoice);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${invoice.invoiceNumber}.pdf"`);
+    res.send(buffer);
+  }
+
+  @Get("site-receipt-sheet/pdf")
+  async getSiteReceiptSheetPdf(@Param("orderId") orderId: string, @Res() res: Response) {
+    const invoice = await this.invoicesService.findByOrderId(orderId);
+    const receiptSheetData = mapInvoiceToSiteReceiptSheet(invoice);
+    const buffer = await renderSiteReceiptSheetPdf(receiptSheetData);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${receiptSheetData.receiptSheetNumber.replace(/\//g, "-")}.pdf"`);
     res.send(buffer);
   }
 

@@ -114,10 +114,31 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
             {invoice.placeOfSupplyStateCode ?? "33"} ({invoice.placeOfSupplyStateName ?? "Tamil Nadu"})
           </p>
         </div>
-        <a href={`/api/builder/orders/${params.id}/invoice/pdf`} target="_blank" rel="noreferrer" className="posh-btn">
-          Download PDF
-        </a>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={`/api/builder/orders/${params.id}/invoice/pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className="posh-btn"
+          >
+            Download Invoice PDF
+          </a>
+          <a
+            href={`/api/builder/orders/${params.id}/site-receipt-sheet/pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className="posh-btn-ghost flex items-center gap-1.5"
+            title="Download Site Material Receipt & Verification Sheet (Price-free)"
+          >
+            Download Site Receipt Sheet
+          </a>
+        </div>
       </header>
+      <div className="-mt-3 text-right">
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          Site Material Receipt &amp; Verification Sheet: Material details and quantities only — no pricing information.
+        </span>
+      </div>
 
       {/* Parties Grid (Bill To & Ship To) */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

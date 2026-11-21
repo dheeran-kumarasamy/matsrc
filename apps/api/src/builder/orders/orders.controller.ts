@@ -6,6 +6,8 @@ import { RoleGuard } from "src/auth/role.guard";
 import { CurrentUser } from "src/auth/current-user.decorator";
 import { InvoicesService } from "src/admin/invoices/invoices.service";
 import { renderInvoicePdf } from "src/admin/invoices/invoice-pdf.util";
+import { mapInvoiceToSiteReceiptSheet } from "src/admin/invoices/site-receipt-sheet-dto";
+import { renderSiteReceiptSheetPdf } from "src/admin/invoices/site-receipt-sheet-pdf.util";
 import { BuilderContextService } from "src/builder/builder-context.service";
 import { BuilderOrdersService } from "./orders.service";
 import { CreateOrderDto } from "./dto/create-order.dto";
@@ -64,6 +66,19 @@ export class BuilderOrdersController {
     const buffer = await renderInvoicePdf(invoice);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${invoice.invoiceNumber}.pdf"`);
+    res.send(buffer);
+  }
+
+  // Site Material Receipt & Verification Sheet PDF download, scoped to the
+  // requesting builder's own order. Strictly price-free and non-commercial.
+  @Get(":id/site-receipt-sheet/pdf")
+  async getSiteReceiptSheetPdf(@CurrentUser() user: any, @Param("id") id: string, @Res() res: Response) {
+    const { user: builder } = await this.builderContext.getOrCreateBuilder(user.userId, user.email, user.name);
+    const invoice = await this.invoicesService.findByOrderIdForUser(id, { id: builder.id, role: "BUILDER" });
+    const receiptSheetData = mapInvoiceToSiteReceiptSheet(invoice);
+    const buffer = await renderSiteReceiptSheetPdf(receiptSheetData);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${receiptSheetData.receiptSheetNumber.replace(/\//g, "-")}.pdf"`);
     res.send(buffer);
   }
 }

@@ -603,6 +603,12 @@ async function transformRawListingsToPublic(
 ): Promise<any[]> {
   if (!listings || listings.length === 0) return [];
 
+  // Filter out any products or categories where customer ordering has been disabled by admin
+  const orderableListings = listings.filter(
+    (item: any) => item.isOrderable !== false && item.category?.isOrderable !== false
+  );
+  if (orderableListings.length === 0) return [];
+
   // Admin-Configurable Product Markup — buyer-facing PLP/PDP display price
   // fix: `/products` and the product detail page previously showed the
   // supplier's own raw price, while only the cart (GET /api/builder/cart)
@@ -613,8 +619,8 @@ async function transformRawListingsToPublic(
   // in-memory below via the SAME resolveEffectiveMarkupPercent()
   // PRODUCT -> CATEGORY -> GLOBAL precedence every other buyer-price-
   // setting call site already uses.
-  const distinctProductIds = Array.from(new Set(listings.map((p: any) => p.id)));
-  const distinctCategoryIds = Array.from(new Set(listings.map((p: any) => p.categoryId)));
+  const distinctProductIds = Array.from(new Set(orderableListings.map((p: any) => p.id)));
+  const distinctCategoryIds = Array.from(new Set(orderableListings.map((p: any) => p.categoryId)));
   const markupRows = await prisma.markupSetting.findMany({
     where: {
       OR: [
@@ -943,8 +949,12 @@ export async function getPublicSupplierProductById(id: string): Promise<{
     });
   }
 
-  // If the product does not exist or is inactive, return null immediately without loading the catalogue
-  if (!requestedProduct) {
+  // If the product does not exist, is inactive, or has ordering disabled, return null immediately without loading the catalogue
+  if (
+    !requestedProduct ||
+    requestedProduct.isOrderable === false ||
+    requestedProduct.category?.isOrderable === false
+  ) {
     return null;
   }
 

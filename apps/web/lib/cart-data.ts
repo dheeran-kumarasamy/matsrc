@@ -121,7 +121,7 @@ export async function resolveProductGroupForCart(productId: string, quantity: nu
     },
   });
 
-  if (!product) {
+  if (!product || (product as any).isOrderable === false || (product as any).category?.isOrderable === false) {
     return null;
   }
 
@@ -148,7 +148,14 @@ export async function resolveProductGroupForCart(productId: string, quantity: nu
     groupProducts = [product];
   }
 
-  const candidates = groupProducts.map(productToResolutionCandidate);
+  const eligibleProducts = groupProducts.filter(
+    (p: any) => p.isOrderable !== false && p.category?.isOrderable !== false
+  );
+  if (eligibleProducts.length === 0) {
+    return null;
+  }
+
+  const candidates = eligibleProducts.map(productToResolutionCandidate);
   const resolution = resolveLowestPriceForQuantity(candidates, quantity);
 
   return { product, candidates, resolution };

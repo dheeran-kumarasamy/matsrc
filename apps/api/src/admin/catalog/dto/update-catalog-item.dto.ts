@@ -14,4 +14,8 @@ export class UpdateCatalogItemDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isOrderable?: boolean;
 }

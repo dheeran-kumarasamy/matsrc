@@ -552,6 +552,7 @@ model Category {
   name              String             @unique
   slug              String             @unique
   isActive          Boolean            @default(true)
+  isOrderable       Boolean            @default(true)
   // P2-B (Category Discovery): nullable/additive — no category-specific
   // imagery exists anywhere in the platform today (no CMS/asset pipeline),
   // so this is never auto-fabricated. Populated opportunistically from a
@@ -682,6 +683,7 @@ model Product {
   maxServiceableQty Float?
   images            String[]
   isActive          Boolean  @default(true)
+  isOrderable       Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -1663,6 +1665,18 @@ model AdvanceConfig {
   id         String  @id @default("global")
   percentage Decimal @db.Decimal(5, 2)
   isEnabled  Boolean @default(true)
+
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+// Order Splitting Configuration — controls whether multi-item buyer carts
+// can be split across multiple suppliers, or whether all items within a
+// category / entire cart must be fulfilled by a single supplier.
+model OrderSplittingConfig {
+  id                          String   @id @default("global")
+  allowMultiSupplierSplitting Boolean  @default(false)
+  splitOnlyAcrossCategories   Boolean  @default(true)
 
   updatedAt DateTime @updatedAt
   updatedBy String?

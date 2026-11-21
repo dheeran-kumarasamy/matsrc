@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getAdminServerHeaders } from "@/lib/service-auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+
+function adminHeaders(user: { id?: string; email: string; name?: string | null; role?: string }) {
+  return {
+    "X-User-Id": user.id || user.email,
+    "X-User-Email": user.email,
+    "X-User-Name": user.name || "Admin",
+    "X-User-Role": user.role || "ADMIN",
+  };
+}
 
 export async function POST(
   request: Request,
@@ -20,7 +28,7 @@ export async function POST(
   const response = await fetch(`${API_BASE_URL}/admin/orders/${params.orderId}/quotes/${params.quoteId}/review`, {
     method: "POST",
     headers: {
-      ...getAdminServerHeaders(user),
+      ...adminHeaders(user as any),
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),

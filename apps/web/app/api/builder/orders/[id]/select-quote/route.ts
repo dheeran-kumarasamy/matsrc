@@ -81,32 +81,44 @@ export async function POST(
     const isSwitch = Boolean(order.selectedSupplierId && order.selectedSupplierId !== quote.supplierId);
 
     await prisma.$transaction(async (tx) => {
-      const buyerUnitPrice = Number(quote.buyerUnitPrice ?? quote.unitPrice);
-      const supplierUnitPrice = Number(quote.unitPrice);
-      const markupPercent = Number(quote.markupPercent ?? 0);
-      const markupAmount = Number(quote.markupAmount ?? 0);
-      const taxRatePercent = Number(quote.gstRatePercent ?? 18);
-      const quantity = quote.quantity ?? quote.lineItem.quantity;
-
-      const lineGst = calculateLineGst({
-        quantity,
-        unitPrice: buyerUnitPrice,
-        gstRatePercent: taxRatePercent,
-      });
-
-      // 1. Update the OrderItem with the newly selected quotation pricing & supplier
-      await tx.orderItem.update({
-        where: { id: quote.lineItemId },
-        data: {
+      // Find all quotes from this winning supplier for this order that have been approved
+      const supplierQuotes = await tx.supplierQuote.findMany({
+        where: {
+          enquiryId: order.id,
           supplierId: quote.supplierId,
-          unitPrice: buyerUnitPrice,
-          supplierUnitPrice,
-          markupPercent,
-          markupAmount,
-          taxRatePercent,
-          taxAmount: lineGst.gstAmount,
+          status: SupplierQuoteStatus.SENT_TO_BUYER,
         },
+        include: { lineItem: true },
       });
+
+      // Update all line items covered by this supplier's approved quotes
+      for (const sq of supplierQuotes) {
+        const sqBuyerUnitPrice = Number(sq.buyerUnitPrice ?? sq.unitPrice);
+        const sqSupplierUnitPrice = Number(sq.unitPrice);
+        const sqMarkupPercent = Number(sq.markupPercent ?? 0);
+        const sqMarkupAmount = Number(sq.markupAmount ?? 0);
+        const sqTaxRatePercent = Number(sq.gstRatePercent ?? 18);
+        const sqQuantity = sq.quantity ?? sq.lineItem.quantity;
+
+        const lineGst = calculateLineGst({
+          quantity: sqQuantity,
+          unitPrice: sqBuyerUnitPrice,
+          gstRatePercent: sqTaxRatePercent,
+        });
+
+        await tx.orderItem.update({
+          where: { id: sq.lineItemId },
+          data: {
+            supplierId: sq.supplierId,
+            unitPrice: sqBuyerUnitPrice,
+            supplierUnitPrice: sqSupplierUnitPrice,
+            markupPercent: sqMarkupPercent,
+            markupAmount: sqMarkupAmount,
+            taxRatePercent: sqTaxRatePercent,
+            taxAmount: lineGst.gstAmount,
+          },
+        });
+      }
 
       // 2. Recalculate totals across all OrderItems
       const items = await tx.orderItem.findMany({
@@ -116,7 +128,7 @@ export async function POST(
 
       const totalAmount = items.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0);
       const taxAmount = items.reduce((sum, i) => sum + (i.taxAmount ? Number(i.taxAmount) : 0), 0);
-      const finalPayableAmount = totalAmount + taxAmount;
+      const finalPayableAmount = Math.round((totalAmount + taxAmount + Number.EPSILON) * 100) / 100;
 
       // 3. Update the Order record
       const nextStatus = order.status === OrderStatus.PLACED ? OrderStatus.PROCESSING : order.status;
@@ -134,14 +146,16 @@ export async function POST(
         },
       });
 
+      const chosenQuoteUnitPrice = Number(quote.buyerUnitPrice ?? quote.unitPrice);
+
       // 4. Record audit tracking entry
       await tx.orderTracking.create({
         data: {
           orderId: order.id,
           status: nextStatus,
           note: isSwitch
-            ? `Buyer switched quotation to ${quote.lineItem.product.name} (₹${buyerUnitPrice}/unit)`
-            : `Buyer confirmed quotation for ${quote.lineItem.product.name} (₹${buyerUnitPrice}/unit)`,
+            ? `Buyer switched quotation to ${quote.supplier?.companyName || "supplier"} (₹${chosenQuoteUnitPrice}/unit)`
+            : `Buyer confirmed quotation from ${quote.supplier?.companyName || "supplier"} (₹${chosenQuoteUnitPrice}/unit)`,
         },
       });
     });

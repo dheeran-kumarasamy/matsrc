@@ -43,6 +43,22 @@ vi.mock("@/lib/builder-db", () => ({
     },
     $transaction: vi.fn(async (callback) => {
       return callback({
+        supplierQuote: {
+          findMany: vi.fn(async () => [
+            {
+              id: "quote-1",
+              supplierId: "sup-1",
+              lineItemId: "item-1",
+              unitPrice: 100,
+              buyerUnitPrice: 110,
+              markupPercent: 10,
+              markupAmount: 10,
+              gstRatePercent: 18,
+              quantity: 10,
+              lineItem: { quantity: 10 },
+            },
+          ]),
+        },
         orderItem: {
           update: vi.fn(async (args) => {
             mockTxUpdates.orderItem.push(args);

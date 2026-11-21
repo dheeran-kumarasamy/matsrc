@@ -162,13 +162,21 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
     const buyerStateCode = invoice.buyer?.stateCode ?? posCode;
 
     doc.fontSize(10).fillColor(OLIVE_ACCENT).text("BILL TO (RECIPIENT)", startX, partyY, { underline: true });
-    doc
-      .fontSize(9)
-      .fillColor("#0f172a")
-      .text(buyerName, startX, partyY + 14, { width: colWidth })
-      .fillColor("#64748b")
-      .text(`Address: ${buyerAddress}`, startX, partyY + 26, { width: colWidth })
-      .text(`GSTIN: ${buyerGstin} | State: ${buyerState} (${buyerStateCode})`, startX, partyY + 50, { width: colWidth });
+    doc.fontSize(9).fillColor("#0f172a");
+    const buyerNameH = doc.heightOfString(buyerName, { width: colWidth });
+    doc.text(buyerName, startX, partyY + 14, { width: colWidth });
+
+    doc.fillColor("#64748b");
+    const buyerAddrY = partyY + 14 + buyerNameH + 2;
+    const buyerAddrText = `Address: ${buyerAddress}`;
+    const buyerAddrH = doc.heightOfString(buyerAddrText, { width: colWidth });
+    doc.text(buyerAddrText, startX, buyerAddrY, { width: colWidth });
+
+    const buyerMetaY = buyerAddrY + buyerAddrH + 2;
+    const buyerMetaText = `GSTIN: ${buyerGstin} | State: ${buyerState} (${buyerStateCode})`;
+    const buyerMetaH = doc.heightOfString(buyerMetaText, { width: colWidth });
+    doc.text(buyerMetaText, startX, buyerMetaY, { width: colWidth });
+    const billToBottom = buyerMetaY + buyerMetaH;
 
     // Ship To
     const shipToX = startX + 273;
@@ -179,15 +187,23 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
         .join(", ") || "Not configured";
 
     doc.fontSize(10).fillColor(OLIVE_ACCENT).text("SHIP TO (DELIVERY SITE)", shipToX, partyY, { underline: true });
-    doc
-      .fontSize(9)
-      .fillColor("#0f172a")
-      .text(siteName, shipToX, partyY + 14, { width: colWidth })
-      .fillColor("#64748b")
-      .text(`Address: ${shipToAddress}`, shipToX, partyY + 26, { width: colWidth })
-      .text(`State: ${invoice.shipTo?.state ?? posName} (${posCode})`, shipToX, partyY + 50, { width: colWidth });
+    doc.fontSize(9).fillColor("#0f172a");
+    const siteNameH = doc.heightOfString(siteName, { width: colWidth });
+    doc.text(siteName, shipToX, partyY + 14, { width: colWidth });
 
-    let currentY = partyY + 68;
+    doc.fillColor("#64748b");
+    const shipAddrY = partyY + 14 + siteNameH + 2;
+    const shipAddrText = `Address: ${shipToAddress}`;
+    const shipAddrH = doc.heightOfString(shipAddrText, { width: colWidth });
+    doc.text(shipAddrText, shipToX, shipAddrY, { width: colWidth });
+
+    const shipMetaY = shipAddrY + shipAddrH + 2;
+    const shipMetaText = `State: ${invoice.shipTo?.state ?? posName} (${posCode})`;
+    const shipMetaH = doc.heightOfString(shipMetaText, { width: colWidth });
+    doc.text(shipMetaText, shipToX, shipMetaY, { width: colWidth });
+    const shipToBottom = shipMetaY + shipMetaH;
+
+    let currentY = Math.max(billToBottom, shipToBottom) + 8;
 
     if (invoice.shipFrom) {
       const shipFromText = [invoice.shipFrom.addressLine, invoice.shipFrom.city, invoice.shipFrom.state, invoice.shipFrom.pincode].filter(Boolean).join(", ");

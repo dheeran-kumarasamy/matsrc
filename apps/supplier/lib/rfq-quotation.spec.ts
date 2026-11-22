@@ -138,6 +138,8 @@ vi.mock("@matsrc/db", () => {
         markupAmount: Math.round((buyerUnitPrice - params.supplierUnitPrice + Number.EPSILON) * 100) / 100,
       };
     }),
+    GENERIC_ORDER_CLOSURE_REASON: "This enquiry/order is no longer required for fulfilment. Possible reasons include: requirement fulfilled by another option, project schedule revision, specification adjustment, or quotation window closed.",
+    closeCompetingSuppliersForOrder: vi.fn(async () => ({ candidatesClosed: 0, quotesClosed: 0, notifiedSupplierIds: [] })),
   };
 });
 
@@ -398,57 +400,17 @@ describe("createSupplierQuote — RFQ line-item quotation (lineQuotes path)", ()
     expect(supplierQuoteRows[0].gstRatePercent).toBe(5);
   });
 
-  it("dispatches quote_received notification to buyer upon quotation submission", async () => {
-    seedOrder("enq-notify");
-
-    await createSupplierQuote(
-      "enq-notify",
-      { price: "500", lineQuotes: [{ lineItemId: "line-1", unitPrice: "500" }] },
-      "supplier@example.com"
-    );
-
-    expect(notifyQuoteReceivedMock).toHaveBeenCalledTimes(1);
-    expect(notifyQuoteReceivedMock).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        enquiryId: "enq-notify",
-        supplierId: "sup-1",
-        quoteIds: ["sq-1"],
-      })
-    );
-  });
-
-  it("evaluates enquiry auto-finalization upon quotation submission", async () => {
-    seedOrder("enq-finalize");
+  it("submits quotation with PENDING_ADMIN_REVIEW status for admin curation", async () => {
+    seedOrder("enq-curated");
 
     const result = await createSupplierQuote(
-      "enq-finalize",
+      "enq-curated",
       { price: "500", lineQuotes: [{ lineItemId: "line-1", unitPrice: "500" }] },
       "supplier@example.com"
     );
 
-    expect(finalizeEnquiryMock).toHaveBeenCalledTimes(1);
-    expect(finalizeEnquiryMock).toHaveBeenCalledWith(
-      expect.anything(),
-      "enq-finalize",
-      expect.objectContaining({ waitUntil: expect.any(Function) })
-    );
-    expect(result).toMatchObject({ finalized: true });
-  });
-
-  it("records OrderTracking entry for quotation submission", async () => {
-    seedOrder("enq-tracking");
-
-    await createSupplierQuote(
-      "enq-tracking",
-      { price: "500", lineQuotes: [{ lineItemId: "line-1", unitPrice: "500" }] },
-      "supplier@example.com"
-    );
-
-    expect(orderTrackingRows).toHaveLength(1);
-    expect(orderTrackingRows[0]).toMatchObject({
-      orderId: "enq-tracking",
-      note: expect.stringContaining("quotation"),
-    });
+    expect(result).toBeDefined();
+    expect(supplierQuoteRows).toHaveLength(1);
+    expect(supplierQuoteRows[0].status).toBe("PENDING_ADMIN_REVIEW");
   });
 });

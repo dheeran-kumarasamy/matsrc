@@ -28,6 +28,7 @@ import {
 } from "./order-confirmation-snapshot";
 import { generateOrderNumber } from "./business-number";
 import { resolveMarkupForProduct } from "./markup-calculation";
+import { closeCompetingSuppliersForOrder } from "./competing-supplier-closure";
 import { notifyCustomerOrderStatusChanged } from "./customer-order-status-notification";
 import { notifyPaymentRequired } from "./payment-required-notification";
 
@@ -317,6 +318,14 @@ export async function finalizeEnquiryBestPriceIfEligible(
             markupPercent: line.markupPercent,
             markupAmount: line.markupAmount,
           },
+        });
+      }
+
+      if (selectedSupplierId) {
+        await closeCompetingSuppliersForOrder(tx, {
+          orderId: enquiryId,
+          winningSupplierId: selectedSupplierId,
+          enquiryId: order.enquiryId,
         });
       }
     });

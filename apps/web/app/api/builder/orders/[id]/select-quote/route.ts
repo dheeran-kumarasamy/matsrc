@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { OrderStatus, PaymentStatus, SupplierQuoteStatus, calculateLineGst } from "@matsrc/db";
+import { OrderStatus, PaymentStatus, SupplierQuoteStatus, calculateLineGst, closeCompetingSuppliersForOrder } from "@matsrc/db";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
 
 export const dynamic = "force-dynamic";
@@ -146,9 +146,16 @@ export async function POST(
         },
       });
 
+      // 4. Close competing candidate rows, unselected quotes, and notify competing suppliers
+      await closeCompetingSuppliersForOrder(tx, {
+        orderId: order.id,
+        winningSupplierId: quote.supplierId,
+        enquiryId: order.enquiryId,
+      });
+
       const chosenQuoteUnitPrice = Number(quote.buyerUnitPrice ?? quote.unitPrice);
 
-      // 4. Record audit tracking entry
+      // 5. Record audit tracking entry
       await tx.orderTracking.create({
         data: {
           orderId: order.id,

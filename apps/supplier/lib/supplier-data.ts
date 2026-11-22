@@ -15,6 +15,8 @@ import {
   assertFullOrderSnapshotIntegrity,
   ConcurrentConfirmationLostError,
   checkOrderDispatchEligibility,
+  GENERIC_ORDER_CLOSURE_REASON,
+  closeCompetingSuppliersForOrder,
 } from "@matsrc/db";
 import { formatCurrency, formatProductPrice } from "./currency";
 import { waitUntil } from "@vercel/functions";
@@ -454,6 +456,10 @@ export async function getSupplierDashboardData(email: string) {
           status: {
             in: ["PROCESSING", "DISPATCHED", "OUT_FOR_DELIVERY"],
           },
+          OR: [
+            { selectedSupplierId: null },
+            { selectedSupplierId: supplierProfile.id },
+          ],
         },
       },
       include: { product: { include: { brandRef: true } }, order: true },
@@ -464,10 +470,11 @@ export async function getSupplierDashboardData(email: string) {
       where: {
         order: {
           status: "PLACED",
+          selectedSupplierId: null,
         },
         OR: [
           { supplierId: supplierProfile.id },
-          { candidates: { some: { supplierId: supplierProfile.id } } },
+          { candidates: { some: { supplierId: supplierProfile.id, status: "PENDING" } } },
         ],
       },
       include: { product: { include: { brandRef: true } }, order: true },
@@ -1617,6 +1624,10 @@ export async function getSupplierOrders(email: string): Promise<SupplierOrderRow
         status: {
           in: ["PROCESSING", "DISPATCHED", "OUT_FOR_DELIVERY", "DELIVERED"],
         },
+        OR: [
+          { selectedSupplierId: null },
+          { selectedSupplierId: supplierProfile.id },
+        ],
       },
     },
     include: { order: { include: { user: true } }, product: { include: { brandRef: true } } },
@@ -1695,6 +1706,8 @@ export type SupplierOrderDetail = {
   quantity: string;
   material: string;
   status: OrderStatus;
+  isClosedToSupplier?: boolean;
+  closureReason?: string | null;
   // C34: surfaced so the order detail page can disable/hide "Mark
   // Delivered" client-side when payment isn't settled yet — a UI-level
   // convenience only; the authoritative enforcement is the server-side
@@ -1854,25 +1867,49 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
       product: { include: { brandRef: true } },
       candidates: {
         where: { supplierId: supplierProfile.id },
-        select: { unitPrice: true },
+        select: { unitPrice: true, status: true, declineReason: true, respondedAt: true },
       },
     },
   });
 
   if (!item) return null;
 
+  const candidate = (item as any).candidates?.[0];
+  const isSelectedSupplier = item.order.selectedSupplierId
+    ? item.order.selectedSupplierId === supplierProfile.id
+    : item.supplierId === supplierProfile.id;
+
+  const isClosedToSupplier = Boolean(
+    // 1. Order was awarded to a different supplier
+    (item.order.selectedSupplierId && item.order.selectedSupplierId !== supplierProfile.id) ||
+    // 2. This supplier's candidate entry was declined or closed
+    (candidate && candidate.status === "DECLINED") ||
+    // 3. Line item belongs to a different supplier and order is past PLACED
+    (item.supplierId && item.supplierId !== supplierProfile.id && item.order.status !== "PLACED") ||
+    // 4. Supplier was only a pending candidate, but the order progressed past PLACED
+    (candidate && candidate.status === "PENDING" && item.order.status !== "PLACED")
+  );
+
+  const closureReason = isClosedToSupplier
+    ? candidate?.declineReason || GENERIC_ORDER_CLOSURE_REASON
+    : null;
+
   // Surface the PO number issued by the builder (if any) so it can be shown inside the
   // order details overlay, alongside a link to download it as PDF.
-  const purchaseOrder = await prisma.purchaseOrder.findFirst({
-    where: { orderId, supplierId: supplierProfile.id },
-    orderBy: { createdAt: "desc" },
-  });
+  const purchaseOrder = isClosedToSupplier
+    ? null
+    : await prisma.purchaseOrder.findFirst({
+        where: { orderId, supplierId: supplierProfile.id },
+        orderBy: { createdAt: "desc" },
+      });
 
   // Duplicate supplier-action fix: only relevant while the enquiry is still
   // awaiting this supplier's decision — once it has moved past PLACED there
   // is no longer a choice between quoting and confirming either way.
   const requiresQuotation =
-    item.order.status === "PLACED" ? await hasMultipleEligibleCandidates(orderId, supplierProfile.id) : false;
+    !isClosedToSupplier && item.order.status === "PLACED"
+      ? await hasMultipleEligibleCandidates(orderId, supplierProfile.id)
+      : false;
 
   // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
   // Dispatch — UI-level convenience only (the authoritative enforcement is
@@ -1881,17 +1918,22 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
   // "Mark Dispatched" is ever offered from (see
   // lib/order-status-transitions.ts), so this never does unnecessary work
   // for an order already past that stage.
-  const dispatchEligibility = item.order.status === "PROCESSING" ? await checkOrderDispatchEligibility(prisma as any, orderId) : null;
+  const dispatchEligibility =
+    !isClosedToSupplier && item.order.status === "PROCESSING"
+      ? await checkOrderDispatchEligibility(prisma as any, orderId)
+      : null;
 
   const isReadyForDispatch =
-    item.order.status === "DISPATCHED" ||
-    item.order.status === "OUT_FOR_DELIVERY" ||
-    item.order.status === "DELIVERED" ||
-    (item.order.status === "PROCESSING" && dispatchEligibility?.eligible === true);
+    !isClosedToSupplier &&
+    (item.order.status === "DISPATCHED" ||
+      item.order.status === "OUT_FOR_DELIVERY" ||
+      item.order.status === "DELIVERED" ||
+      (item.order.status === "PROCESSING" && dispatchEligibility?.eligible === true));
 
-  const sitePincode =
-    item.order.site?.pincode ??
-    (item.order.deliveryAddress ? item.order.deliveryAddress.match(/\b\d{6}\b/)?.[0] ?? null : null);
+  const sitePincode = isClosedToSupplier
+    ? null
+    : item.order.site?.pincode ??
+      (item.order.deliveryAddress ? item.order.deliveryAddress.match(/\b\d{6}\b/)?.[0] ?? null : null);
 
   return {
     id: item.orderId,
@@ -1903,7 +1945,9 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     deliveryDate: formatDate(item.deliveryDate ?? item.order.deliveryDate),
     quantity: `${item.quantity} ${item.product.unit}`,
     material: item.product.name,
-    status: item.order.status,
+    status: isClosedToSupplier ? ("CANCELLED" as OrderStatus) : item.order.status,
+    isClosedToSupplier,
+    closureReason,
     paymentStatus: item.order.paymentStatus,
     askPrice: `${formatProductPrice((item as any).candidates?.[0]?.unitPrice ?? (item as any).askPrice ?? item.unitPrice)} / ${item.product.unit}`,
     isReadyForDispatch,
@@ -1923,15 +1967,28 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     // confirmed", "₹X still outstanding"), or null once every requirement
     // is satisfied. UI-level only — see OrderStatusActions.tsx.
     dispatchBlockedReason: dispatchEligibility && !dispatchEligibility.eligible ? dispatchEligibility.reason : null,
-    tracking: item.order.tracking.map((entry: any) => ({
-      id: entry.id,
-      label: entry.note ?? humanizeToken(entry.status),
-      status: entry.status,
-      // S11: OrderTracking.recordedAt is the authoritative timestamp for
-      // this event (set at row-creation time, defaulting to now() —
-      // packages/db/prisma/schema.prisma) — never Order.updatedAt.
-      recordedAt: entry.recordedAt.toISOString(),
-    })),
+    tracking: isClosedToSupplier
+      ? [
+          {
+            id: `closed-${item.orderId}`,
+            label: `Enquiry Closed: ${closureReason}`,
+            status: "CANCELLED" as OrderStatus,
+            recordedAt: (
+              candidate?.respondedAt ??
+              item.order.updatedAt ??
+              new Date()
+            ).toISOString(),
+          },
+        ]
+      : item.order.tracking.map((entry: any) => ({
+          id: entry.id,
+          label: entry.note ?? humanizeToken(entry.status),
+          status: entry.status,
+          // S11: OrderTracking.recordedAt is the authoritative timestamp for
+          // this event (set at row-creation time, defaulting to now() —
+          // packages/db/prisma/schema.prisma) — never Order.updatedAt.
+          recordedAt: entry.recordedAt.toISOString(),
+        })),
     purchaseOrder: purchaseOrder
 
       ? {
@@ -2331,11 +2388,22 @@ export async function updateSupplierOrderStatus(
   // supplier-triggered transitions between the existing OrderStatus values.
   const current = await prisma.order.findUnique({
     where: { id: orderId },
-    select: { status: true, paymentStatus: true },
+    select: { status: true, paymentStatus: true, selectedSupplierId: true, enquiryId: true },
   });
   if (!current) {
     throw new Error("Order not found");
   }
+
+  // Competing supplier protection: If the order has already been assigned to another supplier,
+  // do not allow other suppliers to proceed with or update the order.
+  if (
+    actingSupplierId &&
+    current.selectedSupplierId &&
+    current.selectedSupplierId !== actingSupplierId
+  ) {
+    throw new Error("This order is assigned to another supplier and cannot be updated.");
+  }
+
   if (!isValidOrderStatusTransition(current.status, status)) {
     throw new Error(
       `Invalid order status transition: cannot move from ${current.status} to ${status}`
@@ -2576,7 +2644,23 @@ export async function updateSupplierOrderStatus(
           });
         }
 
+        if (additionalData.selectedSupplierId) {
+          await closeCompetingSuppliersForOrder(tx, {
+            orderId,
+            winningSupplierId: String(additionalData.selectedSupplierId),
+            enquiryId: existing?.enquiryId,
+          });
+        }
+
         return tx.order.findUniqueOrThrow({ where: { id: orderId } });
+      }
+
+      if (additionalData.selectedSupplierId) {
+        await closeCompetingSuppliersForOrder(tx, {
+          orderId,
+          winningSupplierId: String(additionalData.selectedSupplierId),
+          enquiryId: existing?.enquiryId,
+        });
       }
 
       return tx.order.update({
@@ -2721,14 +2805,28 @@ export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]>
     prisma.orderItem.findMany({
       where: {
         OR: [
-          { supplierId: supplierProfile.id },
-          { candidates: { some: { supplierId: supplierProfile.id, status: "PENDING" } } },
+          {
+            supplierId: supplierProfile.id,
+            order: {
+              status: { in: ["PLACED", "PROCESSING"] },
+              OR: [
+                { selectedSupplierId: null },
+                { selectedSupplierId: supplierProfile.id },
+              ],
+              paymentStatus: { not: "PAID" },
+              purchaseOrders: { none: {} },
+            },
+          },
+          {
+            candidates: { some: { supplierId: supplierProfile.id, status: "PENDING" } },
+            order: {
+              status: "PLACED",
+              selectedSupplierId: null,
+              paymentStatus: { not: "PAID" },
+              purchaseOrders: { none: {} },
+            },
+          },
         ],
-        order: {
-          status: { in: ["PLACED", "PROCESSING"] },
-          paymentStatus: { not: "PAID" },
-          purchaseOrders: { none: {} },
-        },
       },
       include: {
         product: true,

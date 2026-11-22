@@ -66,16 +66,32 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
         )}
         <p className="mt-1 text-sm font-semibold text-slate-800">Ask Price: {order.askPrice}</p>
 
-        <div className="mt-3">
-          <a
-            href={`/api/supplier/orders/${order.id}/rfq-pdf`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700"
-          >
-            Download RFQ PDF
-          </a>
-        </div>
+        {order.isClosedToSupplier ? (
+          <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
+            <div className="flex items-center gap-2 font-bold text-amber-950">
+              <svg className="h-5 w-5 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Enquiry No Longer Active For Fulfilment</span>
+            </div>
+            <p className="mt-1 text-sm text-amber-800">
+              {order.closureReason || "This enquiry/order is no longer required for fulfilment. Possible reasons include: requirement fulfilled by another option, project schedule revision, specification adjustment, or quotation window closed."}
+            </p>
+          </div>
+        ) : null}
+
+        {!order.isClosedToSupplier ? (
+          <div className="mt-3">
+            <a
+              href={`/api/supplier/orders/${order.id}/rfq-pdf`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700"
+            >
+              Download RFQ PDF
+            </a>
+          </div>
+        ) : null}
 
         {/* Supplier RFQ Price Revision & GST-Inclusive Order Value: while
             this enquiry is still awaiting the supplier's decision (PLACED),
@@ -89,7 +105,7 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
             comment in lib/supplier-data.ts). For the common single-supplier
             case, OrderStatusActions's "Confirm Enquiry" is the only action
             shown instead, so the two are never rendered together. */}
-        {order.status === "PLACED" && order.requiresQuotation ? (
+        {!order.isClosedToSupplier && order.status === "PLACED" && order.requiresQuotation ? (
           <div className="mt-4">
             <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Quotation</h4>
             <div className="mt-2">
@@ -121,36 +137,50 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
             the supplier can upload their own invoice for Admin review.
             Uploading here never itself generates the BuildOhub buyer
             invoice — only an Admin's explicit confirmation does that. */}
-        {order.status !== "PLACED" ? <SupplierInvoiceUpload orderId={order.id} /> : null}
+        {!order.isClosedToSupplier && order.status !== "PLACED" ? <SupplierInvoiceUpload orderId={order.id} /> : null}
       </section>
 
-      <OrderStatusActions
-        orderId={order.id}
-        status={order.status}
-        // C34 (UI-level prevention): lets the "Mark Delivered" button be
-        // disabled before the supplier ever attempts the action, when the
-        // order's payment isn't settled yet. Purely a UX convenience — the
-        // server-side guard in updateSupplierOrderStatus (lib/supplier-data.ts)
-        // is what actually enforces the rule even if this prop is stale or
-        // this check is bypassed entirely.
-        paymentStatus={order.paymentStatus}
-        // Duplicate supplier-action fix: hides "Confirm Enquiry" when this
-        // enquiry genuinely requires a quotation first (RfqQuotationForm
-        // above is rendered for that case instead) — see
-        // getSupplierOrderDetail's hasMultipleEligibleCandidates doc comment
-        // in lib/supplier-data.ts.
-        requiresQuotation={order.requiresQuotation}
-        // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
-        // Dispatch — see getSupplierOrderDetail's dispatchBlockedReason doc
-        // comment in lib/supplier-data.ts.
-        dispatchBlockedReason={order.dispatchBlockedReason}
-        // `label` already mirrors OrderTracking.note verbatim whenever a note
-        // was recorded (see getSupplierOrderDetail's `label: entry.note ??
-        // humanizeToken(entry.status)`), so it doubles as the `note` input
-        // getCancellationActor needs to distinguish a builder cancellation
-        // from a supplier decline — no extra field/query required.
-        tracking={order.tracking.map((step) => ({ status: step.status, note: step.label }))}
-      />
+      {order.isClosedToSupplier ? (
+        <aside className="panel p-5">
+          <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Order Status</h4>
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-center">
+            <span className="inline-block rounded-full bg-slate-200 px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-700">
+              Closed
+            </span>
+            <p className="mt-2 text-xs text-slate-600">
+              This enquiry is no longer required for fulfilment. No further action is needed.
+            </p>
+          </div>
+        </aside>
+      ) : (
+        <OrderStatusActions
+          orderId={order.id}
+          status={order.status}
+          // C34 (UI-level prevention): lets the "Mark Delivered" button be
+          // disabled before the supplier ever attempts the action, when the
+          // order's payment isn't settled yet. Purely a UX convenience — the
+          // server-side guard in updateSupplierOrderStatus (lib/supplier-data.ts)
+          // is what actually enforces the rule even if this prop is stale or
+          // this check is bypassed entirely.
+          paymentStatus={order.paymentStatus}
+          // Duplicate supplier-action fix: hides "Confirm Enquiry" when this
+          // enquiry genuinely requires a quotation first (RfqQuotationForm
+          // above is rendered for that case instead) — see
+          // getSupplierOrderDetail's hasMultipleEligibleCandidates doc comment
+          // in lib/supplier-data.ts.
+          requiresQuotation={order.requiresQuotation}
+          // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
+          // Dispatch — see getSupplierOrderDetail's dispatchBlockedReason doc
+          // comment in lib/supplier-data.ts.
+          dispatchBlockedReason={order.dispatchBlockedReason}
+          // `label` already mirrors OrderTracking.note verbatim whenever a note
+          // was recorded (see getSupplierOrderDetail's `label: entry.note ??
+          // humanizeToken(entry.status)`), so it doubles as the `note` input
+          // getCancellationActor needs to distinguish a builder cancellation
+          // from a supplier decline — no extra field/query required.
+          tracking={order.tracking.map((step) => ({ status: step.status, note: step.label }))}
+        />
+      )}
     </div>
   );
 }

@@ -74,6 +74,8 @@ vi.mock("@matsrc/db", () => {
         markupAmount: Math.round((buyerUnitPrice - params.supplierUnitPrice + Number.EPSILON) * 100) / 100,
       };
     }),
+    GENERIC_ORDER_CLOSURE_REASON: "This enquiry/order is no longer required for fulfilment. Possible reasons include: requirement fulfilled by another option, project schedule revision, specification adjustment, or quotation window closed.",
+    closeCompetingSuppliersForOrder: vi.fn(async () => ({ candidatesClosed: 0, quotesClosed: 0, notifiedSupplierIds: [] })),
   };
 });
 

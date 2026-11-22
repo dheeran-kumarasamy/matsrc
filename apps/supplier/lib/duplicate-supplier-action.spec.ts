@@ -102,6 +102,8 @@ vi.mock("@matsrc/db", () => {
     // eligible stub is enough. Its own real behaviour is covered separately
     // by packages/db/lib/order-dispatch-eligibility.spec.ts.
     checkOrderDispatchEligibility: vi.fn(async () => ({ eligible: true, finalPayableAmount: 0, settledAmount: 0 })),
+    GENERIC_ORDER_CLOSURE_REASON: "This enquiry/order is no longer required for fulfilment. Possible reasons include: requirement fulfilled by another option, project schedule revision, specification adjustment, or quotation window closed.",
+    closeCompetingSuppliersForOrder: vi.fn(async () => ({ candidatesClosed: 0, quotesClosed: 0, notifiedSupplierIds: [] })),
   };
 });
 

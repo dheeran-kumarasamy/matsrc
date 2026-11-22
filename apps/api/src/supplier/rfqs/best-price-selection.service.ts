@@ -8,6 +8,7 @@ import {
   InconsistentOrderSnapshotError,
   ConcurrentConfirmationLostError,
   type OrderConfirmationSnapshot,
+  closeCompetingSuppliersForOrder,
 } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { CustomerOrderStatusNotificationService } from "src/notification-engine/whatsapp/customer-order-status-notification.service";
@@ -403,6 +404,14 @@ export class BestPriceSelectionService {
             markupPercent: line.markupPercent,
             markupAmount: line.markupAmount,
           },
+        });
+      }
+
+      if (selectedSupplierId) {
+        await closeCompetingSuppliersForOrder(tx, {
+          orderId: enquiryId,
+          winningSupplierId: selectedSupplierId,
+          enquiryId: order.enquiryId,
         });
       }
     }).catch(async (error) => {

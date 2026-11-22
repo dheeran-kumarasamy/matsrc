@@ -167,6 +167,11 @@ export * from "./lib/best-price-selection";
 // calculations (always 2 decimals). See packages/db/lib/currency-formatting.ts.
 export * from "./lib/currency-formatting";
 
+// Competing Supplier Closure & Generic Notification — marks competing candidate
+// rows DECLINED, unselected quotes REJECTED, and notifies competing suppliers
+// with a comprehensive generic reason when an order is accepted for processing.
+export * from "./lib/competing-supplier-closure";
+
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

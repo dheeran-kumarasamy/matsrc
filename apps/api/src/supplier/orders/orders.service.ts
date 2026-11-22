@@ -3,6 +3,8 @@ import { waitUntil } from "@vercel/functions";
 import {
   OrderStatus,
   PaymentStatus,
+  OrderItemCandidateStatus,
+  GENERIC_ORDER_CLOSURE_REASON,
   generateOrderNumber,
   lockAdvanceAccountRow,
   releaseAdvanceReservation,
@@ -56,7 +58,15 @@ export class OrdersService {
     const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
 
     const items = await this.prisma.orderItem.findMany({
-      where: { supplierId: supplierProfile.id },
+      where: {
+        supplierId: supplierProfile.id,
+        order: {
+          OR: [
+            { selectedSupplierId: null },
+            { selectedSupplierId: supplierProfile.id },
+          ],
+        },
+      },
       include: { order: { include: { user: true } }, product: true },
       orderBy: { order: { createdAt: "desc" } },
     });
@@ -76,7 +86,13 @@ export class OrdersService {
     const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
 
     const item = await this.prisma.orderItem.findFirst({
-      where: { orderId: id, supplierId: supplierProfile.id },
+      where: {
+        orderId: id,
+        OR: [
+          { supplierId: supplierProfile.id },
+          { candidates: { some: { supplierId: supplierProfile.id } } },
+        ],
+      },
       include: {
         order: {
           include: {
@@ -85,11 +101,49 @@ export class OrdersService {
           },
         },
         product: true,
+        candidates: {
+          where: { supplierId: supplierProfile.id },
+          select: { status: true, declineReason: true },
+        },
       },
     });
 
     if (!item) {
       throw new NotFoundException("Order not found");
+    }
+
+    const candidate = item.candidates?.[0];
+    const isSelected = item.order.selectedSupplierId
+      ? item.order.selectedSupplierId === supplierProfile.id
+      : item.supplierId === supplierProfile.id;
+
+    const isClosedToSupplier = Boolean(
+      (item.order.selectedSupplierId && item.order.selectedSupplierId !== supplierProfile.id) ||
+      (candidate && candidate.status === OrderItemCandidateStatus.DECLINED) ||
+      (item.order.status !== OrderStatus.PLACED && !isSelected)
+    );
+
+    if (isClosedToSupplier) {
+      return {
+        id: item.orderId,
+        enquiryId: item.order.enquiryId ?? item.orderId,
+        orderNumber: item.order.orderNumber ?? null,
+        buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
+        deliveryDate: formatDate(item.deliveryDate ?? item.order.deliveryDate),
+        quantity: `${item.quantity} ${item.product.unit}`,
+        material: item.product.name,
+        status: OrderStatus.CANCELLED,
+        isClosedToSupplier: true,
+        closureReason: candidate?.declineReason || GENERIC_ORDER_CLOSURE_REASON,
+        paymentStatus: item.order.paymentStatus,
+        tracking: [
+          {
+            id: `closed-${id}`,
+            label: `Enquiry Closed: ${candidate?.declineReason || GENERIC_ORDER_CLOSURE_REASON}`,
+            status: OrderStatus.CANCELLED,
+          },
+        ],
+      };
     }
 
     return {
@@ -102,6 +156,8 @@ export class OrdersService {
       quantity: `${item.quantity} ${item.product.unit}`,
       material: item.product.name,
       status: item.order.status,
+      isClosedToSupplier: false,
+      closureReason: null,
       // C34: surfaced so updateStatus() below can enforce "paid before
       // delivery" using the order's *current* payment state at the moment
       // of the transition attempt, without a second round-trip.
@@ -117,6 +173,10 @@ export class OrdersService {
   async updateStatus(id: string, status: OrderStatus, user: any, note?: string): Promise<{ id: string; status: OrderStatus }> {
     const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
     const current = await this.findOne(id, user);
+
+    if (current.isClosedToSupplier) {
+      throw new BadRequestException("This order is assigned to another supplier and cannot be updated.");
+    }
 
     // Backend transition guard — reject any transition not in
     // VALID_SUPPLIER_TRANSITIONS even if the caller (WhatsApp flow or a

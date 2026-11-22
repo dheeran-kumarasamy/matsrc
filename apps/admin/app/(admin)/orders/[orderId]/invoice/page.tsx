@@ -201,13 +201,13 @@ export default async function AdminInvoiceViewPage({ params }: { params: { order
             Download Invoice PDF
           </a>
           <a
-            href={`/api/admin/orders/${params.orderId}/site-receipt-sheet/pdf`}
+            href={`/api/admin/orders/${params.orderId}/delivery-challan/pdf`}
             target="_blank"
             rel="noreferrer"
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-            title="Download Site Material Receipt & Verification Sheet (DC / Non-financial)"
+            title="Download Delivery Challan (Non-financial)"
           >
-            Download Site Receipt (DC)
+            Download Delivery Challan
           </a>
         </div>
       </header>

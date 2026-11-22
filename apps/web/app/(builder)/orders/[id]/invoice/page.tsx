@@ -123,22 +123,8 @@ export default async function BuilderInvoicePage({ params }: { params: { id: str
           >
             Download Invoice PDF
           </a>
-          <a
-            href={`/api/builder/orders/${params.id}/site-receipt-sheet/pdf`}
-            target="_blank"
-            rel="noreferrer"
-            className="posh-btn-ghost flex items-center gap-1.5"
-            title="Download Site Material Receipt & Verification Sheet (Price-free)"
-          >
-            Download Site Receipt Sheet
-          </a>
         </div>
       </header>
-      <div className="-mt-3 text-right">
-        <span className="text-xs text-slate-500 dark:text-slate-400">
-          Site Material Receipt &amp; Verification Sheet: Material details and quantities only — no pricing information.
-        </span>
-      </div>
 
       {/* Parties Grid (Bill To & Ship To) */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

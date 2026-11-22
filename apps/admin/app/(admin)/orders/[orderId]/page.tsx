@@ -64,6 +64,14 @@ export default async function AdminRfqDetailPage({ params }: { params: { orderId
           >
             View Invoice
           </Link>
+          <a
+            href={`/api/admin/orders/${params.orderId}/delivery-challan/pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+          >
+            Download Delivery Challan
+          </a>
         </div>
       </div>
 

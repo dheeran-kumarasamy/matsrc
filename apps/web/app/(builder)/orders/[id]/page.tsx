@@ -456,20 +456,6 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                   Download Invoice
                 </a>
               </div>
-              <div className="border-t pt-2" style={{ borderColor: "var(--posh-border)" }}>
-                <a
-                  href={`/api/builder/orders/${order.id}/site-receipt-sheet/pdf`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="posh-btn-ghost block w-full text-center text-xs"
-                  title="Material details and quantities only — no pricing information"
-                >
-                  Download Site Receipt Sheet
-                </a>
-                <p className="mt-1 text-[11px] text-slate-500 text-center">
-                  Price-free verification sheet for site engineers
-                </p>
-              </div>
             </div>
           ) : null}
 

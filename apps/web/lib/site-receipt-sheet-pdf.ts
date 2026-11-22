@@ -1,10 +1,10 @@
 import PDFDocument from "pdfkit";
 import { useRupeeCapableFont } from "@/lib/pdf-fonts";
 import { BUILDOHUB_COMPANY } from "@/lib/company-info";
-import type { SiteReceiptSheetData } from "./site-receipt-sheet-dto";
+import type { SiteReceiptSheetData, DeliveryChallanData, DeliveryChallanItem } from "./site-receipt-sheet-dto";
 
-// Re-export type for convenience
-export type { SiteReceiptSheetData } from "./site-receipt-sheet-dto";
+// Re-export types for convenience
+export type { SiteReceiptSheetData, DeliveryChallanData, DeliveryChallanItem } from "./site-receipt-sheet-dto";
 
 const OLIVE_ACCENT = "#4A4A4A";
 
@@ -196,3 +196,5 @@ export function renderSiteReceiptSheetPdf(data: SiteReceiptSheetData): Promise<B
     doc.end();
   });
 }
+
+export const renderDeliveryChallanPdf = renderSiteReceiptSheetPdf;

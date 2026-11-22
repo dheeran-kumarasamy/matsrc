@@ -47,14 +47,20 @@ export class AdminInvoicesController {
     res.send(buffer);
   }
 
-  @Get("site-receipt-sheet/pdf")
-  async getSiteReceiptSheetPdf(@Param("orderId") orderId: string, @Res() res: Response) {
+  @Get("delivery-challan/pdf")
+  async getDeliveryChallanPdf(@Param("orderId") orderId: string, @Res() res: Response) {
     const invoice = await this.invoicesService.findByOrderId(orderId);
     const receiptSheetData = mapInvoiceToSiteReceiptSheet(invoice);
     const buffer = await renderSiteReceiptSheetPdf(receiptSheetData);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${receiptSheetData.receiptSheetNumber.replace(/\//g, "-")}.pdf"`);
     res.send(buffer);
+  }
+
+  // Alias endpoint for backward compatibility
+  @Get("site-receipt-sheet/pdf")
+  async getSiteReceiptSheetPdf(@Param("orderId") orderId: string, @Res() res: Response) {
+    return this.getDeliveryChallanPdf(orderId, res);
   }
 
   // The single Admin-only "Generate Invoice" action. Idempotent — a repeat

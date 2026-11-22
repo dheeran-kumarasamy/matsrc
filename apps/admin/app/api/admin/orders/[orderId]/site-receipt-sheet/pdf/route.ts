@@ -4,8 +4,8 @@ import { auth } from "@/auth";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
 
 // GET /api/admin/orders/[orderId]/site-receipt-sheet/pdf
-// Proxies the NestJS admin/orders/:orderId/invoice/site-receipt-sheet/pdf endpoint
-// so an admin can download the Delivery Challan / Site Material Receipt Sheet PDF.
+// Legacy alias route: proxies the NestJS admin/orders/:orderId/invoice/delivery-challan/pdf endpoint
+// so an admin can download the Delivery Challan PDF.
 export async function GET(request: Request, { params }: { params: { orderId: string } }) {
   const session = await auth();
   const user = session?.user as { id?: string; email?: string | null; name?: string | null; role?: string } | undefined;
@@ -14,7 +14,7 @@ export async function GET(request: Request, { params }: { params: { orderId: str
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const response = await fetch(`${API_BASE_URL}/admin/orders/${params.orderId}/invoice/site-receipt-sheet/pdf`, {
+  const response = await fetch(`${API_BASE_URL}/admin/orders/${params.orderId}/invoice/delivery-challan/pdf`, {
     cache: "no-store",
     headers: {
       "X-User-Id": user.id || user.email,
@@ -25,7 +25,7 @@ export async function GET(request: Request, { params }: { params: { orderId: str
   });
 
   if (!response.ok) {
-    return NextResponse.json({ error: "Failed to load site receipt sheet PDF" }, { status: response.status });
+    return NextResponse.json({ error: "Failed to load Delivery Challan PDF" }, { status: response.status });
   }
 
   const body = await response.arrayBuffer();

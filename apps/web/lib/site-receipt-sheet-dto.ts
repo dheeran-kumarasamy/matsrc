@@ -20,6 +20,8 @@ export type SiteReceiptSheetItem = {
   invoiceQuantity: number;
 };
 
+export type DeliveryChallanItem = SiteReceiptSheetItem;
+
 export type SiteReceiptSheetData = {
   documentTitle: "Delivery Challan";
   receiptSheetNumber: string;
@@ -35,6 +37,8 @@ export type SiteReceiptSheetData = {
   buyerPoNumber: string | null;
   items: SiteReceiptSheetItem[];
 };
+
+export type DeliveryChallanData = SiteReceiptSheetData;
 
 /**
  * Maps a raw invoice or serialized invoice row to a strictly sanitized
@@ -160,3 +164,5 @@ export function mapInvoiceToSiteReceiptSheet(invoice: any): SiteReceiptSheetData
     items,
   };
 }
+
+export const mapInvoiceToDeliveryChallan = mapInvoiceToSiteReceiptSheet;

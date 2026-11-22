@@ -98,6 +98,14 @@ export function InvoiceGenerationQueue({ items }: { items: VerifiedPayment[] }) 
                     >
                       Download Invoice
                     </a>
+                    <a
+                      href={`/api/admin/orders/${item.orderId}/delivery-challan/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700"
+                    >
+                      Download Delivery Challan
+                    </a>
                   </>
                 ) : (
                   <button

@@ -251,10 +251,11 @@ describe("OrdersService.updateStatus — backend transition guard", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it("allows Mark Delivered once dispatched", async () => {
+  it("rejects supplier attempt to mark delivered once dispatched (delivery receipt confirmed by buyer)", async () => {
     const { service } = buildService({ status: OrderStatus.DISPATCHED });
-    const result = await service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" });
-    expect(result.status).toBe(OrderStatus.DELIVERED);
+    await expect(
+      service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" })
+    ).rejects.toThrow(/Suppliers cannot mark orders as delivered/);
   });
 
   it("rejects any transition once already delivered (terminal state)", async () => {
@@ -279,7 +280,7 @@ describe("OrdersService.updateStatus — C34 payment-before-delivery guard", () 
 
     await expect(
       service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" })
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toThrow(/Suppliers cannot mark orders as delivered/);
   });
 
   it("rejects Mark Delivered when payment proof is still PENDING_VERIFICATION", async () => {
@@ -290,7 +291,7 @@ describe("OrdersService.updateStatus — C34 payment-before-delivery guard", () 
 
     await expect(
       service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" })
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toThrow(/Suppliers cannot mark orders as delivered/);
   });
 
   it("rejects Mark Delivered for a REFUNDED order", async () => {
@@ -298,23 +299,23 @@ describe("OrdersService.updateStatus — C34 payment-before-delivery guard", () 
 
     await expect(
       service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" })
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toThrow(/Suppliers cannot mark orders as delivered/);
   });
 
-  it("allows Mark Delivered once payment is PAID", async () => {
+  it("rejects Mark Delivered even once payment is PAID (only buyer can confirm delivery)", async () => {
     const { service } = buildService({ status: OrderStatus.DISPATCHED, paymentStatus: PaymentStatus.PAID });
 
-    const result = await service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" });
-
-    expect(result.status).toBe(OrderStatus.DELIVERED);
+    await expect(
+      service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" })
+    ).rejects.toThrow(/Suppliers cannot mark orders as delivered/);
   });
 
-  it("allows Mark Delivered from OUT_FOR_DELIVERY once payment is PAID", async () => {
+  it("rejects Mark Delivered from OUT_FOR_DELIVERY even once payment is PAID", async () => {
     const { service } = buildService({ status: OrderStatus.OUT_FOR_DELIVERY, paymentStatus: PaymentStatus.PAID });
 
-    const result = await service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" });
-
-    expect(result.status).toBe(OrderStatus.DELIVERED);
+    await expect(
+      service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" })
+    ).rejects.toThrow(/Suppliers cannot mark orders as delivered/);
   });
 
   it("never blocks non-delivery transitions regardless of payment status", async () => {
@@ -369,28 +370,20 @@ describe("OrdersService.updateStatus — customer_order_status notification rout
     expect(customerOrderStatusNotificationService.notifyIfTransitioned).not.toHaveBeenCalled();
   });
 
-  it("Test 3: three distinct transitions each notify exactly once with the correct pair", async () => {
+  it("Test 3: two distinct transitions each notify exactly once with the correct pair", async () => {
     const { service, customerOrderStatusNotificationService } = buildService({ status: OrderStatus.PLACED });
 
     await service.updateStatus("order-1", OrderStatus.PROCESSING, { userId: "u1" });
-    // findOne() is stubbed to a fixed value above, so re-stub between calls
-    // to reflect the just-applied status for the next transition in this
-    // sequence (mirrors the real findOne() re-reading the committed row).
-    // paymentStatus: PAID so the C34 payment-before-delivery guard (which
-    // this test isn't exercising) doesn't block the final DELIVERED step.
     vi.spyOn(service, "findOne").mockResolvedValueOnce({ status: OrderStatus.PROCESSING, paymentStatus: PaymentStatus.PAID } as any);
     await service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" });
-    vi.spyOn(service, "findOne").mockResolvedValueOnce({ status: OrderStatus.DISPATCHED, paymentStatus: PaymentStatus.PAID } as any);
-    await service.updateStatus("order-1", OrderStatus.DELIVERED, { userId: "u1" });
 
-    expect(customerOrderStatusNotificationService.notifyIfTransitioned).toHaveBeenCalledTimes(3);
+    expect(customerOrderStatusNotificationService.notifyIfTransitioned).toHaveBeenCalledTimes(2);
     const pairs = customerOrderStatusNotificationService.notifyIfTransitioned.mock.calls.map(
       (call: any) => [call[0].previousStatus, call[0].newStatus]
     );
     expect(pairs).toEqual([
       [OrderStatus.PLACED, OrderStatus.PROCESSING],
       [OrderStatus.PROCESSING, OrderStatus.DISPATCHED],
-      [OrderStatus.DISPATCHED, OrderStatus.DELIVERED],
     ]);
   });
 });

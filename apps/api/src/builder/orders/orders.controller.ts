@@ -41,6 +41,11 @@ export class BuilderOrdersController {
     return this.ordersService.upsertRating(user, id, dto);
   }
 
+  @Post(":id/confirm-delivery")
+  confirmDelivery(@CurrentUser() user: any, @Param("id") id: string, @Body() body: any) {
+    return this.ordersService.confirmDelivery(user, id, body);
+  }
+
   // Contractor/Client view/download of their own generated invoice. Read-only
   // — this Contractor/Client-scoped controller (@Roles("BUILDER")) never
   // exposes generation; only an Admin can generate (see

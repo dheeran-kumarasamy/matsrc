@@ -195,14 +195,15 @@ describe("updateSupplierOrderStatus — backend transition guard", () => {
   it("rejects Mark Delivered before dispatch", async () => {
     seedOrder("order-6", "PROCESSING");
     await expect(updateSupplierOrderStatus("order-6", "DELIVERED" as any)).rejects.toThrow(
-      /Invalid order status transition/
+      /Suppliers cannot mark orders as delivered/
     );
   });
 
-  it("allows Mark Delivered once dispatched (DISPATCHED -> DELIVERED)", async () => {
+  it("rejects supplier attempt to mark delivered once dispatched (only buyer can confirm delivery)", async () => {
     seedOrder("order-7", "DISPATCHED");
-    const result = await updateSupplierOrderStatus("order-7", "DELIVERED" as any);
-    expect(result.status).toBe("DELIVERED");
+    await expect(updateSupplierOrderStatus("order-7", "DELIVERED" as any)).rejects.toThrow(
+      /Suppliers cannot mark orders as delivered/
+    );
   });
 
   it("rejects any transition attempted after the order has already been delivered", async () => {
@@ -301,19 +302,17 @@ describe("updateSupplierOrderStatus — customer_order_status notification routi
     expect(notifyCustomerOrderStatusChanged).not.toHaveBeenCalled();
   });
 
-  it("Test 3: three distinct transitions each invoke the notification call exactly once with the correct pair", async () => {
+  it("Test 3: distinct transitions each invoke the notification call exactly once with the correct pair", async () => {
     seedOrder("order-12", "PLACED");
 
     await updateSupplierOrderStatus("order-12", "PROCESSING" as any);
     await updateSupplierOrderStatus("order-12", "DISPATCHED" as any);
-    await updateSupplierOrderStatus("order-12", "DELIVERED" as any);
 
-    expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledTimes(3);
+    expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledTimes(2);
     const pairs = notifyCustomerOrderStatusChanged.mock.calls.map((call: any) => [call[1].previousStatus, call[1].newStatus]);
     expect(pairs).toEqual([
       ["PLACED", "PROCESSING"],
       ["PROCESSING", "DISPATCHED"],
-      ["DISPATCHED", "DELIVERED"],
     ]);
   });
 
@@ -402,30 +401,28 @@ describe("updateSupplierOrderStatus — Vercel-safe notification scheduling (wai
     expect(notifyCustomerOrderStatusChanged).not.toHaveBeenCalled();
   });
 
-  it("schedules one waitUntil-wrapped notification per genuine transition across a full PLACED -> PROCESSING -> DISPATCHED -> DELIVERED sequence", async () => {
+  it("schedules one waitUntil-wrapped notification per genuine transition across a full PLACED -> PROCESSING -> DISPATCHED sequence", async () => {
     seedOrder("order-23", "PLACED");
 
     await updateSupplierOrderStatus("order-23", "PROCESSING" as any);
     await updateSupplierOrderStatus("order-23", "DISPATCHED" as any);
-    await updateSupplierOrderStatus("order-23", "DELIVERED" as any);
 
     // Two notifications (customer_order_status + payment_required) per
-    // transition, three transitions = 6 scheduled calls.
-    expect(waitUntilMock).toHaveBeenCalledTimes(6);
+    // transition, two transitions = 4 scheduled calls.
+    expect(waitUntilMock).toHaveBeenCalledTimes(4);
     await Promise.all(waitUntilMock.mock.calls.map((call) => call[0]));
 
-    expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledTimes(3);
+    expect(notifyCustomerOrderStatusChanged).toHaveBeenCalledTimes(2);
     const pairs = notifyCustomerOrderStatusChanged.mock.calls.map((call: any) => [call[1].previousStatus, call[1].newStatus]);
     expect(pairs).toEqual([
       ["PLACED", "PROCESSING"],
       ["PROCESSING", "DISPATCHED"],
-      ["DISPATCHED", "DELIVERED"],
     ]);
 
     // payment_required is scheduled on every transition (its own internal
     // guard decides whether to actually notify), but only the first
     // PLACED -> PROCESSING call here is the genuine trigger.
-    expect(notifyPaymentRequired).toHaveBeenCalledTimes(3);
+    expect(notifyPaymentRequired).toHaveBeenCalledTimes(2);
     expect(notifyPaymentRequired).toHaveBeenNthCalledWith(
       1,
       expect.anything(),
@@ -434,60 +431,19 @@ describe("updateSupplierOrderStatus — Vercel-safe notification scheduling (wai
   });
 });
 
-// C34 — an order must never be marked DELIVERED while payment is not
-// settled. This is the supplier portal's own copy of the rule (mirrors the
-// equivalent guard/tests in apps/api's OrdersService) — the "Mark
-// Delivered" button here (components/supplier/OrderStatusActions.tsx) calls
-// PATCH /api/supplier/orders/:id, which calls this function directly, so
-// this is the single place that must reject the transition even if the
-// request bypasses the UI entirely.
-describe("updateSupplierOrderStatus — C34 payment-before-delivery guard", () => {
-  it("rejects Mark Delivered when payment is still PENDING", async () => {
-    seedOrder("order-30", "DISPATCHED", "PENDING");
+// Delivery confirmation guard: suppliers can no longer mark DELIVERED (buyer must confirm delivery receipt).
+describe("updateSupplierOrderStatus — delivery confirmation guard", () => {
+  it("rejects supplier attempt to mark DELIVERED", async () => {
+    seedOrder("order-30", "DISPATCHED", "PAID");
     await expect(updateSupplierOrderStatus("order-30", "DELIVERED" as any)).rejects.toThrow(
-      /cannot be marked as delivered until payment has been confirmed/
+      /Suppliers cannot mark orders as delivered/
     );
-  });
-
-  it("rejects Mark Delivered when payment proof is still PENDING_VERIFICATION", async () => {
-    seedOrder("order-31", "DISPATCHED", "PENDING_VERIFICATION");
-    await expect(updateSupplierOrderStatus("order-31", "DELIVERED" as any)).rejects.toThrow(
-      /cannot be marked as delivered until payment has been confirmed/
-    );
-  });
-
-  it("rejects Mark Delivered for a REFUNDED order", async () => {
-    seedOrder("order-32", "DISPATCHED", "REFUNDED");
-    await expect(updateSupplierOrderStatus("order-32", "DELIVERED" as any)).rejects.toThrow(
-      /cannot be marked as delivered until payment has been confirmed/
-    );
-  });
-
-  it("allows Mark Delivered once payment is PAID", async () => {
-    seedOrder("order-33", "DISPATCHED", "PAID");
-    const result = await updateSupplierOrderStatus("order-33", "DELIVERED" as any);
-    expect(result.status).toBe("DELIVERED");
-  });
-
-  it("allows Mark Delivered from OUT_FOR_DELIVERY once payment is PAID", async () => {
-    seedOrder("order-34", "OUT_FOR_DELIVERY", "PAID");
-    const result = await updateSupplierOrderStatus("order-34", "DELIVERED" as any);
-    expect(result.status).toBe("DELIVERED");
   });
 
   it("never blocks non-delivery transitions regardless of payment status", async () => {
     seedOrder("order-35", "PROCESSING", "PENDING");
     const result = await updateSupplierOrderStatus("order-35", "DISPATCHED" as any);
     expect(result.status).toBe("DISPATCHED");
-  });
-
-  it("does not schedule any notification when Mark Delivered is rejected for unpaid orders", async () => {
-    seedOrder("order-36", "DISPATCHED", "PENDING");
-    await expect(updateSupplierOrderStatus("order-36", "DELIVERED" as any)).rejects.toThrow(
-      /cannot be marked as delivered until payment has been confirmed/
-    );
-    expect(waitUntilMock).not.toHaveBeenCalled();
-    expect(notifyCustomerOrderStatusChanged).not.toHaveBeenCalled();
   });
 });
 

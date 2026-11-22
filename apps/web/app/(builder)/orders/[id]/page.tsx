@@ -11,6 +11,7 @@ import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
 import { BuyerQuotationSelector } from "@/components/orders/BuyerQuotationSelector";
 import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
+import ConfirmDeliveryCard from "@/components/orders/ConfirmDeliveryCard";
 
 
 type OrderDetail = {
@@ -195,6 +196,14 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           listingId={order.primaryListingId}
           supplierId={order.supplierId}
           acceptedContext
+        />
+      ) : null}
+
+      {order.status === "DISPATCHED" ? (
+        <ConfirmDeliveryCard
+          orderId={order.id}
+          orderNumber={order.orderNumber || order.enquiryId}
+          buyerName={order.siteName || undefined}
         />
       ) : null}
 

@@ -26,8 +26,8 @@ export type OrderAction = {
 // action buttons, keyed by the order's *current* status:
 //   PLACED            (awaiting supplier response) -> PROCESSING | CANCELLED
 //   PROCESSING        (accepted, awaiting dispatch) -> DISPATCHED
-//   DISPATCHED        (in transit)                  -> DELIVERED
-//   OUT_FOR_DELIVERY   (in transit, later stage)      -> DELIVERED
+//   DISPATCHED        (in transit)                  -> (Awaiting buyer delivery confirmation; no supplier action)
+//   OUT_FOR_DELIVERY  (in transit, later stage)     -> (Awaiting buyer delivery confirmation; no supplier action)
 //   DELIVERED / CANCELLED are terminal — no further supplier action.
 const NEXT_ACTIONS: Record<OrderStatus, OrderAction[]> = {
   PLACED: [
@@ -35,8 +35,8 @@ const NEXT_ACTIONS: Record<OrderStatus, OrderAction[]> = {
     { key: "DECLINE", label: "Decline Enquiry", nextStatus: "CANCELLED" },
   ],
   PROCESSING: [{ key: "DISPATCH", label: "Mark Dispatched", nextStatus: "DISPATCHED" }],
-  DISPATCHED: [{ key: "DELIVER", label: "Mark Delivered", nextStatus: "DELIVERED" }],
-  OUT_FOR_DELIVERY: [{ key: "DELIVER", label: "Mark Delivered", nextStatus: "DELIVERED" }],
+  DISPATCHED: [],
+  OUT_FOR_DELIVERY: [],
   DELIVERED: [],
   CANCELLED: [],
 };
@@ -103,6 +103,8 @@ export function getCancellationActor(tracking: TrackingEntryLike[]): Cancellatio
 // ("Cancelled") rather than a compile error.
 export function getReadOnlyStatusLabel(status: OrderStatus, tracking: TrackingEntryLike[] = []): string | null {
   if (status === "DELIVERED") return "Order Delivered";
+  if (status === "DISPATCHED") return "Dispatched — In transit (Awaiting buyer delivery confirmation)";
+  if (status === "OUT_FOR_DELIVERY") return "Out for delivery (Awaiting buyer delivery confirmation)";
   if (status === "CANCELLED") {
     const actor = getCancellationActor(tracking);
     if (actor === "BUILDER") return "Cancelled by Builder";

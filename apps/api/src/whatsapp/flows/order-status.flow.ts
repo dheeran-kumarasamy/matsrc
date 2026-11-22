@@ -317,20 +317,9 @@ export class OrderStatusFlow {
     return null;
   }
 
-  private async isEligibleForDelivery(orderId: string, supplierProfileId: string): Promise<boolean> {
-    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
-    if (!order) return false;
-    if (order.status === OrderStatus.DELIVERED || order.status === OrderStatus.CANCELLED) return false;
-
-    const purchaseOrder = await this.prisma.purchaseOrder.findFirst({
-      where: {
-        orderId,
-        supplierId: supplierProfileId,
-        status: { in: [PurchaseOrderStatus.ISSUED, PurchaseOrderStatus.ACKNOWLEDGED] },
-      },
-    });
-
-    return !!purchaseOrder;
+  private async isEligibleForDelivery(_orderId: string, _supplierProfileId: string): Promise<boolean> {
+    // Delivery receipt must be verified and confirmed by the buyer, not the supplier.
+    return false;
   }
 
   private bucketToOrderStatuses(bucket: Bucket): OrderStatus[] {

@@ -22,16 +22,14 @@ describe("getAvailableActions", () => {
     expect(labels).toEqual(["Mark Dispatched"]);
   });
 
-  it("DISPATCHED shows only Mark Delivered", () => {
+  it("DISPATCHED shows no supplier actions (delivery receipt is confirmed by buyer)", () => {
     const actions = getAvailableActions("DISPATCHED");
-    const labels = actions.map((a) => a.label);
-    expect(labels).toEqual(["Mark Delivered"]);
+    expect(actions).toEqual([]);
   });
 
-  it("OUT_FOR_DELIVERY shows only Mark Delivered", () => {
+  it("OUT_FOR_DELIVERY shows no supplier actions", () => {
     const actions = getAvailableActions("OUT_FOR_DELIVERY");
-    const labels = actions.map((a) => a.label);
-    expect(labels).toEqual(["Mark Delivered"]);
+    expect(actions).toEqual([]);
   });
 
   it("DELIVERED shows no actions", () => {
@@ -77,8 +75,11 @@ describe("getReadOnlyStatusLabel", () => {
   it("returns null for statuses that still have an available action", () => {
     expect(getReadOnlyStatusLabel("PLACED")).toBeNull();
     expect(getReadOnlyStatusLabel("PROCESSING")).toBeNull();
-    expect(getReadOnlyStatusLabel("DISPATCHED")).toBeNull();
-    expect(getReadOnlyStatusLabel("OUT_FOR_DELIVERY")).toBeNull();
+  });
+
+  it("returns awaiting-buyer label for DISPATCHED and OUT_FOR_DELIVERY", () => {
+    expect(getReadOnlyStatusLabel("DISPATCHED")).toMatch(/awaiting buyer delivery confirmation/i);
+    expect(getReadOnlyStatusLabel("OUT_FOR_DELIVERY")).toMatch(/awaiting buyer delivery confirmation/i);
   });
 
   it("other status labels (Order Delivered, Order status: X) remain unchanged", () => {
@@ -142,9 +143,9 @@ describe("isValidOrderStatusTransition — backend transition guard", () => {
     expect(isValidOrderStatusTransition("PLACED", "DISPATCHED")).toBe(false);
   });
 
-  it("allows Deliver only after dispatch (DISPATCHED|OUT_FOR_DELIVERY -> DELIVERED)", () => {
-    expect(isValidOrderStatusTransition("DISPATCHED", "DELIVERED")).toBe(true);
-    expect(isValidOrderStatusTransition("OUT_FOR_DELIVERY", "DELIVERED")).toBe(true);
+  it("rejects supplier Deliver transition (delivery receipt must be confirmed by buyer)", () => {
+    expect(isValidOrderStatusTransition("DISPATCHED", "DELIVERED")).toBe(false);
+    expect(isValidOrderStatusTransition("OUT_FOR_DELIVERY", "DELIVERED")).toBe(false);
   });
 
   it("rejects Deliver before dispatch", () => {

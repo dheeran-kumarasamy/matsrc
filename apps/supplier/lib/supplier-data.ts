@@ -2408,6 +2408,12 @@ export async function updateSupplierOrderStatus(
     throw new Error("This order is assigned to another supplier and cannot be updated.");
   }
 
+  if (status === "DELIVERED") {
+    throw new Error(
+      "Suppliers cannot mark orders as delivered. Delivery receipt must be confirmed by the buyer upon physical inspection at the site."
+    );
+  }
+
   if (!isValidOrderStatusTransition(current.status, status)) {
     throw new Error(
       `Invalid order status transition: cannot move from ${current.status} to ${status}`
@@ -2431,26 +2437,6 @@ export async function updateSupplierOrderStatus(
     }
   }
 
-  // C34 — server-side enforcement: an order must never be marked DELIVERED
-  // while its payment is not yet settled. This function is the single
-  // authoritative place the supplier portal transitions Order.status to
-  // DELIVERED through (the "Mark Delivered" button -> PATCH
-  // /api/supplier/orders/:id -> this function), so gating here blocks the
-  // transition even if a request bypasses the UI and calls the API route
-  // directly. Mirrors the equivalent guard in apps/api's OrdersService
-  // (src/supplier/orders/orders.service.ts), which apps/api's own
-  // "Mark Delivered" path and the WhatsApp delivery-confirmation flow both
-  // go through — both apps enforce the identical rule using the existing
-  // PaymentStatus enum (packages/db/prisma/schema.prisma). PAID is the only
-  // status that means payment has actually been settled, regardless of
-  // which configured payment method (UPI/CARD/NET_BANKING/COD/CREDIT/
-  // BANK_TRANSFER) was used — every one of those funnels into
-  // paymentStatus = PAID via the payment gateway, admin bank-transfer
-  // verification, or admin invoice flow, never guessed or auto-set here.
-  // REFUNDED is deliberately not treated as paid.
-  if (status === "DELIVERED" && current.paymentStatus !== "PAID") {
-    throw new Error("This order cannot be marked as delivered until payment has been confirmed.");
-  }
 
   // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
   // Dispatch — server-side enforcement: an order must never be marked

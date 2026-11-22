@@ -177,6 +177,13 @@ export function OrderStatusActions({
             <p className="text-xs font-semibold text-amber-600">{dispatchBlockedReason}</p>
           ) : null}
         </div>
+      ) : status === "DISPATCHED" || status === "OUT_FOR_DELIVERY" ? (
+        <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+          <p className="font-bold text-blue-950">Materials Dispatched</p>
+          <p className="mt-1 text-xs text-blue-800">
+            Order is in transit. Material delivery receipt will be verified and confirmed by the buyer upon arrival at the site.
+          </p>
+        </div>
       ) : (
         // Terminal state (Delivered/Cancelled) or an order status this table
         // doesn't recognise — never expose a possibly-invalid action, just

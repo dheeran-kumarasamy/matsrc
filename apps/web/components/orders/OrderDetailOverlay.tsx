@@ -18,6 +18,7 @@ import OrderRatingForm from "@/components/orders/OrderRatingForm";
 import GeneratePoButton from "@/components/orders/GeneratePoButton";
 import OrderSiteAssignment from "@/components/orders/OrderSiteAssignment";
 import { resolveBuyerPoDocumentNumber } from "@/lib/purchase-order-utils";
+import ConfirmDeliveryCard from "@/components/orders/ConfirmDeliveryCard";
 
 
 export type OverlayOrderDetail = {
@@ -239,6 +240,14 @@ export default function OrderDetailOverlay({ order }: Props) {
 
           {order.status === "PROCESSING" && order.primaryListingId && order.supplierId ? (
             <SupplierSocialProof listingId={order.primaryListingId} supplierId={order.supplierId} acceptedContext />
+          ) : null}
+
+          {order.status === "DISPATCHED" ? (
+            <ConfirmDeliveryCard
+              orderId={order.id}
+              orderNumber={order.orderNumber || order.enquiryId}
+              buyerName={order.siteName || undefined}
+            />
           ) : null}
 
           {order.status === "DELIVERED" ? (

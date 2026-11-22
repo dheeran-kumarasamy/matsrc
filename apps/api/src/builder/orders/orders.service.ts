@@ -452,4 +452,63 @@ export class BuilderOrdersService {
       updated: false,
     };
   }
+
+  async confirmDelivery(userCtx: any, orderId: string, dto?: { receivedDate?: string; receivedBy?: string; notes?: string }) {
+    const { user } = await this.builderContext.getOrCreateBuilder(userCtx.userId, userCtx.email, userCtx.name);
+
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, userId: user.id },
+      include: {
+        selectedSupplier: { select: { id: true, userId: true, companyName: true } },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException("Order not found");
+    }
+
+    if (order.status !== OrderStatus.DISPATCHED) {
+      throw new BadRequestException(
+        `Delivery receipt can only be confirmed for dispatched orders. Current status: ${order.status}`
+      );
+    }
+
+    const receivedDate =
+      dto?.receivedDate?.trim() ||
+      new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    const receivedBy = dto?.receivedBy?.trim() || user.name || "Site Representative";
+    const notes = dto?.notes?.trim() || null;
+
+    const note = `Buyer confirmed material delivery at site (Received by: ${receivedBy} on ${receivedDate})${
+      notes ? ` - ${notes}` : ""
+    }`;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const delivered = await tx.order.update({
+        where: { id: order.id },
+        data: {
+          status: OrderStatus.DELIVERED,
+          deliveryDate: new Date(),
+        },
+        select: { id: true, status: true, orderNumber: true, enquiryId: true },
+      });
+
+      await tx.orderTracking.create({
+        data: {
+          orderId: order.id,
+          status: OrderStatus.DELIVERED,
+          note,
+        },
+      });
+
+      return delivered;
+    });
+
+    return {
+      success: true,
+      id: updated.id,
+      status: updated.status,
+      note,
+    };
+  }
 }

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { adminApiGet } from "@/lib/api";
 import { requireAdminAccess } from "@/lib/rbac";
 import { AdminQuotationReview, type AdminQuotationData } from "@/components/admin/AdminQuotationReview";
+import { AdminConfirmDeliveryButton } from "@/components/admin/AdminConfirmDeliveryButton";
 
 type RfqSummary = {
   id: string;
@@ -72,6 +73,9 @@ export default async function AdminRfqDetailPage({ params }: { params: { orderId
           >
             Download Delivery Challan
           </a>
+          {rfq.status === "DISPATCHED" ? (
+            <AdminConfirmDeliveryButton orderId={params.orderId} />
+          ) : null}
         </div>
       </div>
 

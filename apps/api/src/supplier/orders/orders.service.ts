@@ -35,8 +35,8 @@ import { PaymentRequiredNotificationService } from "src/notification-engine/what
 const VALID_SUPPLIER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   [OrderStatus.PLACED]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
   [OrderStatus.PROCESSING]: [OrderStatus.DISPATCHED],
-  [OrderStatus.DISPATCHED]: [OrderStatus.DELIVERED],
-  [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED],
+  [OrderStatus.DISPATCHED]: [],
+  [OrderStatus.OUT_FOR_DELIVERY]: [],
   [OrderStatus.DELIVERED]: [],
   [OrderStatus.CANCELLED]: [],
 };
@@ -180,6 +180,12 @@ export class OrdersService {
 
     if (current.isClosedToSupplier) {
       throw new BadRequestException("This order is assigned to another supplier and cannot be updated.");
+    }
+
+    if (status === OrderStatus.DELIVERED) {
+      throw new BadRequestException(
+        "Suppliers cannot mark orders as delivered. Delivery receipt must be confirmed by the buyer upon physical inspection at the site."
+      );
     }
 
     // Backend transition guard — reject any transition not in

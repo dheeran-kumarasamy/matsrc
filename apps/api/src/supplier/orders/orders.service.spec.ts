@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { BadRequestException } from "@nestjs/common";
-import { OrderStatus, PaymentStatus } from "@matsrc/db";
+import { OrderStatus, PaymentStatus, OrderItemCandidateStatus } from "@matsrc/db";
 import { OrdersService } from "./orders.service";
 
 // Mock of Vercel's waitUntil() — records every promise handed to it so
@@ -751,5 +751,97 @@ describe("OrdersService.updateStatus — Admin-Confirmed Freight / Buyer Final C
 
     const result = await service.updateStatus("order-1", OrderStatus.DISPATCHED, { userId: "u1" });
     expect(result.status).toBe(OrderStatus.DISPATCHED);
+  });
+});
+
+describe("OrdersService.findOne — competing supplier closure", () => {
+  it("evaluates isClosedToSupplier as false for the awarded supplier even when past PLACED", async () => {
+    const mockSupplierContext = {
+      getOrCreateSupplier: vi.fn().mockResolvedValue({
+        supplierProfile: { id: "sup-1", companyName: "Ramesh Iron and Steel" },
+      }),
+    };
+    const mockPrisma: any = {
+      orderItem: {
+        findFirst: vi.fn().mockResolvedValue({
+          orderId: "order-1",
+          quantity: 2,
+          deliveryDate: new Date(),
+          supplierId: "sup-1",
+          order: {
+            id: "order-1",
+            enquiryId: "EQ/2608/00001",
+            orderNumber: "OD/2608/00001",
+            status: OrderStatus.DISPATCHED,
+            selectedSupplierId: "sup-1",
+            paymentStatus: PaymentStatus.PAID,
+            user: { name: "Builder" },
+            tracking: [],
+          },
+          product: { name: "TMT Bar", unit: "MT" },
+          candidates: [
+            { status: OrderItemCandidateStatus.PENDING, declineReason: null },
+          ],
+        }),
+      },
+    };
+
+    const service = new OrdersService(
+      mockPrisma,
+      mockSupplierContext as any,
+      {} as any,
+      {} as any,
+      {} as any
+    );
+
+    const result = await service.findOne("order-1", { userId: "u1" });
+    expect(result.isClosedToSupplier).toBe(false);
+    expect(result.status).toBe(OrderStatus.DISPATCHED);
+    expect(result.closureReason).toBeNull();
+  });
+
+  it("evaluates isClosedToSupplier as true for competing unselected supplier when past PLACED", async () => {
+    const mockSupplierContext = {
+      getOrCreateSupplier: vi.fn().mockResolvedValue({
+        supplierProfile: { id: "sup-competing", companyName: "Pioneer Steel" },
+      }),
+    };
+    const mockPrisma: any = {
+      orderItem: {
+        findFirst: vi.fn().mockResolvedValue({
+          orderId: "order-1",
+          quantity: 2,
+          deliveryDate: new Date(),
+          supplierId: "sup-winning",
+          order: {
+            id: "order-1",
+            enquiryId: "EQ/2608/00001",
+            orderNumber: "OD/2608/00001",
+            status: OrderStatus.DISPATCHED,
+            selectedSupplierId: "sup-winning",
+            paymentStatus: PaymentStatus.PAID,
+            user: { name: "Builder" },
+            tracking: [],
+          },
+          product: { name: "TMT Bar", unit: "MT" },
+          candidates: [
+            { status: OrderItemCandidateStatus.PENDING, declineReason: null },
+          ],
+        }),
+      },
+    };
+
+    const service = new OrdersService(
+      mockPrisma,
+      mockSupplierContext as any,
+      {} as any,
+      {} as any,
+      {} as any
+    );
+
+    const result = await service.findOne("order-1", { userId: "u-competing" });
+    expect(result.isClosedToSupplier).toBe(true);
+    expect(result.status).toBe(OrderStatus.CANCELLED);
+    expect(result.closureReason).toMatch(/no longer required for fulfilment/);
   });
 });

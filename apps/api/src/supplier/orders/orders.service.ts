@@ -113,15 +113,19 @@ export class OrdersService {
     }
 
     const candidate = item.candidates?.[0];
-    const isSelected = item.order.selectedSupplierId
-      ? item.order.selectedSupplierId === supplierProfile.id
-      : item.supplierId === supplierProfile.id;
-
-    const isClosedToSupplier = Boolean(
-      (item.order.selectedSupplierId && item.order.selectedSupplierId !== supplierProfile.id) ||
-      (candidate && candidate.status === OrderItemCandidateStatus.DECLINED) ||
-      (item.order.status !== OrderStatus.PLACED && !isSelected)
+    const isSelected = Boolean(
+      item.order.selectedSupplierId
+        ? item.order.selectedSupplierId === supplierProfile.id
+        : item.supplierId === supplierProfile.id
     );
+
+    const isClosedToSupplier =
+      !isSelected &&
+      Boolean(
+        (item.order.selectedSupplierId && item.order.selectedSupplierId !== supplierProfile.id) ||
+        (candidate && candidate.status === OrderItemCandidateStatus.DECLINED) ||
+        (item.order.status !== OrderStatus.PLACED)
+      );
 
     if (isClosedToSupplier) {
       return {

@@ -182,6 +182,58 @@ describe("getSupplierOrderDetail — requiresQuotation (duplicate supplier-actio
     const detail = await getSupplierOrderDetail("order-50", "supplier@example.com");
     expect(detail?.requiresQuotation).toBe(false);
   });
+
+  it("evaluates isClosedToSupplier as false for the awarded supplier even if candidate status is PENDING and order is past PLACED", async () => {
+    seedDetail({
+      supplierId: "supplier-1",
+      order: {
+        id: "order-55",
+        user: { name: "Builder Co", phone: null },
+        status: "DISPATCHED",
+        selectedSupplierId: "supplier-1",
+        paymentStatus: "PAID",
+        deliveryDate: null,
+        deliveryAddress: null,
+        site: null,
+        tracking: [],
+      },
+      candidates: [
+        { status: "PENDING", unitPrice: 100, declineReason: null, respondedAt: null },
+      ],
+    });
+
+    const detail = await getSupplierOrderDetail("order-55", "supplier@example.com");
+    expect(detail).toBeDefined();
+    expect(detail?.isClosedToSupplier).toBe(false);
+    expect(detail?.status).toBe("DISPATCHED");
+    expect(detail?.closureReason).toBeNull();
+  });
+
+  it("evaluates isClosedToSupplier as true for competing unselected supplier when order has progressed past PLACED", async () => {
+    seedDetail({
+      supplierId: "other-supplier",
+      order: {
+        id: "order-56",
+        user: { name: "Builder Co", phone: null },
+        status: "DISPATCHED",
+        selectedSupplierId: "other-supplier",
+        paymentStatus: "PAID",
+        deliveryDate: null,
+        deliveryAddress: null,
+        site: null,
+        tracking: [],
+      },
+      candidates: [
+        { status: "PENDING", unitPrice: 100, declineReason: null, respondedAt: null },
+      ],
+    });
+
+    const detail = await getSupplierOrderDetail("order-56", "supplier@example.com");
+    expect(detail).toBeDefined();
+    expect(detail?.isClosedToSupplier).toBe(true);
+    expect(detail?.status).toBe("CANCELLED");
+    expect(detail?.closureReason).toMatch(/no longer required for fulfilment/);
+  });
 });
 
 describe("updateSupplierOrderStatus — backend guard for competing-supplier RFQs", () => {

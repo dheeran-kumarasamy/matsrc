@@ -1875,20 +1875,24 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
   if (!item) return null;
 
   const candidate = (item as any).candidates?.[0];
-  const isSelectedSupplier = item.order.selectedSupplierId
-    ? item.order.selectedSupplierId === supplierProfile.id
-    : item.supplierId === supplierProfile.id;
-
-  const isClosedToSupplier = Boolean(
-    // 1. Order was awarded to a different supplier
-    (item.order.selectedSupplierId && item.order.selectedSupplierId !== supplierProfile.id) ||
-    // 2. This supplier's candidate entry was declined or closed
-    (candidate && candidate.status === "DECLINED") ||
-    // 3. Line item belongs to a different supplier and order is past PLACED
-    (item.supplierId && item.supplierId !== supplierProfile.id && item.order.status !== "PLACED") ||
-    // 4. Supplier was only a pending candidate, but the order progressed past PLACED
-    (candidate && candidate.status === "PENDING" && item.order.status !== "PLACED")
+  const isSelectedSupplier = Boolean(
+    item.order.selectedSupplierId
+      ? item.order.selectedSupplierId === supplierProfile.id
+      : item.supplierId === supplierProfile.id
   );
+
+  const isClosedToSupplier =
+    !isSelectedSupplier &&
+    Boolean(
+      // 1. Order was awarded to a different supplier
+      (item.order.selectedSupplierId && item.order.selectedSupplierId !== supplierProfile.id) ||
+      // 2. This supplier's candidate entry was declined or closed
+      (candidate && candidate.status === "DECLINED") ||
+      // 3. Line item belongs to a different supplier and order is past PLACED
+      (item.supplierId && item.supplierId !== supplierProfile.id && item.order.status !== "PLACED") ||
+      // 4. Supplier was only a pending candidate, but the order progressed past PLACED
+      (candidate && candidate.status === "PENDING" && item.order.status !== "PLACED")
+    );
 
   const closureReason = isClosedToSupplier
     ? candidate?.declineReason || GENERIC_ORDER_CLOSURE_REASON

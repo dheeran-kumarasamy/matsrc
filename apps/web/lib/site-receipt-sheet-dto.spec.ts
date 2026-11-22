@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mapInvoiceToSiteReceiptSheet } from "./site-receipt-sheet-dto";
 
-describe("mapInvoiceToSiteReceiptSheet (Privacy & Mapping Verification)", () => {
+describe("mapInvoiceToSiteReceiptSheet (Delivery Challan Privacy & Mapping Verification)", () => {
   const mockInvoice = {
     id: "inv-123",
     invoiceNumber: "IN/2608/00002",
@@ -54,9 +54,6 @@ describe("mapInvoiceToSiteReceiptSheet (Privacy & Mapping Verification)", () => 
         taxRate: 18,
         taxAmount: 51480,
         total: 337480,
-        markupPercent: 3.5,
-        markupAmount: 9900,
-        supplierUnitPrice: 50200,
       },
       {
         id: "li-2",
@@ -72,27 +69,22 @@ describe("mapInvoiceToSiteReceiptSheet (Privacy & Mapping Verification)", () => 
         taxRate: 28,
         taxAmount: 21560,
         total: 98560,
-        markupPercent: 2,
-        markupAmount: 1540,
-        supplierUnitPrice: 377,
       },
     ],
   };
 
-  it("1. Maps invoice metadata, site, and products accurately", () => {
+  it("1. Maps invoice metadata, buyer details, and site delivery details accurately", () => {
     const sheet = mapInvoiceToSiteReceiptSheet(mockInvoice);
 
-    expect(sheet.documentTitle).toBe("SITE MATERIAL RECEIPT & VERIFICATION SHEET");
+    expect(sheet.documentTitle).toBe("Delivery Challan");
     expect(sheet.receiptSheetNumber).toBe("DC/2608/00002");
     expect(sheet.invoiceNumber).toBe("IN/2608/00002");
     expect(sheet.orderReference).toBe("EQ/2608/00002");
     expect(sheet.buyerPoNumber).toBe("PO-CLIENT-99");
     expect(sheet.buyerName).toBe("Apex Infrastructure Private Limited");
+    expect(sheet.buyerAddress).toContain("123 Anna Salai, Chennai, Tamil Nadu, 600002");
     expect(sheet.siteName).toBe("Coimbatore Metro Project");
-    expect(sheet.deliveryAddress).toContain("Sugunapuram, Kuniyamuthur");
-    expect(sheet.deliveryAddress).toContain("Coimbatore");
-    expect(sheet.deliveryAddress).toContain("641008");
-    expect(sheet.supplierName).toBe("Pioneer Steel Trading Co");
+    expect(sheet.siteAddress).toContain("Sugunapuram, Kuniyamuthur, Coimbatore, Tamil Nadu, 641008");
 
     expect(sheet.items).toHaveLength(2);
     expect(sheet.items[0]).toEqual({
@@ -116,7 +108,6 @@ describe("mapInvoiceToSiteReceiptSheet (Privacy & Mapping Verification)", () => 
   it("2. STRICT FINANCIAL PRIVACY: Excludes all financial and pricing fields from the mapped output", () => {
     const sheet = mapInvoiceToSiteReceiptSheet(mockInvoice) as any;
 
-    // Check top-level financial fields
     const forbiddenTopLevelKeys = [
       "unitPrice",
       "rate",
@@ -141,7 +132,6 @@ describe("mapInvoiceToSiteReceiptSheet (Privacy & Mapping Verification)", () => 
       expect(sheet[key]).toBeUndefined();
     }
 
-    // Check item-level financial fields
     const forbiddenItemKeys = [
       "unitPrice",
       "rate",
@@ -153,12 +143,6 @@ describe("mapInvoiceToSiteReceiptSheet (Privacy & Mapping Verification)", () => 
       "markupPercent",
       "markupAmount",
       "supplierUnitPrice",
-      "cgstRate",
-      "cgstAmount",
-      "sgstRate",
-      "sgstAmount",
-      "igstRate",
-      "igstAmount",
     ];
 
     for (const item of sheet.items) {
@@ -185,9 +169,8 @@ describe("mapInvoiceToSiteReceiptSheet (Privacy & Mapping Verification)", () => 
     expect(sheet.orderReference).toBe("Not available");
     expect(sheet.buyerPoNumber).toBeNull();
     expect(sheet.buyerName).toBe("Contractor / Client");
-    expect(sheet.siteName).toBe("Site not specified");
-    expect(sheet.deliveryAddress).toBe("Site address not available");
-    expect(sheet.supplierName).toBe("Authorized BuildOhub Supplier");
+    expect(sheet.siteName).toBe("Site Delivery");
+    expect(sheet.siteAddress).toBe("Address not configured");
 
     expect(sheet.items).toHaveLength(1);
     expect(sheet.items[0]).toEqual({
@@ -200,4 +183,3 @@ describe("mapInvoiceToSiteReceiptSheet (Privacy & Mapping Verification)", () => 
     });
   });
 });
-

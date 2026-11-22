@@ -1,19 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import PDFDocument from "pdfkit";
 import { renderSiteReceiptSheetPdf } from "./site-receipt-sheet-pdf.util";
-import { mapInvoiceToSiteReceiptSheet, type SiteReceiptSheetData } from "./site-receipt-sheet-dto";
+import type { SiteReceiptSheetData } from "./site-receipt-sheet-dto";
 
-describe("renderSiteReceiptSheetPdf (apps/api)", () => {
+describe("renderSiteReceiptSheetPdf (apps/api Delivery Challan)", () => {
   const sampleData: SiteReceiptSheetData = {
-    documentTitle: "SITE MATERIAL RECEIPT & VERIFICATION SHEET",
+    documentTitle: "Delivery Challan",
     receiptSheetNumber: "DC/2608/00002",
     invoiceNumber: "IN/2608/00002",
     invoiceDate: new Date("2026-11-20"),
     generatedDate: new Date("2026-11-21"),
     supplierName: "Pioneer Steel Trading Co",
     buyerName: "Apex Infrastructure Private Limited",
+    buyerAddress: "123 Anna Salai, Chennai, Tamil Nadu, 600002",
     siteName: "Coimbatore Metro Project",
-    deliveryAddress: "Sugunapuram, Kuniyamuthur, Coimbatore, Tamil Nadu, 641008",
+    siteAddress: "Sugunapuram, Kuniyamuthur, Coimbatore, Tamil Nadu, 641008",
     orderReference: "EQ/2608/00002",
     buyerPoNumber: "PO-7788",
     items: [
@@ -35,7 +36,7 @@ describe("renderSiteReceiptSheetPdf (apps/api)", () => {
     expect(buffer.subarray(0, 5).toString("ascii")).toBe("%PDF-");
   });
 
-  it("2. Verifies mapper and PDF render with no financial information", async () => {
+  it("2. Verifies Delivery Challan header, buyer details, and lack of checklist/signatures", async () => {
     const textRendered: string[] = [];
     const originalText = PDFDocument.prototype.text;
     const textSpy = vi.spyOn(PDFDocument.prototype, "text").mockImplementation(function (
@@ -53,13 +54,15 @@ describe("renderSiteReceiptSheetPdf (apps/api)", () => {
       await renderSiteReceiptSheetPdf(sampleData);
       const fullText = textRendered.join(" ");
 
-      expect(textRendered).toContain("SITE MATERIAL RECEIPT & VERIFICATION SHEET");
-      expect(textRendered.some((t) => t.includes(sampleData.receiptSheetNumber))).toBe(true);
+      expect(textRendered).toContain("DELIVERY CHALLAN");
+      expect(textRendered.some((t) => t === "DC/2608/00002")).toBe(true);
+      expect(textRendered).toContain("BUYER DETAILS");
+      expect(textRendered).toContain("DELIVERY SITE DETAILS");
+      expect(textRendered).not.toContain("DELIVERY & REFERENCE");
+      expect(fullText).not.toContain("9487944167");
+      expect(fullText).not.toContain("VERIFIED & RECEIVED BY (SITE ENGINEER)");
+      expect(fullText).not.toContain("MATERIAL VERIFICATION & INSPECTION CHECKLIST");
       expect(fullText).not.toContain("₹");
-      expect(fullText).not.toContain("INR");
-      expect(fullText).not.toMatch(/unit\s*price/i);
-      expect(fullText).not.toMatch(/total\s*amount/i);
-      expect(fullText).not.toMatch(/subtotal/i);
     } finally {
       textSpy.mockRestore();
     }

@@ -1,10 +1,10 @@
 // apps/api/src/admin/invoices/site-receipt-sheet-dto.ts
 //
-// Site Material Receipt & Verification Sheet — Strict Privacy DTO & Mapper (apps/api)
+// Site Material Receipt & Verification Sheet (Delivery Challan - DC) — Strict Privacy DTO & Mapper (apps/api)
 //
 // Synchronized with apps/web/lib/site-receipt-sheet-dto.ts.
 // MANDATORY FINANCIAL PRIVACY GUARANTEE:
-// This document is strictly for physical material receipt verification at the
+// This document is strictly for physical material delivery verification at the
 // construction site. It MUST NEVER contain commercial, pricing, tax, or
 // payment data. Financial fields are excluded at the source data-mapping level
 // via an explicit whitelist.
@@ -19,15 +19,16 @@ export type SiteReceiptSheetItem = {
 };
 
 export type SiteReceiptSheetData = {
-  documentTitle: "SITE MATERIAL RECEIPT & VERIFICATION SHEET";
+  documentTitle: "Delivery Challan";
   receiptSheetNumber: string;
   invoiceNumber: string;
   invoiceDate: string | Date;
   generatedDate: string | Date;
   supplierName: string;
   buyerName: string;
+  buyerAddress: string;
   siteName: string;
-  deliveryAddress: string;
+  siteAddress: string;
   orderReference: string;
   buyerPoNumber: string | null;
   items: SiteReceiptSheetItem[];
@@ -54,7 +55,22 @@ export function mapInvoiceToSiteReceiptSheet(invoice: any): SiteReceiptSheetData
     invoice.builder?.name ||
     "Contractor / Client";
 
-  const siteName = invoice.site?.name || "Site not specified";
+  // Full Buyer Billing Address (GSTIN is explicitly omitted)
+  const buyerAddress =
+    [
+      invoice.buyer?.addressLine || invoice.buyerAddressLine || invoice.builder?.billingAddress,
+      invoice.buyer?.city || invoice.buyerCity || invoice.builder?.billingCity,
+      invoice.buyer?.state || invoice.buyerState || invoice.builder?.billingState,
+      invoice.buyer?.pincode || invoice.buyerPincode || invoice.builder?.billingPincode,
+    ]
+      .filter(Boolean)
+      .join(", ") ||
+    [invoice.site?.addressLine, invoice.site?.city, invoice.site?.state, invoice.site?.pincode]
+      .filter(Boolean)
+      .join(", ") ||
+    "Address not configured";
+
+  const siteName = invoice.site?.name || "Site Delivery";
 
   const siteAddress =
     [
@@ -64,7 +80,7 @@ export function mapInvoiceToSiteReceiptSheet(invoice: any): SiteReceiptSheetData
       invoice.shipTo?.pincode || invoice.shipToPincode || invoice.site?.pincode,
     ]
       .filter(Boolean)
-      .join(", ") || "Site address not available";
+      .join(", ") || "Address not configured";
 
   const supplierName =
     invoice.supplier?.companyName ||
@@ -100,18 +116,18 @@ export function mapInvoiceToSiteReceiptSheet(invoice: any): SiteReceiptSheetData
   });
 
   return {
-    documentTitle: "SITE MATERIAL RECEIPT & VERIFICATION SHEET",
+    documentTitle: "Delivery Challan",
     receiptSheetNumber,
     invoiceNumber,
     invoiceDate: invoice.invoiceDate || new Date(),
     generatedDate: new Date(),
     supplierName,
     buyerName,
+    buyerAddress,
     siteName,
-    deliveryAddress: siteAddress,
+    siteAddress,
     orderReference: orderRef,
     buyerPoNumber: invoice.buyerPoNumber ? String(invoice.buyerPoNumber) : null,
     items,
   };
 }
-

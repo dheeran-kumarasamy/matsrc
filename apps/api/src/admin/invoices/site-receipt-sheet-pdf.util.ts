@@ -9,7 +9,7 @@ export type { SiteReceiptSheetData } from "./site-receipt-sheet-dto";
 const OLIVE_ACCENT = "#4A4A4A";
 
 /**
- * Renders a clean, professional, A4 printable Site Material Receipt & Verification Sheet PDF (apps/api).
+ * Renders a clean, professional, A4 printable Delivery Challan (DC) PDF (apps/api).
  * Synchronized with apps/web/lib/site-receipt-sheet-pdf.ts.
  */
 export function renderSiteReceiptSheetPdf(data: SiteReceiptSheetData): Promise<Buffer> {
@@ -44,103 +44,91 @@ export function renderSiteReceiptSheetPdf(data: SiteReceiptSheetData): Promise<B
             .filter(Boolean)
             .join(", "),
           startX,
-          66
-        )
-        .text(`Phone: ${BUILDOHUB_COMPANY.phone} | Email: ${BUILDOHUB_COMPANY.email}`, startX, 78);
+          66,
+          { width: 250 }
+        );
 
       // Header Right: Document Title & Metadata
       doc
-        .fontSize(11)
+        .fontSize(14)
         .fillColor(OLIVE_ACCENT)
-        .text(data.documentTitle, startX + 220, 36, { width: 303, align: "right" });
+        .text("DELIVERY CHALLAN", startX + 220, 36, { width: 303, align: "right" });
+
+      doc
+        .fontSize(9)
+        .fillColor("#0f172a")
+        .text(data.receiptSheetNumber, startX + 220, 54, { width: 303, align: "right" });
 
       doc
         .fontSize(8.5)
-        .fillColor("#0f172a")
-        .text(`Sheet No: ${data.receiptSheetNumber}`, startX + 220, 52, { width: 303, align: "right" })
         .fillColor("#64748b")
-        .text(`Ref Invoice: ${data.invoiceNumber}`, startX + 220, 64, { width: 303, align: "right" })
+        .text(`Ref Invoice: ${data.invoiceNumber}`, startX + 220, 68, { width: 303, align: "right" })
         .text(
           `Date: ${new Date(data.invoiceDate).toLocaleDateString("en-IN")}${data.buyerPoNumber ? ` | PO: ${data.buyerPoNumber}` : ""}`,
           startX + 220,
-          76,
+          80,
           { width: 303, align: "right" }
         );
 
-      doc.moveTo(startX, 94).lineTo(startX + pageWidth, 94).strokeColor("#D0D0D0").stroke();
+      doc.moveTo(startX, 98).lineTo(startX + pageWidth, 98).strokeColor("#D0D0D0").stroke();
     }
 
     drawHeader();
 
-    // 2-Column Site & Project Details Grid
-    const partyY = 104;
+    // 2-Column Parties Grid: Buyer Details (Left) vs Site Details (Right)
+    const partyY = 108;
     const colWidth = 250;
 
-    // Left Column: Buyer & Site Information
-    doc.fontSize(9.5).fillColor(OLIVE_ACCENT).text("BUYER / PROJECT DETAILS", startX, partyY, { underline: true });
+    // Left Column: Buyer Details (Full Buyer Legal/Trade Name and Billing Address; GSTIN explicitly omitted)
+    doc.fontSize(10).fillColor(OLIVE_ACCENT).text("BUYER DETAILS", startX, partyY, { underline: true });
     doc.fontSize(9).fillColor("#0f172a");
     const buyerNameH = doc.heightOfString(data.buyerName, { width: colWidth });
     doc.text(data.buyerName, startX, partyY + 14, { width: colWidth });
 
     doc.fillColor("#64748b");
-    const siteTitleY = partyY + 14 + buyerNameH + 2;
-    doc.text(`Site: ${data.siteName}`, startX, siteTitleY, { width: colWidth });
-    const siteTitleH = doc.heightOfString(`Site: ${data.siteName}`, { width: colWidth });
+    const buyerAddrY = partyY + 14 + buyerNameH + 2;
+    const buyerAddrText = `Address: ${data.buyerAddress}`;
+    const buyerAddrH = doc.heightOfString(buyerAddrText, { width: colWidth });
+    doc.text(buyerAddrText, startX, buyerAddrY, { width: colWidth });
+    const leftBottom = buyerAddrY + buyerAddrH;
 
-    const addrY = siteTitleY + siteTitleH + 2;
-    const addrText = `Delivery Address: ${data.deliveryAddress}`;
-    const addrH = doc.heightOfString(addrText, { width: colWidth });
-    doc.text(addrText, startX, addrY, { width: colWidth });
-    const leftBottom = addrY + addrH;
-
-    // Right Column: Delivery & Reference Details
-    const rightColX = startX + 273;
-    doc.fontSize(9.5).fillColor(OLIVE_ACCENT).text("DELIVERY & REFERENCE", rightColX, partyY, { underline: true });
+    // Right Column: Site Details (Site Name and Address; State code omitted)
+    const siteX = startX + 273;
+    doc.fontSize(10).fillColor(OLIVE_ACCENT).text("DELIVERY SITE DETAILS", siteX, partyY, { underline: true });
     doc.fontSize(9).fillColor("#0f172a");
-    const supplierH = doc.heightOfString(`Supplier: ${data.supplierName}`, { width: colWidth });
-    doc.text(`Supplier: ${data.supplierName}`, rightColX, partyY + 14, { width: colWidth });
+    const siteNameH = doc.heightOfString(data.siteName, { width: colWidth });
+    doc.text(data.siteName, siteX, partyY + 14, { width: colWidth });
 
     doc.fillColor("#64748b");
-    const orderRefY = partyY + 14 + supplierH + 2;
-    doc.text(`Enquiry / Order Ref: ${data.orderReference}`, rightColX, orderRefY, { width: colWidth });
-    const orderRefH = doc.heightOfString(`Enquiry / Order Ref: ${data.orderReference}`, { width: colWidth });
+    const siteAddrY = partyY + 14 + siteNameH + 2;
+    const siteAddrText = `Address: ${data.siteAddress}`;
+    const siteAddrH = doc.heightOfString(siteAddrText, { width: colWidth });
+    doc.text(siteAddrText, siteX, siteAddrY, { width: colWidth });
+    const rightBottom = siteAddrY + siteAddrH;
 
-    const genDateY = orderRefY + orderRefH + 2;
-    const genDateText = `Issued On: ${new Date(data.generatedDate).toLocaleDateString("en-IN")}`;
-    doc.text(genDateText, rightColX, genDateY, { width: colWidth });
-    const rightBottom = genDateY + 14;
-
-    let currentY = Math.max(leftBottom, rightBottom) + 10;
+    let currentY = Math.max(leftBottom, rightBottom) + 12;
     doc.moveTo(startX, currentY).lineTo(startX + pageWidth, currentY).strokeColor("#D0D0D0").stroke();
     currentY += 10;
 
     // Table Column Definitions
     const colX = {
       sl: startX,
-      product: startX + 24,
-      spec: startX + 185,
-      unit: startX + 265,
-      invQty: startX + 305,
-      recvQty: startX + 350,
-      accQty: startX + 395,
-      rejQty: startX + 440,
-      remarks: startX + 480,
+      product: startX + 30,
+      spec: startX + 275,
+      unit: startX + 385,
+      qty: startX + 445,
     };
 
     function drawTableHeader(y: number) {
       doc.rect(startX, y, pageWidth, 22).fillColor("#F8FAFC").fill();
       doc.rect(startX, y, pageWidth, 22).strokeColor("#CBD5E1").stroke();
 
-      doc.fontSize(7.5).fillColor("#334155");
-      doc.text("S.No", colX.sl + 2, y + 6, { width: 20, align: "center" });
-      doc.text("Material / Description", colX.product + 2, y + 6, { width: 155, align: "left" });
-      doc.text("Spec / Code", colX.spec + 2, y + 6, { width: 75, align: "left" });
-      doc.text("Unit", colX.unit + 2, y + 6, { width: 36, align: "center" });
-      doc.text("Inv Qty", colX.invQty + 2, y + 6, { width: 40, align: "right" });
-      doc.text("Recv Qty", colX.recvQty + 2, y + 6, { width: 40, align: "center" });
-      doc.text("Acc Qty", colX.accQty + 2, y + 6, { width: 40, align: "center" });
-      doc.text("Rej Qty", colX.rejQty + 2, y + 6, { width: 38, align: "center" });
-      doc.text("Remarks", colX.remarks + 2, y + 6, { width: 40, align: "center" });
+      doc.fontSize(8.5).fillColor("#334155");
+      doc.text("S.No", colX.sl + 4, y + 6, { width: 22, align: "center" });
+      doc.text("Material / Description", colX.product + 4, y + 6, { width: 235, align: "left" });
+      doc.text("Specification / Code", colX.spec + 4, y + 6, { width: 100, align: "left" });
+      doc.text("Unit", colX.unit + 4, y + 6, { width: 50, align: "center" });
+      doc.text("Quantity", colX.qty + 4, y + 6, { width: 70, align: "right" });
 
       return y + 22;
     }
@@ -150,124 +138,47 @@ export function renderSiteReceiptSheetPdf(data: SiteReceiptSheetData): Promise<B
     // Render Table Line Items
     for (const item of data.items) {
       const prodText = item.description ? `${item.productName}\n${item.description}` : item.productName;
-      const prodH = doc.heightOfString(prodText, { width: 155 });
-      const rowHeight = Math.max(prodH + 8, 24);
+      const prodH = doc.heightOfString(prodText, { width: 235 });
+      const rowHeight = Math.max(prodH + 10, 26);
 
       if (currentY + rowHeight > pageBottomLimit) {
         doc.addPage();
         drawHeader();
-        currentY = 104;
+        currentY = 108;
         currentY = drawTableHeader(currentY);
       }
 
       doc.rect(startX, currentY, pageWidth, rowHeight).strokeColor("#E2E8F0").stroke();
 
-      doc.fontSize(8).fillColor("#0f172a");
-      doc.text(String(item.slNo), colX.sl + 2, currentY + 4, { width: 20, align: "center" });
-      doc.text(item.productName, colX.product + 2, currentY + 4, { width: 155 });
+      doc.fontSize(8.5).fillColor("#0f172a");
+      doc.text(String(item.slNo), colX.sl + 4, currentY + 6, { width: 22, align: "center" });
+      doc.text(item.productName, colX.product + 4, currentY + 6, { width: 235 });
       if (item.description) {
-        doc.fontSize(7).fillColor("#64748b").text(item.description, colX.product + 2, currentY + 14, { width: 155 });
+        doc.fontSize(7.5).fillColor("#64748b").text(item.description, colX.product + 4, currentY + 18, { width: 235 });
       }
 
-      doc.fontSize(7.5).fillColor("#475569");
-      doc.text(item.specification || "-", colX.spec + 2, currentY + 4, { width: 75 });
-      doc.text(item.unit, colX.unit + 2, currentY + 4, { width: 36, align: "center" });
+      doc.fontSize(8).fillColor("#475569");
+      doc.text(item.specification || "-", colX.spec + 4, currentY + 6, { width: 100 });
+      doc.text(item.unit, colX.unit + 4, currentY + 6, { width: 50, align: "center" });
 
-      doc.fontSize(8).fillColor("#0f172a").text(
+      doc.fontSize(8.5).fillColor("#0f172a").text(
         item.invoiceQuantity.toLocaleString("en-IN", { maximumFractionDigits: 3 }),
-        colX.invQty + 2,
-        currentY + 4,
-        { width: 40, align: "right" }
+        colX.qty + 4,
+        currentY + 6,
+        { width: 70, align: "right" }
       );
-
-      // Manual Entry Verification Boxes for Site Engineer
-      doc.rect(colX.recvQty + 4, currentY + 3, 36, rowHeight - 6).strokeColor("#CBD5E1").stroke();
-      doc.rect(colX.accQty + 4, currentY + 3, 36, rowHeight - 6).strokeColor("#CBD5E1").stroke();
-      doc.rect(colX.rejQty + 3, currentY + 3, 36, rowHeight - 6).strokeColor("#CBD5E1").stroke();
-      doc.rect(colX.remarks + 3, currentY + 3, 38, rowHeight - 6).strokeColor("#CBD5E1").stroke();
 
       currentY += rowHeight;
     }
 
-    currentY += 12;
-
-    const verificationSectionHeight = 160;
-    if (currentY + verificationSectionHeight > pageBottomLimit) {
-      doc.addPage();
-      drawHeader();
-      currentY = 104;
-    }
-
-    // Material Verification Checklist Section
-    doc.rect(startX, currentY, pageWidth, 74).fillColor("#F8FAFC").fill();
-    doc.rect(startX, currentY, pageWidth, 74).strokeColor("#CBD5E1").stroke();
-
-    doc.fontSize(9).fillColor(OLIVE_ACCENT).text("MATERIAL VERIFICATION & INSPECTION CHECKLIST", startX + 10, currentY + 8, {
-      underline: true,
-    });
-
-    const checkY1 = currentY + 24;
-    const checkY2 = currentY + 42;
-
-    // Row 1
-    doc.rect(startX + 12, checkY1, 10, 10).strokeColor("#475569").stroke();
-    doc.fontSize(8).fillColor("#334155").text("All materials received as listed", startX + 28, checkY1 + 1);
-
-    doc.rect(startX + 180, checkY1, 10, 10).strokeColor("#475569").stroke();
-    doc.text("Quantity discrepancy identified", startX + 196, checkY1 + 1);
-
-    doc.rect(startX + 355, checkY1, 10, 10).strokeColor("#475569").stroke();
-    doc.text("Damaged materials identified", startX + 371, checkY1 + 1);
-
-    // Row 2
-    doc.rect(startX + 12, checkY2, 10, 10).strokeColor("#475569").stroke();
-    doc.text("Product / spec mismatch", startX + 28, checkY2 + 1);
-
-    doc.rect(startX + 180, checkY2, 10, 10).strokeColor("#475569").stroke();
-    doc.text("Partial delivery / Balance pending", startX + 196, checkY2 + 1);
-
-    doc.rect(startX + 355, checkY2, 10, 10).strokeColor("#475569").stroke();
-    doc.text("Other (see remarks below)", startX + 371, checkY2 + 1);
-
-    currentY += 86;
-
-    // Signatures & Remarks Area
-    const signBoxWidth = (pageWidth - 12) / 2;
-
-    doc.rect(startX, currentY, signBoxWidth, 68).strokeColor("#CBD5E1").stroke();
-    doc.fontSize(8.5).fillColor("#0f172a").text("VERIFIED & RECEIVED BY (SITE ENGINEER)", startX + 8, currentY + 6);
-    doc.fontSize(7.5).fillColor("#64748b");
-    doc.text("Name: ___________________________________", startX + 8, currentY + 22);
-    doc.text("Signature: ______________________________", startX + 8, currentY + 36);
-    doc.text("Date: _______________  Time: ____________", startX + 8, currentY + 50);
-
-    const rightSignX = startX + signBoxWidth + 12;
-    doc.rect(rightSignX, currentY, signBoxWidth, 68).strokeColor("#CBD5E1").stroke();
-    doc.fontSize(8.5).fillColor("#0f172a").text("DELIVERED BY (DRIVER / TRANSPORTER)", rightSignX + 8, currentY + 6);
-    doc.fontSize(7.5).fillColor("#64748b");
-    doc.text("Name: ___________________________________", rightSignX + 8, currentY + 22);
-    doc.text("Vehicle No: _____________________________", rightSignX + 8, currentY + 36);
-    doc.text("Signature: ______________________________", rightSignX + 8, currentY + 50);
-
-    currentY += 76;
-
-    // Footer on all buffered pages
+    // Page numbering in footer
     const range = doc.bufferedPageRange();
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i);
       const footerY = 792 - 36;
       doc.moveTo(startX, footerY - 6).lineTo(startX + pageWidth, footerY - 6).strokeColor("#E2E8F0").stroke();
-      doc
-        .fontSize(7)
-        .fillColor("#64748b")
-        .text(
-          "This document is intended solely for material delivery verification at the construction site. It contains no commercial or payment information.",
-          startX,
-          footerY,
-          { width: pageWidth - 70, align: "left" }
-        );
-      doc.text(`Page ${i + 1} of ${range.count}`, startX + pageWidth - 60, footerY, {
-        width: 60,
+      doc.fontSize(8).fillColor("#64748b").text(`Page ${i + 1} of ${range.count}`, startX, footerY, {
+        width: pageWidth,
         align: "right",
       });
     }
@@ -275,4 +186,3 @@ export function renderSiteReceiptSheetPdf(data: SiteReceiptSheetData): Promise<B
     doc.end();
   });
 }
-

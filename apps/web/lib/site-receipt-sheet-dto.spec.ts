@@ -182,4 +182,40 @@ describe("mapInvoiceToSiteReceiptSheet (Delivery Challan Privacy & Mapping Verif
       invoiceQuantity: 15.75,
     });
   });
+
+  it("4. Filters out Freight charges, Other charges, and services from items list and numbers sequentially", () => {
+    const invoiceWithCharges = {
+      invoiceNumber: "IN/2608/00002",
+      site: {
+        name: "GK Farm House - Kovai pudhur",
+        addressLine: "Near Palm Lake, OM Sakthi Nagar, Kovaipudhur",
+        city: "Coimbatore",
+        state: "Tamilnadu",
+        pincode: "641008",
+      },
+      lineItems: [
+        { slNo: 1, productName: "Vizag Steel 12mm TMT Bar Fe 550D", isService: false, quantity: 0.214, unit: "MT" },
+        { slNo: 2, productName: "Vizag Steel 25mm TMT Bar Fe 550D", isService: false, quantity: 4.995, unit: "MT" },
+        { slNo: 3, productName: "Freight charges", isService: true, quantity: 1, unit: "Trip" },
+        { slNo: 4, productName: "Vizag Steel 16mm TMT Bar Fe 550D", isService: false, quantity: 1.331, unit: "MT" },
+        { slNo: 5, productName: "Other charges (loading / handling)", isService: true, quantity: 1, unit: "Service" },
+      ],
+    };
+
+    const sheet = mapInvoiceToSiteReceiptSheet(invoiceWithCharges);
+
+    expect(sheet.siteName).toBe("GK Farm House - Kovai pudhur");
+    expect(sheet.siteAddress).toBe("Near Palm Lake, OM Sakthi Nagar, Kovaipudhur, Coimbatore, Tamilnadu, 641008");
+
+    // Only physical products should be present
+    expect(sheet.items).toHaveLength(3);
+    expect(sheet.items.map((i) => i.productName)).toEqual([
+      "Vizag Steel 12mm TMT Bar Fe 550D",
+      "Vizag Steel 25mm TMT Bar Fe 550D",
+      "Vizag Steel 16mm TMT Bar Fe 550D",
+    ]);
+
+    // Consecutive 1-based indexing
+    expect(sheet.items.map((i) => i.slNo)).toEqual([1, 2, 3]);
+  });
 });

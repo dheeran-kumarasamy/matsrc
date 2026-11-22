@@ -182,7 +182,7 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
     const shipToX = startX + 273;
     const siteName = invoice.site?.name ?? "Site Delivery";
     const shipToAddress =
-      [invoice.shipTo?.addressLine ?? invoice.site?.addressLine, invoice.shipTo?.city ?? invoice.site?.city, invoice.shipTo?.state ?? invoice.site?.state, invoice.shipTo?.pincode ?? invoice.site?.pincode]
+      [invoice.site?.addressLine ?? invoice.shipTo?.addressLine, invoice.site?.city ?? invoice.shipTo?.city, invoice.site?.state ?? invoice.shipTo?.state, invoice.site?.pincode ?? invoice.shipTo?.pincode]
         .filter(Boolean)
         .join(", ") || "Not configured";
 
@@ -198,7 +198,8 @@ export function renderInvoicePdf(invoice: InvoicePdfData): Promise<Buffer> {
     doc.text(shipAddrText, shipToX, shipAddrY, { width: colWidth });
 
     const shipMetaY = shipAddrY + shipAddrH + 2;
-    const shipMetaText = `State: ${invoice.shipTo?.state ?? posName} (${posCode})`;
+    const shipState = invoice.site?.state ?? invoice.shipTo?.state ?? posName;
+    const shipMetaText = `State: ${shipState} (${posCode})`;
     const shipMetaH = doc.heightOfString(shipMetaText, { width: colWidth });
     doc.text(shipMetaText, shipToX, shipMetaY, { width: colWidth });
     const shipToBottom = shipMetaY + shipMetaH;

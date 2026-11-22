@@ -131,12 +131,12 @@ export function serializeInvoice(invoice: any) {
           }
         : null,
     shipTo:
-      invoice.shipToAddressLine || invoice.shipToCity || invoice.shipToState || invoice.shipToPincode
+      invoice.shipToAddressLine || invoice.shipToCity || invoice.shipToState || invoice.shipToPincode || invoice.site
         ? {
-            addressLine: invoice.shipToAddressLine ?? null,
-            city: invoice.shipToCity ?? null,
-            state: invoice.shipToState ?? null,
-            pincode: invoice.shipToPincode ?? null,
+            addressLine: invoice.site?.addressLine ?? invoice.shipToAddressLine ?? null,
+            city: invoice.site?.city ?? invoice.shipToCity ?? null,
+            state: invoice.site?.state ?? invoice.shipToState ?? null,
+            pincode: invoice.site?.pincode ?? invoice.shipToPincode ?? null,
           }
         : null,
     lineItems: (invoice.lineItems ?? []).map((li: any, index: number) => {

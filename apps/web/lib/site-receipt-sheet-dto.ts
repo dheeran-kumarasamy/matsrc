@@ -78,15 +78,15 @@ export function mapInvoiceToSiteReceiptSheet(invoice: any): SiteReceiptSheetData
     "Address not configured";
 
   // Site name fallback
-  const siteName = invoice.site?.name || "Site Delivery";
+  const siteName = invoice.site?.name || invoice.shipTo?.name || "Site Delivery";
 
   // Delivery site address (without state code like 'Tamilnadu (33)')
   const siteAddress =
     [
-      invoice.shipTo?.addressLine || invoice.shipToAddressLine || invoice.site?.addressLine,
-      invoice.shipTo?.city || invoice.shipToCity || invoice.site?.city,
-      invoice.shipTo?.state || invoice.shipToState || invoice.site?.state,
-      invoice.shipTo?.pincode || invoice.shipToPincode || invoice.site?.pincode,
+      invoice.site?.addressLine || invoice.shipTo?.addressLine || invoice.shipToAddressLine,
+      invoice.site?.city || invoice.shipTo?.city || invoice.shipToCity,
+      invoice.site?.state || invoice.shipTo?.state || invoice.shipToState,
+      invoice.site?.pincode || invoice.shipTo?.pincode || invoice.shipToPincode,
     ]
       .filter(Boolean)
       .join(", ") || "Address not configured";
@@ -98,7 +98,26 @@ export function mapInvoiceToSiteReceiptSheet(invoice: any): SiteReceiptSheetData
     invoice.supplierName ||
     "Authorized BuildOhub Supplier";
 
-  const rawLineItems = Array.isArray(invoice.lineItems) ? invoice.lineItems : [];
+  const isFreightOrOtherCharge = (li: any): boolean => {
+    if (li.isService === true) return true;
+    const name = String(li.productName || li.name || "").toLowerCase().trim();
+    const desc = String(li.description || "").toLowerCase().trim();
+    const combined = `${name} ${desc}`;
+    return (
+      combined.includes("freight") ||
+      combined.includes("other charge") ||
+      combined.includes("transport") ||
+      combined.includes("shipping") ||
+      combined.includes("delivery charge") ||
+      combined.includes("loading") ||
+      combined.includes("unloading") ||
+      combined.includes("handling")
+    );
+  };
+
+  const rawLineItems = (Array.isArray(invoice.lineItems) ? invoice.lineItems : []).filter(
+    (li: any) => !isFreightOrOtherCharge(li)
+  );
 
   const items: SiteReceiptSheetItem[] = rawLineItems.map((li: any, idx: number) => {
     const rawQty = li.quantity;
@@ -116,7 +135,7 @@ export function mapInvoiceToSiteReceiptSheet(invoice: any): SiteReceiptSheetData
     const unit = String(li.uqc || li.unit || "Unit");
 
     return {
-      slNo: typeof li.slNo === "number" && li.slNo > 0 ? li.slNo : idx + 1,
+      slNo: idx + 1,
       productName,
       description: description || null,
       specification: specification || null,

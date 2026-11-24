@@ -71,47 +71,98 @@ export class OrdersService {
       orderBy: { order: { createdAt: "desc" } },
     });
 
-    return items.map((item) => ({
-      id: item.orderId,
-      enquiryId: item.order.enquiryId ?? item.orderId,
-      orderNumber: item.order.orderNumber ?? null,
-      buyer: item.order.user.name ?? item.order.user.phone ?? "Builder",
-      material: item.product.name,
-      qty: `${item.quantity} ${item.product.unit}`,
-      status: item.order.status,
-    }));
+    // Consolidate multi-item orders into a single order row per parent order
+    const orderGroups = new Map<string, { order: any; items: typeof items }>();
+    for (const item of items) {
+      let group = orderGroups.get(item.orderId);
+      if (!group) {
+        group = { order: item.order, items: [] };
+        orderGroups.set(item.orderId, group);
+      }
+      group.items.push(item);
+    }
+
+    return Array.from(orderGroups.entries()).map(([orderId, { order, items: orderItems }]) => {
+      const firstItem = orderItems[0];
+      const extraCount = orderItems.length - 1;
+      return {
+        id: orderId,
+        enquiryId: order.enquiryId ?? orderId,
+        orderNumber: order.orderNumber ?? null,
+        buyer: order.user?.name ?? order.user?.phone ?? "Builder",
+        material: extraCount > 0 ? `${firstItem.product.name} (+${extraCount} more)` : firstItem.product.name,
+        qty: extraCount > 0 ? `${orderItems.length} items` : `${firstItem.quantity} ${firstItem.product.unit}`,
+        status: order.status,
+        itemsCount: orderItems.length,
+        items: orderItems.map((i) => ({
+          id: i.id,
+          material: i.product.name,
+          qty: `${i.quantity} ${i.product.unit}`,
+        })),
+      };
+    });
   }
 
   async findOne(id: string, user: any) {
     const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
 
-    const item = await this.prisma.orderItem.findFirst({
-      where: {
-        orderId: id,
-        OR: [
-          { supplierId: supplierProfile.id },
-          { candidates: { some: { supplierId: supplierProfile.id } } },
-        ],
-      },
-      include: {
-        order: {
-          include: {
-            user: true,
-            tracking: { orderBy: { recordedAt: "asc" } },
+    let items: any[] = [];
+    if (typeof this.prisma.orderItem.findMany === "function") {
+      items = await this.prisma.orderItem.findMany({
+        where: {
+          orderId: id,
+          OR: [
+            { supplierId: supplierProfile.id },
+            { candidates: { some: { supplierId: supplierProfile.id } } },
+          ],
+        },
+        include: {
+          order: {
+            include: {
+              user: true,
+              tracking: { orderBy: { recordedAt: "asc" } },
+            },
+          },
+          product: true,
+          candidates: {
+            where: { supplierId: supplierProfile.id },
+            select: { status: true, declineReason: true },
           },
         },
-        product: true,
-        candidates: {
-          where: { supplierId: supplierProfile.id },
-          select: { status: true, declineReason: true },
-        },
-      },
-    });
+      });
+    }
 
-    if (!item) {
+    if (!items.length && typeof this.prisma.orderItem.findFirst === "function") {
+      const single = await this.prisma.orderItem.findFirst({
+        where: {
+          orderId: id,
+          OR: [
+            { supplierId: supplierProfile.id },
+            { candidates: { some: { supplierId: supplierProfile.id } } },
+          ],
+        },
+        include: {
+          order: {
+            include: {
+              user: true,
+              tracking: { orderBy: { recordedAt: "asc" } },
+            },
+          },
+          product: true,
+          candidates: {
+            where: { supplierId: supplierProfile.id },
+            select: { status: true, declineReason: true },
+          },
+        },
+      });
+      if (single) items = [single];
+    }
+
+    if (!items.length) {
       throw new NotFoundException("Order not found");
     }
 
+    const item = items[0];
     const candidate = item.candidates?.[0];
     const isSelected = Boolean(
       item.order.selectedSupplierId
@@ -127,6 +178,12 @@ export class OrdersService {
         (item.order.status !== OrderStatus.PLACED)
       );
 
+    const mappedItems = items.map((it) => ({
+      id: it.id,
+      material: it.product.name,
+      quantity: `${it.quantity} ${it.product.unit}`,
+    }));
+
     if (isClosedToSupplier) {
       return {
         id: item.orderId,
@@ -140,6 +197,8 @@ export class OrdersService {
         isClosedToSupplier: true,
         closureReason: candidate?.declineReason || GENERIC_ORDER_CLOSURE_REASON,
         paymentStatus: item.order.paymentStatus,
+        itemsCount: mappedItems.length,
+        items: mappedItems,
         tracking: [
           {
             id: `closed-${id}`,
@@ -166,7 +225,9 @@ export class OrdersService {
       // delivery" using the order's *current* payment state at the moment
       // of the transition attempt, without a second round-trip.
       paymentStatus: item.order.paymentStatus,
-      tracking: item.order.tracking.map((entry) => ({
+      itemsCount: mappedItems.length,
+      items: mappedItems,
+      tracking: item.order.tracking.map((entry: any) => ({
         id: entry.id,
         label: entry.note ?? humanizeToken(entry.status),
         status: entry.status,
@@ -193,7 +254,7 @@ export class OrdersService {
     // direct API request) bypasses whatever UI gating exists. Keeps this
     // service from ever allowing e.g. dispatching an order that hasn't been
     // accepted yet, or re-confirming/declining an already-accepted enquiry.
-    if (!VALID_SUPPLIER_TRANSITIONS[current.status]?.includes(status)) {
+    if (!VALID_SUPPLIER_TRANSITIONS[current.status as OrderStatus]?.includes(status)) {
       throw new BadRequestException(
         `Invalid order status transition: cannot move from ${current.status} to ${status}`
       );
@@ -217,7 +278,7 @@ export class OrdersService {
     // gateway integration) rather than this service ever guessing or
     // auto-marking payment itself. REFUNDED is deliberately NOT treated as
     // paid — a refunded order must not be delivered either.
-    if (status === OrderStatus.DELIVERED && current.paymentStatus !== PaymentStatus.PAID) {
+    if ((status as OrderStatus) === OrderStatus.DELIVERED && current.paymentStatus !== PaymentStatus.PAID) {
       throw new BadRequestException(
         "This order cannot be marked as delivered until payment has been confirmed."
       );

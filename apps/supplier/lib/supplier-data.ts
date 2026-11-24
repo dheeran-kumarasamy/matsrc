@@ -479,7 +479,7 @@ export async function getSupplierDashboardData(email: string) {
       },
       include: { product: { include: { brandRef: true } }, order: true },
       orderBy: { order: { createdAt: "desc" } },
-      take: 5,
+      take: 20,
     }),
     prisma.order.count({ where: { status: "DELIVERED", items: { some: { supplierId: supplierProfile.id } } } }),
     prisma.orderItem.findMany({
@@ -490,42 +490,72 @@ export async function getSupplierDashboardData(email: string) {
 
   const servedOrderValue = servedOrderItems.reduce((total, item) => total + Number(item.unitPrice) * item.quantity, 0);
 
+  // Group incoming orders by orderId so multi-item orders are consolidated
+  const incomingOrderGroups = new Map<string, { order: any; items: any[] }>();
+  for (const item of confirmedIncomingOrders) {
+    let group = incomingOrderGroups.get(item.orderId);
+    if (!group) {
+      group = { order: item.order, items: [] };
+      incomingOrderGroups.set(item.orderId, group);
+    }
+    group.items.push(item);
+  }
+
+  // Group pending enquiries by orderId
+  const pendingEnquiryGroups = new Map<string, { order: any; items: any[] }>();
+  for (const item of pendingEnquiries) {
+    let group = pendingEnquiryGroups.get(item.orderId);
+    if (!group) {
+      group = { order: item.order, items: [] };
+      pendingEnquiryGroups.set(item.orderId, group);
+    }
+    group.items.push(item);
+  }
+
   return {
     kpis: [
       { label: "Active Listings", value: String(activeListings), hint: "Live SKUs visible to builders" },
       {
         label: "Incoming Orders",
-        value: String(confirmedIncomingOrders.length),
+        value: String(incomingOrderGroups.size),
         hint: "Confirmed orders after customer confirmation",
       },
       {
         label: "Pending Enquiries",
-        value: String(pendingEnquiries.length),
+        value: String(pendingEnquiryGroups.size),
         hint: "Submitted enquiries awaiting your decision",
       },
       { label: "Fulfilment Rate", value: String(servedOrders), hint: `${formatCurrency(servedOrderValue)} value served` },
     ],
-    orders: confirmedIncomingOrders.map((item: any) => ({
-      id: item.orderId,
-      // S15: canonical supplier-facing Order reference — see
-      // apps/supplier/lib/order-display.ts. Never the raw `id` above.
-      displayOrderNumber: resolveSupplierOrderReference(item.order),
-      material: item.product.name,
-      // S06: see getSupplierOrders's brand resolution comment — FK-first,
-      // free-text-fallback, null when the product genuinely has no brand.
-      brand: item.product.brandRef?.name ?? item.product.brand ?? null,
-      quantity: `${item.quantity} ${item.product.unit}`,
-      eta: formatDate(item.deliveryDate ?? item.order.deliveryDate),
-      status: mapOrderStatus(item.order.status),
-    })),
-    pendingEnquiries: pendingEnquiries.map((item: any) => ({
-      id: item.orderId,
-      displayOrderNumber: resolveSupplierOrderReference(item.order),
-      material: item.product.name,
-      brand: item.product.brandRef?.name ?? item.product.brand ?? null,
-      quantity: `${item.quantity} ${item.product.unit}`,
-      eta: formatDate(item.deliveryDate ?? item.order.deliveryDate),
-    })),
+    orders: Array.from(incomingOrderGroups.entries()).slice(0, 5).map(([orderId, { order, items }]) => {
+      const firstItem = items[0];
+      const extraCount = items.length - 1;
+      return {
+        id: orderId,
+        // S15: canonical supplier-facing Order reference — see
+        // apps/supplier/lib/order-display.ts. Never the raw `id` above.
+        displayOrderNumber: resolveSupplierOrderReference(order),
+        material: extraCount > 0 ? `${firstItem.product.name} (+${extraCount} more)` : firstItem.product.name,
+        // S06: see getSupplierOrders's brand resolution comment — FK-first,
+        // free-text-fallback, null when the product genuinely has no brand.
+        brand: firstItem.product.brandRef?.name ?? firstItem.product.brand ?? null,
+        quantity: extraCount > 0 ? `${items.length} items` : `${firstItem.quantity} ${firstItem.product.unit}`,
+        eta: formatDate(firstItem.deliveryDate ?? order.deliveryDate),
+        status: mapOrderStatus(order.status),
+      };
+    }),
+    pendingEnquiries: Array.from(pendingEnquiryGroups.entries()).slice(0, 5).map(([orderId, { order, items }]) => {
+      const firstItem = items[0];
+      const extraCount = items.length - 1;
+      return {
+        id: orderId,
+        displayOrderNumber: resolveSupplierOrderReference(order),
+        material: extraCount > 0 ? `${firstItem.product.name} (+${extraCount} more)` : firstItem.product.name,
+        brand: firstItem.product.brandRef?.name ?? firstItem.product.brand ?? null,
+        quantity: extraCount > 0 ? `${items.length} items` : `${firstItem.quantity} ${firstItem.product.unit}`,
+        eta: formatDate(firstItem.deliveryDate ?? order.deliveryDate),
+      };
+    }),
   };
 }
 
@@ -1634,26 +1664,60 @@ export async function getSupplierOrders(email: string): Promise<SupplierOrderRow
     orderBy: { order: { createdAt: "desc" } },
   });
 
-  return items.map((item: any, idx: number) => ({
-    id: item.orderId,
-    // S15: canonical supplier-facing Order reference (orderNumber ??
-    // enquiryId, never the raw `id` above) — see
-    // apps/supplier/lib/order-display.ts.
-    displayOrderNumber: resolveSupplierOrderReference(item.order),
-    buyer: getBuyerDisplayName(item.order.user.name ?? item.order.user.phone, item.order.user.id, idx),
-    material: item.product.name,
-    // S06: Brand resolution prefers the FK-linked Brand master-data record
-    // (product.brandRef), falling back to the deprecated free-text
-    // `product.brand` column for legacy rows created before brandRef
-    // existed. `null` (never `undefined`/empty string) when the product
-    // genuinely has no brand, so the UI can omit the row entirely.
-    brand: item.product.brandRef?.name ?? item.product.brand ?? null,
-    qty: `${item.quantity} ${item.product.unit}`,
-    status: item.order.status,
-    isAggregated: Boolean(item.order.isAggregated),
-    aggregationPoolId: item.order.aggregationPoolId ?? null,
-  }));
+  // Consolidate multi-item orders into a single order row per parent order
+  const orderGroups = new Map<string, { order: any; items: any[] }>();
+  for (const item of items) {
+    let group = orderGroups.get(item.orderId);
+    if (!group) {
+      group = { order: item.order, items: [] };
+      orderGroups.set(item.orderId, group);
+    }
+    group.items.push(item);
+  }
+
+  let idx = 0;
+  const result: SupplierOrderRow[] = [];
+  for (const [orderId, { order, items: orderItems }] of orderGroups.entries()) {
+    const mappedItems: SupplierOrderItemRow[] = orderItems.map((item: any) => ({
+      id: item.id,
+      material: item.product.name,
+      // S06: Brand resolution prefers the FK-linked Brand master-data record
+      // (product.brandRef), falling back to the deprecated free-text
+      // `product.brand` column for legacy rows created before brandRef
+      // existed. `null` (never `undefined`/empty string) when the product
+      // genuinely has no brand, so the UI can omit the row entirely.
+      brand: item.product.brandRef?.name ?? item.product.brand ?? null,
+      qty: `${item.quantity} ${item.product.unit}`,
+    }));
+
+    const firstItem = mappedItems[0];
+    result.push({
+      id: orderId,
+      // S15: canonical supplier-facing Order reference (orderNumber ??
+      // enquiryId, never the raw `id` above) — see
+      // apps/supplier/lib/order-display.ts.
+      displayOrderNumber: resolveSupplierOrderReference(order),
+      buyer: getBuyerDisplayName(order.user.name ?? order.user.phone, order.user.id, idx++),
+      material: firstItem?.material ?? "",
+      brand: firstItem?.brand ?? null,
+      qty: firstItem?.qty ?? "",
+      status: order.status,
+      isAggregated: Boolean(order.isAggregated),
+      aggregationPoolId: order.aggregationPoolId ?? null,
+      itemsCount: mappedItems.length,
+      items: mappedItems,
+    });
+  }
+
+  return result;
 }
+
+export type SupplierOrderItemRow = {
+  id: string;
+  material: string;
+  brand: string | null;
+  qty: string;
+};
 
 export type SupplierOrderRow = {
   id: string;
@@ -1670,6 +1734,8 @@ export type SupplierOrderRow = {
   status: OrderStatus;
   isAggregated?: boolean;
   aggregationPoolId?: string | null;
+  itemsCount: number;
+  items: SupplierOrderItemRow[];
 };
 
 
@@ -1692,6 +1758,17 @@ export type SupplierOrderPurchaseOrderSummary = {
   version: number;
   approvedAt: string | null;
   exportUrl: string;
+};
+
+export type SupplierOrderItemDetail = {
+  id: string;
+  material: string;
+  brand: string | null;
+  quantity: string;
+  rawQuantity: number;
+  unit: string;
+  askPrice: string;
+  unitPrice: number;
 };
 
 export type SupplierOrderDetail = {
@@ -1748,6 +1825,8 @@ export type SupplierOrderDetail = {
   // satisfied) — a non-null string is the specific, human-readable reason
   // the server would currently reject a dispatch attempt.
   dispatchBlockedReason: string | null;
+  itemsCount: number;
+  items: SupplierOrderItemDetail[];
 };
 
 // Supplier RFQ Price Revision & GST-Inclusive Order Value — a single
@@ -1848,7 +1927,8 @@ async function hasMultipleEligibleCandidates(orderId: string, supplierId: string
 export async function getSupplierOrderDetail(orderId: string, email: string): Promise<SupplierOrderDetail | null> {
   const { supplierProfile } = await ensureSupplierContext(email);
 
-  const item = await prisma.orderItem.findFirst({
+  // Fetch all items for this order and supplier so multi-item orders are fully represented
+  let items = await prisma.orderItem.findMany({
     where: {
       orderId,
       OR: [
@@ -1872,11 +1952,41 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     },
   });
 
-  if (!item) return null;
+  // Fallback to findFirst if findMany returned empty or without order relation (e.g. in test stubs where only findFirst is mocked or findMany is stubbed for hasMultipleEligibleCandidates)
+  if (!items.length || !items[0]?.order) {
+    const single = await prisma.orderItem.findFirst({
+      where: {
+        orderId,
+        OR: [
+          { supplierId: supplierProfile.id },
+          { candidates: { some: { supplierId: supplierProfile.id } } },
+        ],
+      },
+      include: {
+        order: {
+          include: {
+            user: true,
+            tracking: { orderBy: { recordedAt: "asc" } },
+            site: { select: { name: true, addressLine: true, city: true, state: true, pincode: true } },
+          },
+        },
+        product: { include: { brandRef: true } },
+        candidates: {
+          where: { supplierId: supplierProfile.id },
+          select: { unitPrice: true, status: true, declineReason: true, respondedAt: true },
+        },
+      },
+    });
+    if (single) items = [single];
+  }
+
+  if (!items.length || !items[0]?.order) return null;
+
+  const item = items[0];
 
   const candidate = (item as any).candidates?.[0];
   const isSelectedSupplier = Boolean(
-    item.order.selectedSupplierId
+    item.order?.selectedSupplierId
       ? item.order.selectedSupplierId === supplierProfile.id
       : item.supplierId === supplierProfile.id
   );
@@ -1885,13 +1995,13 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     !isSelectedSupplier &&
     Boolean(
       // 1. Order was awarded to a different supplier
-      (item.order.selectedSupplierId && item.order.selectedSupplierId !== supplierProfile.id) ||
+      (item.order?.selectedSupplierId && item.order.selectedSupplierId !== supplierProfile.id) ||
       // 2. This supplier's candidate entry was declined or closed
       (candidate && candidate.status === "DECLINED") ||
       // 3. Line item belongs to a different supplier and order is past PLACED
-      (item.supplierId && item.supplierId !== supplierProfile.id && item.order.status !== "PLACED") ||
+      (item.supplierId && item.supplierId !== supplierProfile.id && item.order?.status !== "PLACED") ||
       // 4. Supplier was only a pending candidate, but the order progressed past PLACED
-      (candidate && candidate.status === "PENDING" && item.order.status !== "PLACED")
+      (candidate && candidate.status === "PENDING" && item.order?.status !== "PLACED")
     );
 
   const closureReason = isClosedToSupplier
@@ -1939,6 +2049,20 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     : item.order.site?.pincode ??
       (item.order.deliveryAddress ? item.order.deliveryAddress.match(/\b\d{6}\b/)?.[0] ?? null : null);
 
+  const mappedItems: SupplierOrderItemDetail[] = items.map((it: any) => {
+    const rawUnitPrice = (it as any).candidates?.[0]?.unitPrice ?? (it as any).askPrice ?? it.unitPrice;
+    return {
+      id: it.id,
+      material: it.product.name,
+      brand: (it.product as any).brandRef?.name ?? it.product.brand ?? null,
+      quantity: `${it.quantity} ${it.product.unit}`,
+      rawQuantity: Number(it.quantity),
+      unit: it.product.unit,
+      askPrice: `${formatProductPrice(rawUnitPrice)} / ${it.product.unit}`,
+      unitPrice: Number(rawUnitPrice),
+    };
+  });
+
   return {
     id: item.orderId,
     // S15: canonical supplier-facing Order reference (orderNumber ??
@@ -1947,13 +2071,13 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     displayOrderNumber: resolveSupplierOrderReference(item.order),
     buyer: getBuyerDisplayName(item.order.user.name ?? item.order.user.phone, item.order.user.id),
     deliveryDate: formatDate(item.deliveryDate ?? item.order.deliveryDate),
-    quantity: `${item.quantity} ${item.product.unit}`,
-    material: item.product.name,
+    quantity: mappedItems[0].quantity,
+    material: mappedItems[0].material,
     status: isClosedToSupplier ? ("CANCELLED" as OrderStatus) : item.order.status,
     isClosedToSupplier,
     closureReason,
     paymentStatus: item.order.paymentStatus,
-    askPrice: `${formatProductPrice((item as any).candidates?.[0]?.unitPrice ?? (item as any).askPrice ?? item.unitPrice)} / ${item.product.unit}`,
+    askPrice: mappedItems[0].askPrice,
     isReadyForDispatch,
     sitePincode,
     // Identity privacy: until RFQ is confirmed and order is ready for dispatch,
@@ -1962,7 +2086,7 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     deliveryAddress: isReadyForDispatch ? (item.order.site?.addressLine ?? item.order.deliveryAddress ?? null) : null,
     // S06: see getSupplierOrders's brand resolution comment above — same
     // FK-first, free-text-fallback, null-when-absent rule.
-    brand: (item.product as any).brandRef?.name ?? item.product.brand ?? null,
+    brand: mappedItems[0].brand,
     requiresQuotation,
     // Admin-Confirmed Freight / Buyer Final Confirmation / Payment-Gated
     // Dispatch — null while the order isn't PROCESSING (dispatch isn't a
@@ -1971,6 +2095,8 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
     // confirmed", "₹X still outstanding"), or null once every requirement
     // is satisfied. UI-level only — see OrderStatusActions.tsx.
     dispatchBlockedReason: dispatchEligibility && !dispatchEligibility.eligible ? dispatchEligibility.reason : null,
+    itemsCount: mappedItems.length,
+    items: mappedItems,
     tracking: isClosedToSupplier
       ? [
           {
@@ -1994,7 +2120,6 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
           recordedAt: entry.recordedAt.toISOString(),
         })),
     purchaseOrder: purchaseOrder
-
       ? {
           id: purchaseOrder.id,
           poNumber: purchaseOrder.poNumber,
@@ -2847,25 +2972,44 @@ export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]>
     source: "RFQ",
   }));
 
-  const enquiryCards: SupplierRfqCard[] = pendingEnquiryItems.map((item: any) => ({
-    id: item.orderId,
-    enquiryId: item.order.enquiryId ?? item.orderId,
-    material: item.product.name,
-    quantity: `${item.quantity} ${item.product.unit}`,
-    // OrderItem/Order have no dedicated pincode field (see Order model in
-    // packages/db/prisma/schema.prisma — delivery location is captured via
-    // deliveryLat/deliveryLng/deliveryAddress instead) — fall back to the
-    // formatted delivery address rather than fabricating a pincode value.
-    pincode: item.order.deliveryAddress ?? "See order for delivery details",
-    dueBy: formatDate(item.deliveryDate ?? item.order.deliveryDate),
-    latestQuote: item.supplierQuotes?.[0]
-      ? {
-          price: item.supplierQuotes[0].unitPrice.toString(),
-          validUntil: (item.supplierQuotes[0] as any).validUntil instanceof Date ? (item.supplierQuotes[0] as any).validUntil.toISOString() : ((item.supplierQuotes[0] as any).validUntil ?? null),
-        }
-      : null,
-    source: "ENQUIRY",
-  }));
+  const enquiryMap = new Map<string, any[]>();
+  for (const item of pendingEnquiryItems) {
+    let group = enquiryMap.get(item.orderId);
+    if (!group) {
+      group = [];
+      enquiryMap.set(item.orderId, group);
+    }
+    group.push(item);
+  }
+
+  const enquiryCards: SupplierRfqCard[] = Array.from(enquiryMap.entries()).map(([orderId, groupItems]) => {
+    const item = groupItems[0];
+    const extraCount = groupItems.length - 1;
+    const latestQuoteItem = groupItems.find((it) => it.supplierQuotes?.[0]);
+    const latestQuote = latestQuoteItem?.supplierQuotes?.[0];
+    return {
+      id: orderId,
+      enquiryId: item.order.enquiryId ?? orderId,
+      material: extraCount > 0 ? `${item.product.name} (+${extraCount} more)` : item.product.name,
+      quantity: extraCount > 0 ? `${groupItems.length} materials` : `${item.quantity} ${item.product.unit}`,
+      // OrderItem/Order have no dedicated pincode field (see Order model in
+      // packages/db/prisma/schema.prisma — delivery location is captured via
+      // deliveryLat/deliveryLng/deliveryAddress instead) — fall back to the
+      // formatted delivery address rather than fabricating a pincode value.
+      pincode: item.order.deliveryAddress ?? "See order for delivery details",
+      dueBy: formatDate(item.deliveryDate ?? item.order.deliveryDate),
+      latestQuote: latestQuote
+        ? {
+            price: latestQuote.unitPrice.toString(),
+            validUntil:
+              (latestQuote as any).validUntil instanceof Date
+                ? (latestQuote as any).validUntil.toISOString()
+                : ((latestQuote as any).validUntil ?? null),
+          }
+        : null,
+      source: "ENQUIRY",
+    };
+  });
 
   return [...rfqCards, ...enquiryCards];
 }

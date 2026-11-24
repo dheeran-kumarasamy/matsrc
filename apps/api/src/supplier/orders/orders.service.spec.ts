@@ -784,6 +784,7 @@ describe("OrdersService.findOne — competing supplier closure", () => {
       mockSupplierContext as any,
       {} as any,
       {} as any,
+      {} as any,
       {} as any
     );
 
@@ -827,6 +828,7 @@ describe("OrdersService.findOne — competing supplier closure", () => {
     const service = new OrdersService(
       mockPrisma,
       mockSupplierContext as any,
+      {} as any,
       {} as any,
       {} as any,
       {} as any

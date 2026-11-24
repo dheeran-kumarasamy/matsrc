@@ -194,7 +194,7 @@ export class OrderStatusFlow {
       `Qty: ${detail.quantity}\n` +
       `Status: ${detail.status}\n` +
       (detail.deliveryDate ? `Delivery date: ${detail.deliveryDate}\n` : "") +
-      `\nHistory:\n${detail.tracking.map((entry) => `• ${entry.label}`).join("\n") || "No tracking yet."}`;
+      `\nHistory:\n${detail.tracking.map((entry: any) => `• ${entry.label}`).join("\n") || "No tracking yet."}`;
 
     if (eligibleForDelivery) {
       return {

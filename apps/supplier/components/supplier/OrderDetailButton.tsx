@@ -13,6 +13,14 @@ type PurchaseOrderSummary = {
   exportUrl: string;
 };
 
+type OrderDetailItem = {
+  id: string;
+  material: string;
+  brand?: string | null;
+  quantity: string;
+  askPrice?: string;
+};
+
 type OrderDetail = {
   id: string;
   // S15: canonical supplier-facing Order reference (orderNumber ??
@@ -28,6 +36,8 @@ type OrderDetail = {
   status: string;
   tracking: Array<{ id: string; label: string; status: string; recordedAt: string }>;
   purchaseOrder: PurchaseOrderSummary | null;
+  itemsCount?: number;
+  items?: OrderDetailItem[];
 };
 
 // S11: matches the existing en-IN date/time display convention used
@@ -111,20 +121,42 @@ export function OrderDetailButton({
                 <p className="text-xs font-semibold uppercase text-slate-400">Status</p>
                 <p className="text-slate-800">{detail.status}</p>
               </div>
-              <div>
-                <p className="text-xs font-semibold uppercase text-slate-400">Material</p>
-                {detail.brand ? <p className="text-xs font-semibold text-slate-500">{detail.brand}</p> : null}
-                <p className="text-slate-800">{detail.material}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase text-slate-400">Quantity</p>
-                <p className="text-slate-800">{detail.quantity}</p>
-              </div>
-              <div>
+              <div className="col-span-2">
                 <p className="text-xs font-semibold uppercase text-slate-400">Delivery</p>
                 <p className="text-slate-800">{detail.deliveryDate}</p>
               </div>
             </div>
+
+            {detail.items && detail.items.length > 1 ? (
+              <div className="overflow-hidden rounded-lg border border-slate-200">
+                <div className="bg-slate-50 px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Materials ({detail.items.length})
+                </div>
+                <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                  {detail.items.map((item, idx) => (
+                    <div key={item.id ?? idx} className="flex items-center justify-between px-3 py-2 text-sm">
+                      <div>
+                        {item.brand ? <span className="block text-xs font-semibold text-slate-400">{item.brand}</span> : null}
+                        <span className="font-semibold text-slate-800">{item.material}</span>
+                      </div>
+                      <span className="font-semibold text-slate-700">{item.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-slate-400">Material</p>
+                  {detail.brand ? <p className="text-xs font-semibold text-slate-500">{detail.brand}</p> : null}
+                  <p className="text-slate-800">{detail.material}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase text-slate-400">Quantity</p>
+                  <p className="text-slate-800">{detail.quantity}</p>
+                </div>
+              </div>
+            )}
 
             {/* PO number issued by the builder, shown directly inside the overlay + downloadable. */}
             {detail.purchaseOrder ? (

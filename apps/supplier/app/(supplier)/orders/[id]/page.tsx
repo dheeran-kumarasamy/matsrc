@@ -46,10 +46,16 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
     <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
       <AutoRefresh intervalMs={5000} />
       <section className="panel p-5">
-        <h3 className="text-xl font-extrabold text-slate-900">Order {order.displayOrderNumber}</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-xl font-extrabold text-slate-900">Order {order.displayOrderNumber}</h3>
+          {order.itemsCount > 1 ? (
+            <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 border border-blue-200">
+              {order.itemsCount} Materials
+            </span>
+          ) : null}
+        </div>
         <p className="mt-1 text-sm text-slate-600">
-          Buyer: {order.buyer} | Material: {order.brand ? `${order.brand} ` : ""}
-          {order.material} | Delivery: {order.deliveryDate}
+          Buyer: {order.buyer} | Delivery: {order.deliveryDate}
         </p>
         {order.isReadyForDispatch ? (
           <>
@@ -64,7 +70,50 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
         ) : (
           <p className="mt-1 text-sm text-slate-600">Site Pincode: {order.sitePincode ?? "Not specified"}</p>
         )}
-        <p className="mt-1 text-sm font-semibold text-slate-800">Ask Price: {order.askPrice}</p>
+
+        {/* Order Materials Table */}
+        <div className="mt-4">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Order Materials</h4>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+              <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="px-4 py-2.5">#</th>
+                  <th className="px-4 py-2.5">Material</th>
+                  <th className="px-4 py-2.5">Quantity</th>
+                  <th className="px-4 py-2.5">Ask Price</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {order.items && order.items.length > 0 ? (
+                  order.items.map((item, idx) => (
+                    <tr key={item.id ?? idx}>
+                      <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">{idx + 1}</td>
+                      <td className="px-4 py-2.5">
+                        {item.brand ? (
+                          <span className="block text-xs font-semibold text-slate-400">{item.brand}</span>
+                        ) : null}
+                        <span className="font-semibold text-slate-800">{item.material}</span>
+                      </td>
+                      <td className="px-4 py-2.5 font-medium text-slate-700">{item.quantity}</td>
+                      <td className="px-4 py-2.5 font-semibold text-slate-900">{item.askPrice}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">1</td>
+                    <td className="px-4 py-2.5">
+                      {order.brand ? <span className="block text-xs font-semibold text-slate-400">{order.brand}</span> : null}
+                      <span className="font-semibold text-slate-800">{order.material}</span>
+                    </td>
+                    <td className="px-4 py-2.5 font-medium text-slate-700">{order.quantity}</td>
+                    <td className="px-4 py-2.5 font-semibold text-slate-900">{order.askPrice}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
         {order.isClosedToSupplier ? (
           <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">

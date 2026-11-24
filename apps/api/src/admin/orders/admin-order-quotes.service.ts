@@ -25,18 +25,32 @@ export class AdminOrderQuotesService {
           select: { id: true, poNumber: true, status: true },
         },
         supplierQuotes: {
-          select: { id: true, status: true, unitPrice: true, buyerUnitPrice: true, createdAt: true },
+          select: { id: true, supplierId: true, status: true, unitPrice: true, buyerUnitPrice: true, createdAt: true },
         },
       },
     });
 
     return orders.map((order) => {
-      const pendingReviewCount = order.supplierQuotes.filter(
-        (q) => q.status === SupplierQuoteStatus.PENDING_ADMIN_REVIEW
-      ).length;
-      const sentToBuyerCount = order.supplierQuotes.filter(
-        (q) => q.status === SupplierQuoteStatus.SENT_TO_BUYER
-      ).length;
+      // Group quotes by supplier to reflect distinct supplier quotations rather than raw line-item quote rows
+      const supplierQuoteMap = new Map<string, { statuses: Set<string> }>();
+      for (const q of order.supplierQuotes) {
+        const sId = (q as any).supplierId || q.id;
+        if (!supplierQuoteMap.has(sId)) {
+          supplierQuoteMap.set(sId, { statuses: new Set() });
+        }
+        supplierQuoteMap.get(sId)!.statuses.add(q.status);
+      }
+
+      let pendingReviewCount = 0;
+      let sentToBuyerCount = 0;
+
+      for (const [, { statuses }] of supplierQuoteMap) {
+        if (statuses.has(SupplierQuoteStatus.SENT_TO_BUYER)) {
+          sentToBuyerCount++;
+        } else if (statuses.has(SupplierQuoteStatus.PENDING_ADMIN_REVIEW)) {
+          pendingReviewCount++;
+        }
+      }
 
       return {
         id: order.id,
@@ -53,7 +67,7 @@ export class AdminOrderQuotesService {
           quantity: i.quantity,
           unit: i.product.unit,
         })),
-        totalQuotesCount: order.supplierQuotes.length,
+        totalQuotesCount: supplierQuoteMap.size,
         pendingReviewCount,
         sentToBuyerCount,
         isLocked: order.paymentStatus === "PAID" || order.purchaseOrders.length > 0,

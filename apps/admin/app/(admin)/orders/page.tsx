@@ -93,11 +93,17 @@ export default async function AdminOrdersPage() {
                         </span>
                       ) : order.pendingReviewCount > 0 ? (
                         <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800">
-                          {order.pendingReviewCount} Pending Review
+                          {order.sentToBuyerCount > 0
+                            ? `${order.sentToBuyerCount} of ${order.totalQuotesCount} Sent (${order.pendingReviewCount} Pending Review)`
+                            : `${order.pendingReviewCount} of ${order.totalQuotesCount} Pending Review`}
+                        </span>
+                      ) : order.sentToBuyerCount > 0 ? (
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
+                          {order.sentToBuyerCount} of {order.totalQuotesCount} Sent to Buyer
                         </span>
                       ) : (
-                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
-                          {order.sentToBuyerCount} Sent to Buyer
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                          0 of {order.totalQuotesCount} Sent to Buyer
                         </span>
                       )}
                     </td>

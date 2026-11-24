@@ -176,9 +176,25 @@ export function AdminQuotationReview({ initialData }: { initialData: AdminQuotat
             Review raw supplier quotations, adjust platform markup, and choose what quotations to release to the buyer.
           </p>
         </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-          {data.quotes.length} Quote(s) Received
-        </span>
+        {data.quotes.length > 0 ? (
+          (() => {
+            const distinctSuppliersCount = new Set(data.quotes.map((q) => q.supplierId)).size;
+            const sentSuppliersCount = new Set(
+              data.quotes.filter((q) => q.status === "SENT_TO_BUYER").map((q) => q.supplierId)
+            ).size;
+            return (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                {sentSuppliersCount > 0
+                  ? `${sentSuppliersCount} of ${distinctSuppliersCount} Sent to Buyer (${data.quotes.length} item quote${data.quotes.length === 1 ? "" : "s"})`
+                  : `${distinctSuppliersCount} Supplier Quote${distinctSuppliersCount === 1 ? "" : "s"} Received (${data.quotes.length} item quote${data.quotes.length === 1 ? "" : "s"})`}
+              </span>
+            );
+          })()
+        ) : (
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+            0 Quotes Received
+          </span>
+        )}
       </div>
 
       {data.quotes.length === 0 ? (

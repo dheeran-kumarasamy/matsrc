@@ -281,8 +281,8 @@ describe("AdminOrderQuotesService", () => {
           items: [{ id: "i-1", quantity: 5, product: { id: "p-1", name: "TMT Bar", unit: "MT" } }],
           purchaseOrders: [],
           supplierQuotes: [
-            { id: "q-1", status: SupplierQuoteStatus.PENDING_ADMIN_REVIEW, unitPrice: 50000, buyerUnitPrice: null },
-            { id: "q-2", status: SupplierQuoteStatus.SENT_TO_BUYER, unitPrice: 51000, buyerUnitPrice: 53550 },
+            { id: "q-1", supplierId: "sup-1", status: SupplierQuoteStatus.PENDING_ADMIN_REVIEW, unitPrice: 50000, buyerUnitPrice: null },
+            { id: "q-2", supplierId: "sup-2", status: SupplierQuoteStatus.SENT_TO_BUYER, unitPrice: 51000, buyerUnitPrice: 53550 },
           ],
         },
       ]);
@@ -293,6 +293,34 @@ describe("AdminOrderQuotesService", () => {
       expect(result[0].sentToBuyerCount).toBe(1);
       expect(result[0].totalQuotesCount).toBe(2);
       expect(result[0].isLocked).toBe(false);
+    });
+
+    it("groups multiple line item quotes from the same supplier as 1 supplier quotation", async () => {
+      prisma.order.findMany.mockResolvedValue([
+        {
+          id: "order-2",
+          orderNumber: "OD/002",
+          enquiryId: "EQ/2608/00002",
+          status: "DISPATCHED",
+          paymentStatus: "PAID",
+          createdAt: new Date(),
+          user: { id: "u-1", name: "Builder", email: "builder@test.com", phone: "123" },
+          items: [
+            { id: "i-1", quantity: 1, product: { id: "p-1", name: "Item 1", unit: "MT" } },
+            { id: "i-2", quantity: 1, product: { id: "p-2", name: "Item 2", unit: "MT" } },
+          ],
+          purchaseOrders: [],
+          supplierQuotes: [
+            { id: "q-1", supplierId: "sup-1", status: SupplierQuoteStatus.SENT_TO_BUYER, unitPrice: 50000, buyerUnitPrice: 52500 },
+            { id: "q-2", supplierId: "sup-1", status: SupplierQuoteStatus.SENT_TO_BUYER, unitPrice: 51000, buyerUnitPrice: 53550 },
+          ],
+        },
+      ]);
+
+      const result = await service.listOrders();
+      expect(result[0].totalQuotesCount).toBe(1);
+      expect(result[0].sentToBuyerCount).toBe(1);
+      expect(result[0].pendingReviewCount).toBe(0);
     });
   });
 });

@@ -32,71 +32,83 @@ export default async function SupplierOrdersPage() {
             </tr>
           </thead>
           <tbody>
-            {orders.map((order) => (
-              <tr key={order.id} className="border-t border-slate-100 hover:bg-slate-50/50 transition-colors">
-                <td className="px-4 py-3.5 align-top font-semibold text-slate-800">
-                  <div className="flex flex-col items-start gap-1">
-                    <OrderDetailButton
-                      orderId={order.id}
-                      label={order.displayOrderNumber}
-                      className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
-                    />
-                    {order.itemsCount > 1 ? (
-                      <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200">
-                        {order.itemsCount} Materials
-                      </span>
-                    ) : null}
-                    {order.isAggregated ? (
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                        Group Order
-                      </span>
-                    ) : null}
-                  </div>
-                </td>
+            {orders.map((order) => {
+              const items =
+                order.items && order.items.length > 0
+                  ? order.items
+                  : [{ id: order.id, material: order.material, brand: order.brand, qty: order.qty }];
+              const rowCount = items.length;
 
-                <td className="px-4 py-3.5 align-top font-medium text-slate-700">{order.buyer}</td>
-                <td className="px-4 py-3.5 align-top text-slate-700">
-                  <div className="space-y-2">
-                    {order.items && order.items.length > 0 ? (
-                      order.items.map((item, idx) => (
-                        <div key={item.id ?? idx} className="text-sm">
-                          {item.brand ? <p className="text-xs font-semibold text-slate-400">{item.brand}</p> : null}
-                          <p className="font-medium text-slate-800">{item.material}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <div>
-                        {order.brand ? <p className="text-xs font-semibold text-slate-400">{order.brand}</p> : null}
-                        <p className="font-medium text-slate-800">{order.material}</p>
+              return items.map((item, idx) => (
+                <tr
+                  key={`${order.id}-${item.id ?? idx}`}
+                  className={`hover:bg-slate-50/50 transition-colors ${
+                    idx === 0 ? "border-t border-slate-200" : "border-t border-slate-100"
+                  }`}
+                >
+                  {idx === 0 ? (
+                    <td rowSpan={rowCount} className="px-4 py-3 align-top font-semibold text-slate-800">
+                      <div className="flex flex-col items-start gap-1">
+                        <OrderDetailButton
+                          orderId={order.id}
+                          label={order.displayOrderNumber}
+                          className="font-semibold text-blue-700 underline decoration-dotted hover:text-blue-900"
+                        />
+                        {order.itemsCount > 1 ? (
+                          <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200">
+                            {order.itemsCount} Materials
+                          </span>
+                        ) : null}
+                        {order.isAggregated ? (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                            Group Order
+                          </span>
+                        ) : null}
                       </div>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3.5 align-top text-slate-700">
-                  <div className="space-y-2">
-                    {order.items && order.items.length > 0 ? (
-                      order.items.map((item, idx) => (
-                        <div key={item.id ?? idx} className="text-sm font-semibold text-slate-700">
-                          {item.qty}
-                        </div>
-                      ))
-                    ) : (
-                      <p className="font-semibold text-slate-700">{order.qty}</p>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3.5 align-top">
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800">
-                    {order.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3.5 align-top">
-                  <Link href={`/orders/${order.id}`} className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
-                    View
-                  </Link>
-                </td>
-              </tr>
-            ))}
+                    </td>
+                  ) : null}
+
+                  {idx === 0 ? (
+                    <td rowSpan={rowCount} className="px-4 py-3 align-top font-medium text-slate-700">
+                      {order.buyer}
+                    </td>
+                  ) : null}
+
+                  <td className="px-4 py-3 align-top text-slate-700">
+                    <div className="text-sm">
+                      {item.brand ? <p className="text-xs font-semibold text-slate-400">{item.brand}</p> : null}
+                      <p className="font-medium text-slate-800">{item.material}</p>
+                    </div>
+                  </td>
+
+                  <td className="px-4 py-3 align-top text-slate-700 whitespace-nowrap">
+                    <div className="text-sm">
+                      {item.brand ? <p className="text-xs invisible select-none" aria-hidden="true">&nbsp;</p> : null}
+                      <p className="font-semibold text-slate-700">{item.qty}</p>
+                    </div>
+                  </td>
+
+                  {idx === 0 ? (
+                    <td rowSpan={rowCount} className="px-4 py-3 align-top">
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800">
+                        {order.status}
+                      </span>
+                    </td>
+                  ) : null}
+
+                  {idx === 0 ? (
+                    <td rowSpan={rowCount} className="px-4 py-3 align-top">
+                      <Link
+                        href={`/orders/${order.id}`}
+                        className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                      >
+                        View
+                      </Link>
+                    </td>
+                  ) : null}
+                </tr>
+              ));
+            })}
             {orders.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">

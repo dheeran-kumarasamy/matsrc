@@ -89,25 +89,45 @@ export default async function SupplierOrderDetailPage({ params }: Props) {
                   order.items.map((item, idx) => (
                     <tr key={item.id ?? idx}>
                       <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">{idx + 1}</td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-2.5 align-top">
                         {item.brand ? (
                           <span className="block text-xs font-semibold text-slate-400">{item.brand}</span>
                         ) : null}
                         <span className="font-semibold text-slate-800">{item.material}</span>
                       </td>
-                      <td className="px-4 py-2.5 font-medium text-slate-700">{item.quantity}</td>
-                      <td className="px-4 py-2.5 font-semibold text-slate-900">{item.askPrice}</td>
+                      <td className="px-4 py-2.5 align-top font-medium text-slate-700 whitespace-nowrap">
+                        {item.brand ? (
+                          <span className="block text-xs invisible select-none" aria-hidden="true">&nbsp;</span>
+                        ) : null}
+                        <span className="font-semibold text-slate-700">{item.quantity}</span>
+                      </td>
+                      <td className="px-4 py-2.5 align-top font-semibold text-slate-900 whitespace-nowrap">
+                        {item.brand ? (
+                          <span className="block text-xs invisible select-none" aria-hidden="true">&nbsp;</span>
+                        ) : null}
+                        <span>{item.askPrice}</span>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
                     <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">1</td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-2.5 align-top">
                       {order.brand ? <span className="block text-xs font-semibold text-slate-400">{order.brand}</span> : null}
                       <span className="font-semibold text-slate-800">{order.material}</span>
                     </td>
-                    <td className="px-4 py-2.5 font-medium text-slate-700">{order.quantity}</td>
-                    <td className="px-4 py-2.5 font-semibold text-slate-900">{order.askPrice}</td>
+                    <td className="px-4 py-2.5 align-top font-medium text-slate-700 whitespace-nowrap">
+                      {order.brand ? (
+                        <span className="block text-xs invisible select-none" aria-hidden="true">&nbsp;</span>
+                      ) : null}
+                      <span className="font-semibold text-slate-700">{order.quantity}</span>
+                    </td>
+                    <td className="px-4 py-2.5 align-top font-semibold text-slate-900 whitespace-nowrap">
+                      {order.brand ? (
+                        <span className="block text-xs invisible select-none" aria-hidden="true">&nbsp;</span>
+                      ) : null}
+                      <span>{order.askPrice}</span>
+                    </td>
                   </tr>
                 )}
               </tbody>

@@ -11,6 +11,7 @@ import {
   getCartForUser,
   resolveProductGroupForCart,
   computeRequestFingerprint,
+  ensureCartSchema,
 } from "@/lib/cart-data";
 import { resolveLowestPriceForQuantity } from "@/lib/resolution";
 
@@ -19,27 +20,52 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     const ctx = await resolveUserCtx(request);
+    await ensureCartSchema();
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
-    const items = await prisma.cartItem.findMany({
-      where: { userId: user.id },
-      include: {
-        product: {
-          select: {
-            name: true,
-            unit: true,
-            supplierId: true,
-            basePrice: true,
-            supplier: { select: { companyName: true } },
-            pricingTiers: {
-              select: { minQty: true, maxQty: true, tierPrice: true },
-              orderBy: { minQty: "asc" },
+    let items: any[] = [];
+    try {
+      items = await prisma.cartItem.findMany({
+        where: { userId: user.id },
+        include: {
+          product: {
+            select: {
+              name: true,
+              unit: true,
+              supplierId: true,
+              basePrice: true,
+              supplier: { select: { companyName: true } },
+              pricingTiers: {
+                select: { minQty: true, maxQty: true, tierPrice: true },
+                orderBy: { minQty: "asc" },
+              },
             },
           },
         },
-      },
-      orderBy: { updatedAt: "desc" },
-    });
+        orderBy: { updatedAt: "desc" },
+      });
+    } catch (findErr: any) {
+      if (findErr?.code === "P2021" || findErr?.code === "P2022") {
+        await ensureCartSchema();
+        items = await prisma.cartItem.findMany({
+          where: { userId: user.id },
+          include: {
+            product: {
+              select: {
+                name: true,
+                unit: true,
+                supplierId: true,
+                basePrice: true,
+                supplier: { select: { companyName: true } },
+              },
+            },
+          },
+          orderBy: { updatedAt: "desc" },
+        }).catch(() => []);
+      } else {
+        throw findErr;
+      }
+    }
 
     const subtotal = items.reduce(
       (acc, item) =>
@@ -91,6 +117,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const ctx = await resolveUserCtx(request);
+    await ensureCartSchema();
     const body = await request.json().catch(() => ({}));
     const productId = typeof body.productId === "string" ? body.productId.trim() : "";
     const quantity = Number(body.quantity);
@@ -159,42 +186,46 @@ export async function POST(request: Request) {
 
           // Durable Database-Backed Idempotency Check
           if (idempotencyKey && typeof tx.cartIdempotency?.findUnique === "function") {
-            const existingRecord = await tx.cartIdempotency.findUnique({
-              where: { userId_key: { userId: user.id, key: idempotencyKey } },
-            });
-            if (existingRecord) {
-              // Check expiry: expired records must not be treated as valid duplicates
-              if (existingRecord.expiresAt && existingRecord.expiresAt < new Date()) {
+            try {
+              const existingRecord = await tx.cartIdempotency.findUnique({
+                where: { userId_key: { userId: user.id, key: idempotencyKey } },
+              });
+              if (existingRecord) {
+                // Check expiry: expired records must not be treated as valid duplicates
+                if (existingRecord.expiresAt && existingRecord.expiresAt < new Date()) {
+                  return {
+                    conflict: true,
+                    status: 410,
+                    error: "Idempotency key has expired. Please submit a new request with a fresh key.",
+                  };
+                }
+
+                if (existingRecord.requestFingerprint !== requestFingerprint) {
+                  return {
+                    conflict: true,
+                    status: 409,
+                    error: "Idempotency key was previously used with a different request payload.",
+                  };
+                }
+
+                // Latest authoritative cart state for replay (prevents restoring stale cart snapshots)
+                const currentCart = await getCartForUser(user.id, tx);
+                const currentItem = currentCart.items.find((i) => i.productId === productId);
                 return {
-                  conflict: true,
-                  status: 410,
-                  error: "Idempotency key has expired. Please submit a new request with a fresh key.",
+                  cached: true,
+                  status: existingRecord.responseStatus || 200,
+                  payload: {
+                    ...(existingRecord.responsePayload as any),
+                    id: currentItem?.id ?? (existingRecord.responsePayload as any)?.id,
+                    quantity: currentItem?.quantity ?? (existingRecord.responsePayload as any)?.quantity,
+                    items: currentCart.items,
+                    summary: currentCart.summary,
+                    isReplay: true,
+                  },
                 };
               }
-
-              if (existingRecord.requestFingerprint !== requestFingerprint) {
-                return {
-                  conflict: true,
-                  status: 409,
-                  error: "Idempotency key was previously used with a different request payload.",
-                };
-              }
-
-              // Latest authoritative cart state for replay (prevents restoring stale cart snapshots)
-              const currentCart = await getCartForUser(user.id, tx);
-              const currentItem = currentCart.items.find((i) => i.productId === productId);
-              return {
-                cached: true,
-                status: existingRecord.responseStatus || 200,
-                payload: {
-                  ...(existingRecord.responsePayload as any),
-                  id: currentItem?.id ?? (existingRecord.responsePayload as any)?.id,
-                  quantity: currentItem?.quantity ?? (existingRecord.responsePayload as any)?.quantity,
-                  items: currentCart.items,
-                  summary: currentCart.summary,
-                  isReplay: true,
-                },
-              };
+            } catch (idempErr: any) {
+              console.warn("Cart idempotency lookup warning (bypassed):", idempErr?.message);
             }
           }
 
@@ -244,13 +275,27 @@ export async function POST(request: Request) {
               }
             : {};
 
-          const updatedItem = await tx.cartItem.update({
-            where: { id: existing.id },
-            data: {
-              quantity,
-              ...resolvedFields,
-            },
-          });
+          let updatedItem: any;
+          try {
+            updatedItem = await tx.cartItem.update({
+              where: { id: existing.id },
+              data: {
+                quantity,
+                ...resolvedFields,
+              },
+            });
+          } catch (updateErr: any) {
+            if (updateErr?.code === "P2022") {
+              updatedItem = await tx.cartItem.update({
+                where: { id: existing.id },
+                data: {
+                  quantity,
+                },
+              });
+            } else {
+              throw updateErr;
+            }
+          }
 
           const cart = await getCartForUser(user.id, tx);
           const responsePayload = {
@@ -264,16 +309,20 @@ export async function POST(request: Request) {
           };
 
           if (idempotencyKey && typeof tx.cartIdempotency?.create === "function") {
-            await tx.cartIdempotency.create({
-              data: {
-                userId: user.id,
-                key: idempotencyKey,
-                requestFingerprint,
-                responseStatus: 200,
-                responsePayload,
-                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24-hour durability
-              },
-            });
+            try {
+              await tx.cartIdempotency.create({
+                data: {
+                  userId: user.id,
+                  key: idempotencyKey,
+                  requestFingerprint,
+                  responseStatus: 200,
+                  responsePayload,
+                  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24-hour durability
+                },
+              });
+            } catch (idempErr: any) {
+              console.warn("Cart idempotency record creation warning (bypassed):", idempErr?.message);
+            }
           }
 
           return { success: true, payload: responsePayload };
@@ -377,42 +426,46 @@ export async function POST(request: Request) {
 
             // Durable Database-Backed Idempotency Check
             if (idempotencyKey && typeof tx.cartIdempotency?.findUnique === "function") {
-              const existingRecord = await tx.cartIdempotency.findUnique({
-                where: { userId_key: { userId: user.id, key: idempotencyKey } },
-              });
-              if (existingRecord) {
-                // Check expiry: expired records must not be treated as valid duplicates
-                if (existingRecord.expiresAt && existingRecord.expiresAt < new Date()) {
+              try {
+                const existingRecord = await tx.cartIdempotency.findUnique({
+                  where: { userId_key: { userId: user.id, key: idempotencyKey } },
+                });
+                if (existingRecord) {
+                  // Check expiry: expired records must not be treated as valid duplicates
+                  if (existingRecord.expiresAt && existingRecord.expiresAt < new Date()) {
+                    return {
+                      conflict: true,
+                      status: 410,
+                      error: "Idempotency key has expired. Please submit a new request with a fresh key.",
+                    };
+                  }
+
+                  if (existingRecord.requestFingerprint !== requestFingerprint) {
+                    return {
+                      conflict: true,
+                      status: 409,
+                      error: "Idempotency key was previously used with a different request payload.",
+                    };
+                  }
+
+                  // Latest authoritative cart state for replay (prevents restoring stale cart snapshots)
+                  const currentCart = await getCartForUser(user.id, tx);
+                  const currentItem = currentCart.items.find((i) => i.productId === productId);
                   return {
-                    conflict: true,
-                    status: 410,
-                    error: "Idempotency key has expired. Please submit a new request with a fresh key.",
+                    cached: true,
+                    status: existingRecord.responseStatus || 200,
+                    payload: {
+                      ...(existingRecord.responsePayload as any),
+                      id: currentItem?.id ?? (existingRecord.responsePayload as any)?.id,
+                      quantity: currentItem?.quantity ?? (existingRecord.responsePayload as any)?.quantity,
+                      items: currentCart.items,
+                      summary: currentCart.summary,
+                      isReplay: true,
+                    },
                   };
                 }
-
-                if (existingRecord.requestFingerprint !== requestFingerprint) {
-                  return {
-                    conflict: true,
-                    status: 409,
-                    error: "Idempotency key was previously used with a different request payload.",
-                  };
-                }
-
-                // Latest authoritative cart state for replay (prevents restoring stale cart snapshots)
-                const currentCart = await getCartForUser(user.id, tx);
-                const currentItem = currentCart.items.find((i) => i.productId === productId);
-                return {
-                  cached: true,
-                  status: existingRecord.responseStatus || 200,
-                  payload: {
-                    ...(existingRecord.responsePayload as any),
-                    id: currentItem?.id ?? (existingRecord.responsePayload as any)?.id,
-                    quantity: currentItem?.quantity ?? (existingRecord.responsePayload as any)?.quantity,
-                    items: currentCart.items,
-                    summary: currentCart.summary,
-                    isReplay: true,
-                  },
-                };
+              } catch (idempErr: any) {
+                console.warn("Cart idempotency lookup warning (bypassed):", idempErr?.message);
               }
             }
 
@@ -450,19 +503,38 @@ export async function POST(request: Request) {
                 }
               : {};
 
-            const savedItem = await tx.cartItem.upsert({
-              where: { userId_productId: { userId: user.id, productId: product.id } },
-              update: {
-                quantity: targetQuantity,
-                ...resolvedFields,
-              },
-              create: {
-                userId: user.id,
-                productId: product.id,
-                quantity: targetQuantity,
-                ...resolvedFields,
-              },
-            });
+            let savedItem: any;
+            try {
+              savedItem = await tx.cartItem.upsert({
+                where: { userId_productId: { userId: user.id, productId: product.id } },
+                update: {
+                  quantity: targetQuantity,
+                  ...resolvedFields,
+                },
+                create: {
+                  userId: user.id,
+                  productId: product.id,
+                  quantity: targetQuantity,
+                  ...resolvedFields,
+                },
+              });
+            } catch (upsertErr: any) {
+              if (upsertErr?.code === "P2022") {
+                savedItem = await tx.cartItem.upsert({
+                  where: { userId_productId: { userId: user.id, productId: product.id } },
+                  update: {
+                    quantity: targetQuantity,
+                  },
+                  create: {
+                    userId: user.id,
+                    productId: product.id,
+                    quantity: targetQuantity,
+                  },
+                });
+              } else {
+                throw upsertErr;
+              }
+            }
 
             const cart = await getCartForUser(user.id, tx);
             const responsePayload = {
@@ -477,16 +549,20 @@ export async function POST(request: Request) {
 
             // Atomically record the idempotency token inside the SAME transaction
             if (idempotencyKey && typeof tx.cartIdempotency?.create === "function") {
-              await tx.cartIdempotency.create({
-                data: {
-                  userId: user.id,
-                  key: idempotencyKey,
-                  requestFingerprint,
-                  responseStatus: 200,
-                  responsePayload,
-                  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24-hour durability
-                },
-              });
+              try {
+                await tx.cartIdempotency.create({
+                  data: {
+                    userId: user.id,
+                    key: idempotencyKey,
+                    requestFingerprint,
+                    responseStatus: 200,
+                    responsePayload,
+                    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24-hour durability
+                  },
+                });
+              } catch (idempErr: any) {
+                console.warn("Cart idempotency record creation warning (bypassed):", idempErr?.message);
+              }
             }
 
             return { success: true, payload: responsePayload };
@@ -606,7 +682,17 @@ export async function POST(request: Request) {
     }
     console.error("Cart items POST error:", error);
     return NextResponse.json(
-      { error: "Failed to update cart" },
+      {
+        error: "Failed to update cart",
+        message: error?.message || "Failed to update cart",
+        code: error?.code,
+        detail:
+          process.env.NODE_ENV !== "production" ||
+          process.env.BUILDOHUB_ENV === "uat" ||
+          process.env.NEXT_PUBLIC_APP_ENV === "uat"
+            ? error?.message
+            : undefined,
+      },
       { status: 500 }
     );
   }

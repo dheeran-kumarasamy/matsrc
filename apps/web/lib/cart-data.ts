@@ -38,6 +38,75 @@ export type CartPayload = {
   summary: CartSummaryData;
 };
 
+let cartSchemaEnsured = false;
+let cartSchemaEnsuringPromise: Promise<void> | null = null;
+
+/**
+ * Self-heals cart and catalogue schema on unmigrated databases, ensuring that
+ * missing columns (e.g. isOrderable, resolvedUnitPrice) or missing tables
+ * (e.g. CartIdempotency, PricingTier) do not crash cart operations with P2021/P2022.
+ */
+export async function ensureCartSchema(client?: any): Promise<void> {
+  if (cartSchemaEnsured) return;
+  if (cartSchemaEnsuringPromise) return cartSchemaEnsuringPromise;
+
+  const db = client || prisma;
+  if (!db || typeof db.$executeRawUnsafe !== "function") return;
+
+  cartSchemaEnsuringPromise = (async () => {
+    try {
+      await db.$executeRawUnsafe('ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "maxServiceableQty" DOUBLE PRECISION;');
+      await db.$executeRawUnsafe('ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;');
+      await db.$executeRawUnsafe('ALTER TABLE "Category" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;');
+      await db.$executeRawUnsafe(
+        'CREATE TABLE IF NOT EXISTS "PricingTier" ("id" TEXT PRIMARY KEY, "productId" TEXT NOT NULL, "minQty" DOUBLE PRECISION NOT NULL, "maxQty" DOUBLE PRECISION NOT NULL, "tierPrice" DECIMAL(12,2) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
+      );
+      await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "PricingTier_productId_idx" ON "PricingTier"("productId");');
+      await db.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "OrderSplittingConfig" (
+          "id" TEXT NOT NULL DEFAULT 'global',
+          "allowMultiSupplierSplitting" BOOLEAN NOT NULL DEFAULT false,
+          "splitOnlyAcrossCategories" BOOLEAN NOT NULL DEFAULT true,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedBy" TEXT,
+          CONSTRAINT "OrderSplittingConfig_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await db.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "CartIdempotency" (
+          "id" TEXT NOT NULL,
+          "userId" TEXT NOT NULL,
+          "key" TEXT NOT NULL,
+          "requestFingerprint" TEXT NOT NULL,
+          "responseStatus" INTEGER NOT NULL DEFAULT 200,
+          "responsePayload" JSONB,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL,
+          "expiresAt" TIMESTAMP(3),
+          CONSTRAINT "CartIdempotency_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await db.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "CartIdempotency_userId_key_key" ON "CartIdempotency"("userId", "key");');
+      await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "CartIdempotency_userId_idx" ON "CartIdempotency"("userId");');
+      await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "CartIdempotency_expiresAt_idx" ON "CartIdempotency"("expiresAt");');
+      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedListingId" TEXT;');
+      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedSupplierId" TEXT;');
+      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedTierMinQty" DOUBLE PRECISION;');
+      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedTierMaxQty" DOUBLE PRECISION;');
+      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedUnitPrice" DECIMAL(12,2);');
+      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedAt" TIMESTAMP(3);');
+      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ALTER COLUMN "quantity" TYPE DOUBLE PRECISION;');
+      cartSchemaEnsured = true;
+    } catch (err) {
+      console.warn("ensureCartSchema warning:", err);
+    } finally {
+      cartSchemaEnsuringPromise = null;
+    }
+  })();
+
+  return cartSchemaEnsuringPromise;
+}
+
 export interface CartFingerprintPayload {
   productId: string;
   quantity: number;
@@ -109,27 +178,13 @@ export function productToResolutionCandidate(product: {
  */
 export async function resolveProductGroupForCart(productId: string, quantity: number, dbClient?: any) {
   const client = dbClient || prisma;
-  const product = await client.product.findFirst({
-    where: {
-      OR: [{ id: productId }, { slug: productId }],
-      isActive: true,
-    },
-    include: {
-      category: true,
-      supplier: { select: { companyName: true } },
-      pricingTiers: { orderBy: { minQty: "asc" } },
-    },
-  });
+  await ensureCartSchema(client);
 
-  if (!product || (product as any).isOrderable === false || (product as any).category?.isOrderable === false) {
-    return null;
-  }
-
-  let groupProducts: typeof product[] = [];
-  if (product.canonicalProductId && product.canonicalProductId.trim() !== "") {
-    const foundGroup = await client.product.findMany({
+  let product: any = null;
+  try {
+    product = await client.product.findFirst({
       where: {
-        canonicalProductId: product.canonicalProductId,
+        OR: [{ id: productId }, { slug: productId }],
         isActive: true,
       },
       include: {
@@ -137,8 +192,67 @@ export async function resolveProductGroupForCart(productId: string, quantity: nu
         supplier: { select: { companyName: true } },
         pricingTiers: { orderBy: { minQty: "asc" } },
       },
-      orderBy: { updatedAt: "desc" },
     });
+  } catch (err: any) {
+    if (err?.code === "P2021" || err?.code === "P2022") {
+      await ensureCartSchema(client);
+      try {
+        product = await client.product.findFirst({
+          where: {
+            OR: [{ id: productId }, { slug: productId }],
+            isActive: true,
+          },
+          include: {
+            category: true,
+            supplier: { select: { companyName: true } },
+          },
+        });
+      } catch (fallbackErr) {
+        console.error("resolveProductGroupForCart fallback failed:", fallbackErr);
+        throw err;
+      }
+    } else {
+      throw err;
+    }
+  }
+
+  if (!product || (product as any).isOrderable === false || (product as any).category?.isOrderable === false) {
+    return null;
+  }
+
+  let groupProducts: typeof product[] = [];
+  if (product.canonicalProductId && product.canonicalProductId.trim() !== "") {
+    let foundGroup: any[] = [];
+    try {
+      foundGroup = await client.product.findMany({
+        where: {
+          canonicalProductId: product.canonicalProductId,
+          isActive: true,
+        },
+        include: {
+          category: true,
+          supplier: { select: { companyName: true } },
+          pricingTiers: { orderBy: { minQty: "asc" } },
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+    } catch {
+      try {
+        foundGroup = await client.product.findMany({
+          where: {
+            canonicalProductId: product.canonicalProductId,
+            isActive: true,
+          },
+          include: {
+            category: true,
+            supplier: { select: { companyName: true } },
+          },
+          orderBy: { updatedAt: "desc" },
+        });
+      } catch {
+        foundGroup = [product];
+      }
+    }
     groupProducts = Array.isArray(foundGroup) ? foundGroup : [];
 
     if (!groupProducts.some((p) => p.id === product.id)) {
@@ -257,35 +371,71 @@ async function resolveMarkupsWithCache(
  */
 export async function getCartForUser(userId: string, dbClient?: any): Promise<CartPayload> {
   const client = dbClient || prisma;
-  const rawItems = await client.cartItem.findMany({
-    where: { userId },
-    select: {
-      id: true,
-      productId: true,
-      quantity: true,
-      resolvedUnitPrice: true,
-      resolvedSupplierId: true,
-      product: {
-        select: {
-          name: true,
-          unit: true,
-          supplierId: true,
-          categoryId: true,
-          basePrice: true,
-          images: true,
-          supplier: { select: { companyName: true } },
-          pricingTiers: {
-            select: { minQty: true, maxQty: true, tierPrice: true },
-            orderBy: { minQty: "asc" },
+  await ensureCartSchema(client);
+
+  let rawItems: any[] = [];
+  try {
+    rawItems = await client.cartItem.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        productId: true,
+        quantity: true,
+        resolvedUnitPrice: true,
+        resolvedSupplierId: true,
+        product: {
+          select: {
+            name: true,
+            unit: true,
+            supplierId: true,
+            categoryId: true,
+            basePrice: true,
+            images: true,
+            supplier: { select: { companyName: true } },
+            pricingTiers: {
+              select: { minQty: true, maxQty: true, tierPrice: true },
+              orderBy: { minQty: "asc" },
+            },
+            aggregationEnabled: true,
+            aggregationPriceTiers: true,
+            aggregationWindowDays: true,
           },
-          aggregationEnabled: true,
-          aggregationPriceTiers: true,
-          aggregationWindowDays: true,
         },
       },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+      orderBy: { updatedAt: "desc" },
+    });
+  } catch (err: any) {
+    if (err?.code === "P2021" || err?.code === "P2022") {
+      await ensureCartSchema(client);
+      try {
+        rawItems = await client.cartItem.findMany({
+          where: { userId },
+          select: {
+            id: true,
+            productId: true,
+            quantity: true,
+            product: {
+              select: {
+                name: true,
+                unit: true,
+                supplierId: true,
+                categoryId: true,
+                basePrice: true,
+                images: true,
+                supplier: { select: { companyName: true } },
+              },
+            },
+          },
+          orderBy: { updatedAt: "desc" },
+        });
+      } catch (fallbackErr) {
+        console.error("getCartForUser fallback error:", fallbackErr);
+        rawItems = [];
+      }
+    } else {
+      throw err;
+    }
+  }
   const items = rawItems ?? [];
 
   const batchParams = items.map((item: any) => {

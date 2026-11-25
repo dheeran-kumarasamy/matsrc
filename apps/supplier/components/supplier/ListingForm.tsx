@@ -4,7 +4,7 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+const CATALOG_API_BASE_URL = "/api/public/catalog";
 
 // Max local image upload size — kept conservative since uploaded files are
 // encoded as base64 data URIs and stored directly in `Product.images`
@@ -29,7 +29,7 @@ function useCatalogOptions(entity: "category" | "brand" | "grade" | "unit") {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`${API_BASE_URL}/public/catalog/${entity}`, { cache: "no-store" })
+    fetch(`${CATALOG_API_BASE_URL}/${entity}`, { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         if (!cancelled) setOptions(Array.isArray(data) ? data : []);

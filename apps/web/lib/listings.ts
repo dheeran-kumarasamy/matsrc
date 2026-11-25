@@ -182,7 +182,21 @@ export type ProductGroupResult = {
   siblings: SupplierListing[];
 };
 
+function shouldUseDirectUatDb(): boolean {
+  return (
+    process.env.BUILDOHUB_ENV === "uat" &&
+    !process.env.SUPPLIER_APP_URL &&
+    !process.env.NEXT_PUBLIC_SUPPLIER_APP_URL &&
+    !process.env.SUPPLIER_PORTAL_URL
+  );
+}
+
 export const getSupplierListings = requestCache(async (): Promise<SupplierListing[]> => {
+  if (shouldUseDirectUatDb()) {
+    const { getPublicListingsFromDb } = await import("@/lib/listings-db");
+    return getPublicListingsFromDb();
+  }
+
   let supplierUrl: string;
   try {
     supplierUrl = getSupplierAppUrl();
@@ -223,6 +237,11 @@ export const getSupplierListings = requestCache(async (): Promise<SupplierListin
 });
 
 export const getSupplierProductGroup = requestCache(async (slug: string): Promise<ProductGroupResult | null> => {
+  if (shouldUseDirectUatDb()) {
+    const { getPublicProductGroupFromDb } = await import("@/lib/listings-db");
+    return getPublicProductGroupFromDb(slug);
+  }
+
   let shouldFallback = false;
   let supplierUrl: string;
   try {

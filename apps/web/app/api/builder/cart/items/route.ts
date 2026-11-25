@@ -17,6 +17,21 @@ import { resolveLowestPriceForQuantity } from "@/lib/resolution";
 
 export const dynamic = "force-dynamic";
 
+async function runWithSavepoint<T>(tx: any, name: string, fn: () => Promise<T>): Promise<T> {
+  if (typeof tx?.$executeRawUnsafe !== "function") {
+    return fn();
+  }
+  await tx.$executeRawUnsafe(`SAVEPOINT ${name}`);
+  try {
+    const res = await fn();
+    await tx.$executeRawUnsafe(`RELEASE SAVEPOINT ${name}`);
+    return res;
+  } catch (err) {
+    await tx.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${name}`).catch(() => {});
+    throw err;
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const ctx = await resolveUserCtx(request);
@@ -187,9 +202,11 @@ export async function POST(request: Request) {
           // Durable Database-Backed Idempotency Check
           if (idempotencyKey && typeof tx.cartIdempotency?.findUnique === "function") {
             try {
-              const existingRecord = await tx.cartIdempotency.findUnique({
-                where: { userId_key: { userId: user.id, key: idempotencyKey } },
-              });
+              const existingRecord = await runWithSavepoint<any>(tx, "sp_set_idemp_lookup", () =>
+                tx.cartIdempotency.findUnique({
+                  where: { userId_key: { userId: user.id, key: idempotencyKey } },
+                })
+              );
               if (existingRecord) {
                 // Check expiry: expired records must not be treated as valid duplicates
                 if (existingRecord.expiresAt && existingRecord.expiresAt < new Date()) {
@@ -210,7 +227,9 @@ export async function POST(request: Request) {
 
                 // Latest authoritative cart state for replay (prevents restoring stale cart snapshots)
                 const currentCart = await getCartForUser(user.id, tx);
-                const currentItem = currentCart.items.find((i) => i.productId === productId);
+                const currentItem = currentCart.items.find(
+                  (i) => i.productId === product.id || i.productId === productId
+                );
                 return {
                   cached: true,
                   status: existingRecord.responseStatus || 200,
@@ -236,13 +255,13 @@ export async function POST(request: Request) {
                 ? await tx.$queryRaw`
                     SELECT "id", "quantity"
                     FROM "CartItem"
-                    WHERE "userId" = ${user.id} AND ("id" = ${body.cartItemId} OR "productId" = ${productId})
+                    WHERE "userId" = ${user.id} AND ("id" = ${body.cartItemId} OR "productId" = ${product.id})
                     FOR UPDATE
                   `
                 : await tx.$queryRaw`
                     SELECT "id", "quantity"
                     FROM "CartItem"
-                    WHERE "userId" = ${user.id} AND "productId" = ${productId}
+                    WHERE "userId" = ${user.id} AND "productId" = ${product.id}
                     FOR UPDATE
                   `;
             existing = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
@@ -253,7 +272,7 @@ export async function POST(request: Request) {
                 userId: user.id,
                 OR: [
                   ...(typeof body.cartItemId === "string" && body.cartItemId ? [{ id: body.cartItemId }] : []),
-                  { productId },
+                  { productId: product.id },
                 ],
               },
             });
@@ -277,13 +296,15 @@ export async function POST(request: Request) {
 
           let updatedItem: any;
           try {
-            updatedItem = await tx.cartItem.update({
-              where: { id: existing.id },
-              data: {
-                quantity,
-                ...resolvedFields,
-              },
-            });
+            updatedItem = await runWithSavepoint(tx, "sp_set_cart_update", () =>
+              tx.cartItem.update({
+                where: { id: existing.id },
+                data: {
+                  quantity,
+                  ...resolvedFields,
+                },
+              })
+            );
           } catch (updateErr: any) {
             if (updateErr?.code === "P2022") {
               updatedItem = await tx.cartItem.update({
@@ -310,17 +331,22 @@ export async function POST(request: Request) {
 
           if (idempotencyKey && typeof tx.cartIdempotency?.create === "function") {
             try {
-              await tx.cartIdempotency.create({
-                data: {
-                  userId: user.id,
-                  key: idempotencyKey,
-                  requestFingerprint,
-                  responseStatus: 200,
-                  responsePayload,
-                  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24-hour durability
-                },
-              });
+              await runWithSavepoint(tx, "sp_set_idemp_create", () =>
+                tx.cartIdempotency.create({
+                  data: {
+                    userId: user.id,
+                    key: idempotencyKey,
+                    requestFingerprint,
+                    responseStatus: 200,
+                    responsePayload,
+                    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24-hour durability
+                  },
+                })
+              );
             } catch (idempErr: any) {
+              if (idempErr?.code === "P2002" || /unique.*constraint/i.test(idempErr?.message ?? "")) {
+                throw idempErr;
+              }
               console.warn("Cart idempotency record creation warning (bypassed):", idempErr?.message);
             }
           }
@@ -427,9 +453,11 @@ export async function POST(request: Request) {
             // Durable Database-Backed Idempotency Check
             if (idempotencyKey && typeof tx.cartIdempotency?.findUnique === "function") {
               try {
-                const existingRecord = await tx.cartIdempotency.findUnique({
-                  where: { userId_key: { userId: user.id, key: idempotencyKey } },
-                });
+                const existingRecord = await runWithSavepoint<any>(tx, "sp_idemp_lookup", () =>
+                  tx.cartIdempotency.findUnique({
+                    where: { userId_key: { userId: user.id, key: idempotencyKey } },
+                  })
+                );
                 if (existingRecord) {
                   // Check expiry: expired records must not be treated as valid duplicates
                   if (existingRecord.expiresAt && existingRecord.expiresAt < new Date()) {
@@ -450,7 +478,9 @@ export async function POST(request: Request) {
 
                   // Latest authoritative cart state for replay (prevents restoring stale cart snapshots)
                   const currentCart = await getCartForUser(user.id, tx);
-                  const currentItem = currentCart.items.find((i) => i.productId === productId);
+                  const currentItem = currentCart.items.find(
+                    (i) => i.productId === product.id || i.productId === productId
+                  );
                   return {
                     cached: true,
                     status: existingRecord.responseStatus || 200,
@@ -474,14 +504,14 @@ export async function POST(request: Request) {
               const rows = await tx.$queryRaw`
                 SELECT "id", "quantity"
                 FROM "CartItem"
-                WHERE "userId" = ${user.id} AND "productId" = ${productId}
+                WHERE "userId" = ${user.id} AND "productId" = ${product.id}
                 FOR UPDATE
               `;
               current = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
             }
             if (!current) {
               current = await tx.cartItem.findUnique({
-                where: { userId_productId: { userId: user.id, productId } },
+                where: { userId_productId: { userId: user.id, productId: product.id } },
               });
             }
 
@@ -505,19 +535,21 @@ export async function POST(request: Request) {
 
             let savedItem: any;
             try {
-              savedItem = await tx.cartItem.upsert({
-                where: { userId_productId: { userId: user.id, productId: product.id } },
-                update: {
-                  quantity: targetQuantity,
-                  ...resolvedFields,
-                },
-                create: {
-                  userId: user.id,
-                  productId: product.id,
-                  quantity: targetQuantity,
-                  ...resolvedFields,
-                },
-              });
+              savedItem = await runWithSavepoint(tx, "sp_cart_upsert", () =>
+                tx.cartItem.upsert({
+                  where: { userId_productId: { userId: user.id, productId: product.id } },
+                  update: {
+                    quantity: targetQuantity,
+                    ...resolvedFields,
+                  },
+                  create: {
+                    userId: user.id,
+                    productId: product.id,
+                    quantity: targetQuantity,
+                    ...resolvedFields,
+                  },
+                })
+              );
             } catch (upsertErr: any) {
               if (upsertErr?.code === "P2022") {
                 savedItem = await tx.cartItem.upsert({
@@ -550,17 +582,22 @@ export async function POST(request: Request) {
             // Atomically record the idempotency token inside the SAME transaction
             if (idempotencyKey && typeof tx.cartIdempotency?.create === "function") {
               try {
-                await tx.cartIdempotency.create({
-                  data: {
-                    userId: user.id,
-                    key: idempotencyKey,
-                    requestFingerprint,
-                    responseStatus: 200,
-                    responsePayload,
-                    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24-hour durability
-                  },
-                });
+                await runWithSavepoint(tx, "sp_idemp_create", () =>
+                  tx.cartIdempotency.create({
+                    data: {
+                      userId: user.id,
+                      key: idempotencyKey,
+                      requestFingerprint,
+                      responseStatus: 200,
+                      responsePayload,
+                      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24-hour durability
+                    },
+                  })
+                );
               } catch (idempErr: any) {
+                if (idempErr?.code === "P2002" || /unique.*constraint/i.test(idempErr?.message ?? "")) {
+                  throw idempErr;
+                }
                 console.warn("Cart idempotency record creation warning (bypassed):", idempErr?.message);
               }
             }

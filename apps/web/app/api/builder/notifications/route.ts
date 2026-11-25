@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { prisma, getOrCreateBuilder, getUserCtx, resolveUserCtx } from "@/lib/builder-db";
 
 export const dynamic = "force-dynamic";
 
@@ -12,27 +12,60 @@ export const dynamic = "force-dynamic";
 // builder as in-app alerts.
 export async function GET(request: Request) {
   try {
-    const ctx = getUserCtx(request);
+    let ctx: any = null;
+    try {
+      ctx = await resolveUserCtx(request);
+    } catch {
+      ctx = getUserCtx(request);
+    }
+
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
     const userIds = Array.from(new Set([user.id, ctx.userId, ctx.email].filter(Boolean)));
 
-    const [rows, unreadCount] = await Promise.all([
-      prisma.notification.findMany({
-        where: { userId: { in: userIds } },
-        orderBy: { createdAt: "desc" },
-        take: 30,
-        select: {
-          id: true,
-          title: true,
-          body: true,
-          read: true,
-          createdAt: true,
-          templateType: true,
-          variables: true,
-        },
-      }),
-      prisma.notification.count({ where: { userId: { in: userIds }, read: false } }),
-    ]);
+    let rows: any[] = [];
+    let unreadCount = 0;
+
+    try {
+      [rows, unreadCount] = await Promise.all([
+        prisma.notification.findMany({
+          where: { userId: { in: userIds } },
+          orderBy: { createdAt: "desc" },
+          take: 30,
+          select: {
+            id: true,
+            title: true,
+            body: true,
+            read: true,
+            createdAt: true,
+            templateType: true,
+            variables: true,
+          },
+        }),
+        prisma.notification.count({ where: { userId: { in: userIds }, read: false } }),
+      ]);
+    } catch (dbErr: any) {
+      console.warn("Notification query fallback without template columns:", dbErr?.message);
+      try {
+        [rows, unreadCount] = await Promise.all([
+          prisma.notification.findMany({
+            where: { userId: { in: userIds } },
+            orderBy: { createdAt: "desc" },
+            take: 30,
+            select: {
+              id: true,
+              title: true,
+              body: true,
+              read: true,
+              createdAt: true,
+            },
+          }),
+          prisma.notification.count({ where: { userId: { in: userIds }, read: false } }),
+        ]);
+      } catch {
+        rows = [];
+        unreadCount = 0;
+      }
+    }
 
     // Order-status notifications (submitted/accepted/declined/dispatched/
     // out-for-delivery/delivered + best-price-ready) carry the source
@@ -53,9 +86,19 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json({ items, unreadCount });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === "UNAUTHENTICATED" || error?.message?.includes("UNAUTHENTICATED")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     console.error("Notifications GET error:", error);
-    return NextResponse.json({ error: "Failed to fetch notifications" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Failed to fetch notifications",
+        message: error?.message || "Failed to fetch notifications",
+        code: error?.code,
+      },
+      { status: 500 }
+    );
   }
 }
 
@@ -64,7 +107,12 @@ export async function GET(request: Request) {
 // ("Mark all as read" action in the dropdown).
 export async function PATCH(request: Request) {
   try {
-    const ctx = getUserCtx(request);
+    let ctx: any = null;
+    try {
+      ctx = await resolveUserCtx(request);
+    } catch {
+      ctx = getUserCtx(request);
+    }
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
     const userIds = Array.from(new Set([user.id, ctx.userId, ctx.email].filter(Boolean)));
     const body = await request.json().catch(() => ({}));
@@ -78,8 +126,18 @@ export async function PATCH(request: Request) {
     }
 
     return NextResponse.json({ error: "Unsupported request" }, { status: 400 });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === "UNAUTHENTICATED" || error?.message?.includes("UNAUTHENTICATED")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     console.error("Notifications PATCH error:", error);
-    return NextResponse.json({ error: "Failed to update notifications" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Failed to update notifications",
+        message: error?.message || "Failed to update notifications",
+        code: error?.code,
+      },
+      { status: 500 }
+    );
   }
 }

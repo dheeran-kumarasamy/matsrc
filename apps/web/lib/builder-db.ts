@@ -22,11 +22,64 @@ export function formatDate(date: Date | null | undefined): string | null {
   return new Date(date).toLocaleDateString("en-IN");
 }
 
+let schemaEnsured = false;
+let schemaEnsuringPromise: Promise<void> | null = null;
+
+export async function ensureBuilderSchema(): Promise<void> {
+  if (schemaEnsured) return;
+  if (schemaEnsuringPromise) return schemaEnsuringPromise;
+
+  schemaEnsuringPromise = (async () => {
+    try {
+      if (typeof (prisma as any)?.$executeRawUnsafe === "function") {
+        await (prisma as any).$executeRawUnsafe(
+          'ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;'
+        );
+        await (prisma as any).$executeRawUnsafe(
+          'ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "maxServiceableQty" INTEGER;'
+        );
+        await (prisma as any).$executeRawUnsafe(
+          'ALTER TABLE "Category" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;'
+        );
+        await (prisma as any).$executeRawUnsafe(
+          'CREATE TABLE IF NOT EXISTS "OrderSplittingConfig" ("id" TEXT PRIMARY KEY DEFAULT \'global\', "allowMultiSupplierSplitting" BOOLEAN NOT NULL DEFAULT false, "splitOnlyAcrossCategories" BOOLEAN NOT NULL DEFAULT true, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedBy" TEXT);'
+        );
+        await (prisma as any).$executeRawUnsafe(
+          'CREATE TABLE IF NOT EXISTS "PricingTier" ("id" TEXT PRIMARY KEY, "productId" TEXT NOT NULL, "minQty" INTEGER NOT NULL, "maxQty" INTEGER NOT NULL, "tierPrice" DECIMAL(12,2) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
+        );
+        await (prisma as any).$executeRawUnsafe(
+          'CREATE TABLE IF NOT EXISTS "CartIdempotency" ("id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL, "idempotencyKey" TEXT NOT NULL, "requestHash" TEXT NOT NULL, "responseBody" TEXT NOT NULL, "statusCode" INTEGER NOT NULL DEFAULT 200, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "expiresAt" TIMESTAMP(3) NOT NULL);'
+        );
+        await (prisma as any).$executeRawUnsafe(
+          'CREATE TABLE IF NOT EXISTS "Watchlist" ("id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL, "productId" TEXT NOT NULL, "targetPrice" DECIMAL(12,2), "alertSent" BOOLEAN NOT NULL DEFAULT false, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
+        );
+        await (prisma as any).$executeRawUnsafe(
+          'ALTER TABLE "Notification" ADD COLUMN IF NOT EXISTS "templateType" TEXT;'
+        );
+        await (prisma as any).$executeRawUnsafe(
+          'ALTER TABLE "Notification" ADD COLUMN IF NOT EXISTS "variables" TEXT;'
+        );
+        await (prisma as any).$executeRawUnsafe(
+          'ALTER TABLE "Notification" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT \'pending\';'
+        );
+      }
+      schemaEnsured = true;
+    } catch (e) {
+      console.warn("Builder schema self-healing notice (ignorable):", e);
+    } finally {
+      schemaEnsuringPromise = null;
+    }
+  })();
+
+  return schemaEnsuringPromise;
+}
+
 export async function getOrCreateBuilder(
   userId: string,
   email: string,
   name: string
 ) {
+  await ensureBuilderSchema().catch(() => {});
   let user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     user = await prisma.user.upsert({

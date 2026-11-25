@@ -12,7 +12,16 @@ export async function GET(request: Request) {
     const ctx = await resolveUserCtx(request);
     await ensureCartSchema();
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
-    const cart = await getCartForUser(user.id);
+    let cart: any = null;
+    try {
+      cart = await getCartForUser(user.id);
+    } catch (cartErr: any) {
+      console.warn("getCartForUser fallback to empty cart:", cartErr?.message);
+      cart = {
+        items: [],
+        summary: { itemCount: 0, subtotal: 0, subtotalLabel: "₹0.00" },
+      };
+    }
 
     return NextResponse.json(cart);
   } catch (error: any) {

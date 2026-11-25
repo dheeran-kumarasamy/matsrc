@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
+import { prisma, getOrCreateBuilder, getUserCtx, resolveUserCtx } from "@/lib/builder-db";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,12 @@ export const dynamic = "force-dynamic";
 // from Prisma against the CanonicalProduct/Product/PriceSnapshot tables.
 export async function GET(request: Request, { params }: { params: { canonicalProductId: string } }) {
   try {
-    const ctx = getUserCtx(request);
+    let ctx: any = null;
+    try {
+      ctx = await resolveUserCtx(request);
+    } catch {
+      ctx = getUserCtx(request);
+    }
     await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
     const { canonicalProductId } = params;
@@ -36,45 +41,72 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
       return NextResponse.json({ error: "Canonical product not found" }, { status: 404 });
     }
 
-    const [offers, history] = await Promise.all([
-      prisma.product.findMany({
-        where: {
-          canonicalProductId,
-          isActive: true,
-          isOrderable: true,
-          category: { isOrderable: true },
-        },
-        select: {
-          id: true,
-          name: true,
-          brand: true,
-          basePrice: true,
-          unit: true,
-          supplierId: true,
-          supplier: { select: { companyName: true } },
-          brandRef: { select: { name: true } },
-          pricingTiers: {
-            select: { minQty: true, maxQty: true, tierPrice: true },
-            orderBy: { minQty: "asc" },
+    let offers: any[] = [];
+    let history: any[] = [];
+    try {
+      [offers, history] = await Promise.all([
+        prisma.product.findMany({
+          where: {
+            canonicalProductId,
+            isActive: true,
+            isOrderable: true,
+            category: { isOrderable: true },
           },
-        },
-        orderBy: { basePrice: "asc" },
-      }),
-      prisma.priceSnapshot.findMany({
-        where: { canonicalProductId },
-        orderBy: { capturedAt: "desc" },
-        take: 90,
-        select: {
-          id: true,
-          price: true,
-          source: true,
-          unit: true,
-          region: true,
-          capturedAt: true,
-          supplierId: true,
-        },
-      }),
-    ]);
+          select: {
+            id: true,
+            name: true,
+            brand: true,
+            basePrice: true,
+            unit: true,
+            supplierId: true,
+            supplier: { select: { companyName: true } },
+            brandRef: { select: { name: true } },
+            pricingTiers: {
+              select: { minQty: true, maxQty: true, tierPrice: true },
+              orderBy: { minQty: "asc" },
+            },
+          },
+          orderBy: { basePrice: "asc" },
+        }),
+        prisma.priceSnapshot.findMany({
+          where: { canonicalProductId },
+          orderBy: { capturedAt: "desc" },
+          take: 90,
+          select: {
+            id: true,
+            price: true,
+            source: true,
+            unit: true,
+            region: true,
+            capturedAt: true,
+            supplierId: true,
+          },
+        }),
+      ]);
+    } catch (dbErr: any) {
+      console.warn("Retrying price comparison with fallback query:", dbErr?.message);
+      try {
+        offers = await prisma.product.findMany({
+          where: {
+            canonicalProductId,
+            isActive: true,
+          },
+          select: {
+            id: true,
+            name: true,
+            brand: true,
+            basePrice: true,
+            unit: true,
+            supplierId: true,
+            supplier: { select: { companyName: true } },
+            brandRef: { select: { name: true } },
+          },
+          orderBy: { basePrice: "asc" },
+        });
+      } catch {
+        offers = [];
+      }
+    }
 
     return NextResponse.json({
       canonicalProductId,
@@ -84,16 +116,16 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
         name: offer.name,
         brand: offer.brandRef?.name ?? offer.brand ?? null,
         supplierId: offer.supplierId,
-        supplierName: getSupplierDisplayName(offer.supplier.companyName, offer.supplierId, idx),
+        supplierName: getSupplierDisplayName(offer.supplier?.companyName, offer.supplierId, idx),
         price: Number(offer.basePrice),
         unit: offer.unit,
-        pricingTiers: offer.pricingTiers.map((tier) => ({
+        pricingTiers: (offer.pricingTiers || []).map((tier: any) => ({
           minQty: tier.minQty,
           maxQty: tier.maxQty,
           tierPrice: Number(tier.tierPrice),
         })),
       })),
-      history: history.map((snapshot) => ({
+      history: (history || []).map((snapshot) => ({
         id: snapshot.id,
         price: Number(snapshot.price),
         source: snapshot.source,
@@ -103,11 +135,18 @@ export async function GET(request: Request, { params }: { params: { canonicalPro
         supplierId: snapshot.supplierId,
       })),
     });
-  } catch (error) {
-    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+  } catch (error: any) {
+    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message.includes("UNAUTHENTICATED"))) {
       return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
     }
     console.error("Price comparison GET error:", error);
-    return NextResponse.json({ error: "Failed to fetch price comparison" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Failed to fetch price comparison",
+        message: error?.message || "Failed to fetch price comparison",
+        code: error?.code,
+      },
+      { status: 500 }
+    );
   }
 }

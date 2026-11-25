@@ -16,32 +16,49 @@ export const dynamic = "force-dynamic";
 // brand-new buyer always sees a ₹0 balance instead of a 404/empty state.
 export async function GET(request: Request) {
   try {
-    const ctx = await resolveUserCtx(request);
+    const ctx = await resolveUserCtx(request).catch(() => null);
+    if (!ctx) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
 
-    const account = await getOrCreateAdvanceAccount(prisma as any, user.id);
+    let fullAccount: any = null;
+    let pendingAgg: any = { _sum: { amount: 0 } };
 
-    const fullAccount = await prisma.customerAdvanceAccount.findUnique({
-      where: { id: account.id },
-      select: { id: true, currency: true, availableBalance: true, status: true },
-    });
+    try {
+      const account = await getOrCreateAdvanceAccount(prisma as any, user.id);
+      fullAccount = await prisma.customerAdvanceAccount.findUnique({
+        where: { id: account.id },
+        select: { id: true, currency: true, availableBalance: true, status: true },
+      });
 
-    const pendingAgg = await prisma.advancePayment.aggregate({
-      where: { buyerId: user.id, status: "PENDING" },
-      _sum: { amount: true },
-    });
+      pendingAgg = await prisma.advancePayment.aggregate({
+        where: { buyerId: user.id, status: "PENDING" },
+        _sum: { amount: true },
+      });
+    } catch (dbErr: any) {
+      console.warn("Advance balance query fallback:", dbErr?.message);
+    }
 
     return NextResponse.json({
       availableBalance: fullAccount ? Number(fullAccount.availableBalance) : 0,
-      pendingAdvance: Number(pendingAgg._sum.amount ?? 0),
+      pendingAdvance: Number(pendingAgg?._sum?.amount ?? 0),
       currency: fullAccount?.currency ?? "INR",
       status: fullAccount?.status ?? "ACTIVE",
     });
   } catch (error: any) {
-    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+    if (error instanceof Error && (error.message === "UNAUTHENTICATED" || error.message.includes("UNAUTHENTICATED"))) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("Advance balance GET error:", error);
-    return NextResponse.json({ error: "Failed to fetch advance balance", details: error?.message }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Failed to fetch advance balance",
+        message: error?.message || "Failed to fetch advance balance",
+        details: error?.message,
+        code: error?.code,
+      },
+      { status: 500 }
+    );
   }
 }

@@ -128,33 +128,82 @@ function isMissingPricingSchemaError(error: unknown) {
     message?: string;
   };
 
-  if (maybeError.code === "P2022" && maybeError.meta?.column?.includes("maxServiceableQty")) {
+  if (
+    maybeError.code === "P2022" &&
+    (maybeError.meta?.column?.includes("maxServiceableQty") ||
+      maybeError.meta?.column?.includes("isOrderable") ||
+      maybeError.meta?.column?.includes("Product.isOrderable") ||
+      maybeError.meta?.column?.includes("Category.isOrderable"))
+  ) {
     return true;
   }
 
-  if (maybeError.code === "P2021" && maybeError.meta?.table?.includes("PricingTier")) {
+  if (
+    maybeError.code === "P2021" &&
+    (maybeError.meta?.table?.includes("PricingTier") ||
+      maybeError.meta?.table?.includes("OrderSplittingConfig"))
+  ) {
     return true;
   }
 
   const message = maybeError.message ?? "";
-  return message.includes("maxServiceableQty") || message.includes("PricingTier");
+  return (
+    message.includes("maxServiceableQty") ||
+    message.includes("PricingTier") ||
+    message.includes("isOrderable") ||
+    message.includes("OrderSplittingConfig")
+  );
 }
 
-async function ensurePricingSchema() {
-  await prisma.$executeRawUnsafe('ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "maxServiceableQty" INTEGER;');
-  await prisma.$executeRawUnsafe(
-    'UPDATE "Product" SET "maxServiceableQty" = COALESCE("maxServiceableQty", "stock") WHERE "maxServiceableQty" IS NULL;'
-  );
-  await prisma.$executeRawUnsafe(
-    'CREATE TABLE IF NOT EXISTS "PricingTier" ("id" TEXT PRIMARY KEY, "productId" TEXT NOT NULL, "minQty" INTEGER NOT NULL, "maxQty" INTEGER NOT NULL, "tierPrice" DECIMAL(12,2) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
-  );
-  await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "PricingTier_productId_idx" ON "PricingTier"("productId");');
-  await prisma.$executeRawUnsafe(
-    'CREATE UNIQUE INDEX IF NOT EXISTS "PricingTier_productId_minQty_maxQty_key" ON "PricingTier"("productId", "minQty", "maxQty");'
-  );
-  await prisma.$executeRawUnsafe(
-    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PricingTier_productId_fkey') THEN ALTER TABLE "PricingTier" ADD CONSTRAINT "PricingTier_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE; END IF; END $$;`
-  );
+let schemaEnsured = false;
+let schemaEnsuringPromise: Promise<void> | null = null;
+
+export async function ensurePricingSchema(): Promise<void> {
+  if (schemaEnsured) return;
+  if (schemaEnsuringPromise) return schemaEnsuringPromise;
+
+  schemaEnsuringPromise = (async () => {
+    try {
+      await prisma.$executeRawUnsafe('ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "maxServiceableQty" INTEGER;');
+      await prisma.$executeRawUnsafe(
+        'UPDATE "Product" SET "maxServiceableQty" = COALESCE("maxServiceableQty", "stock") WHERE "maxServiceableQty" IS NULL;'
+      );
+      await prisma.$executeRawUnsafe('ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;');
+      await prisma.$executeRawUnsafe('ALTER TABLE "Category" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;');
+      await prisma.$executeRawUnsafe(
+        'CREATE TABLE IF NOT EXISTS "PricingTier" ("id" TEXT PRIMARY KEY, "productId" TEXT NOT NULL, "minQty" INTEGER NOT NULL, "maxQty" INTEGER NOT NULL, "tierPrice" DECIMAL(12,2) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
+      );
+      await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "PricingTier_productId_idx" ON "PricingTier"("productId");');
+      await prisma.$executeRawUnsafe(
+        'CREATE UNIQUE INDEX IF NOT EXISTS "PricingTier_productId_minQty_maxQty_key" ON "PricingTier"("productId", "minQty", "maxQty");'
+      );
+      await prisma.$executeRawUnsafe(
+        `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PricingTier_productId_fkey') THEN ALTER TABLE "PricingTier" ADD CONSTRAINT "PricingTier_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE; END IF; END $$;`
+      );
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "OrderSplittingConfig" (
+          "id" TEXT NOT NULL DEFAULT 'global',
+          "allowMultiSupplierSplitting" BOOLEAN NOT NULL DEFAULT false,
+          "splitOnlyAcrossCategories" BOOLEAN NOT NULL DEFAULT true,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedBy" TEXT,
+          CONSTRAINT "OrderSplittingConfig_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO "OrderSplittingConfig" ("id", "allowMultiSupplierSplitting", "splitOnlyAcrossCategories", "updatedAt")
+        VALUES ('global', false, true, CURRENT_TIMESTAMP)
+        ON CONFLICT ("id") DO NOTHING;
+      `);
+      schemaEnsured = true;
+    } catch (err) {
+      console.warn("ensurePricingSchema self-healing warning:", err);
+    } finally {
+      schemaEnsuringPromise = null;
+    }
+  })();
+
+  return schemaEnsuringPromise;
 }
 
 async function sleep(ms: number) {
@@ -180,6 +229,7 @@ async function withPoolTimeoutRetry<T>(operation: () => Promise<T>): Promise<T> 
 }
 
 export async function ensureSupplierContext(email: string): Promise<SupplierContext> {
+  await ensurePricingSchema();
   const user = await withPoolTimeoutRetry<{
     id: string;
     name: string | null;
@@ -581,20 +631,39 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
     });
   } catch (error) {
     if (!isMissingPricingSchemaError(error)) throw error;
-    listings = await prisma.product.findMany({
-      where: { supplierId: supplierProfile.id },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        category: { select: { name: true } },
-        grade: true,
-        unit: true,
-        basePrice: true,
-        stock: true,
-        isActive: true,
-      },
-    });
+    await ensurePricingSchema();
+    try {
+      listings = await prisma.product.findMany({
+        where: { supplierId: supplierProfile.id },
+        select: {
+          id: true,
+          name: true,
+          category: { select: { name: true } },
+          grade: true,
+          unit: true,
+          basePrice: true,
+          stock: true,
+          maxServiceableQty: true,
+          isActive: true,
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+    } catch {
+      listings = await prisma.product.findMany({
+        where: { supplierId: supplierProfile.id },
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          category: { select: { name: true } },
+          grade: true,
+          unit: true,
+          basePrice: true,
+          stock: true,
+          isActive: true,
+        },
+      });
+    }
   }
 
   return listings.map((product: any) => ({
@@ -611,6 +680,7 @@ export async function getSupplierListings(email: string): Promise<SupplierListin
 }
 
 export async function getPublicSupplierListings(options?: { fullImages?: boolean }) {
+  await ensurePricingSchema();
   let listings: any[] = [];
 
   try {
@@ -627,17 +697,28 @@ export async function getPublicSupplierListings(options?: { fullImages?: boolean
     });
   } catch (error) {
     if (!isMissingPricingSchemaError(error)) throw error;
-    listings = await prisma.product.findMany({
-      where: {
-        isActive: true,
-        isOrderable: true,
-        category: {
+    await ensurePricingSchema();
+    try {
+      listings = await prisma.product.findMany({
+        where: {
+          isActive: true,
           isOrderable: true,
+          category: {
+            isOrderable: true,
+          },
         },
-      },
-      include: { category: true, brandRef: true },
-      orderBy: { updatedAt: "desc" },
-    });
+        include: { category: true, brandRef: true, pricingTiers: { orderBy: { minQty: "asc" } } },
+        orderBy: { updatedAt: "desc" },
+      });
+    } catch {
+      listings = await prisma.product.findMany({
+        where: {
+          isActive: true,
+        },
+        include: { category: true, brandRef: true },
+        orderBy: { updatedAt: "desc" },
+      });
+    }
   }
 
   return transformRawListingsToPublic(listings, options);
@@ -979,6 +1060,7 @@ export async function getPublicSupplierProductById(id: string): Promise<{
     return null;
   }
 
+  await ensurePricingSchema();
   // Step A — Fetch the requested listing directly from the database
   let requestedProduct: any = null;
   try {
@@ -991,13 +1073,24 @@ export async function getPublicSupplierProductById(id: string): Promise<{
     });
   } catch (error) {
     if (!isMissingPricingSchemaError(error)) throw error;
-    requestedProduct = await prisma.product.findFirst({
-      where: {
-        OR: [{ id }, { slug: id }],
-        isActive: true,
-      },
-      include: { category: true, brandRef: true },
-    });
+    await ensurePricingSchema();
+    try {
+      requestedProduct = await prisma.product.findFirst({
+        where: {
+          OR: [{ id }, { slug: id }],
+          isActive: true,
+        },
+        include: { category: true, brandRef: true, pricingTiers: { orderBy: { minQty: "asc" } } },
+      });
+    } catch {
+      requestedProduct = await prisma.product.findFirst({
+        where: {
+          OR: [{ id }, { slug: id }],
+          isActive: true,
+        },
+        include: { category: true, brandRef: true },
+      });
+    }
   }
 
   // If the product does not exist, is inactive, or has ordering disabled, return null immediately without loading the catalogue
@@ -1173,22 +1266,33 @@ export async function getSupplierListingById(id: string, email: string) {
     });
   } catch (error) {
     if (!isMissingPricingSchemaError(error)) throw error;
-    product = await prisma.product.findFirst({
-      where: { id, supplierId: supplierProfile.id },
-      include: { category: true },
-    });
+    await ensurePricingSchema();
+    try {
+      product = await prisma.product.findFirst({
+        where: { id, supplierId: supplierProfile.id },
+        include: { category: true, pricingTiers: { orderBy: { minQty: "asc" } } },
+      });
+    } catch {
+      product = await prisma.product.findFirst({
+        where: { id, supplierId: supplierProfile.id },
+        include: { category: true },
+      });
+    }
 
     if (product) {
       product = {
         ...product,
-        maxServiceableQty: product.stock,
-        pricingTiers: [
-          {
-            minQty: 1,
-            maxQty: product.stock,
-            tierPrice: product.basePrice,
-          },
-        ],
+        maxServiceableQty: product.maxServiceableQty ?? product.stock,
+        pricingTiers:
+          product.pricingTiers && product.pricingTiers.length > 0
+            ? product.pricingTiers
+            : [
+                {
+                  minQty: 1,
+                  maxQty: product.stock,
+                  tierPrice: product.basePrice,
+                },
+              ],
       };
     }
   }

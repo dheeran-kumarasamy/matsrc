@@ -41,27 +41,33 @@ export type CartPayload = {
 let cartSchemaEnsured = false;
 let cartSchemaEnsuringPromise: Promise<void> | null = null;
 
+export function resetCartSchemaCache(): void {
+  cartSchemaEnsured = false;
+}
+
 /**
  * Self-heals cart and catalogue schema on unmigrated databases, ensuring that
  * missing columns (e.g. isOrderable, resolvedUnitPrice) or missing tables
  * (e.g. CartIdempotency, PricingTier) do not crash cart operations with P2021/P2022.
+ * Always executes DDL against the root `prisma` client (never an interactive `tx`)
+ * so DDL failures never abort an active PostgreSQL transaction.
  */
 export async function ensureCartSchema(client?: any): Promise<void> {
   if (cartSchemaEnsured) return;
   if (cartSchemaEnsuringPromise) return cartSchemaEnsuringPromise;
 
-  const db = client || prisma;
+  const db = typeof (prisma as any)?.$executeRawUnsafe === "function" ? prisma : client;
   if (!db || typeof db.$executeRawUnsafe !== "function") return;
 
   cartSchemaEnsuringPromise = (async () => {
     try {
-      await db.$executeRawUnsafe('ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "maxServiceableQty" DOUBLE PRECISION;');
-      await db.$executeRawUnsafe('ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;');
-      await db.$executeRawUnsafe('ALTER TABLE "Category" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;');
+      await db.$executeRawUnsafe('ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "maxServiceableQty" DOUBLE PRECISION;').catch(() => {});
+      await db.$executeRawUnsafe('ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;').catch(() => {});
+      await db.$executeRawUnsafe('ALTER TABLE "Category" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;').catch(() => {});
       await db.$executeRawUnsafe(
         'CREATE TABLE IF NOT EXISTS "PricingTier" ("id" TEXT PRIMARY KEY, "productId" TEXT NOT NULL, "minQty" DOUBLE PRECISION NOT NULL, "maxQty" DOUBLE PRECISION NOT NULL, "tierPrice" DECIMAL(12,2) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
-      );
-      await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "PricingTier_productId_idx" ON "PricingTier"("productId");');
+      ).catch(() => {});
+      await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "PricingTier_productId_idx" ON "PricingTier"("productId");').catch(() => {});
       await db.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS "OrderSplittingConfig" (
           "id" TEXT NOT NULL DEFAULT 'global',
@@ -71,7 +77,7 @@ export async function ensureCartSchema(client?: any): Promise<void> {
           "updatedBy" TEXT,
           CONSTRAINT "OrderSplittingConfig_pkey" PRIMARY KEY ("id")
         );
-      `);
+      `).catch(() => {});
       await db.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS "CartIdempotency" (
           "id" TEXT NOT NULL,
@@ -81,21 +87,37 @@ export async function ensureCartSchema(client?: any): Promise<void> {
           "responseStatus" INTEGER NOT NULL DEFAULT 200,
           "responsePayload" JSONB,
           "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
           "expiresAt" TIMESTAMP(3),
           CONSTRAINT "CartIdempotency_pkey" PRIMARY KEY ("id")
         );
-      `);
-      await db.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "CartIdempotency_userId_key_key" ON "CartIdempotency"("userId", "key");');
-      await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "CartIdempotency_userId_idx" ON "CartIdempotency"("userId");');
-      await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "CartIdempotency_expiresAt_idx" ON "CartIdempotency"("expiresAt");');
-      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedListingId" TEXT;');
-      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedSupplierId" TEXT;');
-      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedTierMinQty" DOUBLE PRECISION;');
-      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedTierMaxQty" DOUBLE PRECISION;');
-      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedUnitPrice" DECIMAL(12,2);');
-      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedAt" TIMESTAMP(3);');
-      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ALTER COLUMN "quantity" TYPE DOUBLE PRECISION;');
+      `).catch(() => {});
+      // Heal CartIdempotency columns if an earlier DDL created it with mismatched columns
+      await db.$executeRawUnsafe('ALTER TABLE "CartIdempotency" ADD COLUMN IF NOT EXISTS "key" TEXT;').catch(() => {});
+      await db.$executeRawUnsafe('ALTER TABLE "CartIdempotency" ADD COLUMN IF NOT EXISTS "requestFingerprint" TEXT;').catch(() => {});
+      await db.$executeRawUnsafe('ALTER TABLE "CartIdempotency" ADD COLUMN IF NOT EXISTS "responseStatus" INTEGER NOT NULL DEFAULT 200;').catch(() => {});
+      await db.$executeRawUnsafe('ALTER TABLE "CartIdempotency" ADD COLUMN IF NOT EXISTS "responsePayload" JSONB;').catch(() => {});
+      await db.$executeRawUnsafe('ALTER TABLE "CartIdempotency" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;').catch(() => {});
+      await db.$executeRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "CartIdempotency_userId_key_key" ON "CartIdempotency"("userId", "key");').catch(() => {});
+      await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "CartIdempotency_userId_idx" ON "CartIdempotency"("userId");').catch(() => {});
+      await db.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "CartIdempotency_expiresAt_idx" ON "CartIdempotency"("expiresAt");').catch(() => {});
+      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedListingId" TEXT;').catch(() => {});
+      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedSupplierId" TEXT;').catch(() => {});
+      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedTierMinQty" DOUBLE PRECISION;').catch(() => {});
+      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedTierMaxQty" DOUBLE PRECISION;').catch(() => {});
+      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedUnitPrice" DECIMAL(12,2);').catch(() => {});
+      await db.$executeRawUnsafe('ALTER TABLE "CartItem" ADD COLUMN IF NOT EXISTS "resolvedAt" TIMESTAMP(3);').catch(() => {});
+      // Only alter CartItem.quantity if it is not already double precision
+      await db.$executeRawUnsafe(`
+        DO $$ BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'CartItem' AND column_name = 'quantity' AND data_type <> 'double precision'
+          ) THEN
+            ALTER TABLE "CartItem" ALTER COLUMN "quantity" TYPE DOUBLE PRECISION;
+          END IF;
+        END $$;
+      `).catch(() => {});
       cartSchemaEnsured = true;
     } catch (err) {
       console.warn("ensureCartSchema warning:", err);
@@ -346,61 +368,81 @@ export async function getCartForUser(userId: string, dbClient?: any): Promise<Ca
   const client = dbClient || prisma;
   await ensureCartSchema(client);
 
+  const runSelect = async (fn: () => Promise<any>) => {
+    if (dbClient && dbClient !== prisma && typeof dbClient.$executeRawUnsafe === "function") {
+      await dbClient.$executeRawUnsafe("SAVEPOINT sp_get_cart");
+      try {
+        const res = await fn();
+        await dbClient.$executeRawUnsafe("RELEASE SAVEPOINT sp_get_cart");
+        return res;
+      } catch (e) {
+        await dbClient.$executeRawUnsafe("ROLLBACK TO SAVEPOINT sp_get_cart").catch(() => {});
+        throw e;
+      }
+    }
+    return fn();
+  };
+
   let rawItems: any[] = [];
   try {
-    rawItems = await client.cartItem.findMany({
-      where: { userId },
-      select: {
-        id: true,
-        productId: true,
-        quantity: true,
-        resolvedUnitPrice: true,
-        resolvedSupplierId: true,
-        product: {
-          select: {
-            name: true,
-            unit: true,
-            supplierId: true,
-            categoryId: true,
-            basePrice: true,
-            images: true,
-            supplier: { select: { companyName: true } },
-            pricingTiers: {
-              select: { minQty: true, maxQty: true, tierPrice: true },
-              orderBy: { minQty: "asc" },
+    rawItems = await runSelect(() =>
+      client.cartItem.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          productId: true,
+          quantity: true,
+          resolvedUnitPrice: true,
+          resolvedSupplierId: true,
+          product: {
+            select: {
+              name: true,
+              unit: true,
+              supplierId: true,
+              categoryId: true,
+              basePrice: true,
+              images: true,
+              supplier: { select: { companyName: true } },
+              pricingTiers: {
+                select: { minQty: true, maxQty: true, tierPrice: true },
+                orderBy: { minQty: "asc" },
+              },
+              aggregationEnabled: true,
+              aggregationPriceTiers: true,
+              aggregationWindowDays: true,
             },
-            aggregationEnabled: true,
-            aggregationPriceTiers: true,
-            aggregationWindowDays: true,
           },
         },
-      },
-      orderBy: { updatedAt: "desc" },
-    });
+        orderBy: { updatedAt: "desc" },
+      })
+    );
   } catch (err: any) {
     if (err?.code === "P2021" || err?.code === "P2022") {
+      resetCartSchemaCache();
       await ensureCartSchema(client);
       try {
-        rawItems = await client.cartItem.findMany({
-          where: { userId },
-          select: {
-            id: true,
-            productId: true,
-            quantity: true,
-            product: {
-              select: {
-                name: true,
-                unit: true,
-                supplierId: true,
-                categoryId: true,
-                basePrice: true,
-                images: true,
-                supplier: { select: { companyName: true } },
+        rawItems = await runSelect(() =>
+          client.cartItem.findMany({
+            where: { userId },
+            select: {
+              id: true,
+              productId: true,
+              quantity: true,
+              product: {
+                select: {
+                  name: true,
+                  unit: true,
+                  supplierId: true,
+                  categoryId: true,
+                  basePrice: true,
+                  images: true,
+                  supplier: { select: { companyName: true } },
+                },
               },
             },
-          },
-          orderBy: { updatedAt: "desc" },
-        });
+            orderBy: { updatedAt: "desc" },
+          })
+        );
       } catch (fallbackErr) {
         console.error("getCartForUser fallback error:", fallbackErr);
         rawItems = [];

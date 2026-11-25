@@ -47,10 +47,10 @@ export async function ensureBuilderSchema(): Promise<void> {
           'CREATE TABLE IF NOT EXISTS "OrderSplittingConfig" ("id" TEXT PRIMARY KEY DEFAULT \'global\', "allowMultiSupplierSplitting" BOOLEAN NOT NULL DEFAULT false, "splitOnlyAcrossCategories" BOOLEAN NOT NULL DEFAULT true, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedBy" TEXT);'
         );
         await (prisma as any).$executeRawUnsafe(
-          'CREATE TABLE IF NOT EXISTS "PricingTier" ("id" TEXT PRIMARY KEY, "productId" TEXT NOT NULL, "minQty" INTEGER NOT NULL, "maxQty" INTEGER NOT NULL, "tierPrice" DECIMAL(12,2) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
+          'CREATE TABLE IF NOT EXISTS "PricingTier" ("id" TEXT PRIMARY KEY, "productId" TEXT NOT NULL, "minQty" DOUBLE PRECISION NOT NULL, "maxQty" DOUBLE PRECISION NOT NULL, "tierPrice" DECIMAL(12,2) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
         );
         await (prisma as any).$executeRawUnsafe(
-          'CREATE TABLE IF NOT EXISTS "CartIdempotency" ("id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL, "idempotencyKey" TEXT NOT NULL, "requestHash" TEXT NOT NULL, "responseBody" TEXT NOT NULL, "statusCode" INTEGER NOT NULL DEFAULT 200, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "expiresAt" TIMESTAMP(3) NOT NULL);'
+          'CREATE TABLE IF NOT EXISTS "CartIdempotency" ("id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL, "key" TEXT NOT NULL, "requestFingerprint" TEXT NOT NULL, "responseStatus" INTEGER NOT NULL DEFAULT 200, "responsePayload" JSONB, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "expiresAt" TIMESTAMP(3));'
         );
         await (prisma as any).$executeRawUnsafe(
           'CREATE TABLE IF NOT EXISTS "Watchlist" ("id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL, "productId" TEXT NOT NULL, "targetPrice" DECIMAL(12,2), "alertSent" BOOLEAN NOT NULL DEFAULT false, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
@@ -84,16 +84,23 @@ export async function getOrCreateBuilder(
   await ensureBuilderSchema().catch(() => {});
   let user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
-    user = await prisma.user.upsert({
-      where: { email },
-      update: {},
-      create: {
-        id: userId,
-        email,
-        name,
-        role: "BUILDER",
-      },
-    });
+    try {
+      user = await prisma.user.upsert({
+        where: { email },
+        update: {},
+        create: {
+          id: userId,
+          email,
+          name,
+          role: "BUILDER",
+        },
+      });
+    } catch (err: any) {
+      if (err?.code === "P2002") {
+        user = await prisma.user.findUnique({ where: { email } });
+      }
+      if (!user) throw err;
+    }
   }
   return user;
 }

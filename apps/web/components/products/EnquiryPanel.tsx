@@ -94,7 +94,8 @@ export default function EnquiryPanel({ productId, unit, maxServiceableQty, prici
       void recordInterestEvent(productId, "CART_ADD");
       setAdded(true);
     } catch {
-      setError("Unable to add this material to your enquiry basket.");
+      const storeError = useCartStore.getState().error;
+      setError(storeError || "Unable to add this material to your enquiry basket.");
     } finally {
       setLoading(false);
     }

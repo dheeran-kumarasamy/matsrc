@@ -104,6 +104,15 @@ export class WhatsAppRouterService {
       return this.humanHandoffMessage();
     }
 
+    if (upper === "UPDATE PRICES" || upper === "UPDATE PRICE" || upper === "PRICES") {
+      let session = this.sessionService.get(phone);
+      if (!session) {
+        session = await this.authenticate(phone);
+        if (!session) return this.registrationRequiredMessage();
+      }
+      return this.priceUpdateFlow.start(session);
+    }
+
 
     let session = this.sessionService.get(phone);
 
@@ -200,6 +209,10 @@ export class WhatsAppRouterService {
   private matchMainMenuChoice(text: string): MainFlow | null {
     const trimmed = text.trim();
     const upper = trimmed.toUpperCase();
+
+    if (upper === "UPDATE PRICES" || upper === "UPDATE PRICE" || upper === "PRICES") {
+      return "PRICE_UPDATE";
+    }
 
     // Path 1: a tapped Interactive List Message row arrives as its `id` (e.g.
     // "PRICE_UPDATE") via `interactive.list_reply.id`.

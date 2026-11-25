@@ -34,7 +34,7 @@
     },
     {
       "path": "/api/notification-engine/cron/supplier-daily-price",
-      "schedule": "0 10 * * *"
+      "schedule": "30 3 * * *"
     }
   ]
 }

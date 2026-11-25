@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseDailyPriceReplyInput } from "./whatsapp.utils";
+import {
+  isSameKeyword,
+  parseDailyPriceReplyInput,
+  parseSelectedSerials,
+  parseSerialPriceInput,
+} from "./whatsapp.utils";
 
 describe("parseDailyPriceReplyInput", () => {
   it("parses a multi-line colon-separated price list", () => {
@@ -49,5 +54,80 @@ describe("parseDailyPriceReplyInput", () => {
       { product: "TMT 10mm", price: "56000" },
       { product: "M-Sand", price: "2100" },
     ]);
+  });
+});
+
+describe("parseSelectedSerials", () => {
+  it("parses comma-separated numbers", () => {
+    expect(parseSelectedSerials("2, 3")).toEqual([2, 3]);
+    expect(parseSelectedSerials("1,2,3")).toEqual([1, 2, 3]);
+    expect(parseSelectedSerials("  4 ,  5  ")).toEqual([4, 5]);
+  });
+
+  it("parses space-separated numbers", () => {
+    expect(parseSelectedSerials("2 3")).toEqual([2, 3]);
+    expect(parseSelectedSerials("1 2 5")).toEqual([1, 2, 5]);
+  });
+
+  it("parses a single number", () => {
+    expect(parseSelectedSerials("2")).toEqual([2]);
+    expect(parseSelectedSerials("  12  ")).toEqual([12]);
+  });
+
+  it("ignores non-numeric noise and duplicates", () => {
+    expect(parseSelectedSerials("update 2, 3 please")).toEqual([2, 3]);
+    expect(parseSelectedSerials("2, 2, 3")).toEqual([2, 3]);
+    expect(parseSelectedSerials("none")).toEqual([]);
+  });
+});
+
+describe("parseSerialPriceInput", () => {
+  it("parses dash-separated serial and price", () => {
+    expect(parseSerialPriceInput("2 - 1520")).toEqual([{ serial: 2, price: 1520 }]);
+    expect(parseSerialPriceInput("2 - 1520\n3 - 64500")).toEqual([
+      { serial: 2, price: 1520 },
+      { serial: 3, price: 64500 },
+    ]);
+  });
+
+  it("parses colon-separated and equals-separated serial and price", () => {
+    expect(parseSerialPriceInput("2: 1520, 3: 64500")).toEqual([
+      { serial: 2, price: 1520 },
+      { serial: 3, price: 64500 },
+    ]);
+    expect(parseSerialPriceInput("2 = 1520")).toEqual([{ serial: 2, price: 1520 }]);
+  });
+
+  it("parses space-separated serial and price", () => {
+    expect(parseSerialPriceInput("2 1520")).toEqual([{ serial: 2, price: 1520 }]);
+  });
+
+  it("cleans currency symbol and commas from prices", () => {
+    expect(parseSerialPriceInput("2 - ₹1,520")).toEqual([{ serial: 2, price: 1520 }]);
+    expect(parseSerialPriceInput("3: ₹64,500.50")).toEqual([{ serial: 3, price: 64500.5 }]);
+  });
+
+  it("filters by expectedSerials when supplied", () => {
+    expect(parseSerialPriceInput("1 - 400, 2 - 1520, 3 - 64500", [2, 3])).toEqual([
+      { serial: 2, price: 1520 },
+      { serial: 3, price: 64500 },
+    ]);
+  });
+});
+
+describe("isSameKeyword", () => {
+  it("identifies SAME variants", () => {
+    expect(isSameKeyword("SAME")).toBe(true);
+    expect(isSameKeyword("same")).toBe(true);
+    expect(isSameKeyword("ALL SAME")).toBe(true);
+    expect(isSameKeyword("NO CHANGE")).toBe(true);
+    expect(isSameKeyword("UNCHANGED")).toBe(true);
+    expect(isSameKeyword("  no change  ")).toBe(true);
+  });
+
+  it("returns false for non-SAME inputs", () => {
+    expect(isSameKeyword("2, 3")).toBe(false);
+    expect(isSameKeyword("2 - 1500")).toBe(false);
+    expect(isSameKeyword("DIFFERENT")).toBe(false);
   });
 });

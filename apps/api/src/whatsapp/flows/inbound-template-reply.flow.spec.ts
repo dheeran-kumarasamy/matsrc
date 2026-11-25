@@ -738,4 +738,67 @@ describe("InboundTemplateReplyFlow — C41 follow-up: real-world phone format mi
       expect(result.text).toContain("PO-2026-00001");
     }
   });
+
+  describe("InboundTemplateReplyFlow — supplier_price_update (Update Prices)", () => {
+    it("routes a verified supplier tapping Update Prices to PriceUpdateFlow.start()", async () => {
+      const prisma = makePrisma({
+        whatsAppMessageLog: {
+          findUnique: vi.fn().mockResolvedValue({ phoneNumber: SUPPLIER_PHONE_PLUS, templateName: "supplier_price_update" }),
+        },
+        notificationEvent: {
+          findMany: vi.fn().mockResolvedValue([
+            { recipientId: "supplier-user-1", entityId: "supplier-profile-1", payload: {}, createdAt: new Date(), status: "sent" },
+          ]),
+        },
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ whatsappNumber: SUPPLIER_PHONE_PLUS, phone: null }),
+          findFirst: vi.fn().mockResolvedValue({
+            id: "supplier-user-1",
+            whatsappNumber: SUPPLIER_PHONE_PLUS,
+            name: "Rajesh",
+            role: "SUPPLIER",
+            supplierProfile: { id: "supplier-profile-1" },
+          }),
+        },
+      });
+
+      const sessionService = {
+        get: vi.fn().mockReturnValue(null),
+        create: vi.fn().mockResolvedValue({
+          phone: SUPPLIER_PHONE,
+          userId: "supplier-user-1",
+          supplierProfileId: "supplier-profile-1",
+          flow: "PRICE_UPDATE",
+          step: "AWAITING_PRODUCT_SELECTION",
+        }),
+        setFlow: vi.fn(),
+      };
+
+      const priceUpdateFlow = {
+        start: vi.fn().mockResolvedValue({
+          kind: "text",
+          text: "Your Current Product Price List",
+        }),
+      };
+
+      const flow = new InboundTemplateReplyFlow(prisma as any, sessionService as any, priceUpdateFlow as any);
+
+      const result = await flow.tryHandle(SUPPLIER_PHONE, {
+        templateButtonPayload: "Update Prices",
+        templateMessageId: "wamid.PRICE-UPDATE-1",
+      });
+
+      expect(sessionService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phone: SUPPLIER_PHONE,
+          userId: "supplier-user-1",
+          supplierProfileId: "supplier-profile-1",
+          flow: "PRICE_UPDATE",
+          step: "AWAITING_PRODUCT_SELECTION",
+        })
+      );
+      expect(priceUpdateFlow.start).toHaveBeenCalled();
+      expect(result).toEqual({ kind: "text", text: "Your Current Product Price List" });
+    });
+  });
 });

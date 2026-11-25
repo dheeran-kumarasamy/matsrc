@@ -56,8 +56,8 @@ describe("SupplierDailyPriceReminderService", () => {
     expect(result.notified).toBe(1);
   });
 
-  describe("Test 1 — Supplier with multiple missing prices", () => {
-    it("passes exactly ONE body parameter containing the full comma-separated missing-product list", async () => {
+  describe("Test 1 — Supplier with missing prices", () => {
+    it("passes exactly ONE body parameter containing the supplier name", async () => {
       const completeness = makeCompleteness([
         {
           supplierId: "s1",
@@ -71,7 +71,7 @@ describe("SupplierDailyPriceReminderService", () => {
           totalUpdatedToday: 0,
         },
       ]);
-      const prisma = makePrisma(makeSupplierProfile());
+      const prisma = makePrisma(makeSupplierProfile({ companyName: "Acme Steel" }));
       const engine = {
         dispatch: vi.fn().mockResolvedValue({ eventId: "e1", channel: "WHATSAPP", allowed: true, sendResult: { success: true, externalId: "wamid.1" } }),
         resolve: vi.fn(),
@@ -81,18 +81,18 @@ describe("SupplierDailyPriceReminderService", () => {
       await service.evaluateAndNotify();
 
       expect(engine.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ parameters: ["TMT 10mm, TMT 12mm, M-Sand"] }),
+        expect.objectContaining({ parameters: ["Acme Steel"] }),
         "WHATSAPP"
       );
     });
   });
 
   describe("Test 2 — One missing product", () => {
-    it("the single body parameter contains just that one product name", async () => {
+    it("still passes the single supplier name variable {{1}}", async () => {
       const completeness = makeCompleteness([
         { supplierId: "s1", businessDate: "2026-01-01", missingProducts: [{ id: "p1", name: "TMT 10mm" }], totalRequired: 1, totalUpdatedToday: 0 },
       ]);
-      const prisma = makePrisma(makeSupplierProfile());
+      const prisma = makePrisma(makeSupplierProfile({ companyName: "Acme Steel" }));
       const engine = {
         dispatch: vi.fn().mockResolvedValue({ eventId: "e1", channel: "WHATSAPP", allowed: true, sendResult: { success: true, externalId: "wamid.1" } }),
         resolve: vi.fn(),
@@ -101,7 +101,7 @@ describe("SupplierDailyPriceReminderService", () => {
       const service = new SupplierDailyPriceReminderService(prisma as any, completeness as any, engine as any);
       await service.evaluateAndNotify();
 
-      expect(engine.dispatch).toHaveBeenCalledWith(expect.objectContaining({ parameters: ["TMT 10mm"] }), "WHATSAPP");
+      expect(engine.dispatch).toHaveBeenCalledWith(expect.objectContaining({ parameters: ["Acme Steel"] }), "WHATSAPP");
     });
   });
 

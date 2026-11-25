@@ -25,7 +25,7 @@ export class SupplierDailyPriceSchedulerService {
 
   constructor(private readonly reminder: SupplierDailyPriceReminderService) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_10AM, { name: "supplier-daily-price-reminder" })
+  @Cron("30 3 * * *", { name: "supplier-daily-price-reminder" })
   async run(): Promise<void> {
     try {
       const result = await this.reminder.evaluateAndNotify();

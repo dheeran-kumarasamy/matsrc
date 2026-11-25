@@ -117,8 +117,105 @@ export function matchDeliveredCommand(input: string): string | null {
  * it can never be confused with a numeric value or a product name that
  * happens to contain "same".
  */
+/**
+ * Parses serial numbers from a selection message, e.g. "2, 3", "1, 5, 8", "2", "1 3", "1-3".
+ * Returns an array of unique positive integers.
+ */
+export function parseSelectedSerials(input: string): number[] {
+  const trimmed = input.trim();
+  if (!trimmed) return [];
+
+  // Split on commas, spaces, semicolons, or "and"
+  const tokens = trimmed.split(/[\s,;]+|\band\b/i).filter(Boolean);
+  const serials: number[] = [];
+
+  for (const token of tokens) {
+    // Check for range like "1-3"
+    const rangeMatch = /^(\d+)-(\d+)$/.exec(token);
+    if (rangeMatch) {
+      const start = Number(rangeMatch[1]);
+      const end = Number(rangeMatch[2]);
+      if (start > 0 && end >= start && end - start <= 50) {
+        for (let i = start; i <= end; i++) {
+          serials.push(i);
+        }
+      }
+      continue;
+    }
+
+    const num = Number(token.replace(/[^\d]/g, ""));
+    if (Number.isInteger(num) && num > 0) {
+      serials.push(num);
+    }
+  }
+
+  return Array.from(new Set(serials));
+}
+
+/**
+ * Parses serial-price lines, e.g.:
+ *   "2 - 1520"
+ *   "3 - 64500"
+ *   "2: 1520"
+ *   "3 = 64500"
+ *   "2 1520"
+ *   "2 - ₹1,520"
+ *
+ * If single serial is expected and user only enters a numeric price ("1520" or "₹1,520"),
+ * it maps to that expected serial.
+ */
+export function parseSerialPriceInput(
+  input: string,
+  expectedSerials?: number[]
+): Array<{ serial: number; price: number }> {
+  const trimmed = input.trim();
+  if (!trimmed) return [];
+
+  // Single-product selection fallback: if only 1 serial was selected and user inputs just a price
+  if (expectedSerials && expectedSerials.length === 1) {
+    const singlePrice = parsePositiveNumber(trimmed.replace(/[₹,]/g, ""));
+    if (singlePrice !== null) {
+      // Check if it's already a serial-price pattern like "1 5000" or "1 - 5000"
+      const parts = trimmed.split(/[-:= \t]+/).filter(Boolean);
+      if (parts.length === 1) {
+        return [{ serial: expectedSerials[0], price: singlePrice }];
+      }
+    }
+  }
+
+  const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const results: Array<{ serial: number; price: number }> = [];
+  const seenSerials = new Set<number>();
+  const expectedSet = expectedSerials && expectedSerials.length > 0 ? new Set(expectedSerials) : null;
+
+  for (const line of lines) {
+    // Also support comma-separated pairs on a single line: "2 - 1520, 3 - 64500"
+    // Split on comma only when followed by another serial item (lookahead) to avoid splitting inside numbers like "1,520"
+    const subSegments = line.split(/,(?=\s*\d+(?:\s*[-:=]|\s+\d))/).map((s) => s.trim()).filter(Boolean);
+
+    for (const segment of subSegments) {
+      // Match "<serial> <sep> <price>" where sep can be [-, :, =] with optional whitespace, OR whitespace \s+
+      const match = /^(\d+)(?:\s*[-:=]\s*|\s+)[₹]?\s*([0-9,]+(?:\.[0-9]+)?)$/.exec(segment);
+      if (match) {
+        const serial = Number(match[1]);
+        const price = parsePositiveNumber(match[2].replace(/,/g, ""));
+        if (serial > 0 && price !== null && !seenSerials.has(serial)) {
+          if (expectedSet && !expectedSet.has(serial)) {
+            continue;
+          }
+          seenSerials.add(serial);
+          results.push({ serial, price });
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
 export function isSameKeyword(value: string): boolean {
-  return value.trim().toUpperCase() === "SAME";
+  const upper = value.trim().toUpperCase();
+  return upper === "SAME" || upper === "ALL SAME" || upper === "NO CHANGE" || upper === "UNCHANGED";
 }
 
 export function parseDailyPriceReplyInput(input: string): Array<{ product: string; price: string }> {

@@ -3,6 +3,8 @@ import { parsePhoneNumber } from "libphonenumber-js";
 import { findIdentity } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { BotMessage } from "../whatsapp.types";
+import { WhatsAppSessionService } from "../whatsapp-session.service";
+import { PriceUpdateFlow } from "./price-update.flow";
 
 /**
  * Normalizes ANY WhatsApp-style phone string — a Meta webhook inbound phone
@@ -151,7 +153,12 @@ function phoneNumbersMatch(a: string | null | undefined, b: string | null | unde
  */
 
 type TemplateEventMapping = {
-  eventType: "SUPPLIER_RFQ_RECEIVED" | "SUPPLIER_PO_RECEIVED" | "PAYMENT_REQUIRED" | "QUOTE_RECEIVED";
+  eventType:
+    | "SUPPLIER_RFQ_RECEIVED"
+    | "SUPPLIER_PO_RECEIVED"
+    | "PAYMENT_REQUIRED"
+    | "QUOTE_RECEIVED"
+    | "SUPPLIER_DAILY_PRICE_UPDATE_REQUIRED";
   audience: "supplier" | "builder";
 };
 
@@ -167,6 +174,7 @@ const TEMPLATE_EVENT_MAP: Record<string, TemplateEventMapping> = {
   supplier_po_alert: { eventType: "SUPPLIER_PO_RECEIVED", audience: "supplier" },
   payment_required: { eventType: "PAYMENT_REQUIRED", audience: "builder" },
   quote_received: { eventType: "QUOTE_RECEIVED", audience: "builder" },
+  supplier_price_update: { eventType: "SUPPLIER_DAILY_PRICE_UPDATE_REQUIRED", audience: "supplier" },
 };
 
 function builderPortalBaseUrl(): string {
@@ -181,7 +189,11 @@ function supplierPortalBaseUrl(): string {
 export class InboundTemplateReplyFlow {
   private readonly logger = new Logger(InboundTemplateReplyFlow.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sessionService: WhatsAppSessionService,
+    private readonly priceUpdateFlow: PriceUpdateFlow
+  ) {}
 
   /**
    * Returns `null` when the inbound message is not a recognized
@@ -236,7 +248,11 @@ export class InboundTemplateReplyFlow {
         return null;
       }
 
-      if (mapping.eventType === "SUPPLIER_RFQ_RECEIVED" || mapping.eventType === "SUPPLIER_PO_RECEIVED") {
+      if (
+        mapping.eventType === "SUPPLIER_RFQ_RECEIVED" ||
+        mapping.eventType === "SUPPLIER_PO_RECEIVED" ||
+        mapping.eventType === "SUPPLIER_DAILY_PRICE_UPDATE_REQUIRED"
+      ) {
         return this.handleSupplierReply(mapping.eventType, event, phone);
       }
 
@@ -257,7 +273,7 @@ export class InboundTemplateReplyFlow {
    */
   private async findMatchingEvent(eventType: string, phone: string) {
     const candidates = await this.prisma.notificationEvent.findMany({
-      where: { eventType, channel: "WHATSAPP", status: { in: ["sent", "created"] } },
+      where: { eventType, channel: "WHATSAPP" },
       orderBy: { createdAt: "desc" },
       take: 10,
     });
@@ -280,13 +296,13 @@ export class InboundTemplateReplyFlow {
   }
 
   /**
-   * Supplier-side reply ("Review RFQ" / "View Purchase Order"). Re-verifies
+   * Supplier-side reply ("Review RFQ" / "View Purchase Order" / "Update Prices"). Re-verifies
    * the supplier's own phone resolves to the SupplierProfile that actually
-   * owns the RFQ/PO referenced by the matched NotificationEvent before
+   * owns the RFQ/PO/catalogue referenced by the matched NotificationEvent before
    * returning any detail — never trusts the event row alone.
    */
   private async handleSupplierReply(
-    eventType: "SUPPLIER_RFQ_RECEIVED" | "SUPPLIER_PO_RECEIVED",
+    eventType: "SUPPLIER_RFQ_RECEIVED" | "SUPPLIER_PO_RECEIVED" | "SUPPLIER_DAILY_PRICE_UPDATE_REQUIRED",
     event: { recipientId: string; entityId: string | null; payload: any },
     phone: string
   ): Promise<BotMessage | null> {
@@ -310,6 +326,27 @@ export class InboundTemplateReplyFlow {
     }
 
     const supplierProfileId = supplierUser.supplierProfile.id;
+
+    if (eventType === "SUPPLIER_DAILY_PRICE_UPDATE_REQUIRED") {
+      let session = this.sessionService.get(phone);
+      if (!session) {
+        session = await this.sessionService.create({
+          phone,
+          userId: supplierUser.id,
+          name: supplierUser.name ?? "Supplier",
+          email: supplierUser.email ?? "",
+          role: "SUPPLIER",
+          supplierProfileId,
+          flow: "PRICE_UPDATE",
+          step: "AWAITING_PRODUCT_SELECTION",
+          context: {},
+        });
+      } else {
+        this.sessionService.setFlow(phone, "PRICE_UPDATE", "AWAITING_PRODUCT_SELECTION", {});
+        session = this.sessionService.get(phone)!;
+      }
+      return this.priceUpdateFlow.start(session);
+    }
 
     if (eventType === "SUPPLIER_RFQ_RECEIVED") {
       const orderItem = await this.prisma.orderItem.findFirst({

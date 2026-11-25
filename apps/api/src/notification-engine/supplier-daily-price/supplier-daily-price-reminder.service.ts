@@ -78,10 +78,8 @@ export class SupplierDailyPriceReminderService {
 
       const phone = supplierProfile.user.whatsappNumber?.trim() || supplierProfile.user.phone?.trim() || null;
       const missingNames = result.missingProducts.map((p) => p.name);
-      // Single Meta template variable {{1}} — the full, untruncated,
-      // comma-separated list (spec §5/§6: "Do NOT send one Meta variable per
-      // product. There is exactly ONE body variable.").
       const missingProductsList = missingNames.join(", ");
+      const supplierName = supplierProfile.user.name || supplierProfile.companyName || "Supplier";
 
       const dispatchResult = await this.engine.dispatch(
         {
@@ -91,10 +89,10 @@ export class SupplierDailyPriceReminderService {
           entityType: "SupplierProfile",
           entityId: result.supplierId,
           phone,
-          parameters: [missingProductsList],
+          parameters: [supplierName],
           deepLink: supplierPricingDeepLink(),
-          title: "Daily Price Update Reminder",
-          body: `Your Buildohub price list is missing today's update for ${missingProductsList}. Please update your prices to keep your product information current.`,
+          title: "Daily Price Update",
+          body: `Good morning ${supplierName}! 👋\n\nYour listed products and current prices are available on Matsrc.\n\nIf any of your product prices have changed today, you can review your products and update them here.\n\nNo price change? No action is required.\n\nYour existing prices will remain unchanged until you update them.\n\nThank you,\nTeam Matsrc`,
           dedupeKey,
           payload: {
             supplierId: result.supplierId,

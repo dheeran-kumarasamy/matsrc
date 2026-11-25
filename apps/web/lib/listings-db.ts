@@ -3,7 +3,7 @@ import {
   isValidSupplierPrice,
   resolveEffectiveMarkupPercent,
 } from "@matsrc/db";
-import { ensureBuilderSchema, formatProductPrice, prisma } from "@/lib/builder-db";
+import { ensureBuilderSchema, formatCurrency, prisma } from "@/lib/builder-db";
 import type { ProductGroupResult, SupplierListing } from "@/lib/listings";
 
 async function fetchMarkupRows(productIds: string[], categoryIds: string[]) {
@@ -78,7 +78,7 @@ async function transformDbProductsToListings(products: any[]): Promise<SupplierL
       grade: product.grade ?? "NA",
       sizeLabel: product.sizeLabel ?? null,
       unit: product.unit,
-      price: `${formatProductPrice(buyerBasePrice)} / ${product.unit}`,
+      price: `${formatCurrency(buyerBasePrice)} / ${product.unit}`,
       stock: `${product.stock} ${product.unit}`,
       maxServiceableQty: `${fallbackMaxQty} ${product.unit}`,
       active: Boolean(product.isActive),

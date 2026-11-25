@@ -211,6 +211,22 @@ export async function resolveProductGroupForCart(productId: string, quantity: nu
     isActive: true,
   };
 
+  const safeProductSelect = {
+    id: true,
+    name: true,
+    slug: true,
+    canonicalProductId: true,
+    supplierId: true,
+    categoryId: true,
+    basePrice: true,
+    stock: true,
+    unit: true,
+    images: true,
+    isActive: true,
+    category: { select: { id: true, name: true } },
+    supplier: { select: { companyName: true } },
+  };
+
   let product: any = null;
   try {
     product = await client.product.findFirst({
@@ -223,14 +239,12 @@ export async function resolveProductGroupForCart(productId: string, quantity: nu
     });
   } catch (err: any) {
     if (err?.code === "P2021" || err?.code === "P2022") {
+      resetCartSchemaCache();
       await ensureCartSchema(client);
       try {
         product = await client.product.findFirst({
           where: productWhere,
-          include: {
-            category: true,
-            supplier: { select: { companyName: true } },
-          },
+          select: safeProductSelect,
         });
       } catch (fallbackErr) {
         console.error("resolveProductGroupForCart fallback failed:", fallbackErr);
@@ -268,10 +282,7 @@ export async function resolveProductGroupForCart(productId: string, quantity: nu
             canonicalProductId: product.canonicalProductId,
             isActive: true,
           },
-          include: {
-            category: true,
-            supplier: { select: { companyName: true } },
-          },
+          select: safeProductSelect,
           orderBy: { updatedAt: "desc" },
         });
       } catch {

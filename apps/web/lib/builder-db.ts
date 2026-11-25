@@ -34,36 +34,77 @@ export async function ensureBuilderSchema(): Promise<void> {
   schemaEnsuringPromise = (async () => {
     try {
       if (typeof (prisma as any)?.$executeRawUnsafe === "function") {
-        await (prisma as any).$executeRawUnsafe(
-          'ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;'
-        );
-        await (prisma as any).$executeRawUnsafe(
-          'ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "maxServiceableQty" INTEGER;'
-        );
-        await (prisma as any).$executeRawUnsafe(
-          'ALTER TABLE "Category" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;'
-        );
-        await (prisma as any).$executeRawUnsafe(
-          'CREATE TABLE IF NOT EXISTS "OrderSplittingConfig" ("id" TEXT PRIMARY KEY DEFAULT \'global\', "allowMultiSupplierSplitting" BOOLEAN NOT NULL DEFAULT false, "splitOnlyAcrossCategories" BOOLEAN NOT NULL DEFAULT true, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedBy" TEXT);'
-        );
-        await (prisma as any).$executeRawUnsafe(
-          'CREATE TABLE IF NOT EXISTS "PricingTier" ("id" TEXT PRIMARY KEY, "productId" TEXT NOT NULL, "minQty" DOUBLE PRECISION NOT NULL, "maxQty" DOUBLE PRECISION NOT NULL, "tierPrice" DECIMAL(12,2) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
-        );
-        await (prisma as any).$executeRawUnsafe(
-          'CREATE TABLE IF NOT EXISTS "CartIdempotency" ("id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL, "key" TEXT NOT NULL, "requestFingerprint" TEXT NOT NULL, "responseStatus" INTEGER NOT NULL DEFAULT 200, "responsePayload" JSONB, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "expiresAt" TIMESTAMP(3));'
-        );
-        await (prisma as any).$executeRawUnsafe(
-          'CREATE TABLE IF NOT EXISTS "Watchlist" ("id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL, "productId" TEXT NOT NULL, "targetPrice" DECIMAL(12,2), "alertSent" BOOLEAN NOT NULL DEFAULT false, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
-        );
-        await (prisma as any).$executeRawUnsafe(
-          'ALTER TABLE "Notification" ADD COLUMN IF NOT EXISTS "templateType" TEXT;'
-        );
-        await (prisma as any).$executeRawUnsafe(
-          'ALTER TABLE "Notification" ADD COLUMN IF NOT EXISTS "variables" TEXT;'
-        );
-        await (prisma as any).$executeRawUnsafe(
-          'ALTER TABLE "Notification" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT \'pending\';'
-        );
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "maxServiceableQty" DOUBLE PRECISION;')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "Category" ADD COLUMN IF NOT EXISTS "isOrderable" BOOLEAN NOT NULL DEFAULT true;')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe(
+            'CREATE TABLE IF NOT EXISTS "OrderSplittingConfig" ("id" TEXT PRIMARY KEY DEFAULT \'global\', "allowMultiSupplierSplitting" BOOLEAN NOT NULL DEFAULT false, "splitOnlyAcrossCategories" BOOLEAN NOT NULL DEFAULT true, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedBy" TEXT);'
+          )
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe(
+            'CREATE TABLE IF NOT EXISTS "PricingTier" ("id" TEXT PRIMARY KEY, "productId" TEXT NOT NULL, "minQty" DOUBLE PRECISION NOT NULL, "maxQty" DOUBLE PRECISION NOT NULL, "tierPrice" DECIMAL(12,2) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
+          )
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe(
+            'CREATE TABLE IF NOT EXISTS "CartIdempotency" ("id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL, "key" TEXT NOT NULL, "requestFingerprint" TEXT NOT NULL, "responseStatus" INTEGER NOT NULL DEFAULT 200, "responsePayload" JSONB, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "expiresAt" TIMESTAMP(3));'
+          )
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe(
+            'CREATE TABLE IF NOT EXISTS "Watchlist" ("id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL, "productId" TEXT NOT NULL, "targetPrice" DECIMAL(12,2), "alertSent" BOOLEAN NOT NULL DEFAULT false, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);'
+          )
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "Notification" ADD COLUMN IF NOT EXISTS "templateType" TEXT;')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "Notification" ADD COLUMN IF NOT EXISTS "variables" TEXT;')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "Notification" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT \'pending\';')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "whatsappNumber" TEXT;')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "emailVerifiedAt" TIMESTAMP(3);')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "phoneVerifiedAt" TIMESTAMP(3);')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "legalName" TEXT;')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "tradeName" TEXT;')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "gstin" TEXT;')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "billingAddress" TEXT;')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "billingCity" TEXT;')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "billingState" TEXT;')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "billingPincode" TEXT;')
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "paymentDueDays" INTEGER NOT NULL DEFAULT 0;')
+          .catch(() => {});
       }
       schemaEnsured = true;
     } catch (e) {
@@ -82,9 +123,35 @@ export async function getOrCreateBuilder(
   name: string
 ) {
   await ensureBuilderSchema().catch(() => {});
-  let user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    try {
+  const coreSelect = { id: true, email: true, name: true, role: true } as const;
+  try {
+    let user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      try {
+        user = await prisma.user.upsert({
+          where: { email },
+          update: {},
+          create: {
+            id: userId,
+            email,
+            name,
+            role: "BUILDER",
+          },
+        });
+      } catch (err: any) {
+        if (err?.code === "P2002") {
+          user = await prisma.user.findUnique({ where: { email } });
+        }
+        if (!user) throw err;
+      }
+    }
+    return user;
+  } catch (err: any) {
+    if (err?.code !== "P2022") throw err;
+    schemaEnsured = false;
+    await ensureBuilderSchema().catch(() => {});
+    let user = await prisma.user.findUnique({ where: { id: userId }, select: coreSelect });
+    if (!user) {
       user = await prisma.user.upsert({
         where: { email },
         update: {},
@@ -94,15 +161,11 @@ export async function getOrCreateBuilder(
           name,
           role: "BUILDER",
         },
+        select: coreSelect,
       });
-    } catch (err: any) {
-      if (err?.code === "P2002") {
-        user = await prisma.user.findUnique({ where: { email } });
-      }
-      if (!user) throw err;
     }
+    return user as any;
   }
-  return user;
 }
 
 // Middleware (apps/web/middleware.ts) already rejects unauthenticated

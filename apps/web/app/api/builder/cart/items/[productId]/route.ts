@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma, getOrCreateBuilder, resolveUserCtx } from "@/lib/builder-db";
+import { ensureCartSchema } from "@/lib/cart-data";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,7 @@ export async function DELETE(
 ) {
   try {
     const ctx = await resolveUserCtx(request);
+    await ensureCartSchema();
     const user = await getOrCreateBuilder(ctx.userId, ctx.email, ctx.name);
     const url = new URL(request.url);
     const cartItemId = url.searchParams.get("cartItemId");

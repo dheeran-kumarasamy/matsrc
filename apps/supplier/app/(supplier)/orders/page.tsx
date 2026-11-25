@@ -45,14 +45,17 @@ export default async function SupplierOrdersPage() {
                   ) : null}
                 </td>
 
-                <td className="px-4 py-3 text-slate-700">{order.buyer}</td>
-                <td className="px-4 py-3 text-slate-700">
+                <td className="px-4 py-3 align-top text-slate-700">{order.buyer}</td>
+                <td className="px-4 py-3 align-top text-slate-700">
                   {order.brand ? <p className="text-xs font-semibold text-slate-400">{order.brand}</p> : null}
-                  <p>{order.material}</p>
+                  <p className="font-medium text-slate-800">{order.material}</p>
                 </td>
-                <td className="px-4 py-3 text-slate-700">{order.qty}</td>
-                <td className="px-4 py-3 text-slate-700">{order.status}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 align-top text-slate-700 whitespace-nowrap">
+                  {order.brand ? <p className="text-xs invisible select-none" aria-hidden="true">&nbsp;</p> : null}
+                  <p className="font-semibold text-slate-700">{order.qty}</p>
+                </td>
+                <td className="px-4 py-3 align-top text-slate-700">{order.status}</td>
+                <td className="px-4 py-3 align-top">
                   <Link href={`/orders/${order.id}`} className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700">
                     View
                   </Link>

@@ -57,9 +57,13 @@ export function validateServiceUrl(
     hostname.includes("-uat-") ||
     hostname.startsWith("uat-");
 
+  const isSharedSupplierPortal =
+    hostname === "supplier.buildohub.in" ||
+    hostname === "matsrc-supplier.vercel.app";
+
   // Preview environment checks
   if (vercelEnv === "preview") {
-    if (isProductionTarget) {
+    if (isProductionTarget && (buildohubEnv !== "uat" || !isSharedSupplierPortal)) {
       throw new Error(`Preview environment cannot connect to Production service URL: ${url}`);
     }
     if (isUatTarget) {
@@ -79,7 +83,7 @@ export function validateServiceUrl(
 
   // UAT environment checks
   if (buildohubEnv === "uat" && vercelEnv !== "preview") {
-    if (isProductionTarget) {
+    if (isProductionTarget && !isSharedSupplierPortal) {
       throw new Error(`UAT environment cannot connect to Production service URL: ${url}`);
     }
     if (isPreviewTarget) {
@@ -98,6 +102,11 @@ export function getSupplierAppUrl(): string {
 
   if (configured) {
     return validateServiceUrl(configured);
+  }
+
+  // UAT environment connects to the shared supplier portal
+  if (process.env.BUILDOHUB_ENV === "uat") {
+    return "https://supplier.buildohub.in";
   }
 
   // Preview and Production environments must NEVER silently connect to hardcoded Production URLs
@@ -185,7 +194,7 @@ export const getSupplierListings = requestCache(async (): Promise<SupplierListin
   try {
     const response = await fetch(`${supplierUrl}/api/public/listings`, {
       next: { revalidate: 300, tags: ["catalog-listings"] },
-      redirect: "manual",
+      redirect: "follow",
     });
 
     if (response.status === 302 || response.status === 307 || response.status === 308) {
@@ -226,7 +235,7 @@ export const getSupplierProductGroup = requestCache(async (slug: string): Promis
   try {
     const response = await fetch(`${supplierUrl}/api/public/listings/${encodeURIComponent(slug)}`, {
       next: { revalidate: 300, tags: ["catalog-listings", `product-${slug}`] },
-      redirect: "manual",
+      redirect: "follow",
     });
 
     // Genuine 404: product does not exist. Return null immediately without expensive full-catalogue fallback.

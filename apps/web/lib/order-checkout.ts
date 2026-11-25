@@ -91,6 +91,7 @@ export async function createOrdersFromCart(
     include: {
       product: {
         select: {
+          name: true,
           supplierId: true,
           canonicalProductId: true,
           categoryId: true,

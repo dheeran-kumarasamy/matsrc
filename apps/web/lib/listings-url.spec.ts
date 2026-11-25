@@ -57,6 +57,12 @@ describe('Service URL Resolution & Preview Isolation Guard', () => {
       (process.env as any).NODE_ENV = 'test';
       expect(getSupplierAppUrl()).toBe('http://localhost:3001');
     });
+
+    it('defaults to supplier.buildohub.in in UAT environment', () => {
+      process.env.BUILDOHUB_ENV = 'uat';
+      process.env.VERCEL_ENV = 'preview';
+      expect(getSupplierAppUrl()).toBe('https://supplier.buildohub.in');
+    });
   });
 
   describe('validateServiceUrl cross-environment boundaries', () => {
@@ -92,6 +98,15 @@ describe('Service URL Resolution & Preview Isolation Guard', () => {
       expect(() =>
         validateServiceUrl('https://supplier.matsrc.in', { buildohubEnv: 'uat' })
       ).toThrowError(/UAT environment cannot connect to Production service URL/);
+    });
+
+    it('allows UAT environment to connect to shared supplier portal', () => {
+      expect(
+        validateServiceUrl('https://supplier.buildohub.in', { buildohubEnv: 'uat' })
+      ).toBe('https://supplier.buildohub.in');
+      expect(
+        validateServiceUrl('https://matsrc-supplier.vercel.app', { buildohubEnv: 'uat' })
+      ).toBe('https://matsrc-supplier.vercel.app');
     });
 
     it('rejects invalid or malformed URL formats', () => {

@@ -169,7 +169,7 @@ export class WhatsappNotificationService {
       const payload = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        to: phone,
+        to: phone.replace(/^\+/, "").replace(/\s+/g, ""),
         type: "template",
         template: {
           name: templateName,

@@ -17,6 +17,7 @@ import {
   MENU_FOOTER,
   WhatsAppSession,
 } from "./whatsapp.types";
+import { isSameKeyword, parseSelectedSerials, parseSerialPriceInput } from "./whatsapp.utils";
 
 const MAIN_MENU_ROWS: Array<{ id: MainFlow; title: string; description: string }> = [
   { id: "PRICE_UPDATE", title: "Update Product Price", description: "Change price of an active listing" },
@@ -97,15 +98,15 @@ export class WhatsAppRouterService {
       }
     }
 
+    let session = await this.sessionService.getOrRestore(phone);
+
     if (HUMAN_HANDOFF_KEYWORDS.has(upper)) {
-      const session = this.sessionService.get(phone);
       if (session) this.sessionService.update(phone, { flow: "HUMAN_HANDOFF", step: "WAITING_FOR_AGENT" });
       await this.recordEscalation(session, phone, text);
       return this.humanHandoffMessage();
     }
 
     if (upper === "UPDATE PRICES" || upper === "UPDATE PRICE" || upper === "PRICES") {
-      let session = this.sessionService.get(phone);
       if (!session) {
         session = await this.authenticate(phone);
         if (!session) return this.registrationRequiredMessage();
@@ -113,20 +114,29 @@ export class WhatsAppRouterService {
       return this.priceUpdateFlow.start(session);
     }
 
+    // Direct supplier price update action: serial number selection (e.g. "4,5"),
+    // price overrides (e.g. "4 - 295, 5 - 295"), or SAME.
+    // Seamlessly handles replies even if serverless instance restarted or session timed out.
+    if (!session || session.flow === "MAIN" || session.flow === "PRICE_UPDATE") {
+      const selectedSerials = parseSelectedSerials(text);
+      const isPriceEntries = parseSerialPriceInput(text).length > 0;
+      const isSame = isSameKeyword(text);
+      const isMainMenuNumeric = session?.flow === "MAIN" && /^[1-4]$/.test(text.trim());
 
-    let session = this.sessionService.get(phone);
+      if ((selectedSerials.length > 0 && !isMainMenuNumeric) || isPriceEntries || isSame) {
+        if (!session) {
+          session = await this.authenticate(phone);
+        }
+        if (session) {
+          await this.priceUpdateFlow.ensureCatalogueSession(session);
+          return this.priceUpdateFlow.handle(session, text);
+        }
+      }
+    }
 
     // Supplier Daily Price Update reply (Phase 1) — a SEPARATE inbound
     // workflow from the interactive menu flows below (spec §21: "Keep the
-    // two concerns separate"). Only intercepted when the supplier is NOT
-    // already mid-way through an interactive menu flow (no session, or
-    // parked at the main menu) — this is deliberate: it must never hijack
-    // free-text entry inside an active flow (e.g. a rejection reason) that
-    // happens to contain a colon/dash. `tryHandle` itself is a safe no-op
-    // (returns null) whenever the text doesn't parse as a price list, the
-    // sender isn't a known supplier, or there is no active daily
-    // price-update session for them — in all of those cases this falls
-    // through to the normal menu handling unchanged.
+    // two concerns separate").
     if (!session || session.flow === "MAIN") {
       const dailyPriceReply = await this.dailyPriceReplyFlow.tryHandle(phone, text, session);
       if (dailyPriceReply) {

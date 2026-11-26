@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
+import { PrismaService } from "src/prisma/prisma.service";
 import {
   MAX_INVALID_RETRIES,
   MainFlow,
@@ -14,9 +15,8 @@ import {
  *    status update.
  *  - a simple per-supplier-per-minute rate limiter for price-update and enquiry-decision
  *    actions, guarding against fat-finger loops / accidental double submits.
- *
- * In-memory Map is sufficient for a single-instance deployment; swap for Redis (the repo
- * already depends on ioredis for BullMQ) if horizontal scaling is needed later.
+ *  - persistent database backing via `AuditLog` so session state survives across
+ *    serverless lambda cold starts and multi-instance deployments.
  */
 @Injectable()
 export class WhatsAppSessionService {
@@ -28,16 +28,74 @@ export class WhatsAppSessionService {
   private static readonly RATE_LIMIT_WINDOW_MS = 60 * 1000;
   private static readonly RATE_LIMIT_MAX_ACTIONS = 5;
 
+  constructor(@Optional() private readonly prisma?: PrismaService) {}
+
+  cleanPhone(phone: string): string {
+    return phone.replace(/^whatsapp:/, "").replace(/^\+/, "").replace(/\s+/g, "");
+  }
+
   get(phone: string): WhatsAppSession | undefined {
-    const session = this.sessions.get(phone);
+    const clean = this.cleanPhone(phone);
+    const session = this.sessions.get(clean) || this.sessions.get(phone);
     if (!session) return undefined;
 
     if (Date.now() - session.updatedAt > SESSION_IDLE_TIMEOUT_MS) {
+      this.sessions.delete(clean);
       this.sessions.delete(phone);
       return undefined;
     }
 
     return session;
+  }
+
+  /**
+   * Retrieves an active session from in-memory cache or restores it from persistent
+   * database storage if running on a new/different serverless instance.
+   */
+  async getOrRestore(phone: string): Promise<WhatsAppSession | undefined> {
+    const inMem = this.get(phone);
+    if (inMem) return inMem;
+
+    if (!this.prisma) return undefined;
+
+    const clean = this.cleanPhone(phone);
+    try {
+      const row = await this.prisma.auditLog.findFirst({
+        where: {
+          action: "WHATSAPP_SESSION_STATE",
+          entityType: "WhatsAppSession",
+          OR: [{ entityId: clean }, { entityId: `+${clean}` }],
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (!row || !row.metadata) return undefined;
+      const session = row.metadata as unknown as WhatsAppSession;
+      if (Date.now() - (session.updatedAt || 0) > SESSION_IDLE_TIMEOUT_MS) {
+        return undefined;
+      }
+
+      this.sessions.set(clean, session);
+      return session;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private persist(session: WhatsAppSession): void {
+    if (!this.prisma) return;
+    const clean = this.cleanPhone(session.phone);
+    this.prisma.auditLog
+      .create({
+        data: {
+          actorId: session.userId || "system",
+          action: "WHATSAPP_SESSION_STATE",
+          entityType: "WhatsAppSession",
+          entityId: clean,
+          metadata: session as any,
+        },
+      })
+      .catch(() => {});
   }
 
   create(params: {
@@ -49,8 +107,9 @@ export class WhatsAppSessionService {
     language?: "en" | "regional";
   }): WhatsAppSession {
     const now = Date.now();
+    const clean = this.cleanPhone(params.phone);
     const session: WhatsAppSession = {
-      phone: params.phone,
+      phone: clean,
       userId: params.userId,
       email: params.email ?? null,
       name: params.name ?? null,
@@ -63,13 +122,15 @@ export class WhatsAppSessionService {
       createdAt: now,
       updatedAt: now,
     };
-    this.sessions.set(params.phone, session);
+    this.sessions.set(clean, session);
+    this.persist(session);
     return session;
   }
 
 
   update(phone: string, patch: Partial<Pick<WhatsAppSession, "flow" | "step" | "context" | "invalidCount" | "language">>): WhatsAppSession | undefined {
-    const session = this.get(phone);
+    const clean = this.cleanPhone(phone);
+    const session = this.get(clean);
     if (!session) return undefined;
 
     const updated: WhatsAppSession = {
@@ -78,7 +139,8 @@ export class WhatsAppSessionService {
       context: patch.context ?? session.context,
       updatedAt: Date.now(),
     };
-    this.sessions.set(phone, updated);
+    this.sessions.set(clean, updated);
+    this.persist(updated);
     return updated;
   }
 
@@ -104,6 +166,8 @@ export class WhatsAppSessionService {
   }
 
   destroy(phone: string): void {
+    const clean = this.cleanPhone(phone);
+    this.sessions.delete(clean);
     this.sessions.delete(phone);
   }
 

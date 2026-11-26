@@ -48,9 +48,9 @@ export class PriceUpdateFlow {
     @Optional() private readonly dailyPriceReminder?: SupplierDailyPriceReminderService
   ) {}
 
-  async start(session: WhatsAppSession): Promise<BotMessage> {
+  async loadSerialMapping(supplierProfileId: string): Promise<SerialMappingItem[]> {
     const listings = await this.prisma.product.findMany({
-      where: { supplierId: session.supplierProfileId, isActive: true },
+      where: { supplierId: supplierProfileId, isActive: true },
       include: {
         category: true,
         brandRef: true,
@@ -60,17 +60,7 @@ export class PriceUpdateFlow {
       orderBy: [{ category: { name: "asc" } }, { name: "asc" }],
     });
 
-    if (listings.length === 0) {
-      this.sessionService.resetToMainMenu(session.phone);
-      return {
-        kind: "text",
-        text: `You have no active listings right now. Please add or activate listings on the Matsrc Supplier Portal: ${
-          process.env.SUPPLIER_PORTAL_URL || "https://matsrc-supplier.vercel.app"
-        }/listings\n\n${MENU_FOOTER}`,
-      };
-    }
-
-    const serialMapping: SerialMappingItem[] = listings.map((listing, index) => {
+    return listings.map((listing, index) => {
       const serial = index + 1;
       const unit = listing.unitRef?.symbol || listing.unitRef?.name || listing.unit || "unit";
       const title = this.formatProductTitle(listing);
@@ -83,13 +73,40 @@ export class PriceUpdateFlow {
         currentPrice: Number(listing.basePrice),
       };
     });
+  }
+
+  async ensureCatalogueSession(session: WhatsAppSession): Promise<SerialMappingItem[]> {
+    let serialMapping = session.context?.serialMapping as SerialMappingItem[] | undefined;
+    if (!serialMapping || serialMapping.length === 0) {
+      serialMapping = await this.loadSerialMapping(session.supplierProfileId);
+      this.sessionService.setFlow(session.phone, "PRICE_UPDATE", session.step || "AWAITING_PRODUCT_SELECTION", {
+        ...(session.context || {}),
+        serialMapping,
+      });
+      session.context = { ...(session.context || {}), serialMapping };
+    }
+    return serialMapping;
+  }
+
+  async start(session: WhatsAppSession): Promise<BotMessage> {
+    const serialMapping = await this.ensureCatalogueSession(session);
+
+    if (serialMapping.length === 0) {
+      this.sessionService.resetToMainMenu(session.phone);
+      return {
+        kind: "text",
+        text: `You have no active listings right now. Please add or activate listings on the Matsrc Supplier Portal: ${
+          process.env.SUPPLIER_PORTAL_URL || "https://matsrc-supplier.vercel.app"
+        }/listings\n\n${MENU_FOOTER}`,
+      };
+    }
 
     this.sessionService.setFlow(session.phone, "PRICE_UPDATE", "AWAITING_PRODUCT_SELECTION", {
       serialMapping,
-      candidates: listings.map((listing) => ({
-        id: listing.id,
-        label: listing.name,
-        price: listing.basePrice.toString(),
+      candidates: serialMapping.map((item) => ({
+        id: item.productId,
+        label: item.name,
+        price: item.currentPrice.toString(),
       })),
     });
 
@@ -114,6 +131,7 @@ export class PriceUpdateFlow {
   }
 
   async handle(session: WhatsAppSession, text: string): Promise<BotMessage> {
+    await this.ensureCatalogueSession(session);
     switch (session.step) {
       case "AWAITING_PRODUCT_SELECTION":
         return this.handleProductSelection(session, text);
@@ -247,6 +265,12 @@ export class PriceUpdateFlow {
     }
 
     if (parsedPrices.length === 0) {
+      // If user typed serial numbers (e.g. they re-selected or changed selection like "4, 5")
+      const newlySelected = parseSelectedSerials(trimmed);
+      if (newlySelected.length > 0) {
+        return this.handleProductSelection(session, text);
+      }
+
       const invalidCount = this.sessionService.incrementInvalid(session.phone);
       if (invalidCount >= 3) {
         this.sessionService.resetToMainMenu(session.phone);

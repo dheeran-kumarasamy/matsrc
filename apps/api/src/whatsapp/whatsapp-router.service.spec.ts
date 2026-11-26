@@ -34,6 +34,7 @@ describe("WhatsAppRouterService", () => {
   let authService: { resolveByVerifiedNumber: ReturnType<typeof vi.fn>; getRegistrationLink: ReturnType<typeof vi.fn> };
   let sessionService: {
     get: ReturnType<typeof vi.fn>;
+    getOrRestore: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     resetToMainMenu: ReturnType<typeof vi.fn>;
@@ -41,7 +42,7 @@ describe("WhatsAppRouterService", () => {
     hasExceededRetries: ReturnType<typeof vi.fn>;
   };
   let auditHelper: { recordEscalation: ReturnType<typeof vi.fn> };
-  let priceUpdateFlow: { start: ReturnType<typeof vi.fn>; handle: ReturnType<typeof vi.fn> };
+  let priceUpdateFlow: { start: ReturnType<typeof vi.fn>; handle: ReturnType<typeof vi.fn>; ensureCatalogueSession: ReturnType<typeof vi.fn> };
   let enquiryDecisionFlow: { start: ReturnType<typeof vi.fn>; handle: ReturnType<typeof vi.fn> };
   let orderStatusFlow: { start: ReturnType<typeof vi.fn>; handle: ReturnType<typeof vi.fn> };
   let dailyReportFlow: { start: ReturnType<typeof vi.fn>; handle: ReturnType<typeof vi.fn> };
@@ -66,6 +67,7 @@ describe("WhatsAppRouterService", () => {
 
     sessionService = {
       get: vi.fn().mockImplementation(() => session),
+      getOrRestore: vi.fn().mockImplementation(async () => sessionService.get()),
       create: vi.fn().mockImplementation(() => session),
       update: vi.fn().mockImplementation((_phone, patch) => {
         session = { ...session, ...patch };
@@ -78,7 +80,11 @@ describe("WhatsAppRouterService", () => {
 
     auditHelper = { recordEscalation: vi.fn().mockResolvedValue(undefined) };
 
-    priceUpdateFlow = { start: vi.fn().mockResolvedValue({ kind: "text", text: "price-update-start" }), handle: vi.fn() };
+    priceUpdateFlow = {
+      start: vi.fn().mockResolvedValue({ kind: "text", text: "price-update-start" }),
+      handle: vi.fn(),
+      ensureCatalogueSession: vi.fn().mockResolvedValue([]),
+    };
     enquiryDecisionFlow = { start: vi.fn().mockResolvedValue({ kind: "text", text: "enquiry-decision-start" }), handle: vi.fn() };
     orderStatusFlow = { start: vi.fn().mockResolvedValue({ kind: "text", text: "order-status-start" }), handle: vi.fn() };
     dailyReportFlow = { start: vi.fn().mockResolvedValue({ kind: "text", text: "daily-report-start" }), handle: vi.fn() };

@@ -793,9 +793,13 @@ describe("InboundTemplateReplyFlow — C41 follow-up: real-world phone format mi
           phone: SUPPLIER_PHONE,
           userId: "supplier-user-1",
           supplierProfileId: "supplier-profile-1",
-          flow: "PRICE_UPDATE",
-          step: "AWAITING_PRODUCT_SELECTION",
         })
+      );
+      expect(sessionService.setFlow).toHaveBeenCalledWith(
+        SUPPLIER_PHONE,
+        "PRICE_UPDATE",
+        "AWAITING_PRODUCT_SELECTION",
+        {}
       );
       expect(priceUpdateFlow.start).toHaveBeenCalled();
       expect(result).toEqual({ kind: "text", text: "Your Current Product Price List" });

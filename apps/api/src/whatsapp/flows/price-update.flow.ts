@@ -62,7 +62,11 @@ export class PriceUpdateFlow {
 
     return listings.map((listing, index) => {
       const serial = index + 1;
-      const unit = listing.unitRef?.symbol || listing.unitRef?.name || listing.unit || "unit";
+      const unit =
+        (listing.unitRef as { symbol?: string | null; name?: string | null } | null)?.symbol ||
+        listing.unitRef?.name ||
+        listing.unit ||
+        "unit";
       const title = this.formatProductTitle(listing);
       return {
         serial,

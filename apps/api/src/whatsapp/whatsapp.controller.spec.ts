@@ -121,7 +121,7 @@ describe("WhatsAppController", () => {
   let controller: WhatsAppController;
   let router: { handleInboundMessage: ReturnType<typeof vi.fn> };
   let sessionService: { withIdempotency: ReturnType<typeof vi.fn> };
-  let auditHelper: { recordDeliveryStatus: ReturnType<typeof vi.fn>; recordEscalation: ReturnType<typeof vi.fn> };
+  let auditHelper: { record: ReturnType<typeof vi.fn>; recordDeliveryStatus: ReturnType<typeof vi.fn>; recordEscalation: ReturnType<typeof vi.fn> };
   let sendAdapter: { send: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {

@@ -8,13 +8,14 @@ function createMockSession(overrides: Partial<WhatsAppSession> = {}): WhatsAppSe
     userId: "user-1",
     email: "supplier@example.com",
     name: "Rajesh",
-    role: "SUPPLIER",
     supplierProfileId: "supplier-profile-1",
+    language: "en",
     flow: "PRICE_UPDATE",
     step: "AWAITING_PRODUCT_SELECTION",
     context: {},
     invalidCount: 0,
-    lastActiveAt: Date.now(),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
     ...overrides,
   };
 }

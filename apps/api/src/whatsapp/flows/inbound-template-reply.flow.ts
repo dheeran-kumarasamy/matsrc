@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { parsePhoneNumber } from "libphonenumber-js";
 import { findIdentity } from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
@@ -191,8 +191,8 @@ export class InboundTemplateReplyFlow {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly sessionService: WhatsAppSessionService,
-    private readonly priceUpdateFlow: PriceUpdateFlow
+    @Optional() private readonly sessionService?: WhatsAppSessionService,
+    @Optional() private readonly priceUpdateFlow?: PriceUpdateFlow
   ) {}
 
   /**
@@ -328,23 +328,24 @@ export class InboundTemplateReplyFlow {
     const supplierProfileId = supplierUser.supplierProfile.id;
 
     if (eventType === "SUPPLIER_DAILY_PRICE_UPDATE_REQUIRED") {
-      let session = this.sessionService.get(phone);
+      if (!this.sessionService || !this.priceUpdateFlow) {
+        return null;
+      }
+      let session = this.sessionService.getOrRestore
+        ? await this.sessionService.getOrRestore(phone)
+        : this.sessionService.get(phone);
       if (!session) {
-        session = await this.sessionService.create({
+        session = this.sessionService.create({
           phone,
           userId: supplierUser.id,
           name: supplierUser.name ?? "Supplier",
           email: supplierUser.email ?? "",
-          role: "SUPPLIER",
           supplierProfileId,
-          flow: "PRICE_UPDATE",
-          step: "AWAITING_PRODUCT_SELECTION",
-          context: {},
         });
-      } else {
-        this.sessionService.setFlow(phone, "PRICE_UPDATE", "AWAITING_PRODUCT_SELECTION", {});
-        session = this.sessionService.get(phone)!;
       }
+      session =
+        this.sessionService.setFlow(phone, "PRICE_UPDATE", "AWAITING_PRODUCT_SELECTION", {}) ??
+        session;
       return this.priceUpdateFlow.start(session);
     }
 

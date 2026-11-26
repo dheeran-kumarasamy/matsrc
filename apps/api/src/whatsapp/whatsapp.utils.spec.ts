@@ -113,6 +113,17 @@ describe("parseSerialPriceInput", () => {
       { serial: 3, price: 64500 },
     ]);
   });
+
+  it("supports 'and' and semicolon separators with mixed spacing", () => {
+    expect(parseSerialPriceInput("4 -300 and 5-299", [4, 5])).toEqual([
+      { serial: 4, price: 300 },
+      { serial: 5, price: 299 },
+    ]);
+    expect(parseSerialPriceInput("1: 400; 2 = 1520")).toEqual([
+      { serial: 1, price: 400 },
+      { serial: 2, price: 1520 },
+    ]);
+  });
 });
 
 describe("isSameKeyword", () => {

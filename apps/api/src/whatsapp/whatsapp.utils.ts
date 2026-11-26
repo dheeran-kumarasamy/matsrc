@@ -189,9 +189,13 @@ export function parseSerialPriceInput(
   const expectedSet = expectedSerials && expectedSerials.length > 0 ? new Set(expectedSerials) : null;
 
   for (const line of lines) {
-    // Also support comma-separated pairs on a single line: "2 - 1520, 3 - 64500"
-    // Split on comma only when followed by another serial item (lookahead) to avoid splitting inside numbers like "1,520"
-    const subSegments = line.split(/,(?=\s*\d+(?:\s*[-:=]|\s+\d))/).map((s) => s.trim()).filter(Boolean);
+    // Also support comma-, semicolon-, or "and"-separated pairs on a single line:
+    // e.g. "2 - 1520, 3 - 64500" or "4 -300 and 5-299"
+    // Use lookahead so commas inside numbers like "1,520" are not split.
+    const subSegments = line
+      .split(/(?:,|;|\s+\band\b\s+)(?=\s*\d+(?:\s*[-:=]|\s+\d))/i)
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     for (const segment of subSegments) {
       // Match "<serial> <sep> <price>" where sep can be [-, :, =] with optional whitespace, OR whitespace \s+

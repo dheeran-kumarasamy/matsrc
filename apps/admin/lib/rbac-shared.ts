@@ -2,26 +2,27 @@
 // This module must NOT import anything server-only (e.g. "@/auth" / "@/lib/password"),
 // since it is imported by client components ("use client").
 
-export const MENU_CONFIG = [
-  { key: "dashboard", href: "/dashboard", label: "Dashboard" },
-  { key: "orders", href: "/orders", label: "Orders & RFQs" },
-  { key: "vendors", href: "/vendors", label: "Vendor Approval" },
-  { key: "buyers", href: "/buyers", label: "Buyer Credit Terms" },
-  { key: "kyc", href: "/kyc", label: "KYC Queue" },
-  { key: "disputes", href: "/disputes", label: "Disputes" },
-  { key: "payments", href: "/payments", label: "Payment Verification" },
-  { key: "advance-payments", href: "/advance-payments", label: "Advance Payments" },
-  { key: "supplier-invoices", href: "/supplier-invoices", label: "Supplier Invoices" },
-  { key: "aggregation", href: "/aggregation", label: "Aggregation Pools" },
-  { key: "catalog", href: "/catalog", label: "Catalog Master Data" },
-  { key: "markup", href: "/markup", label: "Product Markup" },
-  { key: "gst", href: "/gst", label: "GST & Advance Configuration" },
-  { key: "pricing", href: "/pricing", label: "Price Intelligence" },
-  { key: "notifications", href: "/notifications", label: "Notification Engine" },
-  { key: "whatsapp-alerts", href: "/whatsapp-alerts", label: "WhatsApp Alerts (Test)" },
-  { key: "audit", href: "/audit", label: "Audit Logs" },
+export type AdminMenuGroup = "overview" | "supplier" | "buyer" | "admin";
 
-  { key: "access", href: "/access", label: "Access Control" },
+export const MENU_CONFIG = [
+  { key: "dashboard", href: "/dashboard", label: "Dashboard", group: "overview" },
+  { key: "vendors", href: "/vendors", label: "Vendor Approval", group: "supplier" },
+  { key: "kyc", href: "/kyc", label: "KYC Queue", group: "supplier" },
+  { key: "supplier-invoices", href: "/supplier-invoices", label: "Supplier Invoices", group: "supplier" },
+  { key: "buyers", href: "/buyers", label: "Buyer Credit Terms", group: "buyer" },
+  { key: "payments", href: "/payments", label: "Payment Verification", group: "buyer" },
+  { key: "advance-payments", href: "/advance-payments", label: "Advance Payments", group: "buyer" },
+  { key: "orders", href: "/orders", label: "Orders & RFQs", group: "admin" },
+  { key: "disputes", href: "/disputes", label: "Disputes", group: "admin" },
+  { key: "aggregation", href: "/aggregation", label: "Aggregation Pools", group: "admin" },
+  { key: "catalog", href: "/catalog", label: "Catalog Master Data", group: "admin" },
+  { key: "markup", href: "/markup", label: "Product Markup", group: "admin" },
+  { key: "gst", href: "/gst", label: "GST & Advance Configuration", group: "admin" },
+  { key: "pricing", href: "/pricing", label: "Price Intelligence", group: "admin" },
+  { key: "notifications", href: "/notifications", label: "Notification Engine", group: "admin" },
+  { key: "whatsapp-alerts", href: "/whatsapp-alerts", label: "WhatsApp Alerts (Test)", group: "admin" },
+  { key: "audit", href: "/audit", label: "Audit Logs", group: "admin" },
+  { key: "access", href: "/access", label: "Access Control", group: "admin" },
 ] as const;
 
 export type AdminMenu = (typeof MENU_CONFIG)[number]["key"];

@@ -9,6 +9,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const links = MENU_CONFIG.filter((menu) => access.menus.includes(menu.key)).map((menu) => ({
     href: menu.href,
     label: menu.label,
+    group: menu.group,
   }));
 
   // Real "N items need action" count — replaces the previous hardcoded "7"

@@ -77,12 +77,19 @@ export class PriceUpdateFlow {
 
   async ensureCatalogueSession(session: WhatsAppSession): Promise<SerialMappingItem[]> {
     let serialMapping = session.context?.serialMapping as SerialMappingItem[] | undefined;
-    if (!serialMapping || serialMapping.length === 0) {
+    const targetStep =
+      session.flow === "PRICE_UPDATE" && session.step && session.step !== "MAIN_MENU"
+        ? session.step
+        : "AWAITING_PRODUCT_SELECTION";
+
+    if (!serialMapping || serialMapping.length === 0 || session.flow !== "PRICE_UPDATE") {
       serialMapping = await this.loadSerialMapping(session.supplierProfileId);
-      this.sessionService.setFlow(session.phone, "PRICE_UPDATE", session.step || "AWAITING_PRODUCT_SELECTION", {
+      this.sessionService.setFlow(session.phone, "PRICE_UPDATE", targetStep, {
         ...(session.context || {}),
         serialMapping,
       });
+      session.flow = "PRICE_UPDATE";
+      session.step = targetStep;
       session.context = { ...(session.context || {}), serialMapping };
     }
     return serialMapping;

@@ -150,10 +150,11 @@ export class MetaCloudApiSendAdapter implements WhatsAppSendAdapter {
   }
 
   private toGraphPayload(to: string, message: BotMessage): Record<string, unknown> {
+    const recipient = to.replace(/^whatsapp:/, "").replace(/^\+/, "").replace(/\s+/g, "");
     const base = {
       messaging_product: "whatsapp",
       recipient_type: "individual",
-      to,
+      to: recipient,
     };
 
     switch (message.kind) {

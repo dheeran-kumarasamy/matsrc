@@ -27,6 +27,12 @@ import { NotificationEngineModule } from "../notification-engine/notification-en
  * Fail-closed preview protection:
  * When VERCEL_ENV === "preview", always select MockWhatsAppSendAdapter regardless
  * of WHATSAPP_ADAPTER to guarantee preview deployments never dispatch live Meta messages.
+ *
+ * In production/non-preview:
+ *  - Explicit WHATSAPP_ADAPTER="meta" selects MetaCloudApiSendAdapter.
+ *  - Explicit WHATSAPP_ADAPTER="mock" selects MockWhatsAppSendAdapter.
+ *  - If WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID are configured, default to MetaCloudApiSendAdapter
+ *    to prevent silent fallback to mock in production environments where WHATSAPP_ADAPTER wasn't explicitly set.
  */
 export function whatsAppSendProviderFactory(
   mock: MockWhatsAppSendAdapter,
@@ -35,12 +41,16 @@ export function whatsAppSendProviderFactory(
   if (process.env.VERCEL_ENV === "preview") {
     return mock;
   }
-  switch (process.env.WHATSAPP_ADAPTER) {
-    case "meta":
-      return meta;
-    default:
-      return mock;
+  if (process.env.WHATSAPP_ADAPTER === "meta") {
+    return meta;
   }
+  if (process.env.WHATSAPP_ADAPTER === "mock") {
+    return mock;
+  }
+  if (process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID) {
+    return meta;
+  }
+  return mock;
 }
 
 @Module({

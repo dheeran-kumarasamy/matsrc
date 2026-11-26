@@ -147,6 +147,9 @@ export class WhatsAppController {
     // unchanged, while requiring valid signatures whenever a real secret is present.
     if (appSecret) {
       if (!this.isValidSignature(req.rawBody, signatureHeader, appSecret)) {
+        this.logger.warn(
+          `[WhatsApp Webhook] Signature verification failed (rawBody=${!!req.rawBody}, signatureHeader=${!!signatureHeader})`
+        );
         res.status(HttpStatus.UNAUTHORIZED).json({ ok: false, error: "Invalid webhook signature" });
         return;
       }
@@ -204,32 +207,80 @@ export class WhatsAppController {
       return;
     }
 
+    try {
+      await this.auditHelper.record({
+        actorId: "system",
+        action: "WHATSAPP_INBOUND_MESSAGE",
+        entityType: "WhatsAppMessage",
+        entityId: messageId ?? `inbound-${Date.now()}`,
+        metadata: {
+          phone,
+          text,
+          type: firstMessage?.type,
+          templateMessageId,
+          templateButtonPayload,
+        },
+      });
+    } catch {
+      // Best-effort audit
+    }
+
     // Dedup inbound webhook retries by Meta's `messages[].id` (a separate concern from
     // the per-mutating-action idempotency already implemented in
     // `WhatsAppSessionService.withIdempotency`, which is keyed per action, not per
     // inbound delivery).
     const handleInboundMessageStart = performance.now();
 
-const reply = messageId
-  ? await this.sessionService.withIdempotency(
-      `webhook-message:${messageId}`,
-      () => this.router.handleInboundMessage(phone, text, { templateButtonPayload, templateMessageId })
-    )
-  : await this.router.handleInboundMessage(phone, text, { templateButtonPayload, templateMessageId });
+    const reply = messageId
+      ? await this.sessionService.withIdempotency(
+          `webhook-message:${messageId}`,
+          () => this.router.handleInboundMessage(phone, text, { templateButtonPayload, templateMessageId })
+        )
+      : await this.router.handleInboundMessage(phone, text, { templateButtonPayload, templateMessageId });
 
-console.log(`[WhatsApp Webhook] handleInboundMessage took ${(performance.now() - handleInboundMessageStart).toFixed(2)}ms`);
+    console.log(`[WhatsApp Webhook] handleInboundMessage took ${(performance.now() - handleInboundMessageStart).toFixed(2)}ms`);
 
-const sendReplyStart = performance.now();
+    const sendReplyStart = performance.now();
 
-try {
-  await this.sendAdapter.send(phone, reply);
-} catch (error) {
-  this.logger.error(`Failed to send reply to ${phone}`, error as Error);
-} finally {
-  console.log(`[WhatsApp Webhook] sendReply took ${(performance.now() - sendReplyStart).toFixed(2)}ms`);
-}
+    try {
+      const sendResult = await this.sendAdapter.send(phone, reply);
+      try {
+        await this.auditHelper.record({
+          actorId: "system",
+          action: "WHATSAPP_BOT_REPLY",
+          entityType: "WhatsAppMessage",
+          entityId: sendResult.externalId || `reply-${Date.now()}`,
+          metadata: {
+            recipientPhone: phone,
+            replyKind: reply.kind,
+            provider: sendResult.provider,
+            externalId: sendResult.externalId,
+          },
+        });
+      } catch {
+        // Best-effort audit
+      }
+    } catch (error) {
+      this.logger.error(`Failed to send reply to ${phone}`, error as Error);
+      try {
+        await this.auditHelper.record({
+          actorId: "system",
+          action: "WHATSAPP_BOT_REPLY_FAILED",
+          entityType: "WhatsAppMessage",
+          entityId: messageId ?? `reply-failed-${Date.now()}`,
+          metadata: {
+            recipientPhone: phone,
+            error: (error as Error).message,
+          },
+        });
+      } catch {
+        // Best-effort audit
+      }
+    } finally {
+      console.log(`[WhatsApp Webhook] sendReply took ${(performance.now() - sendReplyStart).toFixed(2)}ms`);
+    }
 
-res.status(HttpStatus.OK).send("EVENT_RECEIVED");
+    res.status(HttpStatus.OK).send("EVENT_RECEIVED");
   }
 
 

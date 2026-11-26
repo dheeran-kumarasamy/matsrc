@@ -6,6 +6,8 @@ import { MetaCloudApiSendAdapter } from "./adapters/meta-cloud-api-send.adapter"
 describe("whatsAppSendProviderFactory (WhatsAppModule)", () => {
   const originalVercelEnv = process.env.VERCEL_ENV;
   const originalWhatsAppAdapter = process.env.WHATSAPP_ADAPTER;
+  const originalAccessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const originalPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   let mockAdapter: MockWhatsAppSendAdapter;
   let metaAdapter: MetaCloudApiSendAdapter;
@@ -13,6 +15,8 @@ describe("whatsAppSendProviderFactory (WhatsAppModule)", () => {
   beforeEach(() => {
     mockAdapter = new MockWhatsAppSendAdapter();
     metaAdapter = new MetaCloudApiSendAdapter();
+    delete process.env.WHATSAPP_ACCESS_TOKEN;
+    delete process.env.WHATSAPP_PHONE_NUMBER_ID;
   });
 
   afterEach(() => {
@@ -26,6 +30,18 @@ describe("whatsAppSendProviderFactory (WhatsAppModule)", () => {
       delete process.env.WHATSAPP_ADAPTER;
     } else {
       process.env.WHATSAPP_ADAPTER = originalWhatsAppAdapter;
+    }
+
+    if (originalAccessToken === undefined) {
+      delete process.env.WHATSAPP_ACCESS_TOKEN;
+    } else {
+      process.env.WHATSAPP_ACCESS_TOKEN = originalAccessToken;
+    }
+
+    if (originalPhoneNumberId === undefined) {
+      delete process.env.WHATSAPP_PHONE_NUMBER_ID;
+    } else {
+      process.env.WHATSAPP_PHONE_NUMBER_ID = originalPhoneNumberId;
     }
   });
 
@@ -98,6 +114,16 @@ describe("whatsAppSendProviderFactory (WhatsAppModule)", () => {
 
       const selected = whatsAppSendProviderFactory(mockAdapter, metaAdapter);
       expect(selected).toBe(mockAdapter);
+    });
+
+    it("selects Meta adapter when credentials are set even if WHATSAPP_ADAPTER is unset", () => {
+      delete process.env.VERCEL_ENV;
+      delete process.env.WHATSAPP_ADAPTER;
+      process.env.WHATSAPP_ACCESS_TOKEN = "test-token";
+      process.env.WHATSAPP_PHONE_NUMBER_ID = "test-phone-id";
+
+      const selected = whatsAppSendProviderFactory(mockAdapter, metaAdapter);
+      expect(selected).toBe(metaAdapter);
     });
   });
 });

@@ -25,6 +25,7 @@ function initNest(): Promise<void> {
   if (!nestReady) {
     nestReady = NestFactory.create(AppModule, new ExpressAdapter(server), {
       logger: ['error', 'warn'],
+      rawBody: true,
     }).then(async (app) => {
       app.setGlobalPrefix('api');
       app.enableCors();
@@ -43,5 +44,10 @@ function initNest(): Promise<void> {
 
 module.exports = async (req: Request, res: Response) => {
   await initNest();
-  server(req, res);
+  return new Promise<void>((resolve, reject) => {
+    res.on('finish', resolve);
+    res.on('close', resolve);
+    res.on('error', reject);
+    server(req, res);
+  });
 };

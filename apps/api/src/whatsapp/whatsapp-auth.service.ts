@@ -41,10 +41,19 @@ export class WhatsAppAuthService {
 
 
   async resolveByVerifiedNumber(phone: string): Promise<WhatsAppIdentity | null> {
+    const raw = phone.trim();
+    const withPlus = raw.startsWith("+") ? raw : `+${raw}`;
+    const withoutPlus = raw.replace(/^\+/, "");
+
     const user = await this.prisma.user.findFirst({
       where: {
         role: Role.SUPPLIER,
-        OR: [{ whatsappNumber: phone }, { phone }],
+        OR: [
+          { whatsappNumber: withPlus },
+          { whatsappNumber: withoutPlus },
+          { phone: withPlus },
+          { phone: withoutPlus },
+        ],
       },
       include: { supplierProfile: true },
     });

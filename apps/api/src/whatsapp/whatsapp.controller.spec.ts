@@ -133,6 +133,7 @@ describe("WhatsAppController", () => {
       withIdempotency: vi.fn(async (_key: string, fn: () => Promise<unknown>) => fn()),
     };
     auditHelper = {
+      record: vi.fn().mockResolvedValue(undefined),
       recordDeliveryStatus: vi.fn().mockResolvedValue(undefined),
       recordEscalation: vi.fn().mockResolvedValue(undefined),
     };

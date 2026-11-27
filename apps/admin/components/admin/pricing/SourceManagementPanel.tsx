@@ -26,6 +26,19 @@ function money(value: number) {
   return formatCurrency(value);
 }
 
+function getEnableBlockReason(source: PricingAdminSource): string | null {
+  if (!source.tosReviewedAt) {
+    return "Cannot enable: ToS has not been reviewed for this source.";
+  }
+  if (!source.robotsAllowed) {
+    return "Cannot enable: robots.txt does not allow scraping this source.";
+  }
+  if (!source.configComplete) {
+    return "Cannot enable: configuration is incomplete (baseUrl and valid parser or Apify actor required).";
+  }
+  return null;
+}
+
 export function SourceManagementPanel({ sources }: { sources: PricingAdminSource[] }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -166,14 +179,20 @@ export function SourceManagementPanel({ sources }: { sources: PricingAdminSource
                           </button>
                         </>
                       ) : (
-                        <button
-                          type="button"
-                          disabled={busyId === source.id}
-                          onClick={() => void runAction(source.id, "enable")}
-                          className="rounded-lg border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-                        >
-                          Enable
-                        </button>
+                        (() => {
+                          const blockReason = getEnableBlockReason(source);
+                          return (
+                            <button
+                              type="button"
+                              disabled={busyId === source.id || blockReason !== null}
+                              title={blockReason ?? "Enable source"}
+                              onClick={() => void runAction(source.id, "enable")}
+                              className="rounded-lg border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Enable
+                            </button>
+                          );
+                        })()
                       )}
                       <button
                         type="button"

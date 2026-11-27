@@ -111,7 +111,7 @@ function getBuilderPortalBaseUrl(): string {
     process.env.NEXT_PUBLIC_BUILDER_APP_URL ||
     process.env.BUILDER_PORTAL_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
-    "https://matsrc-web.vercel.app"
+    "https://buildohub.in"
   );
 }
 

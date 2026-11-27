@@ -30,7 +30,7 @@ export function buildDailyPriceDedupeKey(supplierId: string, businessDate: strin
 // NEXT_PUBLIC_SUPPLIER_APP_URL env vars, falling back to the shared default
 // used throughout this module.
 export function supplierPricingDeepLink(): string {
-  const baseUrl = process.env.SUPPLIER_PORTAL_URL || process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://matsrc-supplier.vercel.app";
+  const baseUrl = process.env.SUPPLIER_PORTAL_URL || process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://supplier.buildohub.in";
   return `${baseUrl.replace(/\/$/, "")}/listings`;
 }
 

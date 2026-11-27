@@ -92,7 +92,7 @@ export class SupplierDailyPriceReminderService {
           parameters: [supplierName],
           deepLink: supplierPricingDeepLink(),
           title: "Daily Price Update",
-          body: `Good morning ${supplierName}! 👋\n\nYour listed products and current prices are available on Matsrc.\n\nIf any of your product prices have changed today, you can review your products and update them here.\n\nNo price change? No action is required.\n\nYour existing prices will remain unchanged until you update them.\n\nThank you,\nTeam Matsrc`,
+          body: `Good morning ${supplierName}! 👋\n\nYour listed products and current prices are available on Buildohub.\n\nIf any of your product prices have changed today, you can review your products and update them here.\n\nNo price change? No action is required.\n\nYour existing prices will remain unchanged until you update them.\n\nThank you,\nTeam Buildohub`,
           dedupeKey,
           payload: {
             supplierId: result.supplierId,

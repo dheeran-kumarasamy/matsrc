@@ -182,7 +182,7 @@ function builderPortalBaseUrl(): string {
 }
 
 function supplierPortalBaseUrl(): string {
-  return (process.env.SUPPLIER_PORTAL_URL || process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://matsrc-supplier.vercel.app").replace(/\/$/, "");
+  return (process.env.SUPPLIER_PORTAL_URL || process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://supplier.buildohub.in").replace(/\/$/, "");
 }
 
 @Injectable()

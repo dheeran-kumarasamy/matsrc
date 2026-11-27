@@ -33,6 +33,24 @@ async function getAdminHeaders(extra?: HeadersInit): Promise<HeadersInit> {
   };
 }
 
+async function extractApiError(response: Response, fallback: string): Promise<string> {
+  try {
+    const data = await response.clone().json();
+    if (Array.isArray(data?.message) && data.message.length > 0) {
+      return String(data.message[0]);
+    }
+    if (typeof data?.message === "string" && data.message.trim()) {
+      return data.message;
+    }
+    if (typeof data?.error === "string" && data.error.trim()) {
+      return data.error;
+    }
+  } catch {
+    // Non-JSON response body
+  }
+  return fallback;
+}
+
 export async function adminApiGet<T>(path: string): Promise<T> {
   const headers = await getAdminHeaders();
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -41,7 +59,7 @@ export async function adminApiGet<T>(path: string): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`Admin API request failed: ${response.status}`);
+    throw new Error(await extractApiError(response, `Admin API request failed: ${response.status}`));
   }
 
   return response.json() as Promise<T>;
@@ -56,7 +74,7 @@ export async function adminApiPatch<T>(path: string, body: unknown): Promise<T> 
   });
 
   if (!response.ok) {
-    throw new Error(`Admin API patch failed: ${response.status}`);
+    throw new Error(await extractApiError(response, `Admin API patch failed: ${response.status}`));
   }
 
   return response.json() as Promise<T>;
@@ -71,7 +89,7 @@ export async function adminApiPost<T>(path: string, body?: unknown): Promise<T> 
   });
 
   if (!response.ok) {
-    throw new Error(`Admin API post failed: ${response.status}`);
+    throw new Error(await extractApiError(response, `Admin API post failed: ${response.status}`));
   }
 
   return response.json() as Promise<T>;

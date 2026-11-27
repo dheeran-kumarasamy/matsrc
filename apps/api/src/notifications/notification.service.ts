@@ -791,7 +791,7 @@ export class NotificationService {
   }
 
   private getSupplierEnquiryDeepLink(enquiryId: string): string {
-    const baseUrl = process.env.SUPPLIER_PORTAL_URL || process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://matsrc-supplier.vercel.app";
+    const baseUrl = process.env.SUPPLIER_PORTAL_URL || process.env.NEXT_PUBLIC_SUPPLIER_APP_URL || "https://supplier.buildohub.in";
     return `${baseUrl.replace(/\/$/, "")}/rfqs?respond=${enquiryId}`;
   }
 

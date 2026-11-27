@@ -285,7 +285,7 @@ describe("PriceUpdateFlow", () => {
         expect(message.text).toContain("TMT Steel – JSW – Fe500D – 12 mm: ₹64,500 → ₹64,800/ton");
         expect(message.text).toContain("Unchanged Products:");
         expect(message.text).toContain("OPC Cement – UltraTech – 53 Grade: ₹395/bag (Unchanged)");
-        expect(message.text).toContain("Your prices are now live on Matsrc.");
+        expect(message.text).toContain("Your prices are now live on Buildohub.");
       }
     });
 

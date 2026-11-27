@@ -106,8 +106,8 @@ export class PriceUpdateFlow {
       this.sessionService.resetToMainMenu(session.phone);
       return {
         kind: "text",
-        text: `You have no active listings right now. Please add or activate listings on the Matsrc Supplier Portal: ${
-          process.env.SUPPLIER_PORTAL_URL || "https://matsrc-supplier.vercel.app"
+        text: `You have no active listings right now. Please add or activate listings on the Buildohub Supplier Portal: ${
+          process.env.SUPPLIER_PORTAL_URL || "https://supplier.buildohub.in"
         }/listings\n\n${MENU_FOOTER}`,
       };
     }
@@ -174,7 +174,7 @@ export class PriceUpdateFlow {
       }
       return {
         kind: "text",
-        text: `✅ Confirmed: all your product prices remain unchanged.\n\nYour existing prices will stay live on Matsrc.\n\nThank you!\n\n${MENU_FOOTER}`,
+        text: `✅ Confirmed: all your product prices remain unchanged.\n\nYour existing prices will stay live on Buildohub.\n\nThank you!\n\n${MENU_FOOTER}`,
       };
     }
 
@@ -427,7 +427,7 @@ export class PriceUpdateFlow {
     if (unchangedLines.length > 0) {
       receipt += `\n\nUnchanged Products:\n${unchangedLines.join("\n")}`;
     }
-    receipt += `\n\nYour prices are now live on Matsrc.\n\n${MENU_FOOTER}`;
+    receipt += `\n\nYour prices are now live on Buildohub.\n\n${MENU_FOOTER}`;
 
     this.sessionService.resetToMainMenu(session.phone);
 

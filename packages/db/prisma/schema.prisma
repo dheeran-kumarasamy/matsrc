@@ -912,6 +912,14 @@ model SupplierQuote {
   markupPercent  Decimal? @db.Decimal(5, 2)
   markupAmount   Decimal? @db.Decimal(12, 2)
 
+  // Optional supplier-quoted logistics/ancillary charges & dispatch date.
+  // Nullable/additive so suppliers can omit any field.
+  freightCharges   Decimal?  @db.Decimal(12, 2)
+  loadingCharges   Decimal?  @db.Decimal(12, 2)
+  unloadingCharges Decimal?  @db.Decimal(12, 2)
+  otherCharges     Decimal?  @db.Decimal(12, 2)
+  dispatchDate     DateTime?
+
   @@index([enquiryId])
   @@index([supplierId])
   @@index([lineItemId])
@@ -1101,6 +1109,13 @@ model Order {
   finalPayableAmount    Decimal? @db.Decimal(12, 2)
   advancePercent        Decimal? @db.Decimal(5, 2)
   requiredAdvanceAmount Decimal? @db.Decimal(12, 2)
+
+  // Selected quotation's optional logistics/ancillary charges & dispatch date.
+  freightCharges   Decimal   @default(0) @db.Decimal(12, 2)
+  loadingCharges   Decimal   @default(0) @db.Decimal(12, 2)
+  unloadingCharges Decimal   @default(0) @db.Decimal(12, 2)
+  otherCharges     Decimal   @default(0) @db.Decimal(12, 2)
+  dispatchDate     DateTime?
 
   deliveryDate       DateTime?
   // REQ-07: map-based geolocation capture, replacing the checkout pincode

@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { PaymentStatus, SupplierQuoteStatus } from "@matsrc/db";
+import {
+  calculateQuoteChargesGst,
+  formatDispatchDateIn,
+  PaymentStatus,
+  SupplierQuoteStatus,
+} from "@matsrc/db";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
 import { getSupplierDisplayName } from "@/lib/supplier-display";
 
@@ -65,6 +70,19 @@ export async function GET(
         order.selectedQuoteId === quote.id ||
         (order.selectedSupplierId === quote.supplierId && Boolean(order.quoteSelectionCompletedAt));
 
+      const qAny = quote as any;
+      const freightCharges = qAny.freightCharges != null ? Number(qAny.freightCharges) : null;
+      const loadingCharges = qAny.loadingCharges != null ? Number(qAny.loadingCharges) : null;
+      const unloadingCharges = qAny.unloadingCharges != null ? Number(qAny.unloadingCharges) : null;
+      const otherCharges = qAny.otherCharges != null ? Number(qAny.otherCharges) : null;
+      const dispatchDate = formatDispatchDateIn(qAny.dispatchDate ?? null);
+      const chargesGst = calculateQuoteChargesGst({
+        freightCharges,
+        loadingCharges,
+        unloadingCharges,
+        otherCharges,
+      });
+
       return {
         id: quote.id,
         supplierId: quote.supplierId,
@@ -76,6 +94,14 @@ export async function GET(
         buyerUnitPrice,
         currency: quote.currency,
         leadTimeDays: quote.leadTimeDays,
+        freightCharges,
+        loadingCharges,
+        unloadingCharges,
+        otherCharges,
+        chargesSubtotal: chargesGst.chargesSubtotal,
+        chargesGstAmount: chargesGst.chargesGstAmount,
+        chargesTotal: chargesGst.chargesTotal,
+        dispatchDate,
         lineSubtotal,
         gstRatePercent,
         gstAmount,

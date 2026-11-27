@@ -103,6 +103,16 @@ export async function ensureBuilderSchema(): Promise<void> {
         await (prisma as any)
           .$executeRawUnsafe('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "paymentDueDays" INTEGER NOT NULL DEFAULT 0;')
           .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe(
+            'ALTER TABLE "SupplierQuote" ADD COLUMN IF NOT EXISTS "freightCharges" DECIMAL(12,2), ADD COLUMN IF NOT EXISTS "loadingCharges" DECIMAL(12,2), ADD COLUMN IF NOT EXISTS "unloadingCharges" DECIMAL(12,2), ADD COLUMN IF NOT EXISTS "otherCharges" DECIMAL(12,2), ADD COLUMN IF NOT EXISTS "dispatchDate" TIMESTAMP(3);'
+          )
+          .catch(() => {});
+        await (prisma as any)
+          .$executeRawUnsafe(
+            'ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "freightCharges" DECIMAL(12,2) NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS "loadingCharges" DECIMAL(12,2) NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS "unloadingCharges" DECIMAL(12,2) NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS "otherCharges" DECIMAL(12,2) NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS "dispatchDate" TIMESTAMP(3);'
+          )
+          .catch(() => {});
       }
       schemaEnsured = true;
     } catch (e) {

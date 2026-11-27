@@ -14,6 +14,14 @@ export type BuyerQuoteItem = {
   buyerUnitPrice: number;
   currency: string;
   leadTimeDays: number | null;
+  freightCharges?: number | null;
+  loadingCharges?: number | null;
+  unloadingCharges?: number | null;
+  otherCharges?: number | null;
+  chargesSubtotal?: number;
+  chargesGstAmount?: number;
+  chargesTotal?: number;
+  dispatchDate?: string | null;
   lineSubtotal: number;
   gstRatePercent: number;
   gstAmount: number;
@@ -201,6 +209,42 @@ export function BuyerQuotationSelector({ orderId }: { orderId: string }) {
                   <span>GST ({quote.gstRatePercent}%):</span>
                   <span>₹{quote.gstAmount.toLocaleString("en-IN")}</span>
                 </div>
+                {(quote.freightCharges ?? 0) > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Freight Charges:</span>
+                    <span>₹{quote.freightCharges!.toLocaleString("en-IN")}</span>
+                  </div>
+                )}
+                {(quote.loadingCharges ?? 0) > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Loading Charges:</span>
+                    <span>₹{quote.loadingCharges!.toLocaleString("en-IN")}</span>
+                  </div>
+                )}
+                {(quote.unloadingCharges ?? 0) > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Unloading Charges:</span>
+                    <span>₹{quote.unloadingCharges!.toLocaleString("en-IN")}</span>
+                  </div>
+                )}
+                {(quote.otherCharges ?? 0) > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Other Charges:</span>
+                    <span>₹{quote.otherCharges!.toLocaleString("en-IN")}</span>
+                  </div>
+                )}
+                {(quote.chargesGstAmount ?? 0) > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>GST on Charges (18%):</span>
+                    <span>₹{quote.chargesGstAmount!.toLocaleString("en-IN")}</span>
+                  </div>
+                )}
+                {quote.dispatchDate && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Dispatch Date:</span>
+                    <span className="font-medium text-slate-800">{quote.dispatchDate}</span>
+                  </div>
+                )}
                 {quote.leadTimeDays && (
                   <div className="flex justify-between text-slate-600">
                     <span>Est. Lead Time:</span>
@@ -209,7 +253,7 @@ export function BuyerQuotationSelector({ orderId }: { orderId: string }) {
                 )}
                 <div className="flex justify-between border-t border-slate-100 pt-2 text-sm font-extrabold text-slate-950">
                   <span>Total Payable:</span>
-                  <span>₹{quote.lineTotal.toLocaleString("en-IN")}</span>
+                  <span>₹{(quote.lineTotal + (quote.chargesTotal ?? 0)).toLocaleString("en-IN")}</span>
                 </div>
               </div>
             </div>

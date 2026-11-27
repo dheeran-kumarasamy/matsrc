@@ -1,6 +1,11 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { waitUntil } from "@vercel/functions";
-import { calculateLineGst, parseQuotedPrice } from "@matsrc/db";
+import {
+  calculateLineGst,
+  parseOptionalDispatchDate,
+  parseOptionalQuoteCharge,
+  parseQuotedPrice,
+} from "@matsrc/db";
 import { PrismaService } from "src/prisma/prisma.service";
 import { SupplierContextService } from "src/supplier/supplier-context.service";
 import { formatDate } from "src/supplier/utils";
@@ -174,6 +179,22 @@ export class RfqsService {
     user: any
   ): Promise<{ id: string; rfqId: string; price: string }> {
     const { supplierProfile } = await this.supplierContext.getOrCreateSupplier(user.userId, user.email, user.name);
+
+    let freightCharges: number | null = null;
+    let loadingCharges: number | null = null;
+    let unloadingCharges: number | null = null;
+    let otherCharges: number | null = null;
+    let dispatchDate: Date | null = null;
+    try {
+      freightCharges = parseOptionalQuoteCharge(dto.freightCharges, "Freight charges");
+      loadingCharges = parseOptionalQuoteCharge(dto.loadingCharges, "Loading charges");
+      unloadingCharges = parseOptionalQuoteCharge(dto.unloadingCharges, "Unloading charges");
+      otherCharges = parseOptionalQuoteCharge(dto.otherCharges, "Other charges");
+      dispatchDate = parseOptionalDispatchDate(dto.dispatchDate);
+    } catch (err) {
+      throw new BadRequestException(err instanceof Error ? err.message : "Invalid quotation charges or dispatch date");
+    }
+
     const enquiry = await this.prisma.order.findUnique({
       where: { id: enquiryId },
       include: {
@@ -267,6 +288,11 @@ export class RfqsService {
             lineSubtotal: gst.lineSubtotal,
             gstAmount: gst.gstAmount,
             lineTotal: gst.lineTotal,
+            freightCharges,
+            loadingCharges,
+            unloadingCharges,
+            otherCharges,
+            dispatchDate,
             status: "PENDING_ADMIN_REVIEW",
           },
         });

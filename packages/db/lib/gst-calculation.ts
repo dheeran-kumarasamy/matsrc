@@ -57,6 +57,132 @@ export function parseQuotedPrice(raw: string | number | null | undefined): numbe
   return isValidQuotedPrice(parsed) ? parsed : null;
 }
 
+export type QuoteChargesInput = {
+  freightCharges?: number | string | null;
+  loadingCharges?: number | string | null;
+  unloadingCharges?: number | string | null;
+  otherCharges?: number | string | null;
+};
+
+export type QuoteChargesBreakdown = {
+  freightCharges: number;
+  loadingCharges: number;
+  unloadingCharges: number;
+  otherCharges: number;
+  chargesSubtotal: number;
+  chargesGstPercent: number;
+  chargesGstAmount: number;
+  chargesTotal: number;
+};
+
+/**
+ * Parses an optional charge input. Blank/null/undefined returns `0` (valid,
+ * ignored). Throws an Error if a non-empty value is negative or non-finite.
+ */
+export function parseOptionalQuoteCharge(
+  raw: string | number | null | undefined,
+  fieldLabel = "Charge"
+): number | null {
+  if (raw === null || raw === undefined) return null;
+  const trimmed = typeof raw === "string" ? raw.trim() : raw;
+  if (trimmed === "") return null;
+  const parsed = typeof trimmed === "number" ? trimmed : Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`${fieldLabel} must be a non-negative number.`);
+  }
+  return roundCurrency(parsed);
+}
+
+/**
+ * Computes 18% GST and total across optional freight, loading, unloading,
+ * and other quotation charges.
+ */
+export function calculateQuoteChargesGst(input: QuoteChargesInput): QuoteChargesBreakdown {
+  const toVal = (v: number | string | null | undefined) => {
+    if (v === null || v === undefined || v === "") return 0;
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? roundCurrency(n) : 0;
+  };
+  const freightCharges = toVal(input.freightCharges);
+  const loadingCharges = toVal(input.loadingCharges);
+  const unloadingCharges = toVal(input.unloadingCharges);
+  const otherCharges = toVal(input.otherCharges);
+  const chargesSubtotal = roundCurrency(
+    freightCharges + loadingCharges + unloadingCharges + otherCharges
+  );
+  const chargesGstPercent = DEFAULT_TAX_RATE_PERCENT;
+  const chargesGstAmount = roundCurrency((chargesSubtotal * chargesGstPercent) / 100);
+  const chargesTotal = roundCurrency(chargesSubtotal + chargesGstAmount);
+  return {
+    freightCharges,
+    loadingCharges,
+    unloadingCharges,
+    otherCharges,
+    chargesSubtotal,
+    chargesGstPercent,
+    chargesGstAmount,
+    chargesTotal,
+  };
+}
+
+/**
+ * Parses an optional Indian-format `DD/MM/YYYY` (or ISO `YYYY-MM-DD`) dispatch
+ * date string into a UTC midnight `Date`. Returns `null` for blank input and
+ * throws an Error for malformed or past dates.
+ */
+export function parseOptionalDispatchDate(raw: string | null | undefined): Date | null {
+  if (raw === null || raw === undefined) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  let day: number;
+  let month: number;
+  let year: number;
+
+  const ddmmyyyy = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(trimmed);
+  const yyyymmdd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+
+  if (ddmmyyyy) {
+    day = Number(ddmmyyyy[1]);
+    month = Number(ddmmyyyy[2]);
+    year = Number(ddmmyyyy[3]);
+  } else if (yyyymmdd) {
+    year = Number(yyyymmdd[1]);
+    month = Number(yyyymmdd[2]);
+    day = Number(yyyymmdd[3]);
+  } else {
+    throw new Error("Dispatch date must be in DD/MM/YYYY format.");
+  }
+
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    candidate.getUTCFullYear() !== year ||
+    candidate.getUTCMonth() !== month - 1 ||
+    candidate.getUTCDate() !== day
+  ) {
+    throw new Error("Dispatch date is not a valid calendar date.");
+  }
+
+  const now = new Date();
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  if (candidate < todayUtc) {
+    throw new Error("Dispatch date cannot be in the past.");
+  }
+
+  return candidate;
+}
+
+/** Formats a Date/ISO string as `DD/MM/YYYY` (en-IN). */
+export function formatDispatchDateIn(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const yyyy = d.getUTCFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 export type LineGstInput = {
   quantity: number;
   unitPrice: number;

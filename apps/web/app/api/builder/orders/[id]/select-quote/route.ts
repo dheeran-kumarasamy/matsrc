@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
-import { OrderStatus, PaymentStatus, SupplierQuoteStatus, calculateLineGst, closeCompetingSuppliersForOrder } from "@matsrc/db";
+import {
+  OrderStatus,
+  PaymentStatus,
+  SupplierQuoteStatus,
+  calculateLineGst,
+  calculateQuoteChargesGst,
+  closeCompetingSuppliersForOrder,
+  roundCurrency,
+} from "@matsrc/db";
 import { prisma, getOrCreateBuilder, getUserCtx } from "@/lib/builder-db";
 
 export const dynamic = "force-dynamic";
@@ -120,15 +128,35 @@ export async function POST(
         });
       }
 
-      // 2. Recalculate totals across all OrderItems
+      // 2. Recalculate totals across all OrderItems + selected quote's optional charges (with 18% GST)
       const items = await tx.orderItem.findMany({
         where: { orderId: order.id },
         select: { unitPrice: true, quantity: true, taxAmount: true },
       });
 
-      const totalAmount = items.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0);
-      const taxAmount = items.reduce((sum, i) => sum + (i.taxAmount ? Number(i.taxAmount) : 0), 0);
-      const finalPayableAmount = Math.round((totalAmount + taxAmount + Number.EPSILON) * 100) / 100;
+      const quoteWithExtras = (supplierQuotes.find((sq: any) =>
+        sq.freightCharges != null ||
+        sq.loadingCharges != null ||
+        sq.unloadingCharges != null ||
+        sq.otherCharges != null ||
+        sq.dispatchDate != null
+      ) ?? quote) as any;
+
+      const chargesGst = calculateQuoteChargesGst({
+        freightCharges: quoteWithExtras?.freightCharges != null ? Number(quoteWithExtras.freightCharges) : 0,
+        loadingCharges: quoteWithExtras?.loadingCharges != null ? Number(quoteWithExtras.loadingCharges) : 0,
+        unloadingCharges: quoteWithExtras?.unloadingCharges != null ? Number(quoteWithExtras.unloadingCharges) : 0,
+        otherCharges: quoteWithExtras?.otherCharges != null ? Number(quoteWithExtras.otherCharges) : 0,
+      });
+
+      const totalAmount = roundCurrency(
+        items.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0)
+      );
+      const itemsTaxAmount = roundCurrency(
+        items.reduce((sum, i) => sum + (i.taxAmount ? Number(i.taxAmount) : 0), 0)
+      );
+      const taxAmount = roundCurrency(itemsTaxAmount + chargesGst.chargesGstAmount);
+      const finalPayableAmount = roundCurrency(totalAmount + chargesGst.chargesSubtotal + taxAmount);
 
       // 3. Update the Order record
       const nextStatus = order.status === OrderStatus.PLACED ? OrderStatus.PROCESSING : order.status;
@@ -139,6 +167,11 @@ export async function POST(
           selectedSupplierId: quote.supplierId,
           selectedQuoteId: quote.id,
           quoteSelectionCompletedAt: new Date(),
+          freightCharges: chargesGst.freightCharges,
+          loadingCharges: chargesGst.loadingCharges,
+          unloadingCharges: chargesGst.unloadingCharges,
+          otherCharges: chargesGst.otherCharges,
+          dispatchDate: quoteWithExtras?.dispatchDate ?? null,
           bestPriceTotal: totalAmount,
           totalAmount,
           taxAmount,

@@ -30,7 +30,8 @@ const {
   orderTrackingRows: [] as any[],
 }));
 
-vi.mock("@matsrc/db", () => {
+vi.mock("@matsrc/db", async () => {
+  const gstHelpers = await import("../../../packages/db/lib/gst-calculation");
   return {
     prisma: {
       user: {
@@ -121,6 +122,11 @@ vi.mock("@matsrc/db", () => {
       const parsed = typeof raw === "number" ? raw : Number(raw);
       return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
     },
+    roundCurrency: gstHelpers.roundCurrency,
+    parseOptionalQuoteCharge: gstHelpers.parseOptionalQuoteCharge,
+    calculateQuoteChargesGst: gstHelpers.calculateQuoteChargesGst,
+    parseOptionalDispatchDate: gstHelpers.parseOptionalDispatchDate,
+    formatDispatchDateIn: gstHelpers.formatDispatchDateIn,
     // Admin-Configurable Product Markup: real resolution logic (product ->
     // category -> global precedence, explicit-0%-vs-unset) is already
     // covered by packages/db/lib/markup-calculation.spec.ts — this mock
@@ -412,5 +418,74 @@ describe("createSupplierQuote — RFQ line-item quotation (lineQuotes path)", ()
     expect(result).toBeDefined();
     expect(supplierQuoteRows).toHaveLength(1);
     expect(supplierQuoteRows[0].status).toBe("PENDING_ADMIN_REVIEW");
+  });
+
+  it("persists optional freight, loading, unloading, other charges (18% GST) and DD/MM/YYYY dispatch date", async () => {
+    seedOrder("enq-charges");
+
+    const result = await createSupplierQuote(
+      "enq-charges",
+      {
+        price: "500",
+        lineQuotes: [{ lineItemId: "line-1", unitPrice: "500" }],
+        freightCharges: "1000",
+        loadingCharges: "250",
+        unloadingCharges: "250",
+        otherCharges: "500",
+        dispatchDate: "25/12/2099",
+      },
+      "supplier@example.com"
+    );
+
+    expect(result).toBeDefined();
+    expect(supplierQuoteRows[0]).toMatchObject({
+      freightCharges: 1000,
+      loadingCharges: 250,
+      unloadingCharges: 250,
+      otherCharges: 500,
+    });
+    expect(supplierQuoteRows[0].dispatchDate).toBeInstanceOf(Date);
+    expect(supplierQuoteRows[0].dispatchDate.toISOString().slice(0, 10)).toBe("2099-12-25");
+  });
+
+  it("allows ignoring all optional charges and dispatch date", async () => {
+    seedOrder("enq-no-charges");
+
+    const result = await createSupplierQuote(
+      "enq-no-charges",
+      {
+        price: "500",
+        lineQuotes: [{ lineItemId: "line-1", unitPrice: "500" }],
+        freightCharges: "",
+        loadingCharges: null,
+        unloadingCharges: undefined,
+        otherCharges: "",
+        dispatchDate: "",
+      },
+      "supplier@example.com"
+    );
+
+    expect(result).toBeDefined();
+    expect(supplierQuoteRows[0].freightCharges).toBeNull();
+    expect(supplierQuoteRows[0].loadingCharges).toBeNull();
+    expect(supplierQuoteRows[0].unloadingCharges).toBeNull();
+    expect(supplierQuoteRows[0].otherCharges).toBeNull();
+    expect(supplierQuoteRows[0].dispatchDate).toBeNull();
+  });
+
+  it("rejects invalid dispatch date format", async () => {
+    seedOrder("enq-bad-date");
+
+    await expect(
+      createSupplierQuote(
+        "enq-bad-date",
+        {
+          price: "500",
+          lineQuotes: [{ lineItemId: "line-1", unitPrice: "500" }],
+          dispatchDate: "12-25-2099",
+        },
+        "supplier@example.com"
+      )
+    ).rejects.toThrow(/DD\/MM\/YYYY/);
   });
 });

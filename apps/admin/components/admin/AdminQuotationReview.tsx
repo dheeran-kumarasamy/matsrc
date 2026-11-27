@@ -14,6 +14,14 @@ export type AdminSupplierQuote = {
   supplierUnitPrice: number;
   currency: string;
   leadTimeDays: number | null;
+  freightCharges?: number | null;
+  loadingCharges?: number | null;
+  unloadingCharges?: number | null;
+  otherCharges?: number | null;
+  chargesSubtotal?: number;
+  chargesGstAmount?: number;
+  chargesTotal?: number;
+  dispatchDate?: string | null;
   status: "PENDING_ADMIN_REVIEW" | "SENT_TO_BUYER" | "REJECTED";
   sentToBuyerAt: string | null;
   reviewedByAdminId: string | null;
@@ -256,7 +264,18 @@ export function AdminQuotationReview({ initialData }: { initialData: AdminQuotat
                       Material: <strong className="text-slate-800">{quote.materialName}</strong> ({quote.quantity}{" "}
                       {quote.unit}) · Submitted on {new Date(quote.createdAt).toLocaleString("en-IN")}
                       {quote.leadTimeDays ? ` · Lead Time: ${quote.leadTimeDays} days` : ""}
+                      {quote.dispatchDate ? ` · Dispatch Date: ${quote.dispatchDate}` : ""}
                     </p>
+                    {(quote.chargesSubtotal ?? 0) > 0 ? (
+                      <p className="mt-1 text-xs text-slate-600">
+                        Extra Charges (excl. GST):
+                        {quote.freightCharges ? ` Freight ₹${quote.freightCharges.toLocaleString("en-IN")}` : ""}
+                        {quote.loadingCharges ? ` · Loading ₹${quote.loadingCharges.toLocaleString("en-IN")}` : ""}
+                        {quote.unloadingCharges ? ` · Unloading ₹${quote.unloadingCharges.toLocaleString("en-IN")}` : ""}
+                        {quote.otherCharges ? ` · Other ₹${quote.otherCharges.toLocaleString("en-IN")}` : ""}
+                        {` (+ 18% GST ₹${(quote.chargesGstAmount ?? 0).toLocaleString("en-IN")} = ₹${(quote.chargesTotal ?? 0).toLocaleString("en-IN")})`}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="text-right">

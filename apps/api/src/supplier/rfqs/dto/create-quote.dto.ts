@@ -56,4 +56,20 @@ export class CreateQuoteDto {
   @Type(() => QuoteLineItemDto)
   @IsOptional()
   lineQuotes?: QuoteLineItemDto[];
+
+  @IsOptional()
+  freightCharges?: number | string | null;
+
+  @IsOptional()
+  loadingCharges?: number | string | null;
+
+  @IsOptional()
+  unloadingCharges?: number | string | null;
+
+  @IsOptional()
+  otherCharges?: number | string | null;
+
+  @IsString()
+  @IsOptional()
+  dispatchDate?: string | null;
 }

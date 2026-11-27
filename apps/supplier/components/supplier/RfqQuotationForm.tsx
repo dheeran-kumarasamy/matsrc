@@ -50,6 +50,11 @@ type QuotationContext = {
   subtotal: number;
   gstAmount: number;
   grandTotal: number;
+  freightCharges?: number | null;
+  loadingCharges?: number | null;
+  unloadingCharges?: number | null;
+  otherCharges?: number | null;
+  dispatchDate?: string | null;
 };
 
 function computeLine(quantity: number, unitPrice: number, gstRatePercent: number) {
@@ -59,10 +64,52 @@ function computeLine(quantity: number, unitPrice: number, gstRatePercent: number
   return { lineSubtotal, gstAmount, lineTotal };
 }
 
+function parseOptionalChargeClient(raw: string): { valid: boolean; value: number | null } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { valid: true, value: null };
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n < 0) return { valid: false, value: null };
+  return { valid: true, value: Math.round((n + Number.EPSILON) * 100) / 100 };
+}
+
+function validateIndianDate(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (!trimmed) return true;
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(trimmed);
+  if (!match) return false;
+  const dd = Number(match[1]);
+  const mm = Number(match[2]);
+  const yyyy = Number(match[3]);
+  const d = new Date(Date.UTC(yyyy, mm - 1, dd));
+  if (d.getUTCFullYear() !== yyyy || d.getUTCMonth() !== mm - 1 || d.getUTCDate() !== dd) {
+    return false;
+  }
+  const now = new Date();
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return d >= todayUtc;
+}
+
+function toIsoDateInput(ddmmyyyy: string): string {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(ddmmyyyy.trim());
+  if (!match) return "";
+  return `${match[3]}-${match[2]}-${match[1]}`;
+}
+
+function fromIsoDateInput(yyyymmdd: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(yyyymmdd.trim());
+  if (!match) return "";
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
 export function RfqQuotationForm({ enquiryId }: { enquiryId: string }) {
   const router = useRouter();
   const [context, setContext] = useState<QuotationContext | null>(null);
   const [prices, setPrices] = useState<Record<string, string>>({});
+  const [freightCharges, setFreightCharges] = useState("");
+  const [loadingCharges, setLoadingCharges] = useState("");
+  const [unloadingCharges, setUnloadingCharges] = useState("");
+  const [otherCharges, setOtherCharges] = useState("");
+  const [dispatchDate, setDispatchDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +130,11 @@ export function RfqQuotationForm({ enquiryId }: { enquiryId: string }) {
           initial[line.lineItemId] = line.initialUnitPrice.toString();
         }
         setPrices(initial);
+        setFreightCharges(data.freightCharges != null ? String(data.freightCharges) : "");
+        setLoadingCharges(data.loadingCharges != null ? String(data.loadingCharges) : "");
+        setUnloadingCharges(data.unloadingCharges != null ? String(data.unloadingCharges) : "");
+        setOtherCharges(data.otherCharges != null ? String(data.otherCharges) : "");
+        setDispatchDate(data.dispatchDate ?? "");
       })
       .catch(() => {
         if (!cancelled) setContext(null);
@@ -124,15 +176,35 @@ export function RfqQuotationForm({ enquiryId }: { enquiryId: string }) {
     return { ...line, unitPrice, lineSubtotal, gstAmount, lineTotal };
   });
 
+  const parsedFreight = parseOptionalChargeClient(freightCharges);
+  const parsedLoading = parseOptionalChargeClient(loadingCharges);
+  const parsedUnloading = parseOptionalChargeClient(unloadingCharges);
+  const parsedOther = parseOptionalChargeClient(otherCharges);
+  const isDispatchDateValid = validateIndianDate(dispatchDate);
+
   const subtotal = computedLines.reduce((sum, line) => sum + line.lineSubtotal, 0);
-  const totalGst = computedLines.reduce((sum, line) => sum + line.gstAmount, 0);
-  const grandTotal = subtotal + totalGst;
+  const productGst = computedLines.reduce((sum, line) => sum + line.gstAmount, 0);
+  const extraChargesSubtotal =
+    (parsedFreight.value ?? 0) +
+    (parsedLoading.value ?? 0) +
+    (parsedUnloading.value ?? 0) +
+    (parsedOther.value ?? 0);
+  const extraChargesGst = Math.round((extraChargesSubtotal * 0.18 + Number.EPSILON) * 100) / 100;
+  const totalGst = Math.round((productGst + extraChargesGst + Number.EPSILON) * 100) / 100;
+  const grandTotal = Math.round((subtotal + extraChargesSubtotal + totalGst + Number.EPSILON) * 100) / 100;
 
   const hasInvalidPrice = computedLines.some((line) => {
     const raw = prices[line.lineItemId];
     const parsed = Number(raw);
     return raw === "" || raw === undefined || !Number.isFinite(parsed) || parsed < 0;
   });
+
+  const hasInvalidOptionalFields =
+    !parsedFreight.valid ||
+    !parsedLoading.valid ||
+    !parsedUnloading.valid ||
+    !parsedOther.valid ||
+    !isDispatchDateValid;
 
   async function submit() {
     setSubmitting(true);
@@ -144,6 +216,11 @@ export function RfqQuotationForm({ enquiryId }: { enquiryId: string }) {
           lineItemId: line.lineItemId,
           unitPrice: prices[line.lineItemId],
         })),
+        freightCharges: parsedFreight.value,
+        loadingCharges: parsedLoading.value,
+        unloadingCharges: parsedUnloading.value,
+        otherCharges: parsedOther.value,
+        dispatchDate: dispatchDate.trim() || null,
       });
       setSuccess(true);
       setConfirming(false);
@@ -245,6 +322,101 @@ export function RfqQuotationForm({ enquiryId }: { enquiryId: string }) {
         </table>
       </div>
 
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wide text-slate-600">
+              Additional Charges &amp; Dispatch Details{" "}
+              <span className="text-xs font-medium normal-case text-slate-400">(Optional)</span>
+            </p>
+            <p className="mt-1 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-800">
+              These fields are optional and can be left blank. However, providing freight, loading/unloading, other
+              charges, and an expected dispatch date gives your quotation a better chance of approval by the admin and
+              buyer.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="block text-xs font-semibold text-slate-700">
+            Freight Charges (₹, excl. GST)
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Optional (e.g. 2500)"
+              value={freightCharges}
+              onChange={(e) => setFreightCharges(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-normal"
+            />
+          </label>
+          <label className="block text-xs font-semibold text-slate-700">
+            Loading Charges (₹, excl. GST)
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Optional (e.g. 500)"
+              value={loadingCharges}
+              onChange={(e) => setLoadingCharges(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-normal"
+            />
+          </label>
+          <label className="block text-xs font-semibold text-slate-700">
+            Unloading Charges (₹, excl. GST)
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Optional (e.g. 500)"
+              value={unloadingCharges}
+              onChange={(e) => setUnloadingCharges(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-normal"
+            />
+          </label>
+          <label className="block text-xs font-semibold text-slate-700">
+            Other Charges (₹, excl. GST)
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Optional"
+              value={otherCharges}
+              onChange={(e) => setOtherCharges(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-normal"
+            />
+          </label>
+          <div className="block text-xs font-semibold text-slate-700 sm:col-span-2 lg:col-span-2">
+            <span>Expected Dispatch Date (DD/MM/YYYY)</span>
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="DD/MM/YYYY (Optional)"
+                value={dispatchDate}
+                onChange={(e) => setDispatchDate(e.target.value)}
+                className={`w-full rounded-md border px-2.5 py-1.5 text-sm font-normal ${
+                  dispatchDate.trim() && !isDispatchDateValid ? "border-rose-400 bg-rose-50" : "border-slate-300"
+                }`}
+              />
+              <input
+                type="date"
+                aria-label="Pick dispatch date"
+                min={new Date().toISOString().slice(0, 10)}
+                value={toIsoDateInput(dispatchDate)}
+                onChange={(e) => setDispatchDate(fromIsoDateInput(e.target.value))}
+                className="w-10 shrink-0 rounded-md border border-slate-300 px-1.5 py-1.5 text-sm font-normal"
+              />
+            </div>
+            {dispatchDate.trim() && !isDispatchDateValid ? (
+              <span className="mt-1 block text-[11px] font-medium text-rose-600">
+                Enter a valid today or future date in DD/MM/YYYY format.
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
         <p className="text-sm font-bold uppercase tracking-wide text-slate-500">Quotation Summary</p>
         <div className="mt-2 space-y-1 text-sm text-slate-700">
@@ -252,10 +424,40 @@ export function RfqQuotationForm({ enquiryId }: { enquiryId: string }) {
             <span>Product Value</span>
             <span>{formatInr(subtotal)}</span>
           </div>
+          {(parsedFreight.value ?? 0) > 0 ? (
+            <div className="flex justify-between">
+              <span>Freight Charges</span>
+              <span>{formatInr(parsedFreight.value!)}</span>
+            </div>
+          ) : null}
+          {(parsedLoading.value ?? 0) > 0 ? (
+            <div className="flex justify-between">
+              <span>Loading Charges</span>
+              <span>{formatInr(parsedLoading.value!)}</span>
+            </div>
+          ) : null}
+          {(parsedUnloading.value ?? 0) > 0 ? (
+            <div className="flex justify-between">
+              <span>Unloading Charges</span>
+              <span>{formatInr(parsedUnloading.value!)}</span>
+            </div>
+          ) : null}
+          {(parsedOther.value ?? 0) > 0 ? (
+            <div className="flex justify-between">
+              <span>Other Charges</span>
+              <span>{formatInr(parsedOther.value!)}</span>
+            </div>
+          ) : null}
           <div className="flex justify-between">
-            <span>GST</span>
+            <span>GST {extraChargesSubtotal > 0 ? "(incl. 18% on charges)" : ""}</span>
             <span>{formatInr(totalGst)}</span>
           </div>
+          {dispatchDate.trim() && isDispatchDateValid ? (
+            <div className="flex justify-between text-xs text-slate-500">
+              <span>Expected Dispatch Date</span>
+              <span className="font-semibold text-slate-700">{dispatchDate.trim()}</span>
+            </div>
+          ) : null}
           <div className="mt-2 flex justify-between border-t border-slate-300 pt-2 text-base font-extrabold text-slate-900">
             <span>Total Order Value</span>
             <span>{formatInr(grandTotal)}</span>
@@ -269,7 +471,7 @@ export function RfqQuotationForm({ enquiryId }: { enquiryId: string }) {
         <div className="flex gap-2">
           <button
             type="button"
-            disabled={hasInvalidPrice}
+            disabled={hasInvalidPrice || hasInvalidOptionalFields}
             onClick={() => setConfirming(true)}
             className="flex-1 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
           >

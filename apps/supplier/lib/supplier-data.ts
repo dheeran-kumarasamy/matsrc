@@ -3,7 +3,12 @@ import {
   notifyCustomerOrderStatusChanged,
   notifyPaymentRequired,
   calculateLineGst,
+  calculateQuoteChargesGst,
+  formatDispatchDateIn,
+  parseOptionalDispatchDate,
+  parseOptionalQuoteCharge,
   parseQuotedPrice,
+  roundCurrency,
   lockAdvanceAccountRow,
   releaseAdvanceReservation,
   generateOrderNumber,
@@ -194,6 +199,22 @@ export async function ensurePricingSchema(): Promise<void> {
         INSERT INTO "OrderSplittingConfig" ("id", "allowMultiSupplierSplitting", "splitOnlyAcrossCategories", "updatedAt")
         VALUES ('global', false, true, CURRENT_TIMESTAMP)
         ON CONFLICT ("id") DO NOTHING;
+      `);
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "SupplierQuote"
+          ADD COLUMN IF NOT EXISTS "freightCharges" DECIMAL(12, 2),
+          ADD COLUMN IF NOT EXISTS "loadingCharges" DECIMAL(12, 2),
+          ADD COLUMN IF NOT EXISTS "unloadingCharges" DECIMAL(12, 2),
+          ADD COLUMN IF NOT EXISTS "otherCharges" DECIMAL(12, 2),
+          ADD COLUMN IF NOT EXISTS "dispatchDate" TIMESTAMP(3);
+      `);
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Order"
+          ADD COLUMN IF NOT EXISTS "freightCharges" DECIMAL(12, 2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS "loadingCharges" DECIMAL(12, 2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS "unloadingCharges" DECIMAL(12, 2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS "otherCharges" DECIMAL(12, 2) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS "dispatchDate" TIMESTAMP(3);
       `);
       schemaEnsured = true;
     } catch (err) {
@@ -1971,6 +1992,14 @@ export type RfqQuotationContext = {
   subtotal: number;
   gstAmount: number;
   grandTotal: number;
+  freightCharges: number | null;
+  loadingCharges: number | null;
+  unloadingCharges: number | null;
+  otherCharges: number | null;
+  dispatchDate: string | null;
+  chargesSubtotal: number;
+  chargesGstAmount: number;
+  chargesTotal: number;
 };
 
 
@@ -2260,6 +2289,7 @@ export async function getSupplierOrderDetail(orderId: string, email: string): Pr
 // GST is resolved per line item from OrderItem.taxRatePercent (falling back
 // to DEFAULT_TAX_RATE_PERCENT via calculateLineGst — never hard-coded).
 export async function getEnquiryQuotationContext(enquiryId: string, email: string): Promise<RfqQuotationContext | null> {
+  await ensurePricingSchema();
   const { supplierProfile } = await ensureSupplierContext(email);
 
   const order = await prisma.order.findUnique({
@@ -2341,9 +2371,32 @@ export async function getEnquiryQuotationContext(enquiryId: string, email: strin
   });
 
   const subtotal = lines.reduce((sum, line) => sum + line.lineSubtotal, 0);
-  const gstAmountTotal = lines.reduce((sum, line) => sum + line.gstAmount, 0);
+  const productGstAmountTotal = lines.reduce((sum, line) => sum + line.gstAmount, 0);
   const hasSubmittedQuote =
     order.items.length > 0 && order.items.every((item: any) => item.supplierQuotes && item.supplierQuotes.length > 0);
+
+  const latestQuoteWithExtras = order.items
+    .map((item: any) => item.supplierQuotes?.[0])
+    .find((q: any) => q != null);
+
+  const freightCharges =
+    latestQuoteWithExtras?.freightCharges != null ? Number(latestQuoteWithExtras.freightCharges) : null;
+  const loadingCharges =
+    latestQuoteWithExtras?.loadingCharges != null ? Number(latestQuoteWithExtras.loadingCharges) : null;
+  const unloadingCharges =
+    latestQuoteWithExtras?.unloadingCharges != null ? Number(latestQuoteWithExtras.unloadingCharges) : null;
+  const otherCharges =
+    latestQuoteWithExtras?.otherCharges != null ? Number(latestQuoteWithExtras.otherCharges) : null;
+  const dispatchDate = formatDispatchDateIn(latestQuoteWithExtras?.dispatchDate ?? null);
+
+  const chargesGst = calculateQuoteChargesGst({
+    freightCharges,
+    loadingCharges,
+    unloadingCharges,
+    otherCharges,
+  });
+  const totalGst = roundCurrency(productGstAmountTotal + chargesGst.chargesGstAmount);
+  const grandTotal = roundCurrency(subtotal + chargesGst.chargesSubtotal + totalGst);
 
   return {
     enquiryId,
@@ -2351,9 +2404,17 @@ export async function getEnquiryQuotationContext(enquiryId: string, email: strin
     quotable,
     hasSubmittedQuote,
     lines,
-    subtotal: Math.round(subtotal * 100) / 100,
-    gstAmount: Math.round(gstAmountTotal * 100) / 100,
-    grandTotal: Math.round((subtotal + gstAmountTotal) * 100) / 100,
+    subtotal: roundCurrency(subtotal),
+    gstAmount: totalGst,
+    grandTotal,
+    freightCharges,
+    loadingCharges,
+    unloadingCharges,
+    otherCharges,
+    dispatchDate,
+    chargesSubtotal: chargesGst.chargesSubtotal,
+    chargesGstAmount: chargesGst.chargesGstAmount,
+    chargesTotal: chargesGst.chargesTotal,
   };
 }
 
@@ -3120,18 +3181,38 @@ export async function getSupplierRfqs(email: string): Promise<SupplierRfqCard[]>
 
 export type RfqQuoteLineInput = { lineItemId: string; unitPrice: string };
 
+type RfqQuoteExtrasInput = {
+  freightCharges?: string | number | null;
+  loadingCharges?: string | number | null;
+  unloadingCharges?: string | number | null;
+  otherCharges?: string | number | null;
+  dispatchDate?: string | null;
+};
+
 export async function createSupplierQuote(
   rfqId: string,
-  input: { price: string; validUntil?: string; notes?: string; lineQuotes?: RfqQuoteLineInput[] },
+  input: {
+    price: string;
+    validUntil?: string;
+    notes?: string;
+    lineQuotes?: RfqQuoteLineInput[];
+  } & RfqQuoteExtrasInput,
   email: string
 ) {
+  await ensurePricingSchema();
   const { supplierProfile } = await ensureSupplierContext(email);
 
   // Supplier RFQ Price Revision & GST-Inclusive Order Value: when the
   // caller submits `lineQuotes`, this is a real enquiry (OrderItem-backed)
   // RFQ quotation, not the legacy QuickRequest `Quote` flow below.
   if (Array.isArray(input.lineQuotes) && input.lineQuotes.length > 0) {
-    return createEnquiryLineQuotesForSupplier(rfqId, input.lineQuotes, supplierProfile.id);
+    return createEnquiryLineQuotesForSupplier(rfqId, input.lineQuotes, supplierProfile.id, {
+      freightCharges: input.freightCharges,
+      loadingCharges: input.loadingCharges,
+      unloadingCharges: input.unloadingCharges,
+      otherCharges: input.otherCharges,
+      dispatchDate: input.dispatchDate,
+    });
   }
 
   const rfq = await prisma.quickRequest.findUnique({ where: { id: rfqId } });
@@ -3157,8 +3238,21 @@ export async function createSupplierQuote(
 async function createEnquiryLineQuotesForSupplier(
   enquiryId: string,
   lineQuotes: RfqQuoteLineInput[],
-  supplierId: string
+  supplierId: string,
+  extras?: RfqQuoteExtrasInput
 ) {
+  const freightCharges = parseOptionalQuoteCharge(extras?.freightCharges, "Freight charges");
+  const loadingCharges = parseOptionalQuoteCharge(extras?.loadingCharges, "Loading charges");
+  const unloadingCharges = parseOptionalQuoteCharge(extras?.unloadingCharges, "Unloading charges");
+  const otherCharges = parseOptionalQuoteCharge(extras?.otherCharges, "Other charges");
+  const dispatchDate = parseOptionalDispatchDate(extras?.dispatchDate);
+  const chargesGst = calculateQuoteChargesGst({
+    freightCharges,
+    loadingCharges,
+    unloadingCharges,
+    otherCharges,
+  });
+
   const enquiry = await prisma.order.findUnique({
     where: { id: enquiryId },
     // Admin-Configurable Product Markup: `product` (for categoryId) is now
@@ -3267,20 +3361,16 @@ async function createEnquiryLineQuotesForSupplier(
           buyerUnitPrice: resolved.buyerUnitPrice,
           markupPercent: resolved.markupPercent,
           markupAmount: resolved.markupAmount,
+          freightCharges,
+          loadingCharges,
+          unloadingCharges,
+          otherCharges,
+          dispatchDate,
           status: "PENDING_ADMIN_REVIEW",
         },
       });
       rows.push({ id: row.id, unitPrice: row.unitPrice });
 
-      // Supplier RFQ Price Revision (spec §15/§22): the single-supplier
-      // confirm flow (this app's "Confirm Enquiry" action) has no separate
-      // cross-supplier best-price-selection step — the order must use the
-      // submitted quotation price directly. Admin-Configurable Product
-      // Markup: OrderItem.unitPrice is the BUYER-FACING price, so this is
-      // now the MARKED-UP figure — never the supplier's raw quotation
-      // (`gst.unitPrice`) — with the original supplier price + applied
-      // markup frozen alongside it, mirroring OrderItem's documented
-      // snapshot lifecycle.
       if ((item as any).supplierId === supplierId) {
         await tx.orderItem.update({
           where: { id: lineItemId },
@@ -3289,27 +3379,46 @@ async function createEnquiryLineQuotesForSupplier(
             supplierUnitPrice: resolved.supplierUnitPrice,
             markupPercent: resolved.markupPercent,
             markupAmount: resolved.markupAmount,
+            taxAmount: calculateLineGst({
+              quantity: gst.quantity,
+              unitPrice: resolved.buyerUnitPrice,
+              gstRatePercent: gst.gstRatePercent,
+            }).gstAmount,
           },
         });
       }
     }
 
-    // Order-Total Synchronization (mirrors
-    // BestPriceSelectionService.selectAndFinalizeIfEligible's identical fix
-    // for the multi-supplier RFQ flow): Order.totalAmount must reflect the
-    // FULL set of order lines — including any lines not part of this
-    // particular submission — using each line's CURRENT (just-updated,
-    // buyer-facing) unitPrice, never the stale total computed at
-    // enquiry-creation time. Read fresh inside the same transaction so this
-    // always reflects the just-written OrderItem rows.
     const refreshedItems = await tx.orderItem.findMany({
       where: { orderId: enquiryId },
-      select: { unitPrice: true, quantity: true },
+      select: { unitPrice: true, quantity: true, taxAmount: true, supplierId: true },
     });
-    const totalAmount = refreshedItems.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0);
+    const totalAmount = roundCurrency(
+      refreshedItems.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0)
+    );
+    const itemsTaxAmount = roundCurrency(
+      refreshedItems.reduce((sum, i) => sum + Number(i.taxAmount ?? 0), 0)
+    );
+    const allOwnedBySupplier =
+      refreshedItems.length > 0 && refreshedItems.every((i) => i.supplierId === supplierId);
+
+    const orderUpdateData: Record<string, any> = { totalAmount };
+    if (allOwnedBySupplier) {
+      const totalTax = roundCurrency(itemsTaxAmount + chargesGst.chargesGstAmount);
+      orderUpdateData.freightCharges = chargesGst.freightCharges;
+      orderUpdateData.loadingCharges = chargesGst.loadingCharges;
+      orderUpdateData.unloadingCharges = chargesGst.unloadingCharges;
+      orderUpdateData.otherCharges = chargesGst.otherCharges;
+      orderUpdateData.dispatchDate = dispatchDate;
+      orderUpdateData.taxAmount = totalTax;
+      orderUpdateData.finalPayableAmount = roundCurrency(
+        totalAmount + chargesGst.chargesSubtotal + totalTax
+      );
+    }
+
     await tx.order.update({
       where: { id: enquiryId },
-      data: { totalAmount },
+      data: orderUpdateData,
     });
 
     return rows;

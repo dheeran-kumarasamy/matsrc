@@ -1,7 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
 import { MarkupService } from "src/admin/markup/markup.service";
-import { calculateLineGst, SupplierQuoteStatus } from "@matsrc/db";
+import {
+  calculateLineGst,
+  calculateQuoteChargesGst,
+  formatDispatchDateIn,
+  SupplierQuoteStatus,
+} from "@matsrc/db";
 import { ReviewAction, ReviewSupplierQuoteDto } from "./dto/review-supplier-quote.dto";
 
 @Injectable()
@@ -152,6 +157,19 @@ export class AdminOrderQuotesService {
           order.selectedQuoteId === quote.id ||
           (order.selectedSupplierId === quote.supplierId && quote.status === SupplierQuoteStatus.SENT_TO_BUYER);
 
+        const qAny = quote as any;
+        const freightCharges = qAny.freightCharges != null ? Number(qAny.freightCharges) : null;
+        const loadingCharges = qAny.loadingCharges != null ? Number(qAny.loadingCharges) : null;
+        const unloadingCharges = qAny.unloadingCharges != null ? Number(qAny.unloadingCharges) : null;
+        const otherCharges = qAny.otherCharges != null ? Number(qAny.otherCharges) : null;
+        const dispatchDate = formatDispatchDateIn(qAny.dispatchDate ?? null);
+        const chargesGst = calculateQuoteChargesGst({
+          freightCharges,
+          loadingCharges,
+          unloadingCharges,
+          otherCharges,
+        });
+
         return {
           id: quote.id,
           enquiryId: quote.enquiryId,
@@ -164,6 +182,14 @@ export class AdminOrderQuotesService {
           supplierUnitPrice,
           currency: quote.currency,
           leadTimeDays: quote.leadTimeDays,
+          freightCharges,
+          loadingCharges,
+          unloadingCharges,
+          otherCharges,
+          chargesSubtotal: chargesGst.chargesSubtotal,
+          chargesGstAmount: chargesGst.chargesGstAmount,
+          chargesTotal: chargesGst.chargesTotal,
+          dispatchDate,
           status: quote.status,
           sentToBuyerAt: quote.sentToBuyerAt,
           reviewedByAdminId: quote.reviewedByAdminId,
